@@ -30,6 +30,7 @@ try {
 	// ignore polyfill errors
 }
 
+import type {App} from 'obsidian';
 import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
@@ -113,6 +114,32 @@ export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
 		...(agent.tools ? {tools: agent.tools} : {}),
 		...(agent.skills ? {skills: agent.skills} : {}),
 	};
+}
+
+/**
+ * Calculates adaptive client-side timeout in milliseconds scaled by file count in scope.
+ * Formula: Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200)).
+ * The result is compared against configuredTimeoutSec (converted to ms), taking the larger value.
+ */
+export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeoutSec?: number): number {
+	const allFiles = app.vault.getFiles();
+	let fileCount = 0;
+	if (!scopePath || scopePath === '/' || scopePath.trim() === '') {
+		fileCount = allFiles.length;
+	} else {
+		const normalizedScope = scopePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+		if (normalizedScope === '') {
+			fileCount = allFiles.length;
+		} else {
+			fileCount = allFiles.filter(f => {
+				const filePath = f.path.replace(/\\/g, '/');
+				return filePath === normalizedScope || filePath.startsWith(normalizedScope + '/');
+			}).length;
+		}
+	}
+	const dynamicTimeout = Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200));
+	const configuredMs = (configuredTimeoutSec ?? 0) * 1000;
+	return Math.max(dynamicTimeout, configuredMs);
 }
 
 /** Standard Claude models supported by the Claude Agent SDK / CLI. */
@@ -451,7 +478,16 @@ export class AgentService {
 		maxTurns?: number;
 		permissionMode?: Options['permissionMode'];
 		tools?: Options['tools'];
+		timeout?: number;
 	}): Promise<string | undefined> {
+		let timer: NodeJS.Timeout | undefined;
+		const abortController = new AbortController();
+		if (options.timeout && options.timeout > 0) {
+			timer = setTimeout(() => {
+				abortController.abort();
+			}, options.timeout);
+		}
+
 		try {
 			await this.ensureConnected();
 
@@ -471,16 +507,22 @@ export class AgentService {
 					tools: options.tools ?? [],
 					env: this.buildEnv(),
 					pathToClaudeCodeExecutable: this.resolvedCli?.path,
+					abortController,
 				}),
 			});
 
 			const text = await this.collectText(stream);
 			return text || undefined;
 		} catch (e) {
+			if (abortController.signal.aborted && options.timeout && options.timeout > 0) {
+				throw new Error(`Request timed out after ${options.timeout}ms`);
+			}
 			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
 				this.onConnectionError(e);
 			}
 			throw e;
+		} finally {
+			if (timer) clearTimeout(timer);
 		}
 	}
 
@@ -509,7 +551,16 @@ export class AgentService {
 		cwd?: string;
 		attachments?: unknown[];
 		onEvent?: (msg: SDKMessage) => void;
+		timeout?: number;
 	}): Promise<{content: string | undefined; sessionId: string}> {
+		let timer: NodeJS.Timeout | undefined;
+		const abortController = new AbortController();
+		if (options.timeout && options.timeout > 0) {
+			timer = setTimeout(() => {
+				abortController.abort();
+			}, options.timeout);
+		}
+
 		try {
 			await this.ensureConnected();
 
@@ -534,6 +585,7 @@ export class AgentService {
 					...(options.effort ? {effort: options.effort} : {}),
 					...(options.resume ? {resume: options.resume} : {}),
 					...(options.cwd ? {cwd: options.cwd} : {}),
+					abortController,
 				}),
 			});
 
@@ -578,10 +630,15 @@ export class AgentService {
 			const content = textParts.join('') || undefined;
 			return {content, sessionId};
 		} catch (e) {
+			if (abortController.signal.aborted && options.timeout && options.timeout > 0) {
+				throw new Error(`Request timed out after ${options.timeout}ms`);
+			}
 			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
 				this.onConnectionError(e);
 			}
 			throw e;
+		} finally {
+			if (timer) clearTimeout(timer);
 		}
 	}
 

@@ -8,7 +8,7 @@ import type SynapsePlugin from '../main';
 import type {SynapseView} from '../synapseView';
 import {SYNAPSE_VIEW_TYPE} from '../synapseView';
 import type {SessionConfig, CustomAgentConfig} from '../copilot';
-import {toCustomAgentConfig} from '../copilot';
+import {toCustomAgentConfig, getAdaptiveTimeout} from '../copilot';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
 import {getSkillsFolder, getMcpInputValue} from '../settings';
@@ -252,11 +252,13 @@ export class TelegramBotService {
 			// resume it to maintain conversation history. This avoids all shared-state
 			// issues with the chat view's resumeSession taking over event listeners.
 			const config = this.buildBotSessionConfig();
+			const timeout = getAdaptiveTimeout(this.plugin.app, undefined, this.plugin.settings.providerRequestTimeout);
 			// Use inlineChat which handles session resume internally
 			const {content, sessionId} = await this.plugin.copilot!.inlineChat({
 				prompt: sendOpts.prompt,
 				...(entry.sessionId ? {resume: entry.sessionId} : {}),
 				...config,
+				timeout,
 			});
 			if (sessionId) {
 				entry.sessionId = sessionId;

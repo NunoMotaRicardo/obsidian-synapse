@@ -1,7 +1,7 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
-import {toCustomAgentConfig} from '../copilot';
+import {toCustomAgentConfig, getAdaptiveTimeout} from '../copilot';
 import type {AgentConfig} from '../types';
 import {getSkillsFolder} from '../settings';
 import {FolderTreeModal} from '../modals';
@@ -387,6 +387,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.handleBasicSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
+		const timeout = getAdaptiveTimeout(this.app, this.searchWorkingDir, this.plugin.settings.providerRequestTimeout);
+
 		const {content} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
 			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
@@ -394,6 +396,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			permissionMode: 'plan',
 			tools: [],
 			maxTurns: 1,
+			timeout,
 		});
 		this.renderSearchResults(content || '');
 	};
@@ -402,9 +405,12 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		const sessionConfig = this.buildSearchSessionConfig();
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
+		const timeout = getAdaptiveTimeout(this.app, this.searchWorkingDir, this.plugin.settings.providerRequestTimeout);
+
 		const {content, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
 			...sessionConfig,
+			timeout,
 		});
 
 		// Name the session
