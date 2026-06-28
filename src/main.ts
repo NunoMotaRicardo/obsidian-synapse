@@ -8,6 +8,7 @@ import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
+import {runAgentSpike} from './agentSpike';
 import type {EditorView} from '@codemirror/view';
 
 export default class SidekickPlugin extends Plugin {
@@ -138,6 +139,23 @@ export default class SidekickPlugin extends Plugin {
 				this.settings.autocompleteEnabled = !this.settings.autocompleteEnabled;
 				await this.saveData(this.settings);
 				new Notice(`Sidekick: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+			},
+		});
+
+		// Command: Test Claude Agent SDK (spike)
+		this.addCommand({
+			id: 'test-claude-agent-sdk',
+			name: 'Test Claude Agent SDK',
+			callback: async () => {
+				new Notice('Sidekick: running Claude Agent SDK spike…');
+				console.info('[sidekick] Agent SDK spike: starting');
+				const result = await runAgentSpike();
+				console.info('[sidekick] Agent SDK spike result:', result);
+				if (result.ok) {
+					new Notice(`Claude Agent SDK: ${result.text} (${result.durationMs}ms)`, 15000);
+				} else {
+					new Notice(`Claude Agent SDK error: ${result.error}`, 15000);
+				}
 			},
 		});
 
