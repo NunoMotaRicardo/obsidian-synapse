@@ -94,10 +94,12 @@ export interface ModelInfo {
 	id: string;
 	name: string;
 	capabilities?: {
-		supports?: {vision?: boolean; reasoningEffort?: boolean};
+		supports?: {vision?: boolean; reasoningEffort?: boolean; tools?: boolean};
 		limits?: {max_context_window_tokens?: number};
 		supportedReasoningEfforts?: string[];
 	};
+	isVision?: boolean;
+	supportsTools?: boolean;
 }
 
 /** Map parsed AgentConfig from vault frontmatter to SDK AgentDefinition (CustomAgentConfig). */
@@ -117,34 +119,42 @@ export const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
 		id: 'claude-3-7-sonnet',
 		name: 'Claude 3.7 Sonnet',
 		capabilities: {
-			supports: {vision: true, reasoningEffort: true},
+			supports: {vision: true, reasoningEffort: true, tools: true},
 			limits: {max_context_window_tokens: 200000},
 			supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
 		},
+		isVision: true,
+		supportsTools: true,
 	},
 	{
 		id: 'claude-3-5-sonnet',
 		name: 'Claude 3.5 Sonnet',
 		capabilities: {
-			supports: {vision: true, reasoningEffort: false},
+			supports: {vision: true, reasoningEffort: false, tools: true},
 			limits: {max_context_window_tokens: 200000},
 		},
+		isVision: true,
+		supportsTools: true,
 	},
 	{
 		id: 'claude-3-5-haiku',
 		name: 'Claude 3.5 Haiku',
 		capabilities: {
-			supports: {vision: false, reasoningEffort: false},
+			supports: {vision: false, reasoningEffort: false, tools: true},
 			limits: {max_context_window_tokens: 200000},
 		},
+		isVision: false,
+		supportsTools: true,
 	},
 	{
 		id: 'claude-3-opus',
 		name: 'Claude 3 Opus',
 		capabilities: {
-			supports: {vision: true, reasoningEffort: false},
+			supports: {vision: true, reasoningEffort: false, tools: true},
 			limits: {max_context_window_tokens: 200000},
 		},
+		isVision: true,
+		supportsTools: true,
 	},
 ];
 
@@ -175,20 +185,24 @@ export type VersionInfoCallback = (info: {version: string; protocolVersion?: str
 export class AgentService {
 	private state: ConnectionState = 'disconnected';
 	private readonly auth: AuthConfig;
+	private readonly providerConfig?: import('./providerModels').ProviderConfigOptions;
 	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
 	private readonly onVersionInfo?: VersionInfoCallback;
 	private readonly getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	private resolvedCli: ResolvedCliPath | null = null;
+	private customModels: ModelInfo[] = [];
 
 	constructor(opts?: {
 		auth?: AuthConfig;
+		providerConfig?: import('./providerModels').ProviderConfigOptions;
 		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
 		onVersionInfo?: VersionInfoCallback;
 		getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
+		this.providerConfig = opts?.providerConfig;
 		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
 		this.onVersionInfo = opts?.onVersionInfo;
@@ -207,6 +221,23 @@ export class AgentService {
 		};
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
+		}
+		if (this.providerConfig && this.providerConfig.baseUrl) {
+			const preset = (this.providerConfig.preset || '').toLowerCase();
+			let baseUrl = this.providerConfig.baseUrl.trim();
+			if (preset === 'ollama') {
+				baseUrl = baseUrl.replace(/\/+$/, '');
+				if (!baseUrl.endsWith('/v1')) {
+					baseUrl = `${baseUrl}/v1`;
+				}
+			}
+			env['ANTHROPIC_BASE_URL'] = baseUrl;
+			env['OPENAI_BASE_URL'] = baseUrl;
+			const token = this.providerConfig.bearerToken || this.providerConfig.apiKey;
+			if (token) {
+				env['ANTHROPIC_API_KEY'] = token;
+				env['OPENAI_API_KEY'] = token;
+			}
 		}
 		return env;
 	}
@@ -297,8 +328,15 @@ export class AgentService {
 		return resolved;
 	}
 
+	setCustomModels(models: ModelInfo[]): void {
+		this.customModels = models;
+	}
+
 	/** Get available Claude models. */
 	getModels(): ModelInfo[] {
+		if (this.customModels.length > 0) {
+			return [...this.customModels, ...DEFAULT_CLAUDE_MODELS];
+		}
 		return DEFAULT_CLAUDE_MODELS;
 	}
 

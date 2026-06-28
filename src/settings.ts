@@ -3,6 +3,7 @@ import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
+import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
 /** Helper to update a secure field in both runtime settings and local storage. */
 function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
@@ -25,6 +26,14 @@ export interface SynapseSettings {
 	anthropicApiKey: string;
 	/** Custom path to the claude CLI binary. Empty = auto-detect. */
 	claudeLocation: string;
+	/** BYOK / Local provider preset. */
+	providerPreset: ProviderPreset;
+	/** Base URL for custom provider endpoint. */
+	providerBaseUrl: string;
+	/** Provider API key (stored securely via local storage). */
+	providerApiKey: string;
+	/** Provider bearer token (stored securely via local storage). */
+	providerBearerToken: string;
 	synapseFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
@@ -123,6 +132,10 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	authType: 'subscription',
 	anthropicApiKey: '',
 	claudeLocation: '',
+	providerPreset: 'ollama',
+	providerBaseUrl: 'http://localhost:11434',
+	providerApiKey: '',
+	providerBearerToken: '',
 	synapseFolder: 'synapse',
 	toolApproval: 'ask',
 	inlineModel: '',
@@ -151,7 +164,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken'];
+export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken', 'providerApiKey', 'providerBearerToken'];
 
 const SECURE_PREFIX = 'synapse-secure-';
 
@@ -474,6 +487,157 @@ export class SynapseSettingTab extends PluginSettingTab {
 			}
 		};
 		void renderCliStatus();
+
+		// ── Local Model / BYOK Provider ─────────────────────────────
+		new Setting(claudePanel)
+			.setName('Local & custom providers')
+			.setHeading();
+
+		const providerDescEl = claudePanel.createDiv({cls: 'setting-item-description'});
+		providerDescEl.style.marginBottom = '12px';
+
+		const updateProviderDesc = () => {
+			if (this.plugin.settings.providerPreset === 'ollama') {
+				providerDescEl.setText('Ollama integration: make sure Ollama is running locally ("ollama serve"). Pull models via "ollama pull <model>". Default URL is http://localhost:11434.');
+			} else {
+				providerDescEl.setText('Configure an OpenAI-compatible endpoint or BYOK provider for local or custom models.');
+			}
+		};
+		updateProviderDesc();
+
+		const providerFieldsEl = claudePanel.createDiv();
+
+		const renderProviderFields = () => {
+			providerFieldsEl.empty();
+
+			const datalistId = 'synapse-provider-models-datalist';
+			let datalist = providerFieldsEl.querySelector(`#${datalistId}`) as HTMLDataListElement;
+			if (!datalist) {
+				datalist = providerFieldsEl.createEl('datalist', {attr: {id: datalistId}});
+			}
+
+			const updateModelDatalist = (models: import('./copilot').ModelInfo[]) => {
+				datalist.empty();
+				for (const m of models) {
+					const opt = datalist.createEl('option', {attr: {value: m.id}});
+					if (m.name && m.name !== m.id) {
+						opt.text = m.name;
+					}
+				}
+			};
+
+			new Setting(providerFieldsEl)
+				.setName('Provider')
+				.setDesc('Select the backend model provider preset.')
+				.addDropdown(dropdown => dropdown
+					.addOptions({
+						ollama: 'Ollama',
+						openai: 'OpenAI',
+						azure: 'Azure OpenAI',
+						anthropic: 'Anthropic (BYOK)',
+						'foundry-local': 'Foundry Local',
+						'other-openai': 'OpenAI Compatible',
+					})
+					.setValue(this.plugin.settings.providerPreset)
+					.onChange(async (value) => {
+						this.plugin.settings.providerPreset = value as ProviderPreset;
+						if (value === 'ollama' && !this.plugin.settings.providerBaseUrl) {
+							this.plugin.settings.providerBaseUrl = 'http://localhost:11434';
+						}
+						await this.plugin.saveSettings();
+						await this.plugin.initCopilot();
+						updateProviderDesc();
+						renderProviderFields();
+					}))
+				.addButton(button => button
+					.setButtonText('Test')
+					.onClick(async () => {
+						button.setDisabled(true);
+						button.setButtonText('Testing…');
+						clearOllamaShowCache();
+						try {
+							const res = await fetchProviderModels({
+								preset: this.plugin.settings.providerPreset,
+								baseUrl: this.plugin.settings.providerBaseUrl,
+								apiKey: this.plugin.settings.providerApiKey,
+								bearerToken: this.plugin.settings.providerBearerToken,
+							});
+
+							if (res.ok) {
+								const models = res.models;
+								if (models.length > 0) {
+									let msg = `Connected — found ${models.length} model(s).`;
+									if (this.plugin.settings.providerPreset === 'ollama' && !this.plugin.settings.inlineModel) {
+										msg += ' Select a model in the Model name field below.';
+									}
+									new Notice(msg);
+									this.plugin.setProviderModels(models);
+									updateModelDatalist(models);
+								} else {
+									if (this.plugin.settings.providerPreset === 'ollama') {
+										new Notice("Connected to Ollama, but no models are installed. Pull one with 'ollama pull llama3.1'.");
+									} else {
+										new Notice('Connected, but the provider reported no available models.');
+									}
+									this.plugin.setProviderModels([]);
+									updateModelDatalist([]);
+								}
+							} else {
+								if (this.plugin.settings.providerPreset === 'ollama' && res.isOllamaConnectionError) {
+									new Notice('Could not connect to Ollama. Make sure Ollama is running ("ollama serve") and the base URL is correct.');
+								} else {
+									new Notice(`Test failed: ${res.error}`);
+								}
+								this.plugin.setProviderModels([]);
+								updateModelDatalist([]);
+							}
+						} finally {
+							button.setDisabled(false);
+							button.setButtonText('Test');
+						}
+					}));
+
+			new Setting(providerFieldsEl)
+				.setName('Base URL')
+				.setDesc('Base URL for the provider endpoint.')
+				.addText(text => text
+					.setPlaceholder(this.plugin.settings.providerPreset === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com')
+					.setValue(this.plugin.settings.providerBaseUrl)
+					.onChange(async (val) => {
+						this.plugin.settings.providerBaseUrl = val.trim();
+						await this.plugin.saveSettings();
+						await this.plugin.initCopilot();
+					}));
+
+			if (this.plugin.settings.providerPreset !== 'ollama') {
+				new Setting(providerFieldsEl)
+					.setName('API key')
+					.setDesc('Provider API key (stored securely)')
+					.addText(text => {
+						text.inputEl.type = 'password';
+						text.inputEl.autocomplete = 'off';
+						text.setValue(this.plugin.settings.providerApiKey)
+							.onChange(async (val) => {
+								updateSecureField(this.app, this.plugin, 'providerApiKey', val.trim());
+								await this.plugin.initCopilot();
+							});
+					});
+			}
+
+			new Setting(providerFieldsEl)
+				.setName('Model name')
+				.setDesc('Model name/ID for operations. Select from test results or enter custom ID.')
+				.addText(text => {
+					text.inputEl.setAttribute('list', datalistId);
+					text.setValue(this.plugin.settings.inlineModel)
+						.onChange(async (val) => {
+							this.plugin.settings.inlineModel = val.trim();
+							await this.plugin.saveSettings();
+						});
+				});
+		};
+
+		renderProviderFields();
 
 
 		// ══════════════════════════════════════════════════════════
