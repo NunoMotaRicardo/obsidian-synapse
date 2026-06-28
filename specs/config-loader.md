@@ -18,6 +18,7 @@ this user's vault uses `_sidekick/`) and turns files into runtime config.
 
 - Agent `tools`/`skills` frontmatter: omitted = all enabled; present-but-empty = all disabled;
   list = only those.
+- Agent `model` frontmatter binds the agent definition to a specific Claude model ID or local backend reference. `toCustomAgentConfig` maps this field to SDK `AgentDefinition.model`.
 - `mcp.json` accepts `servers` or `mcpServers` top-level key; `${input:id}` placeholders are
   resolved from stored MCP input values, prompting for missing ones at load time.
 - Reload button in the toolbar re-parses everything; malformed files log and are skipped,
