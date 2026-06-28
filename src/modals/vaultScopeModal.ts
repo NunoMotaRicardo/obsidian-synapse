@@ -26,20 +26,20 @@ export class VaultScopeModal extends Modal {
 
 	onOpen(): void {
 		const {contentEl} = this;
-		contentEl.addClass('sidekick-scope-modal');
+		contentEl.addClass('claude-brain-scope-modal');
 
 		contentEl.createEl('h3', {text: 'Select vault scope'});
 
 		this.searchInput = contentEl.createEl('input', {
 			type: 'text',
 			placeholder: 'Filter files and folders…',
-			cls: 'sidekick-scope-search',
+			cls: 'claude-brain-scope-search',
 		});
 		this.searchInput.addEventListener('input', () => this.renderTree());
 
-		this.listContainer = contentEl.createDiv({cls: 'sidekick-scope-tree'});
+		this.listContainer = contentEl.createDiv({cls: 'claude-brain-scope-tree'});
 
-		const btnRow = contentEl.createDiv({cls: 'sidekick-scope-buttons'});
+		const btnRow = contentEl.createDiv({cls: 'claude-brain-scope-buttons'});
 
 		const clearBtn = btnRow.createEl('button', {text: 'Clear all'});
 		clearBtn.addEventListener('click', () => {
@@ -71,9 +71,9 @@ export class VaultScopeModal extends Modal {
 		const root = this.app.vault.getRoot();
 
 		// Render the root node
-		const rootRow = this.listContainer.createDiv({cls: 'sidekick-scope-item'});
+		const rootRow = this.listContainer.createDiv({cls: 'claude-brain-scope-item'});
 
-		const toggle = rootRow.createSpan({cls: 'sidekick-scope-toggle'});
+		const toggle = rootRow.createSpan({cls: 'claude-brain-scope-toggle'});
 		setIcon(toggle, this.collapsed.has('/') ? 'chevron-right' : 'chevron-down');
 		toggle.addEventListener('click', () => {
 			if (this.collapsed.has('/')) {
@@ -87,10 +87,10 @@ export class VaultScopeModal extends Modal {
 		const checkbox = rootRow.createEl('input', {type: 'checkbox'});
 		checkbox.checked = this.selected.has('/') || this.isAncestorSelected('/');
 
-		const iconSpan = rootRow.createSpan({cls: 'sidekick-scope-icon'});
+		const iconSpan = rootRow.createSpan({cls: 'claude-brain-scope-icon'});
 		setIcon(iconSpan, 'vault');
 
-		rootRow.createSpan({text: this.app.vault.getName(), cls: 'sidekick-scope-name sidekick-scope-root-name'});
+		rootRow.createSpan({text: this.app.vault.getName(), cls: 'claude-brain-scope-name claude-brain-scope-root-name'});
 
 		// Context menu on root node
 		rootRow.addEventListener('contextmenu', (e) => {
@@ -132,11 +132,11 @@ export class VaultScopeModal extends Modal {
 
 			if (!matchesFilter && !hasMatch) continue;
 
-			const row = parent.createDiv({cls: 'sidekick-scope-item'});
+			const row = parent.createDiv({cls: 'claude-brain-scope-item'});
 			row.style.paddingLeft = `${depth * 20 + 8}px`;
 
 			if (isFolder) {
-				const toggle = row.createSpan({cls: 'sidekick-scope-toggle'});
+				const toggle = row.createSpan({cls: 'claude-brain-scope-toggle'});
 				setIcon(toggle, this.collapsed.has(child.path) ? 'chevron-right' : 'chevron-down');
 				toggle.addEventListener('click', () => {
 					if (this.collapsed.has(child.path)) {
@@ -155,16 +155,16 @@ export class VaultScopeModal extends Modal {
 					}
 				});
 			} else {
-				row.createSpan({cls: 'sidekick-scope-toggle sidekick-scope-toggle-spacer'});
+				row.createSpan({cls: 'claude-brain-scope-toggle claude-brain-scope-toggle-spacer'});
 			}
 
 			const checkbox = row.createEl('input', {type: 'checkbox'});
 			checkbox.checked = this.selected.has(child.path) || this.isAncestorSelected(child.path);
 
-			const iconSpan = row.createSpan({cls: 'sidekick-scope-icon'});
+			const iconSpan = row.createSpan({cls: 'claude-brain-scope-icon'});
 			setIcon(iconSpan, isFolder ? 'folder' : 'file-text');
 
-			row.createSpan({text: child.name, cls: 'sidekick-scope-name'});
+			row.createSpan({text: child.name, cls: 'claude-brain-scope-name'});
 
 			checkbox.addEventListener('change', () => {
 				if (checkbox.checked) {

@@ -1,7 +1,7 @@
 import {Menu, setIcon} from 'obsidian';
-import type {SidekickView} from '../sidekickView';
+import type {ClaudeBrainView} from '../claudeBrainView';
 import type {ModelInfo, ReasoningEffort, ReasoningSummary, ContextTier} from '../copilot';
-import type {SidekickSettings} from '../settings';
+import type {ClaudeBrainSettings} from '../settings';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {EditModal} from '../modals/editModal';
@@ -34,7 +34,7 @@ function summaryLabel(mode: string): string {
  * values models actually report, so the cast is localized here (see issue 7).
  * Returns `undefined` when nothing applies, so model defaults take over.
  */
-function buildSetModelOptions(settings: SidekickSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
+function buildSetModelOptions(settings: ClaudeBrainSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
 	const opts: {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} = {};
 	if (supportsReasoning) {
 		if (settings.reasoningEffort && (supported?.includes(settings.reasoningEffort) ?? false)) {
@@ -46,8 +46,8 @@ function buildSetModelOptions(settings: SidekickSettings, supported: string[] | 
 	return Object.keys(opts).length > 0 ? opts : undefined;
 }
 
-declare module '../sidekickView' {
-	interface SidekickView {
+declare module '../claudeBrainView' {
+	interface ClaudeBrainView {
 		buildConfigToolbar(parent: HTMLElement): void;
 		populateModelSelect(): void;
 		getSelectedModelInfo(): ModelInfo | undefined;
@@ -69,31 +69,31 @@ declare module '../sidekickView' {
 }
 
 export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
-	const proto = ViewClass.prototype as SidekickView;
+	const proto = ViewClass.prototype as ClaudeBrainView;
 
 	proto.buildConfigToolbar = function(parent: HTMLElement): void {
-		const toolbar = parent.createDiv({cls: 'sidekick-toolbar'});
+		const toolbar = parent.createDiv({cls: 'claude-brain-toolbar'});
 
 		// New conversation button
-		const newChatBtn = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'New conversation'}});
+		const newChatBtn = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'New conversation'}});
 		setIcon(newChatBtn, 'plus');
 		newChatBtn.addEventListener('click', () => void this.newConversation());
 
 		// Agent dropdown
-		const agentGroup = toolbar.createDiv({cls: 'sidekick-toolbar-group'});
-		const agentIcon = agentGroup.createSpan({cls: 'sidekick-toolbar-icon'});
+		const agentGroup = toolbar.createDiv({cls: 'claude-brain-toolbar-group'});
+		const agentIcon = agentGroup.createSpan({cls: 'claude-brain-toolbar-icon'});
 		setIcon(agentIcon, 'bot');
-		this.agentSelect = agentGroup.createEl('select', {cls: 'sidekick-select'});
+		this.agentSelect = agentGroup.createEl('select', {cls: 'claude-brain-select'});
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
 		});
 
 		// Model dropdown
-		const modelGroup = toolbar.createDiv({cls: 'sidekick-toolbar-group'});
-		this.modelIconEl = modelGroup.createSpan({cls: 'sidekick-toolbar-icon clickable-icon'});
+		const modelGroup = toolbar.createDiv({cls: 'claude-brain-toolbar-group'});
+		this.modelIconEl = modelGroup.createSpan({cls: 'claude-brain-toolbar-icon clickable-icon'});
 		setIcon(this.modelIconEl, 'cpu');
 		this.modelIconEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
-		this.modelSelect = modelGroup.createEl('select', {cls: 'sidekick-select sidekick-model-select'});
+		this.modelSelect = modelGroup.createEl('select', {cls: 'claude-brain-select claude-brain-model-select'});
 		this.modelSelect.addEventListener('change', () => {
 			const newModel = this.modelSelect.value;
 			this.selectedModel = newModel;
@@ -104,34 +104,34 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		});
 
 		// Skills button
-		this.skillsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Skills'}});
+		this.skillsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Skills'}});
 		setIcon(this.skillsBtnEl, 'wand-2');
 		this.skillsBtnEl.addEventListener('click', (e) => this.openSkillsMenu(e));
 
 		// Tools button
-		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Tools'}});
+		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Tools'}});
 		setIcon(this.toolsBtnEl, 'plug');
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
 
 		// Working directory button
-		this.cwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Working directory'}});
+		this.cwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Working directory'}});
 		setIcon(this.cwdBtnEl, 'hard-drive-download');
 		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
 		this.updateCwdButton();
 
 		// Spacer to push debug toggle to the right
-		toolbar.createDiv({cls: 'sidekick-toolbar-spacer'});
+		toolbar.createDiv({cls: 'claude-brain-toolbar-spacer'});
 
 		// Debug toggle
-		this.debugBtnEl = toolbar.createDiv({cls: 'sidekick-debug-toggle', attr: {title: 'Show tool & token details'}});
-		const debugIcon = this.debugBtnEl.createSpan({cls: 'sidekick-debug-icon'});
+		this.debugBtnEl = toolbar.createDiv({cls: 'claude-brain-debug-toggle', attr: {title: 'Show tool & token details'}});
+		const debugIcon = this.debugBtnEl.createSpan({cls: 'claude-brain-debug-icon'});
 		setIcon(debugIcon, 'bug');
-		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'sidekick-debug-checkbox'});
+		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'claude-brain-debug-checkbox'});
 		debugCheck.checked = this.showDebugInfo;
 		debugCheck.addEventListener('change', () => {
 			this.showDebugInfo = debugCheck.checked;
 			setDebugEnabled(this.showDebugInfo);
-			this.chatContainer.toggleClass('sidekick-hide-debug', !this.showDebugInfo);
+			this.chatContainer.toggleClass('claude-brain-hide-debug', !this.showDebugInfo);
 		});
 		this.debugBtnEl.addEventListener('click', (e) => {
 			if (e.target !== debugCheck) {

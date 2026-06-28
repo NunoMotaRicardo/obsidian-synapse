@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sidekick",
+	"name": "obsidian-claude-brain",
 	"version": "1.2.2",
-	"description": "Your Obsidian sidekick.",
+	"description": "Your Claude-native second brain for Obsidian.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -29,6 +29,7 @@
 		"@codemirror/view": "^6"
 	},
 	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "^0.3.195",
 		"@github/copilot-sdk": "^1.0.1",
 		"obsidian": "^1.12.3"
 	}

@@ -1,30 +1,31 @@
 import {MarkdownView, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, SidekickSettings, SidekickSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
+import {DEFAULT_SETTINGS, ClaudeBrainSettings, ClaudeBrainSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {CopilotService} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
-import {SidekickView, SIDEKICK_VIEW_TYPE} from "./sidekickView";
-import {registerEditorMenu, registerFileMenu, openSidekickView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
+import {ClaudeBrainView, CLAUDE_BRAIN_VIEW_TYPE} from "./claudeBrainView";
+import {registerEditorMenu, registerFileMenu, openClaudeBrainView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
+import {runAgentSpike} from './agentSpike';
 import type {EditorView} from '@codemirror/view';
 
-export default class SidekickPlugin extends Plugin {
-	settings!: SidekickSettings;
+export default class ClaudeBrainPlugin extends Plugin {
+	settings!: ClaudeBrainSettings;
 	copilot: CopilotService | null = null;
 	telegramBot: TelegramBotService | null = null;
 
 	async onload() {
 		await this.loadSettings();
 		this.applyInlineIconClass();
-		this.addSettingTab(new SidekickSettingTab(this.app, this));
+		this.addSettingTab(new ClaudeBrainSettingTab(this.app, this));
 
-		// Register the Sidekick chat view
-		this.registerView(SIDEKICK_VIEW_TYPE, (leaf) => new SidekickView(leaf, this));
+		// Register the Claude Brain chat view
+		this.registerView(CLAUDE_BRAIN_VIEW_TYPE, (leaf) => new ClaudeBrainView(leaf, this));
 
 		// Ribbon icon to open view
-		this.addRibbonIcon('brain', 'Open sidekick', () => void this.activateView());
+		this.addRibbonIcon('brain', 'Open Claude Brain', () => void this.activateView());
 
 		// Command to open view
 		this.addCommand({
@@ -41,10 +42,10 @@ export default class SidekickPlugin extends Plugin {
 			return (mdView as unknown as {editor?: {cm?: EditorView}}).editor?.cm ?? null;
 		};
 
-		// Command: Chat with sidekick (send selection or open chat)
+		// Command: Chat with Claude Brain (send selection or open chat)
 		this.addCommand({
-			id: 'chat-with-sidekick',
-			name: 'Chat with sidekick',
+			id: 'chat-with-claude-brain',
+			name: 'Chat with Claude Brain',
 			hotkeys: [{modifiers: ['Mod', 'Shift'], key: 'l'}],
 			callback: () => {
 				const cmView = getEditorView();
@@ -55,7 +56,7 @@ export default class SidekickPlugin extends Plugin {
 						const startLine = cmView.state.doc.lineAt(sel.from);
 						const endLine = cmView.state.doc.lineAt(sel.to);
 						const activeFile = this.app.workspace.getActiveFile();
-						openSidekickView(this, text, {
+						openClaudeBrainView(this, text, {
 							filePath: activeFile?.path,
 							fileName: activeFile?.name ?? 'unknown',
 							startLine: startLine.number,
@@ -66,7 +67,7 @@ export default class SidekickPlugin extends Plugin {
 						return;
 					}
 				}
-				openSidekickView(this);
+				openClaudeBrainView(this);
 			},
 		});
 
@@ -100,7 +101,7 @@ export default class SidekickPlugin extends Plugin {
 				if (!cmView) return;
 				const sel = cmView.state.selection.main;
 				if (sel.empty) {
-					new Notice('Sidekick: select some text first.');
+					new Notice('Claude Brain: select some text first.');
 					return;
 				}
 				const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
@@ -121,7 +122,7 @@ export default class SidekickPlugin extends Plugin {
 					if (!cmView) return;
 					const sel = cmView.state.selection.main;
 					if (sel.empty) {
-						new Notice('Sidekick: select some text first.');
+						new Notice('Claude Brain: select some text first.');
 						return;
 					}
 					const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
@@ -137,7 +138,24 @@ export default class SidekickPlugin extends Plugin {
 			callback: async () => {
 				this.settings.autocompleteEnabled = !this.settings.autocompleteEnabled;
 				await this.saveData(this.settings);
-				new Notice(`Sidekick: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+				new Notice(`Claude Brain: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+			},
+		});
+
+		// Command: Test Claude Agent SDK (spike)
+		this.addCommand({
+			id: 'test-claude-agent-sdk',
+			name: 'Test Claude Agent SDK',
+			callback: async () => {
+				new Notice('Claude Brain: running Claude Agent SDK spike…');
+				console.info('[claude-brain] Agent SDK spike: starting');
+				const result = await runAgentSpike();
+				console.info('[claude-brain] Agent SDK spike result:', result);
+				if (result.ok) {
+					new Notice(`Claude Agent SDK: ${result.text} (${result.durationMs}ms)`, 15000);
+				} else {
+					new Notice(`Claude Agent SDK error: ${result.error}`, 15000);
+				}
 			},
 		});
 
@@ -151,10 +169,10 @@ export default class SidekickPlugin extends Plugin {
 			},
 		});
 
-		// Editor context menu (Sidekick submenu for selected text)
+		// Editor context menu (Claude Brain submenu for selected text)
 		registerEditorMenu(this);
 
-		// Vault tree context menu (Sidekick submenu for note files)
+		// Vault tree context menu (Claude Brain submenu for note files)
 		registerFileMenu(this);
 
 		// Ghost-text autocomplete (inline suggestions)
@@ -168,7 +186,7 @@ export default class SidekickPlugin extends Plugin {
 				await this.copilot.ensureConnected();
 			}
 		} catch (e) {
-			console.error('Sidekick: failed to initialize Copilot service', e);
+			console.error('Claude Brain: failed to initialize Copilot service', e);
 			const msg = e instanceof Error ? e.message : String(e);
 			// Try to detect "missing CLI" specifically (spawn ENOENT / not found), not any CLI error.
 			const detail = msg.match(/\(([^)]*)\)\./)?.[1] ?? msg;
@@ -198,7 +216,7 @@ export default class SidekickPlugin extends Plugin {
 		const onListModels = this.buildOnListModels();
 
 		const onVersionInfo = (status: {version: string; protocolVersion: number}) => {
-			console.info('Sidekick: Copilot CLI v%s (protocol %d)', status.version, status.protocolVersion);
+			console.info('Claude Brain: Copilot CLI v%s (protocol %d)', status.version, status.protocolVersion);
 		};
 
 		// Build BYOK provider config for inline/editor operations
@@ -291,7 +309,7 @@ export default class SidekickPlugin extends Plugin {
 	}
 
 	onunload() {
-		document.body.removeClass('sidekick-no-inline-icon');
+		document.body.removeClass('claude-brain-no-inline-icon');
 		if (this.copilot) {
 			void this.copilot.stop();
 		}
@@ -316,29 +334,29 @@ export default class SidekickPlugin extends Plugin {
 	}
 
 	notifySidebarModelsChanged(models: import('./copilot').ModelInfo[]): void {
-		for (const leaf of this.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE)) {
+		for (const leaf of this.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE)) {
 			const view = leaf.view;
-			if (view instanceof SidekickView) {
+			if (view instanceof ClaudeBrainView) {
 				view.refreshProviderModels(models);
 			}
 		}
 	}
 
 	async activateView(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+		const existing = this.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 		if (existing.length > 0 && existing[0]) {
 			void this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (leaf) {
-			await leaf.setViewState({type: SIDEKICK_VIEW_TYPE, active: true});
+			await leaf.setViewState({type: CLAUDE_BRAIN_VIEW_TYPE, active: true});
 			void this.app.workspace.revealLeaf(leaf);
 		}
 	}
 
 	async loadSettings() {
-		const raw = await this.loadData() as Partial<SidekickSettings> | null;
+		const raw = await this.loadData() as Partial<ClaudeBrainSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
@@ -364,7 +382,7 @@ export default class SidekickPlugin extends Plugin {
 	}
 
 	applyInlineIconClass() {
-		document.body.toggleClass('sidekick-no-inline-icon', !this.settings.inlineIconEnabled);
+		document.body.toggleClass('claude-brain-no-inline-icon', !this.settings.inlineIconEnabled);
 	}
 
 	async saveSettings() {

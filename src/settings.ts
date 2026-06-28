@@ -1,5 +1,5 @@
 import {App, Modal, Notice, PluginSettingTab, Setting, normalizePath} from "obsidian";
-import SidekickPlugin from "./main";
+import ClaudeBrainPlugin from "./main";
 import type {ModelInfo, ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
@@ -10,12 +10,12 @@ import {friendlyOllamaError} from "./ollamaErrors";
 const DEFAULT_COPILOT_LOCATION = '';
 
 /** Helper to update a secure field in both runtime settings and local storage. */
-function updateSecureField(app: App, plugin: SidekickPlugin, key: keyof SidekickSettings, value: string): void {
+function updateSecureField(app: App, plugin: ClaudeBrainPlugin, key: keyof ClaudeBrainSettings, value: string): void {
 	(plugin.settings as unknown as Record<string, unknown>)[key] = value;
 	saveSecureField(app, key, value);
 }
 
-export interface SidekickSettings {
+export interface ClaudeBrainSettings {
 	/** 'local' uses cliPath, 'remote' uses cliUrl. */
 	copilotType: 'local' | 'remote';
 	copilotLocation: string;
@@ -25,13 +25,13 @@ export interface SidekickSettings {
 	useLoggedInUser: boolean;
 	/** GitHub personal access token (used when useLoggedInUser is false or in remote mode). */
 	githubToken: string;
-	sidekickFolder: string;
+	claudeBrainFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
 	/** Enable ghost-text autocomplete in the editor. */
 	autocompleteEnabled: boolean;
-	/** Show the inline Sidekick icon on the active editor line. */
+	/** Show the inline Claude Brain icon on the active editor line. */
 	inlineIconEnabled: boolean;
 	/** Provider preset for BYOK. 'github' uses built-in auth. */
 	providerPreset: 'github' | 'openai' | 'azure' | 'anthropic' | 'ollama' | 'foundry-local' | 'other-openai';
@@ -133,13 +133,13 @@ export const DEFAULT_EDIT_MODAL: EditModalDefaults = {
 	editPrompt: '',
 };
 
-export const DEFAULT_SETTINGS: SidekickSettings = {
+export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
 	copilotType: 'local',
 	copilotLocation: DEFAULT_COPILOT_LOCATION,
 	cliUrl: '',
 	useLoggedInUser: true,
 	githubToken: '',
-	sidekickFolder: 'sidekick',
+	claudeBrainFolder: 'claude-brain',
 	toolApproval: 'ask',
 	inlineModel: '',
 	autocompleteEnabled: false,
@@ -168,9 +168,9 @@ export const DEFAULT_SETTINGS: SidekickSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof SidekickSettings> = ['githubToken', 'providerApiKey', 'providerBearerToken', 'telegramBotToken'];
+export const SECURE_FIELDS: ReadonlyArray<keyof ClaudeBrainSettings> = ['githubToken', 'providerApiKey', 'providerBearerToken', 'telegramBotToken'];
 
-const SECURE_PREFIX = 'sidekick-secure-';
+const SECURE_PREFIX = 'claude-brain-secure-';
 
 /** Load a secure field from vault-specific local storage. */
 export function loadSecureField(app: App, key: string): string {
@@ -183,29 +183,29 @@ export function saveSecureField(app: App, key: string, value: string): void {
 	app.saveLocalStorage(SECURE_PREFIX + key, value || null);
 }
 
-/** Derive the agents subfolder from the base Sidekick folder. */
-export function getAgentsFolder(settings: SidekickSettings): string {
-	return normalizePath(`${settings.sidekickFolder}/agents`);
+/** Derive the agents subfolder from the base Claude Brain folder. */
+export function getAgentsFolder(settings: ClaudeBrainSettings): string {
+	return normalizePath(`${settings.claudeBrainFolder}/agents`);
 }
 
-/** Derive the skills subfolder from the base Sidekick folder. */
-export function getSkillsFolder(settings: SidekickSettings): string {
-	return normalizePath(`${settings.sidekickFolder}/skills`);
+/** Derive the skills subfolder from the base Claude Brain folder. */
+export function getSkillsFolder(settings: ClaudeBrainSettings): string {
+	return normalizePath(`${settings.claudeBrainFolder}/skills`);
 }
 
-/** Derive the tools subfolder from the base Sidekick folder. */
-export function getToolsFolder(settings: SidekickSettings): string {
-	return normalizePath(`${settings.sidekickFolder}/tools`);
+/** Derive the tools subfolder from the base Claude Brain folder. */
+export function getToolsFolder(settings: ClaudeBrainSettings): string {
+	return normalizePath(`${settings.claudeBrainFolder}/tools`);
 }
 
-/** Derive the prompts subfolder from the base Sidekick folder. */
-export function getPromptsFolder(settings: SidekickSettings): string {
-	return normalizePath(`${settings.sidekickFolder}/prompts`);
+/** Derive the prompts subfolder from the base Claude Brain folder. */
+export function getPromptsFolder(settings: ClaudeBrainSettings): string {
+	return normalizePath(`${settings.claudeBrainFolder}/prompts`);
 }
 
-/** Derive the triggers subfolder from the base Sidekick folder. */
-export function getTriggersFolder(settings: SidekickSettings): string {
-	return normalizePath(`${settings.sidekickFolder}/triggers`);
+/** Derive the triggers subfolder from the base Claude Brain folder. */
+export function getTriggersFolder(settings: ClaudeBrainSettings): string {
+	return normalizePath(`${settings.claudeBrainFolder}/triggers`);
 }
 
 const SAMPLE_SKILL_CONTENT = `---
@@ -254,10 +254,10 @@ enabled: true
 Help me prepare my day, including asks on me, recommendations for clear actions to prepare, and suggestions on which items to prioritize over others.
 `;
 
-export class SidekickSettingTab extends PluginSettingTab {
-	plugin: SidekickPlugin;
+export class ClaudeBrainSettingTab extends PluginSettingTab {
+	plugin: ClaudeBrainPlugin;
 
-	constructor(app: App, plugin: SidekickPlugin) {
+	constructor(app: App, plugin: ClaudeBrainPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -266,10 +266,10 @@ export class SidekickSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
-		containerEl.addClass('sidekick-settings');
+		containerEl.addClass('claude-brain-settings');
 
 		// ── Tab bar ──────────────────────────────────────────────
-		const tabBar = containerEl.createDiv({cls: 'sidekick-settings-tab-bar'});
+		const tabBar = containerEl.createDiv({cls: 'claude-brain-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
 		const tabIds = ['copilot', 'models', 'capabilities', 'tools', 'bots'] as const;
@@ -290,7 +290,7 @@ export class SidekickSettingTab extends PluginSettingTab {
 
 		for (const id of tabIds) {
 			const btn = tabBar.createEl('button', {
-				cls: 'sidekick-settings-tab',
+				cls: 'claude-brain-settings-tab',
 				text: tabLabels[id],
 			});
 			btn.addEventListener('click', () => switchSettingsTab(id));
@@ -298,16 +298,16 @@ export class SidekickSettingTab extends PluginSettingTab {
 		}
 
 		// ── Panels ───────────────────────────────────────────────
-		const toolsFolder = normalizePath(`${this.plugin.settings.sidekickFolder}/tools`);
+		const toolsFolder = normalizePath(`${this.plugin.settings.claudeBrainFolder}/tools`);
 		if (!this.app.vault.getAbstractFileByPath(toolsFolder)) {
-			const warning = containerEl.createDiv({cls: 'sidekick-settings-warning'});
+			const warning = containerEl.createDiv({cls: 'claude-brain-settings-warning'});
 			warning.createEl('p', {
-				text: 'Sidekick folder is not initialized. Go to the capabilities tab to configure and initialize it.',
+				text: 'Claude Brain folder is not initialized. Go to the capabilities tab to configure and initialize it.',
 			});
 		}
 
 		for (const id of tabIds) {
-			panels[id] = containerEl.createDiv({cls: `sidekick-settings-panel${id === 'copilot' ? '' : ' is-hidden'}`});
+			panels[id] = containerEl.createDiv({cls: `claude-brain-settings-panel${id === 'copilot' ? '' : ' is-hidden'}`});
 		}
 		tabButtons['copilot']?.addClass('is-active');
 
@@ -317,7 +317,7 @@ export class SidekickSettingTab extends PluginSettingTab {
 
 		// Model name datalist: in-memory only, populated by a successful BYOK
 		// Test, reset to empty whenever the Settings tab is (re)opened.
-		const MODEL_DATALIST_ID = 'sidekick-provider-model-datalist';
+		const MODEL_DATALIST_ID = 'claude-brain-provider-model-datalist';
 		let modelDatalistEl: HTMLDataListElement | null = null;
 
 		const populateModelDatalist = (models: ModelInfo[]) => {
@@ -464,7 +464,7 @@ export class SidekickSettingTab extends PluginSettingTab {
 				const resolvedSetting = new Setting(clientFieldsEl)
 					.setName('Resolved binary')
 					.setDesc('Resolving\u2026');
-				resolvedSetting.descEl.addClass('sidekick-resolved-binary');
+				resolvedSetting.descEl.addClass('claude-brain-resolved-binary');
 				const showResolvedBinaryPath = async () => {
 					try {
 						const copilot = this.plugin.copilot;
@@ -712,7 +712,7 @@ export class SidekickSettingTab extends PluginSettingTab {
 				.addOptions(providerOptions)
 				.setValue(this.plugin.settings.providerPreset)
 				.onChange(async (value) => {
-					const newPreset = value as SidekickSettings['providerPreset'];
+					const newPreset = value as ClaudeBrainSettings['providerPreset'];
 					this.plugin.settings.providerPreset = newPreset;
 					const defaults = providerDefaults[newPreset];
 					if (defaults?.baseUrl) {
@@ -826,25 +826,25 @@ export class SidekickSettingTab extends PluginSettingTab {
 		const capPanel = panels['capabilities']!;
 
 		new Setting(capPanel)
-			.setName('Sidekick folder')
+			.setName('Claude Brain folder')
 			.setDesc('Vault folder for agents, skills, tools and triggers.')
 			.addText(text => text
-				.setPlaceholder('Ex: sidekick')
-				.setValue(this.plugin.settings.sidekickFolder)
+				.setPlaceholder('Ex: claude-brain')
+				.setValue(this.plugin.settings.claudeBrainFolder)
 				.onChange(async (value) => {
 					const sanitized = value.trim().replace(/\.\./g, '');
 					if (!sanitized || /[;|&`$(){}]/.test(sanitized)) {
-						new Notice('Sidekick folder name is invalid.');
+						new Notice('Claude Brain folder name is invalid.');
 						return;
 					}
-					this.plugin.settings.sidekickFolder = sanitized;
+					this.plugin.settings.claudeBrainFolder = sanitized;
 					await this.plugin.saveSettings();
 				}))
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const base = normalizePath(this.plugin.settings.sidekickFolder);
+						const base = normalizePath(this.plugin.settings.claudeBrainFolder);
 
 						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/tools', '/prompts', '/triggers']) {
 							const dir = normalizePath(`${base}${sub}`);
@@ -886,9 +886,9 @@ export class SidekickSettingTab extends PluginSettingTab {
 							await this.app.vault.create(triggerPath, SAMPLE_TRIGGER_CONTENT);
 						}
 
-						new Notice('Sidekick folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
+						new Notice('Claude Brain folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
 					} catch (e) {
-						new Notice(`Failed to initialize sidekick folder: ${String(e)}`);
+						new Notice(`Failed to initialize claude-brain folder: ${String(e)}`);
 					}
 				}));
 
@@ -903,8 +903,8 @@ export class SidekickSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(capPanel)
-			.setName('Show inline Sidekick icon')
-			.setDesc('Show the Sidekick icon in the editor gutter next to the active line.')
+			.setName('Show inline Claude Brain icon')
+			.setDesc('Show the Claude Brain icon in the editor gutter next to the active line.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.inlineIconEnabled)
 				.onChange(async (value) => {
@@ -1038,14 +1038,14 @@ export class SidekickSettingTab extends PluginSettingTab {
 			.setName('Telegram')
 			.setHeading();
 
-		const statusEl = headingSetting.nameEl.createSpan({cls: 'sidekick-bot-status'});
+		const statusEl = headingSetting.nameEl.createSpan({cls: 'claude-brain-bot-status'});
 
 		const updateStatusDisplay = (status: string, isError = false) => {
 			statusEl.empty();
 			if (status) {
 				statusEl.createSpan({
 					text: ` — ${status}`,
-					cls: isError ? 'sidekick-bot-status-error' : 'sidekick-bot-status-ok',
+					cls: isError ? 'claude-brain-bot-status-error' : 'claude-brain-bot-status-ok',
 				});
 			}
 		};
@@ -1166,10 +1166,10 @@ export class SidekickSettingTab extends PluginSettingTab {
 
 // ── MCP Input value helpers ─────────────────────────────────
 
-const MCP_SECRET_PREFIX = 'sidekick-mcp-input-';
+const MCP_SECRET_PREFIX = 'claude-brain-mcp-input-';
 
 /** Retrieve the stored value for an MCP input variable. */
-export function getMcpInputValue(app: App, plugin: SidekickPlugin, id: string, isPassword: boolean): string | undefined {
+export function getMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): string | undefined {
 	if (isPassword) {
 		const stored = app.loadLocalStorage(MCP_SECRET_PREFIX + id);
 		return stored != null ? String(stored) : undefined;
@@ -1178,7 +1178,7 @@ export function getMcpInputValue(app: App, plugin: SidekickPlugin, id: string, i
 }
 
 /** Store a value for an MCP input variable. */
-export async function setMcpInputValue(app: App, plugin: SidekickPlugin, id: string, value: string, isPassword: boolean): Promise<void> {
+export async function setMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, value: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, value);
 	} else {
@@ -1189,7 +1189,7 @@ export async function setMcpInputValue(app: App, plugin: SidekickPlugin, id: str
 }
 
 /** Delete the stored value for an MCP input variable. */
-export async function deleteMcpInputValue(app: App, plugin: SidekickPlugin, id: string, isPassword: boolean): Promise<void> {
+export async function deleteMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, null);
 	} else {

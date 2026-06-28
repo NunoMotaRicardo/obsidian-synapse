@@ -42,7 +42,7 @@ no `npm test`). Work in small, independently-verifiable increments:
    `npm run build` (must be clean — strict TS) and `npm run lint`.
 3. **Incremental loop** — for each remaining behavior: smallest change → build clean → lint clean.
 4. **Deploy-test** — use `.claude/skills/deploy-test/` to verify the behavior in the real vault
-   (reload, exercise the UI, check the dev console for `[sidekick]` errors). Required in **both**
+   (reload, exercise the UI, check the dev console for `[claude-brain]` errors). Required in **both**
    modes — lite skips the issue/reviewer ceremony, not verification.
 5. **Refactor** — only once a behavior is verified working: remove duplication, deepen modules.
 6. **Commit** — descriptive message per verified increment (or one commit for a small lite

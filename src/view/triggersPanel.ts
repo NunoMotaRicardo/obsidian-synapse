@@ -1,5 +1,5 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
-import type {SidekickView} from '../sidekickView';
+import type {ClaudeBrainView} from '../claudeBrainView';
 import type {SessionMetadata} from '../copilot';
 import type {TriggerConfig} from '../types';
 import {TriggerScheduler} from '../triggerScheduler';
@@ -8,8 +8,8 @@ import {debugTrace} from '../debug';
 import {describeCron, describeGlob} from './utils';
 import type {BackgroundSession} from './types';
 
-declare module '../sidekickView' {
-	interface SidekickView {
+declare module '../claudeBrainView' {
+	interface ClaudeBrainView {
 		buildTriggersPanel(parent: HTMLElement): void;
 		renderTriggerHistory(): void;
 		parseTriggerAgent(session: SessionMetadata): string;
@@ -21,21 +21,21 @@ declare module '../sidekickView' {
 }
 
 export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as SidekickView;
+	const proto = ViewClass.prototype as ClaudeBrainView;
 
 	proto.buildTriggersPanel = function (parent: HTMLElement): void {
 		// ── History section (top) ─────────────────────────────
-		const historySection = parent.createDiv({cls: 'sidekick-triggers-section sidekick-triggers-history-section'});
-		const historyHeader = historySection.createDiv({cls: 'sidekick-triggers-header'});
-		historyHeader.createDiv({cls: 'sidekick-triggers-title', text: 'History'});
+		const historySection = parent.createDiv({cls: 'claude-brain-triggers-section claude-brain-triggers-history-section'});
+		const historyHeader = historySection.createDiv({cls: 'claude-brain-triggers-header'});
+		historyHeader.createDiv({cls: 'claude-brain-triggers-title', text: 'History'});
 
-		const historyControls = historyHeader.createDiv({cls: 'sidekick-triggers-controls'});
+		const historyControls = historyHeader.createDiv({cls: 'claude-brain-triggers-controls'});
 
 		// Filter by name
 		const historySearchEl = historyControls.createEl('input', {
 			type: 'text',
 			placeholder: 'Filter…',
-			cls: 'sidekick-triggers-search',
+			cls: 'claude-brain-triggers-search',
 		});
 		historySearchEl.addEventListener('input', () => {
 			this.triggerHistoryFilter = historySearchEl.value.toLowerCase();
@@ -44,7 +44,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 
 		// Filter by agent
 		const agentFilterBtn = historyControls.createEl('button', {
-			cls: 'clickable-icon sidekick-triggers-ctrl-btn',
+			cls: 'clickable-icon claude-brain-triggers-ctrl-btn',
 			attr: {title: 'Filter by agent'},
 		});
 		setIcon(agentFilterBtn, 'user');
@@ -75,7 +75,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 
 		// Sort
 		const historySortBtn = historyControls.createEl('button', {
-			cls: 'clickable-icon sidekick-triggers-ctrl-btn',
+			cls: 'clickable-icon claude-brain-triggers-ctrl-btn',
 			attr: {title: 'Sort history'},
 		});
 		setIcon(historySortBtn, 'arrow-up-down');
@@ -90,18 +90,18 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 			menu.showAtMouseEvent(e);
 		});
 
-		this.triggerHistoryListEl = historySection.createDiv({cls: 'sidekick-triggers-list'});
+		this.triggerHistoryListEl = historySection.createDiv({cls: 'claude-brain-triggers-list'});
 
 		// ── Configured triggers section (bottom) ──────────────
-		const configSection = parent.createDiv({cls: 'sidekick-triggers-section sidekick-triggers-config-section'});
-		const configHeader = configSection.createDiv({cls: 'sidekick-triggers-header'});
-		configHeader.createDiv({cls: 'sidekick-triggers-title', text: 'Configured triggers'});
+		const configSection = parent.createDiv({cls: 'claude-brain-triggers-section claude-brain-triggers-config-section'});
+		const configHeader = configSection.createDiv({cls: 'claude-brain-triggers-header'});
+		configHeader.createDiv({cls: 'claude-brain-triggers-title', text: 'Configured triggers'});
 
-		const configControls = configHeader.createDiv({cls: 'sidekick-triggers-controls'});
+		const configControls = configHeader.createDiv({cls: 'claude-brain-triggers-controls'});
 
 		// Sort
 		const configSortBtn = configControls.createEl('button', {
-			cls: 'clickable-icon sidekick-triggers-ctrl-btn',
+			cls: 'clickable-icon claude-brain-triggers-ctrl-btn',
 			attr: {title: 'Sort triggers'},
 		});
 		setIcon(configSortBtn, 'arrow-up-down');
@@ -116,7 +116,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 			menu.showAtMouseEvent(e);
 		});
 
-		this.triggerConfigListEl = configSection.createDiv({cls: 'sidekick-triggers-list'});
+		this.triggerConfigListEl = configSection.createDiv({cls: 'claude-brain-triggers-list'});
 	};
 
 	proto.renderTriggerHistory = function (): void {
@@ -154,7 +154,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 		}
 
 		if (items.length === 0) {
-			this.triggerHistoryListEl.createDiv({cls: 'sidekick-triggers-empty', text: 'No trigger history yet.'});
+			this.triggerHistoryListEl.createDiv({cls: 'claude-brain-triggers-empty', text: 'No trigger history yet.'});
 			return;
 		}
 
@@ -220,26 +220,26 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 		}
 
 		if (items.length === 0) {
-			this.triggerConfigListEl.createDiv({cls: 'sidekick-triggers-empty', text: 'No triggers configured.'});
+			this.triggerConfigListEl.createDiv({cls: 'claude-brain-triggers-empty', text: 'No triggers configured.'});
 			return;
 		}
 
 		for (const trigger of items) {
-			const item = this.triggerConfigListEl.createDiv({cls: 'sidekick-session-item sidekick-triggers-config-item'});
+			const item = this.triggerConfigListEl.createDiv({cls: 'claude-brain-session-item claude-brain-triggers-config-item'});
 			if (!trigger.enabled) item.addClass('is-disabled');
 
 			// Icon with enabled/disabled dot (mirrors session list icon pattern)
-			const iconEl = item.createSpan({cls: 'sidekick-session-icon'});
+			const iconEl = item.createSpan({cls: 'claude-brain-session-icon'});
 			setIcon(iconEl, 'zap');
 			if (trigger.enabled) {
-				iconEl.createSpan({cls: 'sidekick-triggers-enabled-dot'});
+				iconEl.createSpan({cls: 'claude-brain-triggers-enabled-dot'});
 			}
 
 			// Details: name + schedule description (mirrors session list)
 			const agentName = trigger.agent || 'Chat';
 			const displayName = `${agentName}: ${trigger.name}`;
-			const details = item.createDiv({cls: 'sidekick-session-details'});
-			details.createDiv({cls: 'sidekick-session-name', text: displayName});
+			const details = item.createDiv({cls: 'claude-brain-session-details'});
+			details.createDiv({cls: 'claude-brain-session-name', text: displayName});
 
 			// Schedule description as subtitle
 			const scheduleParts: string[] = [];
@@ -247,7 +247,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 			if (trigger.glob) scheduleParts.push(describeGlob(trigger.glob));
 			if (scheduleParts.length === 0) scheduleParts.push('No schedule');
 			const scheduleText = scheduleParts.join(' · ');
-			details.createDiv({cls: 'sidekick-session-time', text: scheduleText});
+			details.createDiv({cls: 'claude-brain-session-time', text: scheduleText});
 
 			const tooltipParts = [displayName];
 			if (trigger.description) tooltipParts.push(trigger.description);
@@ -303,14 +303,14 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 
 		// File change events for onFileChange triggers
 		// Debounce: collect changed file paths, then check triggers once after 1s of quiet
-		const sidekickFolder = normalizePath(this.plugin.settings.sidekickFolder);
+		const claudeBrainFolder = normalizePath(this.plugin.settings.claudeBrainFolder);
 		const pendingFilePaths = new Set<string>();
 		let fileChangeTimer: ReturnType<typeof setTimeout> | null = null;
 		const FILE_CHANGE_DEBOUNCE = 1_000;
 
 		const scheduleFileChangeCheck = (filePath: string) => {
-			if (filePath.startsWith(sidekickFolder + '/') || filePath.startsWith('.sidekick-attachments/')) {
-				debugTrace(`Sidekick: ignoring change in excluded folder: ${filePath}`);
+			if (filePath.startsWith(claudeBrainFolder + '/') || filePath.startsWith('.claude-brain-attachments/')) {
+				debugTrace(`Claude Brain: ignoring change in excluded folder: ${filePath}`);
 				return;
 			}
 			pendingFilePaths.add(filePath);
@@ -320,7 +320,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 				const paths = [...pendingFilePaths];
 				pendingFilePaths.clear();
 				for (const p of paths) {
-					debugTrace(`Sidekick: vault file-change event (debounced): ${p}`);
+					debugTrace(`Claude Brain: vault file-change event (debounced): ${p}`);
 					this.triggerScheduler?.checkFileChangeTriggers(p);
 				}
 			}, FILE_CHANGE_DEBOUNCE);
@@ -353,7 +353,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 	 */
 	proto.fireTriggerInBackground = async function (trigger: TriggerConfig, context?: TriggerFireContext): Promise<void> {
 		if (!this.plugin.copilot) {
-			console.warn('Sidekick: trigger skipped — no copilot client available');
+			console.warn('Claude Brain: trigger skipped — no copilot client available');
 			return;
 		}
 
@@ -429,7 +429,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 
 			new Notice(`Trigger fired: ${trigger.description || trigger.name}`);
 		} catch (e) {
-			console.error('Sidekick: trigger failed', trigger.name, e);
+			console.error('Claude Brain: trigger failed', trigger.name, e);
 			new Notice(`Trigger failed: ${trigger.description || trigger.name} — ${String(e)}`);
 		}
 	};

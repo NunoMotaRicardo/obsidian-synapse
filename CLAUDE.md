@@ -1,10 +1,8 @@
-# obsidian-copilot (Sidekick fork)
+# obsidian-claude-brain
 
-Personal fork of obsidian-sidekick: an Obsidian desktop plugin embedding an AI assistant (chat
-panel, editor actions, triggers, Telegram bot). Upstream is unmaintained. **This repo is being
-rebuilt as a Claude-native plugin** (`obsidian-claude-brain`) — see
-`wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`. The product rename (the `sidekick`
-plugin id, vault folder, command IDs) is deferred and not yet done.
+Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
+triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; fully renamed and
+rebuilt as **Claude Brain** — see `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`.
 
 ## Stack & build
 
@@ -39,9 +37,9 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
   `/brain-lite "description"` for a quick one-pass change (still build/lint/deploy-test, opens a
   draft PR). See `wiki/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
-  `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\sidekick\` → reload
-  (`obsidian plugin:reload id=sidekick`). That vault is the user's real vault — deploy only
-  builds that compile clean. (The `sidekick` plugin id is unchanged pending the product rename.)
+  `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\claude-brain\` → reload
+  (`obsidian plugin:reload id=claude-brain`). That vault is the user's real vault — deploy only
+  builds that compile clean.
 - Releases (BRAT): `.claude/skills/release/`. Tag = `manifest.json` version, no `v` prefix.
 
 ## Dev workflow: agents & skills
@@ -68,7 +66,7 @@ Orchestrated by `/brain-build` (planner skill → brain-coder agent → reviewer
 and `.gemini/commands/*` — thin TOML wrappers that inject the canonical `.claude/skills/`
 playbooks via `@{...}`, so nothing is duplicated. See `GEMINI.md`.
 
-> **Don't confuse with the plugin's own feature:** the vault-local `sidekick/` folder
+> **Don't confuse with the plugin's own feature:** the vault-local `claude-brain/` folder
 > (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
 > customization model parsed by `src/configLoader.ts` — documented in
 > `wiki/ai-customization-guide.md`. The `.claude/` dev tooling above is unrelated tooling for

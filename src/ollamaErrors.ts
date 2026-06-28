@@ -105,5 +105,5 @@ export function formatErrorForNotice(error: unknown, providerPreset: string): st
 			return `Ollama: ${friendly}`;
 		}
 	}
-	return `Sidekick: error — ${cleanError}`;
+	return `Claude Brain: error — ${cleanError}`;
 }

@@ -18,23 +18,23 @@ export class ToolApprovalModal extends Modal {
 	onOpen(): void {
 		const {contentEl} = this;
 		contentEl.empty();
-		contentEl.addClass('sidekick-approval-modal');
+		contentEl.addClass('claude-brain-approval-modal');
 
 		contentEl.createEl('h3', {text: 'Tool approval required'});
 
-		const info = contentEl.createDiv({cls: 'sidekick-approval-info'});
-		info.createDiv({cls: 'sidekick-approval-row', text: `Kind: ${this.request.kind}`});
+		const info = contentEl.createDiv({cls: 'claude-brain-approval-info'});
+		info.createDiv({cls: 'claude-brain-approval-row', text: `Kind: ${this.request.kind}`});
 
 		// Show relevant details based on request kind
 		const details: Record<string, unknown> = {...this.request};
 		delete details.kind;
 		delete details.toolCallId;
 		if (Object.keys(details).length > 0) {
-			const pre = info.createEl('pre', {cls: 'sidekick-approval-details'});
+			const pre = info.createEl('pre', {cls: 'claude-brain-approval-details'});
 			pre.createEl('code', {text: JSON.stringify(details, null, 2)});
 		}
 
-		const btnRow = contentEl.createDiv({cls: 'sidekick-approval-buttons'});
+		const btnRow = contentEl.createDiv({cls: 'claude-brain-approval-buttons'});
 
 		const allowBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Allow'});
 		allowBtn.addEventListener('click', () => {

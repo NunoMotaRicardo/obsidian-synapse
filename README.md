@@ -27,8 +27,8 @@ The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent
 > Sidekick 1.2.2+ requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) when using `@github/copilot-sdk@1.x`.
 
 1. **Install** — Either:
-   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add `https://github.com/vieiraae/obsidian-sidekick` as a beta plugin. BRAT handles downloads and updates automatically.
-   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](https://github.com/vieiraae/obsidian-sidekick/releases/latest) into `<YourVault>/.obsidian/plugins/sidekick/`. Then reload Obsidian and enable **Sidekick** in **Settings → Community plugins**.
+   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add `https://github.com/vieiraae/obsidian-claude-brain` as a beta plugin. BRAT handles downloads and updates automatically.
+   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](https://github.com/vieiraae/obsidian-claude-brain/releases/latest) into `<YourVault>/.obsidian/plugins/claude-brain/`. Then reload Obsidian and enable **Claude Brain** in **Settings → Community plugins**.
 2. **Pick a provider** — Open **Settings → Sidekick**. Use **GitHub (built-in)** with a Copilot subscription ([set up the CLI](#setting-up-the-copilot-cli)), or choose a [BYOK provider](#byok-providers) (OpenAI, Anthropic, Ollama, etc.). Click **Test** to verify. With Ollama or Microsoft Foundry Local you can work offline.
 3. **Initialize** — Under **Sidekick settings**, set a folder name (default: `sidekick`) and click **Initialize** to scaffold the config structure:
    ```
@@ -758,6 +758,6 @@ This means you can author your agents and tools once in Sidekick and use them se
 
 ## Feedback
 
-Found a bug or missing a feature? [Open an issue](https://github.com/vieiraae/obsidian-sidekick/issues) — all feedback is welcome. If you find Sidekick useful, [give the repo a star](https://github.com/vieiraae/obsidian-sidekick) — it helps others discover it.
+Found a bug or missing a feature? [Open an issue](https://github.com/vieiraae/obsidian-claude-brain/issues) — all feedback is welcome. If you find Sidekick useful, [give the repo a star](https://github.com/vieiraae/obsidian-claude-brain) — it helps others discover it.
 
 ![Obsidian Sidekick](./docs/images/bottom-banner.png)
