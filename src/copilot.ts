@@ -202,8 +202,10 @@ export async function sendAndWaitWithAbort<T>(
 	}
 
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timedOut = false;
 	if (options?.timeoutMs && options.timeoutMs > 0) {
 		timer = setTimeout(() => {
+			timedOut = true;
 			controller.abort();
 		}, options.timeoutMs);
 	}
@@ -213,7 +215,7 @@ export async function sendAndWaitWithAbort<T>(
 		return result;
 	} catch (e) {
 		controller.abort();
-		if (timer && controller.signal.aborted && !(e instanceof Error && e.name === 'AbortError')) {
+		if (timedOut) {
 			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
 		}
 		throw e;
