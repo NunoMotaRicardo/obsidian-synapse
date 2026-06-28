@@ -89,7 +89,7 @@ export type {
 // Types that no longer have a direct Agent SDK equivalent but are referenced
 // by consumers — define compatibility aliases.
 
-/** Model info — Agent SDK does not have a model-listing API; this is a minimal shape. */
+/** Model info — minimal shape for UI model picker and capability checks. */
 export interface ModelInfo {
 	id: string;
 	name: string;
@@ -110,6 +110,43 @@ export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
 		...(agent.skills ? {skills: agent.skills} : {}),
 	};
 }
+
+/** Standard Claude models supported by the Claude Agent SDK / CLI. */
+export const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
+	{
+		id: 'claude-3-7-sonnet',
+		name: 'Claude 3.7 Sonnet',
+		capabilities: {
+			supports: {vision: true, reasoningEffort: true},
+			limits: {max_context_window_tokens: 200000},
+			supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
+		},
+	},
+	{
+		id: 'claude-3-5-sonnet',
+		name: 'Claude 3.5 Sonnet',
+		capabilities: {
+			supports: {vision: true, reasoningEffort: false},
+			limits: {max_context_window_tokens: 200000},
+		},
+	},
+	{
+		id: 'claude-3-5-haiku',
+		name: 'Claude 3.5 Haiku',
+		capabilities: {
+			supports: {vision: false, reasoningEffort: false},
+			limits: {max_context_window_tokens: 200000},
+		},
+	},
+	{
+		id: 'claude-3-opus',
+		name: 'Claude 3 Opus',
+		capabilities: {
+			supports: {vision: true, reasoningEffort: false},
+			limits: {max_context_window_tokens: 200000},
+		},
+	},
+];
 
 /** Reasoning summary — kept as a string union for settings compatibility. */
 export type ReasoningSummary = 'none' | 'concise' | 'detailed';
@@ -255,6 +292,11 @@ export class AgentService {
 		resolved.version = v.version;
 		resolved.protocolVersion = v.protocolVersion;
 		return resolved;
+	}
+
+	/** Get available Claude models. */
+	getModels(): ModelInfo[] {
+		return DEFAULT_CLAUDE_MODELS;
 	}
 
 	// ── Sessions ────────────────────────────────────────────────────

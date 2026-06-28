@@ -375,8 +375,10 @@ export class ClaudeBrainView extends ItemView {
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
 			this.enabledMcpServers = new Set(this.mcpServers.map(s => s.name));
 
-			// Agent SDK does not have a model-listing API; models are handled by the CLI.
-			// The inline model is set via settings as a free-text model ID.
+			// Populate available models from AgentService
+			if (this.plugin.copilot) {
+				this.refreshProviderModels(this.plugin.copilot.getModels());
+			}
 		} catch (e) {
 			console.error('Claude Brain: failed to load configs', e);
 		} finally {

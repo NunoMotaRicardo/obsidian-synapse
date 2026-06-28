@@ -202,6 +202,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 				console.log(`Claude Brain: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
 		});
+		this.notifySidebarModelsChanged(this.copilot.getModels());
 	}
 
 	onunload() {
