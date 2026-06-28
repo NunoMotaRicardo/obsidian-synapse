@@ -7,7 +7,7 @@ import {
 	setIcon,
 	Component,
 } from 'obsidian';
-import type SynapsePlugin from './main';
+import SynapsePlugin, {SYNAPSE_ICON_ID} from './main';
 import type {
 	SessionConfig,
 	MCPServerConfig,
@@ -186,7 +186,7 @@ export class SynapseView extends ItemView {
 		return 'Synapse';
 	}
 	getIcon(): string {
-		return 'brain';
+		return SYNAPSE_ICON_ID;
 	}
 
 	saveSessionNames(): void {

@@ -1,4 +1,4 @@
-import {MarkdownView, Notice, Plugin} from 'obsidian';
+import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, getAgentsFolder} from "./settings";
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
 import {loadAgents} from "./configLoader";
@@ -10,12 +10,18 @@ import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import type {EditorView} from '@codemirror/view';
 
+export const SYNAPSE_ICON_ID = 'synapse-icon';
+export const SYNAPSE_ICON_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g transform="translate(50,50)" fill="currentColor"><circle r="9"/><g transform="rotate(-90)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(30)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(150)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g></g></svg>';
+
 export default class SynapsePlugin extends Plugin {
 	settings!: SynapseSettings;
 	copilot: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 
 	async onload() {
+		// Register custom Synapse icon in Obsidian's global icon registry
+		addIcon(SYNAPSE_ICON_ID, SYNAPSE_ICON_SVG);
+
 		// ── Migrate localStorage keys from old prefix ──
 		this.migrateLocalStorageKeys();
 
@@ -29,8 +35,7 @@ export default class SynapsePlugin extends Plugin {
 		this.registerView(SYNAPSE_VIEW_TYPE, (leaf) => new SynapseView(leaf, this));
 
 		// Ribbon icon to open view
-		const SYNAPSE_ICON = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g transform="translate(50,50)" fill="currentColor"><circle r="9"/><g transform="rotate(-90)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(30)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(150)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g></g></svg>';
-		this.addRibbonIcon(SYNAPSE_ICON, 'Open Synapse', () => void this.activateView());
+		this.addRibbonIcon(SYNAPSE_ICON_ID, 'Open Synapse', () => void this.activateView());
 
 		// Command to open view
 		this.addCommand({

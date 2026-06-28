@@ -1,6 +1,6 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
-import type SynapsePlugin from '../main';
+import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 // Agent SDK types imported transitively via AgentService
 import {loadSkills} from '../configLoader';
 import {getSkillsFolder} from '../settings';
@@ -34,7 +34,7 @@ export function registerEditorMenu(plugin: SynapsePlugin): void {
 
 			menu.addItem((item) => {
 				item.setTitle('Synapse')
-					.setIcon('brain');
+					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 				buildSynapseMenu(submenu, plugin, cmView);
@@ -81,7 +81,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 
 			menu.addItem((item) => {
 				item.setTitle('Synapse')
-					.setIcon('brain');
+					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -106,7 +106,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 
 				submenu.addItem((si) =>
 					si.setTitle('Chat with Synapse')
-						.setIcon('brain')
+						.setIcon(SYNAPSE_ICON_ID)
 						.onClick(async () => {
 							const leaf = plugin.app.workspace.getLeaf();
 							await leaf.openFile(abstractFile);
@@ -146,7 +146,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): void {
 	menu.addItem((item) => {
 		item.setTitle('Synapse')
-			.setIcon('brain');
+			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -175,7 +175,7 @@ function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): vo
 		);
 		submenu.addItem((si) =>
 			si.setTitle('Chat with Synapse')
-				.setIcon('brain')
+				.setIcon(SYNAPSE_ICON_ID)
 				.onClick(() => void openSynapseViewWithScope(plugin, folder.path)),
 		);
 	});
@@ -665,7 +665,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 	menu.addItem((item) => {
 		item.setTitle('Synapse')
-			.setIcon('brain');
+			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -1163,7 +1163,7 @@ export function buildSynapseMenu(menu: Menu, plugin: SynapsePlugin, view: Editor
 
 	menu.addItem((item) =>
 		item.setTitle('Chat with Synapse')
-			.setIcon('brain')
+			.setIcon(SYNAPSE_ICON_ID)
 			.onClick(() => {
 				if (hasSelection) {
 					const text = view.state.sliceDoc(sel.from, sel.to);
