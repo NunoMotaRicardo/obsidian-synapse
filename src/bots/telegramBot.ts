@@ -8,6 +8,7 @@ import type ClaudeBrainPlugin from '../main';
 import type {ClaudeBrainView} from '../claudeBrainView';
 import {CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
 import type {SessionConfig, CustomAgentConfig} from '../copilot';
+import {toCustomAgentConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
 import {getSkillsFolder, getMcpInputValue} from '../settings';
@@ -312,11 +313,7 @@ export class TelegramBotService {
 		const agentPool = agent ? [agent] : this.agents;
 		const agents: Record<string, CustomAgentConfig> = {};
 		for (const a of agentPool) {
-			agents[a.name] = {
-				description: a.description || '',
-				prompt: a.instructions,
-				...(a.tools ? {tools: a.tools} : {}),
-			};
+			agents[a.name] = toCustomAgentConfig(a);
 		}
 
 		// Model

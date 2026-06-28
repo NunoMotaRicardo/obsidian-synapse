@@ -42,7 +42,7 @@ export function mapMcpServers(mcpServers: McpServerEntry[], enabledMcpServers: S
 
 /**
  * Resolve a model ID from an agent's preferred model name / partial match.
- * Returns the matching model ID, or `fallback` if no match is found.
+ * Returns the matching model ID, or `agent.model` if specified, or `fallback`.
  */
 export function resolveModelForAgent(agent: AgentConfig | undefined, models: ModelInfo[], fallback: string | undefined): string | undefined {
 	if (!agent?.model) return fallback;
@@ -55,7 +55,7 @@ export function resolveModelForAgent(agent: AgentConfig | undefined, models: Mod
 			m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target)
 		);
 	}
-	return match ? match.id : fallback;
+	return match ? match.id : agent.model;
 }
 
 /**

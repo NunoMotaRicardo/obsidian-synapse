@@ -14,8 +14,9 @@ import type {
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
+	CustomAgentConfig,
 } from './copilot';
-import {Session} from './copilot';
+import {Session, toCustomAgentConfig} from './copilot';
 import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {loadAgents, loadSkills, loadMcpServers, loadPrompts, loadTriggers} from './configLoader';
 import type {InputResolver} from './configLoader';
@@ -956,12 +957,10 @@ export class ClaudeBrainView extends ItemView {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
 		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
-		const customAgents: {name: string; description: string; prompt: string; tools?: string[]}[] = this.agents.map(a => ({
-			name: a.name,
-			description: a.description || '',
-			prompt: a.instructions,
-			...(a.tools ? {tools: a.tools} : {}),
-		}));
+		const agents: Record<string, CustomAgentConfig> = {};
+		for (const a of this.agents) {
+			agents[a.name] = toCustomAgentConfig(a);
+		}
 
 		// Permission handler
 		// Permission handler — canUseTool for Agent SDK
@@ -1007,11 +1006,7 @@ export class ClaudeBrainView extends ItemView {
 			? opts.systemContent + '\n\n' + wsInfo
 			: wsInfo;
 
-		// Build agent definitions (Agent SDK uses Record<string, AgentDefinition>)
-		const agents: Record<string, import('./copilot').CustomAgentConfig> = {};
-		for (const a of customAgents) {
-			agents[a.name] = a;
-		}
+
 
 		const config: SessionConfig = {
 			model: opts.model,
