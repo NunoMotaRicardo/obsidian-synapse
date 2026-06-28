@@ -7,6 +7,29 @@
  * the SDK directly (architecture rule from CLAUDE.md).
  */
 
+// Compatibility shim for Electron desktop environment.
+// Electron's global AbortSignal does not inherit from Node's internal EventTarget/EventEmitter,
+// causing events.setMaxListeners(n, signal) inside the Agent SDK to throw ERR_INVALID_ARG_TYPE.
+try {
+	const nodeReq = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+	const events = nodeReq?.('node:events') as typeof import('node:events') | undefined;
+	if (events && typeof events.setMaxListeners === 'function') {
+		const origSetMaxListeners = events.setMaxListeners;
+		events.setMaxListeners = function(n: number, ...eventTargets: unknown[]) {
+			try {
+				return origSetMaxListeners.apply(this, [n, ...(eventTargets as unknown as [never])]);
+			} catch (e: unknown) {
+				if (e && typeof e === 'object' && 'code' in e && (e as {code?: string}).code === 'ERR_INVALID_ARG_TYPE') {
+					return;
+				}
+				throw e;
+			}
+		};
+	}
+} catch {
+	// ignore polyfill errors
+}
+
 import {query, listSessions, deleteSession, renameSession} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,

@@ -73,12 +73,20 @@ export async function resolveDefaultCliPath(): Promise<ResolvedCliPath> {
 		if (appData) {
 			searchRoots.push(path.join(appData, 'npm', 'node_modules'));
 		}
+	} else {
+		const home = process.env['HOME'];
+		if (home) {
+			searchRoots.push(path.join(home, '.nvm', 'versions', 'node', 'current', 'lib', 'node_modules'));
+		}
+		searchRoots.push('/usr/local/lib/node_modules');
+		searchRoots.push('/opt/homebrew/lib/node_modules');
 	}
 	searchRoots.push(path.join(__dirname, 'node_modules'));
 	for (const root of searchRoots) {
 		candidates.push({path: path.join(root, nativePkg, `claude${ext}`), source: 'global-npm'});
 		candidates.push({path: path.join(root, '@anthropic-ai', 'claude-agent-sdk', 'node_modules', nativePkg, `claude${ext}`), source: 'global-npm'});
 		candidates.push({path: path.join(root, '@anthropic-ai', 'claude-code', 'node_modules', nativePkg, `claude${ext}`), source: 'global-npm'});
+		candidates.push({path: path.join(root, '@anthropic-ai', 'claude-code', 'bin', `claude${ext}`), source: 'global-npm'});
 	}
 
 	for (const candidate of candidates) {
