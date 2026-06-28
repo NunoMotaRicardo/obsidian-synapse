@@ -6,6 +6,7 @@ import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
+import {resolveModelForAgent} from './sessionConfig';
 
 /** Selectable reasoning-summary modes (excludes '' = model default). */
 const REASONING_SUMMARY_MODES = ['none', 'concise', 'detailed'] as const;
@@ -444,16 +445,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.resolveModelForAgent = function(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {
-		if (!agent?.model) return fallback;
-		const target = agent.model.toLowerCase();
-		let match = this.models.find(
-			m => m.name.toLowerCase() === target || m.id.toLowerCase() === target
-		);
-		if (!match) {
-			match = this.models.find(
-				m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target)
-			);
-		}
-		return match ? match.id : fallback;
+		return resolveModelForAgent(agent, this.models, fallback);
 	};
 }

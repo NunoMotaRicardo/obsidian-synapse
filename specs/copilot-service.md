@@ -44,17 +44,23 @@ duplication of the `typeMap` and provider-config assembly.
 The `streaming` flag is set to `false` for the `foundry-local` preset (matching the chat-panel
 behavior), and omitted otherwise (SDK default is streaming).
 
+## Named Agent Model Binding & Routing (#5)
+
+Named agents parsed from `*.agent.md` carry an optional `model` binding (Claude model ID or local backend reference). `toCustomAgentConfig()` converts vault `AgentConfig` objects into SDK `AgentDefinition` (`CustomAgentConfig`) objects with their `model`, `description`, `prompt`, `tools`, and `skills` intact.
+
+`AgentService` includes a internal routing layer (`routeQueryOptions`) that intercepts queries. When a named agent is specified (`agent`) and its matching `AgentDefinition` carries a model binding (`model`), `AgentService` routes the request's effective model to the bound model backend. Tool delegation to subagents via the Agent tool similarly resolves each subagent's bound model.
+
 ## Session options passed through (selected)
 
 | Option | Source |
 |---|---|
-| `model` | toolbar / agent frontmatter / settings |
+| `model` | toolbar / agent frontmatter / settings / AgentService agent routing |
 | `reasoningEffort` | settings + toolbar brain menu, only when `model.capabilities.supports.reasoningEffort` |
 | `reasoningSummary` | settings + toolbar brain menu (issue 0003), same gating as `reasoningEffort` |
 | `contextTier` | planned — issue 0004 |
 | `infiniteSessions` | settings `infiniteSessionsEnabled` (issue #5) — `{ enabled }` config; omitted when `true` (SDK default), passed as `{ enabled: false }` when disabled |
 | `systemMessage` | agent body / built-in prompts |
-| `customAgents`, `agent` | config-loader agents |
+| `customAgents`, `agent` | config-loader agents (bound models converted via `toCustomAgentConfig`) |
 | `mcpServers` | config-loader `tools/mcp.json` |
 | `skillDirectories`, `disabledSkills` | config-loader skills |
 | `onPermissionRequest` | tool-approval modal or `approveAll` |

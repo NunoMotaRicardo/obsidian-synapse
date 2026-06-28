@@ -1,6 +1,7 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {ClaudeBrainView} from '../claudeBrainView';
 import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
+import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
 import {getSkillsFolder} from '../settings';
 import {FolderTreeModal} from '../modals';
@@ -324,11 +325,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			: this.agents;
 		const agents: Record<string, CustomAgentConfig> = {};
 		for (const a of agentPool) {
-			agents[a.name] = {
-				description: a.description || '',
-				prompt: a.instructions,
-				...(a.tools ? {tools: a.tools} : {}),
-			};
+			agents[a.name] = toCustomAgentConfig(a);
 		}
 
 		return {
