@@ -2,13 +2,13 @@ import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, TriggerConfig} from './types';
 
 /** Module-level compiled regex for frontmatter detection. */
-const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 /**
  * Parse YAML-like frontmatter from markdown content.
  * Returns parsed key-value pairs and the body after the frontmatter block.
  */
-function parseFrontmatter(content: string): {meta: Record<string, string | string[]>; body: string} {
+export function parseFrontmatter(content: string): {meta: Record<string, string | string[]>; body: string} {
 	const match = content.match(FM_RE);
 	if (!match) return {meta: {}, body: content};
 	const meta: Record<string, string | string[]> = {};
