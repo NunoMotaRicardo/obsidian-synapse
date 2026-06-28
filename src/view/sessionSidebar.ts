@@ -1,4 +1,4 @@
-import type {ClaudeBrainView} from '../claudeBrainView';
+import type {SynapseView} from '../synapseView';
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
 import type {SessionMetadata} from '../copilot';
 import type {ChatMessage} from '../types';
@@ -6,8 +6,8 @@ import {debugTrace} from '../debug';
 import {formatTimeAgo} from './utils';
 import type {BackgroundSession} from './types';
 
-declare module '../claudeBrainView' {
-	interface ClaudeBrainView {
+declare module '../synapseView' {
+	interface SynapseView {
 		buildSessionSidebar(parent: HTMLElement): void;
 		initSplitter(): void;
 		loadSessions(): Promise<void>;
@@ -39,26 +39,26 @@ declare module '../claudeBrainView' {
 }
 
 export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as ClaudeBrainView;
+	const proto = ViewClass.prototype as SynapseView;
 
 	proto.buildSessionSidebar = function (parent: HTMLElement): void {
-		this.sidebarEl = parent.createDiv({cls: 'claude-brain-sidebar'});
+		this.sidebarEl = parent.createDiv({cls: 'synapse-sidebar'});
 		this.sidebarEl.setCssProps({'--sidebar-width': `${this.sidebarWidth}px`});
 
 		// Header: new session button + filter + sort + search
-		const header = this.sidebarEl.createDiv({cls: 'claude-brain-sidebar-header'});
+		const header = this.sidebarEl.createDiv({cls: 'synapse-sidebar-header'});
 
-		const headerBtnRow = header.createDiv({cls: 'claude-brain-sidebar-btn-row'});
+		const headerBtnRow = header.createDiv({cls: 'synapse-sidebar-btn-row'});
 
 		const newBtn = headerBtnRow.createEl('button', {
-			cls: 'clickable-icon claude-brain-icon-btn claude-brain-sidebar-new-btn',
+			cls: 'clickable-icon synapse-icon-btn synapse-sidebar-new-btn',
 			attr: {title: 'New session'},
 		});
 		setIcon(newBtn, 'plus');
 		newBtn.addEventListener('click', () => void this.newConversation());
 
 		this.sidebarFilterEl = headerBtnRow.createEl('button', {
-			cls: 'clickable-icon claude-brain-sidebar-filter-btn',
+			cls: 'clickable-icon synapse-sidebar-filter-btn',
 			attr: {title: 'Filter sessions by type'},
 		});
 		setIcon(this.sidebarFilterEl, 'filter');
@@ -66,7 +66,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.updateFilterBadge();
 
 		this.sidebarSortEl = headerBtnRow.createEl('button', {
-			cls: 'clickable-icon claude-brain-sidebar-sort-btn',
+			cls: 'clickable-icon synapse-sidebar-sort-btn',
 			attr: {title: 'Sort sessions'},
 		});
 		setIcon(this.sidebarSortEl, 'arrow-up-down');
@@ -74,7 +74,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.updateSortBadge();
 
 		this.sidebarRefreshEl = headerBtnRow.createEl('button', {
-			cls: 'clickable-icon claude-brain-sidebar-refresh-btn',
+			cls: 'clickable-icon synapse-sidebar-refresh-btn',
 			attr: {title: 'Refresh sessions'},
 		});
 		setIcon(this.sidebarRefreshEl, 'refresh-cw');
@@ -84,7 +84,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		});
 
 		this.sidebarDeleteEl = headerBtnRow.createEl('button', {
-			cls: 'clickable-icon claude-brain-sidebar-delete-btn',
+			cls: 'clickable-icon synapse-sidebar-delete-btn',
 			attr: {title: 'Delete displayed sessions'},
 		});
 		setIcon(this.sidebarDeleteEl, 'trash-2');
@@ -93,7 +93,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.sidebarSearchEl = header.createEl('input', {
 			type: 'text',
 			placeholder: 'Search…',
-			cls: 'claude-brain-sidebar-search',
+			cls: 'synapse-sidebar-search',
 		});
 		this.sidebarSearchEl.addEventListener('input', () => {
 			this.sessionFilter = this.sidebarSearchEl.value.toLowerCase();
@@ -101,7 +101,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		});
 
 		// Session list (scrollable)
-		this.sidebarListEl = this.sidebarEl.createDiv({cls: 'claude-brain-sidebar-list'});
+		this.sidebarListEl = this.sidebarEl.createDiv({cls: 'synapse-sidebar-list'});
 	};
 
 	proto.initSplitter = function (): void {
@@ -123,7 +123,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			document.removeEventListener('mousemove', onMouseMove);
 			document.removeEventListener('mouseup', onMouseUp);
 			this.splitterEl.removeClass('is-dragging');
-			document.body.removeClass('claude-brain-no-select');
+			document.body.removeClass('synapse-no-select');
 			// Re-render session list once on drag end instead of every mousemove
 			this.renderSessionList();
 		};
@@ -134,7 +134,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			startX = e.clientX;
 			startWidth = this.sidebarWidth;
 			this.splitterEl.addClass('is-dragging');
-			document.body.addClass('claude-brain-no-select');
+			document.body.addClass('synapse-no-select');
 			document.addEventListener('mousemove', onMouseMove);
 			document.addEventListener('mouseup', onMouseUp);
 		});
@@ -231,13 +231,13 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		onContextMenu: (e: MouseEvent) => void;
 	}): void {
 		const expanded = opts.expanded ?? true;
-		const item = container.createDiv({cls: 'claude-brain-session-item'});
+		const item = container.createDiv({cls: 'synapse-session-item'});
 		const isActive = session.sessionId === this.currentSessionId;
 		if (isActive) item.addClass('is-active');
 
 		const sessionType = this.getSessionType(session);
 		const iconName = sessionType === 'chat' ? 'message-square' : sessionType === 'trigger' ? 'zap' : sessionType === 'inline' ? 'file-text' : sessionType === 'search' ? 'search' : 'code';
-		const iconEl = item.createSpan({cls: 'claude-brain-session-icon'});
+		const iconEl = item.createSpan({cls: 'synapse-session-icon'});
 		setIcon(iconEl, iconName);
 
 		// Green active dot when processing (current or background session)
@@ -245,15 +245,15 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		const bgSession = this.activeSessions.get(session.sessionId);
 		const isBgStreaming = bgSession?.isStreaming ?? false;
 		if (isCurrentStreaming || isBgStreaming) {
-			iconEl.createSpan({cls: 'claude-brain-session-active-dot'});
+			iconEl.createSpan({cls: 'synapse-session-active-dot'});
 		}
 
 		const name = this.getSessionDisplayName(session);
 		if (expanded) {
-			const details = item.createDiv({cls: 'claude-brain-session-details'});
-			details.createDiv({cls: 'claude-brain-session-name', text: name});
+			const details = item.createDiv({cls: 'synapse-session-details'});
+			details.createDiv({cls: 'synapse-session-name', text: name});
 			const modTime = new Date(session.lastModified);
-			details.createDiv({cls: 'claude-brain-session-time', text: formatTimeAgo(modTime)});
+			details.createDiv({cls: 'synapse-session-time', text: formatTimeAgo(modTime)});
 		}
 
 		item.setAttribute('title', name);
@@ -271,7 +271,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'trigger' | 'search' | 'other' {
 		const name = this.sessionNames[session.sessionId] || '';
-		debugTrace(`Claude Brain: getSessionType id=${session.sessionId.slice(0, 8)} name="${name.slice(0, 40)}"`);
+		debugTrace(`Synapse: getSessionType id=${session.sessionId.slice(0, 8)} name="${name.slice(0, 40)}"`);
 		if (name.startsWith('[chat]')) return 'chat';
 		if (name.startsWith('[inline]')) return 'inline';
 		if (name.startsWith('[trigger]')) return 'trigger';
@@ -694,7 +694,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				try {
 					await session.rpc.agent.select({name: sessionConfig.agent});
 				} catch (e) {
-					console.warn('[claude-brain] agent.select on resume failed:', e);
+					console.warn('[synapse] agent.select on resume failed:', e);
 				}
 			}
 
@@ -793,11 +793,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		const input = modal.contentEl.createEl('input', {
 			type: 'text',
 			value: displayName,
-			cls: 'claude-brain-rename-input',
+			cls: 'synapse-rename-input',
 		});
 
 
-		const btnRow = modal.contentEl.createDiv({cls: 'claude-brain-approval-buttons'});
+		const btnRow = modal.contentEl.createDiv({cls: 'synapse-approval-buttons'});
 		const saveBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Save'});
 		saveBtn.addEventListener('click', () => {
 			const newName = input.value.trim();

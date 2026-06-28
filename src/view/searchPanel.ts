@@ -1,5 +1,5 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
-import type {ClaudeBrainView} from '../claudeBrainView';
+import type {SynapseView} from '../synapseView';
 import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
@@ -7,8 +7,8 @@ import {getSkillsFolder} from '../settings';
 import {FolderTreeModal} from '../modals';
 import {mapMcpServers} from './sessionConfig';
 
-declare module '../claudeBrainView' {
-	interface ClaudeBrainView {
+declare module '../synapseView' {
+	interface SynapseView {
 		buildSearchPanel(parent: HTMLElement): void;
 		readonly searchMode: 'basic' | 'advanced';
 		toggleSearchMode(): void;
@@ -34,33 +34,33 @@ declare module '../claudeBrainView' {
 }
 
 export function installSearchPanel(ViewClass: { prototype: unknown }): void {
-	const proto = ViewClass.prototype as ClaudeBrainView;
+	const proto = ViewClass.prototype as SynapseView;
 
-	proto.buildSearchPanel = function (this: ClaudeBrainView, parent: HTMLElement): void {
-		const wrapper = parent.createDiv({cls: 'claude-brain-search-wrapper'});
+	proto.buildSearchPanel = function (this: SynapseView, parent: HTMLElement): void {
+		const wrapper = parent.createDiv({cls: 'synapse-search-wrapper'});
 
 		// ── Toolbar row: scope | mode toggle | [advanced: agent | model | skills | tools] ──
-		const toolbar = wrapper.createDiv({cls: 'claude-brain-toolbar claude-brain-search-toolbar'});
+		const toolbar = wrapper.createDiv({cls: 'synapse-toolbar synapse-search-toolbar'});
 
 		// Search scope (folder picker) — always visible
-		this.searchCwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Search scope'}});
+		this.searchCwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Search scope'}});
 		setIcon(this.searchCwdBtnEl, 'folder');
 		this.searchCwdBtnEl.addEventListener('click', () => this.openSearchScopePicker());
 		this.updateSearchCwdButton();
 
 		// Mode toggle (basic / advanced)
-		this.searchModeToggleEl = toolbar.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Toggle basic/advanced mode'}});
+		this.searchModeToggleEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Toggle basic/advanced mode'}});
 		this.searchModeToggleEl.addEventListener('click', () => this.toggleSearchMode());
 		this.updateSearchModeToggle();
 
 		// Advanced controls group — hidden in basic mode
-		this.searchAdvancedToolbarEl = toolbar.createDiv({cls: 'claude-brain-search-advanced-group'});
+		this.searchAdvancedToolbarEl = toolbar.createDiv({cls: 'synapse-search-advanced-group'});
 
 		// Agent dropdown
-		const agentGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'claude-brain-toolbar-group'});
-		const agentIcon = agentGroup.createSpan({cls: 'claude-brain-toolbar-icon'});
+		const agentGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'synapse-toolbar-group'});
+		const agentIcon = agentGroup.createSpan({cls: 'synapse-toolbar-icon'});
 		setIcon(agentIcon, 'bot');
-		this.searchAgentSelect = agentGroup.createEl('select', {cls: 'claude-brain-select'});
+		this.searchAgentSelect = agentGroup.createEl('select', {cls: 'synapse-select'});
 		this.searchAgentSelect.addEventListener('change', () => {
 			this.searchAgent = this.searchAgentSelect.value;
 			const agent = this.agents.find(a => a.name === this.searchAgent);
@@ -79,21 +79,21 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		});
 
 		// Model dropdown
-		const modelGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'claude-brain-toolbar-group'});
-		const modelIcon = modelGroup.createSpan({cls: 'claude-brain-toolbar-icon'});
+		const modelGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'synapse-toolbar-group'});
+		const modelIcon = modelGroup.createSpan({cls: 'synapse-toolbar-icon'});
 		setIcon(modelIcon, 'cpu');
-		this.searchModelSelect = modelGroup.createEl('select', {cls: 'claude-brain-select claude-brain-model-select'});
+		this.searchModelSelect = modelGroup.createEl('select', {cls: 'synapse-select synapse-model-select'});
 		this.searchModelSelect.addEventListener('change', () => {
 			this.searchModel = this.searchModelSelect.value;
 		});
 
 		// Skills button
-		this.searchSkillsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Skills'}});
+		this.searchSkillsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Skills'}});
 		setIcon(this.searchSkillsBtnEl, 'wand-2');
 		this.searchSkillsBtnEl.addEventListener('click', (e) => this.openSearchSkillsMenu(e));
 
 		// Tools button
-		this.searchToolsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Tools'}});
+		this.searchToolsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
 		setIcon(this.searchToolsBtnEl, 'plug');
 		this.searchToolsBtnEl.addEventListener('click', (e) => this.openSearchToolsMenu(e));
 
@@ -101,9 +101,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.updateSearchAdvancedVisibility();
 
 		// ── Search input + button ──
-		const inputRow = wrapper.createDiv({cls: 'claude-brain-search-input-row'});
+		const inputRow = wrapper.createDiv({cls: 'synapse-search-input-row'});
 		this.searchInputEl = inputRow.createEl('textarea', {
-			cls: 'claude-brain-search-input',
+			cls: 'synapse-search-input',
 			attr: {placeholder: 'Describe what you\'re looking for…', rows: '2'},
 		});
 		this.searchInputEl.addEventListener('keydown', (e) => {
@@ -113,20 +113,20 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			}
 		});
 
-		this.searchBtnEl = inputRow.createEl('button', {cls: 'claude-brain-search-btn', attr: {title: 'Search'}});
+		this.searchBtnEl = inputRow.createEl('button', {cls: 'synapse-search-btn', attr: {title: 'Search'}});
 		setIcon(this.searchBtnEl, 'search');
 		this.searchBtnEl.addEventListener('click', () => void this.handleSearch());
 
 		// ── Results area ──
-		this.searchResultsEl = wrapper.createDiv({cls: 'claude-brain-search-results'});
+		this.searchResultsEl = wrapper.createDiv({cls: 'synapse-search-results'});
 	};
 
 	Object.defineProperty(proto, 'searchMode', {
-		get(this: ClaudeBrainView) { return this.plugin.settings.searchMode; },
+		get(this: SynapseView) { return this.plugin.settings.searchMode; },
 		configurable: true,
 	});
 
-	proto.toggleSearchMode = function (this: ClaudeBrainView): void {
+	proto.toggleSearchMode = function (this: SynapseView): void {
 		const newMode = this.searchMode === 'basic' ? 'advanced' : 'basic';
 		this.plugin.settings.searchMode = newMode;
 		void this.plugin.saveSettings();
@@ -139,7 +139,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		}
 	};
 
-	proto.updateSearchModeToggle = function (this: ClaudeBrainView): void {
+	proto.updateSearchModeToggle = function (this: SynapseView): void {
 		this.searchModeToggleEl.empty();
 		if (this.searchMode === 'basic') {
 			setIcon(this.searchModeToggleEl, 'settings');
@@ -151,11 +151,11 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchModeToggleEl.toggleClass('is-active', this.searchMode === 'advanced');
 	};
 
-	proto.updateSearchAdvancedVisibility = function (this: ClaudeBrainView): void {
+	proto.updateSearchAdvancedVisibility = function (this: SynapseView): void {
 		this.searchAdvancedToolbarEl.toggleClass('is-hidden', this.searchMode !== 'advanced');
 	};
 
-	proto.updateSearchConfigUI = function (this: ClaudeBrainView): void {
+	proto.updateSearchConfigUI = function (this: SynapseView): void {
 		// Agents
 		this.searchAgentSelect.empty();
 		const noAgent = this.searchAgentSelect.createEl('option', {text: 'Agent', attr: {value: ''}});
@@ -199,7 +199,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.applySearchAgentToolsAndSkills(agentConfig);
 	};
 
-	proto.applySearchAgentToolsAndSkills = function (this: ClaudeBrainView, agent?: AgentConfig): void {
+	proto.applySearchAgentToolsAndSkills = function (this: SynapseView, agent?: AgentConfig): void {
 		// Tools: undefined = enable all, [] = disable all, [...] = enable listed
 		if (agent?.tools !== undefined) {
 			const allowed = new Set(agent.tools);
@@ -224,7 +224,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.updateSearchToolsBadge();
 	};
 
-	proto.openSearchSkillsMenu = function (this: ClaudeBrainView, e: MouseEvent): void {
+	proto.openSearchSkillsMenu = function (this: SynapseView, e: MouseEvent): void {
 		const menu = new Menu();
 		if (this.skills.length === 0) {
 			menu.addItem(item => item.setTitle('No skills configured').setDisabled(true));
@@ -247,7 +247,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		menu.showAtMouseEvent(e);
 	};
 
-	proto.openSearchToolsMenu = function (this: ClaudeBrainView, e: MouseEvent): void {
+	proto.openSearchToolsMenu = function (this: SynapseView, e: MouseEvent): void {
 		const menu = new Menu();
 		if (this.mcpServers.length === 0) {
 			menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
@@ -270,26 +270,26 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		menu.showAtMouseEvent(e);
 	};
 
-	proto.updateSearchSkillsBadge = function (this: ClaudeBrainView): void {
+	proto.updateSearchSkillsBadge = function (this: SynapseView): void {
 		const count = this.searchEnabledSkills.size;
 		this.searchSkillsBtnEl.toggleClass('is-active', count > 0);
 		this.searchSkillsBtnEl.setAttribute('title', count > 0 ? `Skills (${count} active)` : 'Skills');
 	};
 
-	proto.updateSearchToolsBadge = function (this: ClaudeBrainView): void {
+	proto.updateSearchToolsBadge = function (this: SynapseView): void {
 		const count = this.searchEnabledMcpServers.size;
 		this.searchToolsBtnEl.toggleClass('is-active', count > 0);
 		this.searchToolsBtnEl.setAttribute('title', count > 0 ? `Tools (${count} active)` : 'Tools');
 	};
 
-	proto.openSearchScopePicker = function (this: ClaudeBrainView): void {
+	proto.openSearchScopePicker = function (this: SynapseView): void {
 		new FolderTreeModal(this.app, this.searchWorkingDir, (folder) => {
 			this.searchWorkingDir = folder.path;
 			this.updateSearchCwdButton();
 		}).open();
 	};
 
-	proto.updateSearchCwdButton = function (this: ClaudeBrainView): void {
+	proto.updateSearchCwdButton = function (this: SynapseView): void {
 		const vaultName = this.app.vault.getName();
 		const label = this.searchWorkingDir
 			? `Search scope: ${vaultName}/${this.searchWorkingDir}`
@@ -298,13 +298,13 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchCwdBtnEl.toggleClass('is-active', !!this.searchWorkingDir);
 	};
 
-	proto.getSearchWorkingDirectory = function (this: ClaudeBrainView): string {
+	proto.getSearchWorkingDirectory = function (this: SynapseView): string {
 		const base = this.getVaultBasePath();
 		if (!this.searchWorkingDir) return base;
 		return base + '/' + normalizePath(this.searchWorkingDir);
 	};
 
-	proto.buildSearchSessionConfig = function (this: ClaudeBrainView): SessionConfig {
+	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		const basePath = this.getVaultBasePath();
 
 		// MCP servers (search-specific selection)
@@ -338,7 +338,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		};
 	};
 
-	proto.handleSearch = async function (this: ClaudeBrainView): Promise<void> {
+	proto.handleSearch = async function (this: SynapseView): Promise<void> {
 		if (this.isSearching) {
 			// Cancel in-progress search
 			const session = this.searchMode === 'basic' ? this.basicSearchSession : this.searchSession;
@@ -365,7 +365,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.isSearching = true;
 		this.updateSearchButton();
 		this.searchResultsEl.empty();
-		this.searchResultsEl.createDiv({cls: 'claude-brain-search-loading', text: 'Searching…'});
+		this.searchResultsEl.createDiv({cls: 'synapse-search-loading', text: 'Searching…'});
 
 		try {
 			if (this.searchMode === 'basic') {
@@ -376,7 +376,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		} catch (e) {
 			if (this.isSearching) {
 				this.searchResultsEl.empty();
-				this.searchResultsEl.createDiv({cls: 'claude-brain-search-empty', text: `Search failed: ${String(e)}`});
+				this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: `Search failed: ${String(e)}`});
 			}
 		} finally {
 			this.isSearching = false;
@@ -384,12 +384,12 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		}
 	};
 
-	proto.handleBasicSearch = async function (this: ClaudeBrainView, query: string): Promise<void> {
+	proto.handleBasicSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
 		const {content} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			cwd: this.getSearchWorkingDirectory(),
 			permissionMode: 'plan',
 			tools: [],
@@ -398,7 +398,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.renderSearchResults(content || '');
 	};
 
-	proto.handleAdvancedSearch = async function (this: ClaudeBrainView, query: string): Promise<void> {
+	proto.handleAdvancedSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const sessionConfig = this.buildSearchSessionConfig();
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
@@ -427,16 +427,16 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.renderSearchResults(content || '');
 	};
 
-	proto.buildBasicSearchSessionConfig = function (this: ClaudeBrainView): SessionConfig {
+	proto.buildBasicSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		return {
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			permissionMode: 'plan',
 			cwd: this.getSearchWorkingDirectory(),
 			tools: [],
 		};
 	};
 
-	proto.renderSearchResults = function (this: ClaudeBrainView, content: string): void {
+	proto.renderSearchResults = function (this: SynapseView, content: string): void {
 		this.searchResultsEl.empty();
 
 		// Try to parse JSON array from the response
@@ -449,24 +449,24 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			results = Array.isArray(parsed) ? parsed : [parsed];
 		} catch {
 			// If not valid JSON, show the raw response
-			this.searchResultsEl.createDiv({cls: 'claude-brain-search-empty', text: content || 'No results found.'});
+			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: content || 'No results found.'});
 			return;
 		}
 
 		if (!Array.isArray(results) || results.length === 0) {
-			this.searchResultsEl.createDiv({cls: 'claude-brain-search-empty', text: 'No results found.'});
+			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: 'No results found.'});
 			return;
 		}
 
 		for (const result of results) {
-			const item = this.searchResultsEl.createDiv({cls: 'claude-brain-search-result'});
+			const item = this.searchResultsEl.createDiv({cls: 'synapse-search-result'});
 
-			const fileRow = item.createDiv({cls: 'claude-brain-search-result-file'});
-			const fileIcon = fileRow.createSpan({cls: 'claude-brain-search-result-icon'});
+			const fileRow = item.createDiv({cls: 'synapse-search-result-file'});
+			const fileIcon = fileRow.createSpan({cls: 'synapse-search-result-icon'});
 			setIcon(fileIcon, 'file-text');
 			const filePath = (result.file || result.path || '').replace(/^\/+/, '');
 			const fileName = filePath.split('/').pop() || filePath || 'Unknown';
-			const fileLink = fileRow.createSpan({cls: 'claude-brain-search-result-name', text: fileName});
+			const fileLink = fileRow.createSpan({cls: 'synapse-search-result-name', text: fileName});
 
 			fileLink.addEventListener('click', () => {
 				if (!filePath) return;
@@ -481,16 +481,16 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			});
 
 			if (result.folder) {
-				fileRow.createSpan({cls: 'claude-brain-search-result-folder', text: result.folder});
+				fileRow.createSpan({cls: 'synapse-search-result-folder', text: result.folder});
 			}
 
 			if (result.reason) {
-				item.createDiv({cls: 'claude-brain-search-result-reason', text: result.reason});
+				item.createDiv({cls: 'synapse-search-result-reason', text: result.reason});
 			}
 		}
 	};
 
-	proto.updateSearchButton = function (this: ClaudeBrainView): void {
+	proto.updateSearchButton = function (this: SynapseView): void {
 		this.searchBtnEl.empty();
 		if (this.isSearching) {
 			setIcon(this.searchBtnEl, 'square');

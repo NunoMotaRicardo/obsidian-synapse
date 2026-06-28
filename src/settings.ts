@@ -1,29 +1,39 @@
-import {App, Modal, Notice, PluginSettingTab, Setting, normalizePath} from "obsidian";
-import ClaudeBrainPlugin from "./main";
+import {App, Modal, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
+import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
 
 /** Helper to update a secure field in both runtime settings and local storage. */
-function updateSecureField(app: App, plugin: ClaudeBrainPlugin, key: keyof ClaudeBrainSettings, value: string): void {
+function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
 	(plugin.settings as unknown as Record<string, unknown>)[key] = value;
 	saveSecureField(app, key, value);
 }
 
-export interface ClaudeBrainSettings {
+export interface FeatureAgentMap {
+	chat: string;
+	inline: string;
+	search: string;
+	telegram: string;
+	vision: string;
+}
+
+export interface SynapseSettings {
 	/** Auth type: 'subscription' uses Claude CLI OAuth, 'apiKey' uses an Anthropic API key. */
 	authType: 'subscription' | 'apiKey';
 	/** Anthropic API key (stored securely via local storage). */
 	anthropicApiKey: string;
 	/** Custom path to the claude CLI binary. Empty = auto-detect. */
 	claudeLocation: string;
-	claudeBrainFolder: string;
+	synapseFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
+	/** Feature to Agent mapping for plugin features. */
+	featureAgents: FeatureAgentMap;
 	/** Enable ghost-text autocomplete in the editor. */
 	autocompleteEnabled: boolean;
-	/** Show the inline Claude Brain icon on the active editor line. */
+	/** Show the inline Synapse icon on the active editor line. */
 	inlineIconEnabled: boolean;
 	/** Persisted form defaults for the Edit modal. */
 	editModalDefaults?: EditModalDefaults;
@@ -109,13 +119,20 @@ export const DEFAULT_EDIT_MODAL: EditModalDefaults = {
 	editPrompt: '',
 };
 
-export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
+export const DEFAULT_SETTINGS: SynapseSettings = {
 	authType: 'subscription',
 	anthropicApiKey: '',
 	claudeLocation: '',
-	claudeBrainFolder: 'claude-brain',
+	synapseFolder: 'synapse',
 	toolApproval: 'ask',
 	inlineModel: '',
+	featureAgents: {
+		chat: 'General',
+		inline: 'General',
+		search: 'General',
+		telegram: 'General',
+		vision: 'Vision',
+	},
 	autocompleteEnabled: false,
 	inlineIconEnabled: false,
 	reasoningEffort: '',
@@ -134,9 +151,9 @@ export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof ClaudeBrainSettings> = ['anthropicApiKey', 'telegramBotToken'];
+export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken'];
 
-const SECURE_PREFIX = 'claude-brain-secure-';
+const SECURE_PREFIX = 'synapse-secure-';
 
 /** Load a secure field from vault-specific local storage. */
 export function loadSecureField(app: App, key: string): string {
@@ -149,29 +166,29 @@ export function saveSecureField(app: App, key: string, value: string): void {
 	app.saveLocalStorage(SECURE_PREFIX + key, value || null);
 }
 
-/** Derive the agents subfolder from the base Claude Brain folder. */
-export function getAgentsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/agents`);
+/** Derive the agents subfolder from the base Synapse folder. */
+export function getAgentsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/agents`);
 }
 
-/** Derive the skills subfolder from the base Claude Brain folder. */
-export function getSkillsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/skills`);
+/** Derive the skills subfolder from the base Synapse folder. */
+export function getSkillsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/skills`);
 }
 
-/** Derive the tools subfolder from the base Claude Brain folder. */
-export function getToolsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/tools`);
+/** Derive the tools subfolder from the base Synapse folder. */
+export function getToolsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/tools`);
 }
 
-/** Derive the prompts subfolder from the base Claude Brain folder. */
-export function getPromptsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/prompts`);
+/** Derive the prompts subfolder from the base Synapse folder. */
+export function getPromptsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/prompts`);
 }
 
-/** Derive the triggers subfolder from the base Claude Brain folder. */
-export function getTriggersFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/triggers`);
+/** Derive the triggers subfolder from the base Synapse folder. */
+export function getTriggersFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/triggers`);
 }
 
 const SAMPLE_SKILL_CONTENT = `---
@@ -188,26 +205,98 @@ This skill generates ASCII art representations of text using block-style Unicode
 When a user requests ASCII art for any word or phrase, generate the block-style representation immediately without asking for clarification on style preferences.
 `;
 
-const SAMPLE_AGENT_CONTENT = `---
-name: Grammar
-description: The Grammar Assistant agent helps users improve their writing
-tools:
-  - github
-skills:
-  - ascii-art
-model: Claude Sonnet 4.5
+const SAMPLE_GENERAL_AGENT = `---
+name: General
+description: General-purpose assistant for chat, editor operations, search, and bot tasks.
+model: claude-3-7-sonnet
 ---
 
-# Grammar Assistant agent Instructions
+# General Assistant Instructions
 
-You are the **Grammar Assistant agent** - the primary task is to helps users improve their writing
+You are a helpful general assistant for Obsidian. Help the user draft notes, answer questions, structure thoughts, and perform vault tasks.
+`;
+
+const SAMPLE_VISION_AGENT = `---
+name: Vision
+description: Vision-capable agent for analyzing note images, diagrams, and attachments.
+model: claude-3-7-sonnet
+---
+
+# Vision Assistant Instructions
+
+You are an AI assistant specialized in analyzing visual content, diagrams, images, and attachments embedded in Obsidian notes.
+`;
+
+const SAMPLE_ZETTELKASTEN_AGENT = `---
+name: Zettelkasten
+description: Methodology agent tuned for atomic notes, dense interlinking, and slip-box workflows.
+model: claude-3-7-sonnet
+---
+
+# Zettelkasten Assistant Instructions
+
+You are a Zettelkasten methodology assistant. Focus on creating atomic, single-concept notes with clear titles, rich context, and bi-directional links ([[note]]).
+`;
+
+const SAMPLE_PARA_AGENT = `---
+name: PARA
+description: Methodology agent tuned for Projects, Areas, Resources, and Archives organization.
+model: claude-3-7-sonnet
+---
+
+# PARA Assistant Instructions
+
+You are a PARA methodology assistant. Help organize information into Projects (goal-oriented), Areas (responsibilities), Resources (topics of interest), and Archives (inactive items).
+`;
+
+const SAMPLE_LYT_AGENT = `---
+name: LYT
+description: Methodology agent tuned for Linking Your Thinking and Maps of Content (MOCs).
+model: claude-3-7-sonnet
+---
+
+# LYT Assistant Instructions
+
+You are a Linking Your Thinking (LYT) methodology assistant. Help synthesize notes into Maps of Content (MOCs), facilitating fluid knowledge navigation.
 `;
 
 const SAMPLE_PROMPT_CONTENT = `---
-agent: Grammar
+agent: General
 ---
-Translate the provided text from English to Portuguese.
+Summarize the key points of the current note into bullet points.
 `;
+
+/** Helper to update frontmatter model property in markdown file content. */
+export function updateAgentModelInContent(content: string, newModel: string): string {
+	const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+	if (!fmMatch) {
+		return `---\nmodel: ${newModel}\n---\n${content}`;
+	}
+	let fm = fmMatch[1]!;
+	const body = fmMatch[2]!;
+	if (/^model\s*:/m.test(fm)) {
+		if (newModel.trim()) {
+			fm = fm.replace(/^model\s*:.*$/m, `model: ${newModel.trim()}`);
+		} else {
+			fm = fm.replace(/^model\s*:.*$\r?\n?/m, '');
+		}
+	} else {
+		if (newModel.trim()) {
+			fm = fm.trim() + `\nmodel: ${newModel.trim()}`;
+		}
+	}
+	return `---\n${fm.trim()}\n---\n${body}`;
+}
+
+/** Helper to update an agent file's bound model in vault. */
+export async function updateAgentModelFile(app: App, filePath: string, newModel: string): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(normalizePath(filePath));
+	if (file instanceof TFile) {
+		const content = await app.vault.read(file);
+		const updated = updateAgentModelInContent(content, newModel);
+		await app.vault.modify(file, updated);
+	}
+}
 
 const SAMPLE_TRIGGER_CONTENT = `---
 name: Daily planner
@@ -220,10 +309,10 @@ enabled: true
 Help me prepare my day, including asks on me, recommendations for clear actions to prepare, and suggestions on which items to prioritize over others.
 `;
 
-export class ClaudeBrainSettingTab extends PluginSettingTab {
-	plugin: ClaudeBrainPlugin;
+export class SynapseSettingTab extends PluginSettingTab {
+	plugin: SynapsePlugin;
 
-	constructor(app: App, plugin: ClaudeBrainPlugin) {
+	constructor(app: App, plugin: SynapsePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -232,16 +321,16 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
-		containerEl.addClass('claude-brain-settings');
+		containerEl.addClass('synapse-settings');
 
 		// ── Tab bar ──────────────────────────────────────────────
-		const tabBar = containerEl.createDiv({cls: 'claude-brain-settings-tab-bar'});
+		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
-		const tabIds = ['claude', 'models', 'capabilities', 'tools', 'bots'] as const;
+		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots'] as const;
 		const tabLabels: Record<string, string> = {
 			claude: 'Claude',
-			models: 'Models',
+			agents: 'Feature Map & Agents',
 			capabilities: 'Capabilities',
 			tools: 'Tools',
 			bots: 'Bots',
@@ -256,7 +345,7 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 		for (const id of tabIds) {
 			const btn = tabBar.createEl('button', {
-				cls: 'claude-brain-settings-tab',
+				cls: 'synapse-settings-tab',
 				text: tabLabels[id],
 			});
 			btn.addEventListener('click', () => switchSettingsTab(id));
@@ -264,16 +353,16 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		}
 
 		// ── Panels ───────────────────────────────────────────────
-		const toolsFolder = normalizePath(`${this.plugin.settings.claudeBrainFolder}/tools`);
+		const toolsFolder = normalizePath(`${this.plugin.settings.synapseFolder}/tools`);
 		if (!this.app.vault.getAbstractFileByPath(toolsFolder)) {
-			const warning = containerEl.createDiv({cls: 'claude-brain-settings-warning'});
+			const warning = containerEl.createDiv({cls: 'synapse-settings-warning'});
 			warning.createEl('p', {
-				text: 'Claude Brain folder is not initialized. Go to the capabilities tab to configure and initialize it.',
+				text: 'Synapse folder is not initialized. Go to the capabilities tab to configure and initialize it.',
 			});
 		}
 
 		for (const id of tabIds) {
-			panels[id] = containerEl.createDiv({cls: `claude-brain-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
+			panels[id] = containerEl.createDiv({cls: `synapse-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
 		}
 		tabButtons['claude']?.addClass('is-active');
 
@@ -366,10 +455,6 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 			cliStatusEl.empty();
 			if (this.plugin.copilot) {
 				try {
-					// Use getVersionInfo() (not resolveCliPath()) so that version and
-					// protocol are always awaited \u2014 resolveCliPath() alone returns a
-					// cached object whose version fields may not yet be populated if
-					// the fire-and-forget check in ensureConnected() hasn't finished.
 					const resolved = await this.plugin.copilot.getVersionInfo();
 					const sourceLabels: Record<string, string> = {
 						'settings': 'settings override',
@@ -392,20 +477,89 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 
 		// ══════════════════════════════════════════════════════════
-		// TAB 2: Models
+		// TAB 2: Feature Map & Agents
 		// ══════════════════════════════════════════════════════════
-		const modelsPanel = panels['models']!;
+		const agentsPanel = panels['agents']!;
 
-		new Setting(modelsPanel)
-			.setName('Inline operations model')
-			.setDesc('Model ID used for editor context-menu actions (fix grammar, summarize, etc.). Leave blank for CLI default.')
-			.addText(text => text
-				.setPlaceholder('e.g. claude-sonnet-4-6')
-				.setValue(this.plugin.settings.inlineModel)
-				.onChange(async (value) => {
-					this.plugin.settings.inlineModel = value.trim();
-					await this.plugin.saveSettings();
-				}));
+		new Setting(agentsPanel)
+			.setName('Feature -> Agent map')
+			.setHeading();
+		agentsPanel.createEl('p', {
+			text: 'Map each plugin feature to a specific agent persona. Lightweight features default to a Claude model out of the box.',
+			cls: 'setting-item-description',
+		});
+
+		const renderAgentsPanel = async () => {
+			const dynamicContainerId = 'synapse-agents-dynamic';
+			let dynamicContainer = agentsPanel.querySelector(`#${dynamicContainerId}`) as HTMLElement;
+			if (dynamicContainer) {
+				dynamicContainer.empty();
+			} else {
+				dynamicContainer = agentsPanel.createDiv({attr: {id: dynamicContainerId}});
+			}
+
+			const vaultAgents = await loadAgents(this.app, getAgentsFolder(this.plugin.settings));
+			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
+			const agentOptions: Record<string, string> = {};
+			for (const name of agentNamesSet) {
+				agentOptions[name] = name;
+			}
+
+			const features: Array<{id: keyof FeatureAgentMap; name: string; desc: string}> = [
+				{id: 'chat', name: 'Chat panel', desc: 'Default agent for main conversation sidebar.'},
+				{id: 'inline', name: 'Inline editor operations', desc: 'Default agent for context-menu actions (rewrite, summarize, structure).'},
+				{id: 'search', name: 'Semantic search', desc: 'Default agent for vault semantic search.'},
+				{id: 'telegram', name: 'Telegram bot', desc: 'Default agent for responding to incoming Telegram messages.'},
+				{id: 'vision', name: 'Vision & image reading', desc: 'Handler agent for analyzing note images and visual attachments.'},
+			];
+
+			for (const feat of features) {
+				const currentAgent = this.plugin.settings.featureAgents?.[feat.id] || (feat.id === 'vision' ? 'Vision' : 'General');
+				new Setting(dynamicContainer)
+					.setName(feat.name)
+					.setDesc(feat.desc)
+					.addDropdown(dropdown => dropdown
+						.addOptions(agentOptions)
+						.setValue(currentAgent)
+						.onChange(async (val) => {
+							if (!this.plugin.settings.featureAgents) {
+								this.plugin.settings.featureAgents = {...DEFAULT_SETTINGS.featureAgents};
+							}
+							this.plugin.settings.featureAgents[feat.id] = val;
+							if (feat.id === 'search') this.plugin.settings.searchAgent = val;
+							if (feat.id === 'telegram') this.plugin.settings.telegramDefaultAgent = val;
+							await this.plugin.saveSettings();
+						}));
+			}
+
+			new Setting(dynamicContainer)
+				.setName('Agent model bindings')
+				.setHeading();
+			dynamicContainer.createEl('p', {
+				text: 'Configure per-agent model bindings. Model bindings determine which AI model runs when the agent is invoked.',
+				cls: 'setting-item-description',
+			});
+
+			if (vaultAgents.length === 0) {
+				dynamicContainer.createEl('p', {
+					text: 'No custom agents found in vault. Shipped defaults are active.',
+					cls: 'setting-item-description',
+				});
+			} else {
+				for (const agent of vaultAgents) {
+					new Setting(dynamicContainer)
+						.setName(`Agent: ${agent.name}`)
+						.setDesc(`${agent.description || 'Custom vault agent'} (${agent.filePath})`)
+						.addText(text => text
+							.setPlaceholder('e.g. claude-3-7-sonnet')
+							.setValue(agent.model || '')
+							.onChange(async (val) => {
+								await updateAgentModelFile(this.app, agent.filePath, val);
+							}));
+				}
+			}
+		};
+		void renderAgentsPanel();
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 3: Capabilities
@@ -413,25 +567,25 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		const capPanel = panels['capabilities']!;
 
 		new Setting(capPanel)
-			.setName('Claude Brain folder')
+			.setName('Synapse folder')
 			.setDesc('Vault folder for agents, skills, tools and triggers.')
 			.addText(text => text
-				.setPlaceholder('Ex: claude-brain')
-				.setValue(this.plugin.settings.claudeBrainFolder)
+				.setPlaceholder('Ex: synapse')
+				.setValue(this.plugin.settings.synapseFolder)
 				.onChange(async (value) => {
 					const sanitized = value.trim().replace(/\.\./g, '');
 					if (!sanitized || /[;|&`$(){}]/.test(sanitized)) {
-						new Notice('Claude Brain folder name is invalid.');
+						new Notice('Synapse folder name is invalid.');
 						return;
 					}
-					this.plugin.settings.claudeBrainFolder = sanitized;
+					this.plugin.settings.synapseFolder = sanitized;
 					await this.plugin.saveSettings();
 				}))
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const base = normalizePath(this.plugin.settings.claudeBrainFolder);
+						const base = normalizePath(this.plugin.settings.synapseFolder);
 
 						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/tools', '/prompts', '/triggers']) {
 							const dir = normalizePath(`${base}${sub}`);
@@ -440,9 +594,18 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 							}
 						}
 
-						const agentPath = normalizePath(`${base}/agents/grammar.agent.md`);
-						if (!this.app.vault.getAbstractFileByPath(agentPath)) {
-							await this.app.vault.create(agentPath, SAMPLE_AGENT_CONTENT);
+						const sampleAgents: Array<{name: string; content: string}> = [
+							{name: 'general.agent.md', content: SAMPLE_GENERAL_AGENT},
+							{name: 'vision.agent.md', content: SAMPLE_VISION_AGENT},
+							{name: 'zettelkasten.agent.md', content: SAMPLE_ZETTELKASTEN_AGENT},
+							{name: 'para.agent.md', content: SAMPLE_PARA_AGENT},
+							{name: 'lyt.agent.md', content: SAMPLE_LYT_AGENT},
+						];
+						for (const ag of sampleAgents) {
+							const p = normalizePath(`${base}/agents/${ag.name}`);
+							if (!this.app.vault.getAbstractFileByPath(p)) {
+								await this.app.vault.create(p, ag.content);
+							}
 						}
 
 						const skillPath = normalizePath(`${base}/skills/ascii-art/SKILL.md`);
@@ -473,9 +636,9 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 							await this.app.vault.create(triggerPath, SAMPLE_TRIGGER_CONTENT);
 						}
 
-						new Notice('Claude Brain folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
+						new Notice('Synapse folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
 					} catch (e) {
-						new Notice(`Failed to initialize claude-brain folder: ${String(e)}`);
+						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}
 				}));
 
@@ -490,8 +653,8 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(capPanel)
-			.setName('Show inline Claude Brain icon')
-			.setDesc('Show the Claude Brain icon in the editor gutter next to the active line.')
+			.setName('Show inline icon')
+			.setDesc('Show the plugin icon in the editor gutter next to the active line.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.inlineIconEnabled)
 				.onChange(async (value) => {
@@ -622,14 +785,14 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 			.setName('Telegram')
 			.setHeading();
 
-		const statusEl = headingSetting.nameEl.createSpan({cls: 'claude-brain-bot-status'});
+		const statusEl = headingSetting.nameEl.createSpan({cls: 'synapse-bot-status'});
 
 		const updateStatusDisplay = (status: string, isError = false) => {
 			statusEl.empty();
 			if (status) {
 				statusEl.createSpan({
 					text: ` — ${status}`,
-					cls: isError ? 'claude-brain-bot-status-error' : 'claude-brain-bot-status-ok',
+					cls: isError ? 'synapse-bot-status-error' : 'synapse-bot-status-ok',
 				});
 			}
 		};
@@ -750,10 +913,10 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 // ── MCP Input value helpers ─────────────────────────────────
 
-const MCP_SECRET_PREFIX = 'claude-brain-mcp-input-';
+const MCP_SECRET_PREFIX = 'synapse-mcp-input-';
 
 /** Retrieve the stored value for an MCP input variable. */
-export function getMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): string | undefined {
+export function getMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): string | undefined {
 	if (isPassword) {
 		const stored = app.loadLocalStorage(MCP_SECRET_PREFIX + id);
 		return stored != null ? String(stored) : undefined;
@@ -762,7 +925,7 @@ export function getMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string
 }
 
 /** Store a value for an MCP input variable. */
-export async function setMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, value: string, isPassword: boolean): Promise<void> {
+export async function setMcpInputValue(app: App, plugin: SynapsePlugin, id: string, value: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, value);
 	} else {
@@ -773,7 +936,7 @@ export async function setMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: 
 }
 
 /** Delete the stored value for an MCP input variable. */
-export async function deleteMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): Promise<void> {
+export async function deleteMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, null);
 	} else {

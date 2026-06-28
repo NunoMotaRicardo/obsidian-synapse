@@ -187,15 +187,15 @@ export class TriggerScheduler {
 	checkFileChangeTriggers(filePath: string): void {
 		const now = Date.now();
 		if (this.triggers.length === 0) {
-			debugTrace('Claude Brain: checkFileChangeTriggers — no triggers loaded');
+			debugTrace('Synapse: checkFileChangeTriggers — no triggers loaded');
 			return;
 		}
 		const globTriggers = this.triggers.filter(t => t.glob);
-		debugTrace(`Claude Brain: checkFileChangeTriggers("${filePath}") — ${this.triggers.length} trigger(s), ${globTriggers.length} with glob`);
+		debugTrace(`Synapse: checkFileChangeTriggers("${filePath}") — ${this.triggers.length} trigger(s), ${globTriggers.length} with glob`);
 		for (const trigger of globTriggers) {
 			const regex = this.getGlobRegex(trigger.glob!);
 			const matches = regex.test(filePath);
-			debugTrace(`Claude Brain: trigger "${trigger.name}" glob="${trigger.glob}" regex=${regex} match=${matches}`);
+			debugTrace(`Synapse: trigger "${trigger.name}" glob="${trigger.glob}" regex=${regex} match=${matches}`);
 			if (matches) {
 				const key = `file:${trigger.name}`;
 				const lastFired = this.callbacks.getLastFired(key);
@@ -204,7 +204,7 @@ export class TriggerScheduler {
 					this.callbacks.setLastFired(key, now);
 					this.callbacks.onTriggerFire(trigger, {filePath});
 				} else {
-					debugTrace(`Claude Brain: trigger "${trigger.name}" skipped — cooldown (${Math.round(elapsed / 1000)}s / 5s)`);
+					debugTrace(`Synapse: trigger "${trigger.name}" skipped — cooldown (${Math.round(elapsed / 1000)}s / 5s)`);
 				}
 			}
 		}

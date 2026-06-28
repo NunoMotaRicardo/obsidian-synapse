@@ -7,7 +7,7 @@ import {
 	setIcon,
 	Component,
 } from 'obsidian';
-import type ClaudeBrainPlugin from './main';
+import type SynapsePlugin from './main';
 import type {
 	SessionConfig,
 	MCPServerConfig,
@@ -32,12 +32,12 @@ import type {BackgroundSession} from './view/types';
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 import {buildPrompt, buildSdkAttachments, mapMcpServers, resolveNoteImageEmbeds} from './view/sessionConfig';
 
-export const CLAUDE_BRAIN_VIEW_TYPE = 'claude-brain-view';
+export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 
-// ── Claude Brain view ───────────────────────────────────────────────
+// ── Synapse view ───────────────────────────────────────────────
 
-export class ClaudeBrainView extends ItemView {
-	plugin: ClaudeBrainPlugin;
+export class SynapseView extends ItemView {
+	plugin: SynapsePlugin;
 
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
@@ -174,16 +174,16 @@ export class ClaudeBrainView extends ItemView {
 	eventUnsubscribers: (() => void)[] = [];
 	earlyEventBuffer: SessionEvent[] | readonly SessionEvent[] = [];
 
-	constructor(leaf: WorkspaceLeaf, plugin: ClaudeBrainPlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: SynapsePlugin) {
 		super(leaf);
 		this.plugin = plugin;
 	}
 
 	getViewType(): string {
-		return CLAUDE_BRAIN_VIEW_TYPE;
+		return SYNAPSE_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return 'Claude Brain';
+		return 'Synapse';
 	}
 	getIcon(): string {
 		return 'brain';
@@ -229,7 +229,7 @@ export class ClaudeBrainView extends ItemView {
 		// Initialize trigger scheduler
 		this.initTriggerScheduler();
 
-		// Watch claude-brain folder for config changes and auto-refresh
+		// Watch synapse folder for config changes and auto-refresh
 		this.registerConfigFileWatcher();
 
 		// Track active note and editor selection
@@ -256,26 +256,26 @@ export class ClaudeBrainView extends ItemView {
 	buildUI(): void {
 		const root = this.containerEl.children[1] as HTMLElement;
 		root.empty();
-		root.addClass('claude-brain-root');
+		root.addClass('synapse-root');
 
 		// Main area (tab bar + panels)
-		this.mainEl = root.createDiv({cls: 'claude-brain-main'});
+		this.mainEl = root.createDiv({cls: 'synapse-main'});
 
 		// Tab bar
 		this.buildTabBar(this.mainEl);
 
 		// ── Chat panel ───────────────────────────────────────
-		this.chatPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-chat'});
+		this.chatPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-chat'});
 
 		// Chat content wrapper (chat + bottom)
-		const chatContent = this.chatPanelEl.createDiv({cls: 'claude-brain-chat-content'});
+		const chatContent = this.chatPanelEl.createDiv({cls: 'synapse-chat-content'});
 
 		// Chat history (scrollable)
-		this.chatContainer = chatContent.createDiv({cls: 'claude-brain-chat claude-brain-hide-debug'});
+		this.chatContainer = chatContent.createDiv({cls: 'synapse-chat synapse-hide-debug'});
 		this.renderWelcome();
 
 		// Bottom panel
-		const bottom = chatContent.createDiv({cls: 'claude-brain-bottom'});
+		const bottom = chatContent.createDiv({cls: 'synapse-bottom'});
 
 		// Input area
 		this.buildInputArea(bottom);
@@ -284,32 +284,32 @@ export class ClaudeBrainView extends ItemView {
 		this.buildConfigToolbar(bottom);
 
 		// Splitter + session sidebar inside chat panel
-		this.splitterEl = this.chatPanelEl.createDiv({cls: 'claude-brain-splitter'});
+		this.splitterEl = this.chatPanelEl.createDiv({cls: 'synapse-splitter'});
 		this.initSplitter();
 		this.buildSessionSidebar(this.chatPanelEl);
 
 		// ── Triggers panel ────────────────────────────────────
-		this.triggersPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-triggers is-hidden'});
+		this.triggersPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-triggers is-hidden'});
 		this.buildTriggersPanel(this.triggersPanelEl);
 
 		// ── Search panel ─────────────────────────────────────
-		this.searchPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-search is-hidden'});
+		this.searchPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-search is-hidden'});
 		this.buildSearchPanel(this.searchPanelEl);
 	}
 
 	buildTabBar(parent: HTMLElement): void {
-		this.tabBarEl = parent.createDiv({cls: 'claude-brain-tab-bar'});
+		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar'});
 		const tabs: {id: 'chat' | 'triggers' | 'search'; icon: string; label: string}[] = [
 			{id: 'chat', icon: 'message-square', label: 'Chat'},
 			{id: 'triggers', icon: 'zap', label: 'Triggers'},
 			{id: 'search', icon: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
-			const btn = this.tabBarEl.createDiv({cls: 'claude-brain-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
+			const btn = this.tabBarEl.createDiv({cls: 'synapse-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
 			btn.dataset.tab = tab.id;
-			const iconEl = btn.createSpan({cls: 'claude-brain-tab-icon'});
+			const iconEl = btn.createSpan({cls: 'synapse-tab-icon'});
 			setIcon(iconEl, tab.icon);
-			btn.createSpan({cls: 'claude-brain-tab-label', text: tab.label});
+			btn.createSpan({cls: 'synapse-tab-label', text: tab.label});
 			btn.addEventListener('click', () => this.switchTab(tab.id));
 		}
 	}
@@ -319,7 +319,7 @@ export class ClaudeBrainView extends ItemView {
 		this.activeTab = tab;
 
 		// Update tab bar active state
-		this.tabBarEl.querySelectorAll('.claude-brain-tab').forEach(el => {
+		this.tabBarEl.querySelectorAll('.synapse-tab').forEach(el => {
 			el.toggleClass('is-active', (el as HTMLElement).dataset.tab === tab);
 		});
 
@@ -380,7 +380,7 @@ export class ClaudeBrainView extends ItemView {
 				this.refreshProviderModels(this.plugin.copilot.getModels());
 			}
 		} catch (e) {
-			console.error('Claude Brain: failed to load configs', e);
+			console.error('Synapse: failed to load configs', e);
 		} finally {
 			this.configLoading = false;
 			this.configLoadedAt = Date.now();
@@ -415,10 +415,10 @@ export class ClaudeBrainView extends ItemView {
 		const DEBOUNCE_MS = 500;
 
 		const scheduleRefresh = (filePath: string) => {
-			const base = normalizePath(this.plugin.settings.claudeBrainFolder);
+			const base = normalizePath(this.plugin.settings.synapseFolder);
 			if (!filePath.startsWith(base + '/')) return;
 			if (this.configLoading || (Date.now() - this.configLoadedAt < 2_000)) return;
-			debugTrace(`Claude Brain: config file changed: ${filePath}`);
+			debugTrace(`Synapse: config file changed: ${filePath}`);
 			if (this.configRefreshTimer) clearTimeout(this.configRefreshTimer);
 			this.configRefreshTimer = setTimeout(() => {
 				this.configRefreshTimer = null;
@@ -584,7 +584,7 @@ export class ClaudeBrainView extends ItemView {
 					}
 				}
 			} catch (e) {
-				console.error('[claude-brain] Failed to resolve note-embedded images:', e);
+				console.error('[synapse] Failed to resolve note-embedded images:', e);
 			}
 		}
 
@@ -661,9 +661,9 @@ export class ClaudeBrainView extends ItemView {
 		} catch (e) {
 			this.finalizeStreamingMessage();
 			// DEBUG: log full error with stack trace
-			console.error('[claude-brain] Send error:', e);
+			console.error('[synapse] Send error:', e);
 			if (e instanceof Error) {
-				console.error('[claude-brain] Stack:', e.stack);
+				console.error('[synapse] Stack:', e.stack);
 			}
 			this.addInfoMessage(this.formatErrorForChat(String(e)));
 		}
@@ -679,7 +679,7 @@ export class ClaudeBrainView extends ItemView {
 		// If no content was streamed yet, replace "Thinking..." with "Cancelled"
 		if (!this.streamingContent && this.streamingBodyEl) {
 			this.streamingBodyEl.empty();
-			this.streamingBodyEl.createDiv({cls: 'claude-brain-thinking claude-brain-cancelled', text: 'Cancelled'});
+			this.streamingBodyEl.createDiv({cls: 'synapse-thinking synapse-cancelled', text: 'Cancelled'});
 		}
 
 		this.finalizeStreamingMessage();
@@ -719,7 +719,7 @@ export class ClaudeBrainView extends ItemView {
 			try {
 				await this.currentSession.rpc.agent.select({name: sessionConfig.agent});
 			} catch (e) {
-				console.warn('[claude-brain] agent.select failed:', e);
+				console.warn('[synapse] agent.select failed:', e);
 			}
 		}
 
@@ -1015,7 +1015,7 @@ export class ClaudeBrainView extends ItemView {
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
-			...(opts.selectedAgentName ? {agent: opts.selectedAgentName} : {}),
+			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
 			systemPrompt: systemContent,
 		};
 
@@ -1096,7 +1096,7 @@ export class ClaudeBrainView extends ItemView {
 }
 
 // ── Install feature modules ─────────────────────────────────────
-// These extend ClaudeBrainView.prototype with methods organized by feature area.
+// These extend SynapseView.prototype with methods organized by feature area.
 import {installChatRenderer} from './view/chatRenderer';
 import {installSearchPanel} from './view/searchPanel';
 import {installTriggersPanel} from './view/triggersPanel';
@@ -1104,9 +1104,9 @@ import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
 import {installConfigToolbar} from './view/configToolbar';
 
-installChatRenderer(ClaudeBrainView);
-installSearchPanel(ClaudeBrainView);
-installTriggersPanel(ClaudeBrainView);
-installSessionSidebar(ClaudeBrainView);
-installInputArea(ClaudeBrainView);
-installConfigToolbar(ClaudeBrainView);
+installChatRenderer(SynapseView);
+installSearchPanel(SynapseView);
+installTriggersPanel(SynapseView);
+installSessionSidebar(SynapseView);
+installInputArea(SynapseView);
+installConfigToolbar(SynapseView);

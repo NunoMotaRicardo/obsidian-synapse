@@ -178,6 +178,7 @@ export class AgentService {
 	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
 	private readonly onVersionInfo?: VersionInfoCallback;
+	private readonly getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	private resolvedCli: ResolvedCliPath | null = null;
 
 	constructor(opts?: {
@@ -185,11 +186,13 @@ export class AgentService {
 		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
 		onVersionInfo?: VersionInfoCallback;
+		getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
 		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
 		this.onVersionInfo = opts?.onVersionInfo;
+		this.getVaultAgents = opts?.getVaultAgents;
 	}
 
 	/**
@@ -200,7 +203,7 @@ export class AgentService {
 	private buildEnv(): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
 			...cleanEnv(),
-			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-claude-brain/1.0.0',
+			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-synapse/1.0.0',
 		};
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
@@ -338,12 +341,14 @@ export class AgentService {
 		try {
 			await this.ensureConnected();
 
+			const agents = options.customAgents ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
+
 			const stream = query({
 				prompt: options.prompt,
 				options: this.routeQueryOptions({
 					model: options.model,
 					systemPrompt: options.systemMessage,
-					agents: options.customAgents,
+					agents,
 					agent: options.agent,
 					canUseTool: options.canUseTool,
 					onElicitation: options.onElicitation,
@@ -394,12 +399,14 @@ export class AgentService {
 		try {
 			await this.ensureConnected();
 
+			const agentsMap = options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined) ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
+
 			const stream = query({
 				prompt: options.prompt,
 				options: this.routeQueryOptions({
 					model: options.model,
 					systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
-					agents: options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined),
+					agents: agentsMap,
 					agent: options.agent,
 					canUseTool: options.canUseTool,
 					onElicitation: options.onElicitation,

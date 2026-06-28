@@ -263,7 +263,7 @@ export async function loadMcpServers(
 			}
 		}
 	} catch (e) {
-		console.error('Claude Brain: failed to parse mcp.json', e);
+		console.error('Synapse: failed to parse mcp.json', e);
 	}
 	return entries;
 }

@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-claude-brain",
+	"name": "obsidian-synapse",
 	"version": "1.2.2",
-	"description": "Your Claude-native second brain for Obsidian.",
+	"description": "Synapse — your Claude-native AI assistant for Obsidian.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

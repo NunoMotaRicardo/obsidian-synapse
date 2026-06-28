@@ -33,7 +33,7 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
 
 2. **Version / protocol check** (#4):
    - After connect, `AgentService` calls `getCliVersion(resolved.path)` fire-and-forget and fires its `onVersionInfo` constructor callback with `{version, protocolVersion, path}`.
-   - `main.ts` wires the callback to log `Claude Brain: Claude CLI v%s (protocol %s) at %s` to console.
+   - `main.ts` wires the callback to log `Synapse: Claude CLI v%s (protocol %s) at %s` to console.
    - Settings display: the resolved binary path line in Settings → Claude shows version info after connect, e.g. `Resolved CLI: C:\...\claude.exe (from global npm install) — v2.1.195, protocol 1`.
 
 3. **Install guidance** (#4):

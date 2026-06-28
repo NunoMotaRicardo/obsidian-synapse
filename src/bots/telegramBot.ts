@@ -4,9 +4,9 @@
  */
 
 import {normalizePath, Notice} from 'obsidian';
-import type ClaudeBrainPlugin from '../main';
-import type {ClaudeBrainView} from '../claudeBrainView';
-import {CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
+import type SynapsePlugin from '../main';
+import type {SynapseView} from '../synapseView';
+import {SYNAPSE_VIEW_TYPE} from '../synapseView';
 import type {SessionConfig, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
@@ -61,7 +61,7 @@ export class TelegramBotService {
 	/** Status change callbacks. */
 	private statusListeners: Array<(status: BotConnectionStatus) => void> = [];
 
-	constructor(private plugin: ClaudeBrainPlugin) {}
+	constructor(private plugin: SynapsePlugin) {}
 
 	onStatusChange(cb: (status: BotConnectionStatus) => void): () => void {
 		this.statusListeners.push(cb);
@@ -150,7 +150,7 @@ export class TelegramBotService {
 				}
 			} catch (e) {
 				if (!this.polling) break; // disconnect was called
-				console.error('Claude Brain Telegram: poll error', e);
+				console.error('Synapse Telegram: poll error', e);
 				// Back off on error
 				await new Promise(r => setTimeout(r, 5000));
 			}
@@ -179,14 +179,14 @@ export class TelegramBotService {
 
 		// Handle /start command
 		if (text === '/start') {
-			await this.sendReply(chatId, threadId, `Hello! I'm your Claude Brain assistant. Send me a message and I'll help you.`);
+			await this.sendReply(chatId, threadId, `Hello! I'm your Synapse assistant. Send me a message and I'll help you.`);
 			return;
 		}
 
 		// Handle /help command
 		if (text === '/help') {
 			await this.sendReply(chatId, threadId,
-				`I'm your Obsidian Claude Brain bot. Here's what you can do:\n` +
+				`I'm your Obsidian Synapse bot. Here's what you can do:\n` +
 				`• Send me any text message to chat\n` +
 				`• Attach photos, documents, or audio\n` +
 				`• Use forum topics for parallel conversations\n` +
@@ -267,7 +267,7 @@ export class TelegramBotService {
 			}
 
 		} catch (e) {
-			console.error('Claude Brain Telegram: message handling error', e);
+			console.error('Synapse Telegram: message handling error', e);
 			// If session is broken, clear it so next message creates a fresh one
 			if (String(e).includes('Session not found')) {
 				entry.sessionId = '';
@@ -283,7 +283,7 @@ export class TelegramBotService {
 
 	private buildBotSessionConfig(): SessionConfig {
 		const basePath = this.getVaultBasePath();
-		const defaultAgentName = this.plugin.settings.telegramDefaultAgent;
+		const defaultAgentName = this.plugin.settings.featureAgents?.telegram || this.plugin.settings.telegramDefaultAgent || 'General';
 
 		// Resolve agent
 		const agent = defaultAgentName
@@ -457,7 +457,7 @@ export class TelegramBotService {
 				const data = await this.api.downloadFile(fileInfo.file_path);
 
 				// Save to temp location in vault
-				const tempDir = normalizePath(`${this.plugin.settings.claudeBrainFolder}/bot-attachments`);
+				const tempDir = normalizePath(`${this.plugin.settings.synapseFolder}/bot-attachments`);
 				const adapter = this.plugin.app.vault.adapter;
 				if (!await adapter.exists(tempDir)) {
 					await adapter.mkdir(tempDir);
@@ -471,7 +471,7 @@ export class TelegramBotService {
 				const basePath = this.getVaultBasePath();
 				results.push({name: safeName, path: `${basePath}/${filePath}`});
 			} catch (e) {
-				console.error(`Claude Brain Telegram: failed to download file ${file.name}`, e);
+				console.error(`Synapse Telegram: failed to download file ${file.name}`, e);
 			}
 		}
 
@@ -480,10 +480,10 @@ export class TelegramBotService {
 
 	// ── Helpers ──────────────────────────────────────────────────
 
-	private getClaudeBrainView(): ClaudeBrainView | null {
-		const leaves = this.plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
+	private getSynapseView(): SynapseView | null {
+		const leaves = this.plugin.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
 		if (leaves.length > 0 && leaves[0]) {
-			return leaves[0].view as ClaudeBrainView;
+			return leaves[0].view as SynapseView;
 		}
 		return null;
 	}
@@ -493,7 +493,7 @@ export class TelegramBotService {
 	}
 
 	private getAvailableModels(): import('../copilot').ModelInfo[] {
-		const view = this.getClaudeBrainView();
+		const view = this.getSynapseView();
 		return view?.models ?? [];
 	}
 
@@ -509,15 +509,15 @@ export class TelegramBotService {
 			};
 
 			const [agents, skills, mcpServers] = await Promise.all([
-				loadAgents(app, normalizePath(`${s.claudeBrainFolder}/agents`)),
-				loadSkills(app, normalizePath(`${s.claudeBrainFolder}/skills`)),
-				loadMcpServers(app, normalizePath(`${s.claudeBrainFolder}/tools`), inputResolver),
+				loadAgents(app, normalizePath(`${s.synapseFolder}/agents`)),
+				loadSkills(app, normalizePath(`${s.synapseFolder}/skills`)),
+				loadMcpServers(app, normalizePath(`${s.synapseFolder}/tools`), inputResolver),
 			]);
 			this.agents = agents;
 			this.skills = skills;
 			this.mcpServers = mcpServers;
 		} catch (e) {
-			console.error('Claude Brain Telegram: failed to reload configs', e);
+			console.error('Synapse Telegram: failed to reload configs', e);
 		}
 	}
 }

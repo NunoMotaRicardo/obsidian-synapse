@@ -7,14 +7,14 @@ import {
 	normalizePath,
 	setIcon,
 } from 'obsidian';
-import type {ClaudeBrainView} from '../claudeBrainView';
+import type {SynapseView} from '../synapseView';
 import {isImageAttachment, type ChatMessage, type ChatAttachment} from '../types';
 import {renderMarkdownSafe} from './utils';
 
 const MAX_DEBUG_DISPLAY_LEN = 5000;
 
-declare module '../claudeBrainView' {
-	interface ClaudeBrainView {
+declare module '../synapseView' {
+	interface SynapseView {
 		addUserMessage(content: string, attachments: ChatAttachment[], scopePaths: string[]): void;
 		addInfoMessage(text: string): void;
 		renderMessageBubble(msg: ChatMessage): Promise<void>;
@@ -45,7 +45,7 @@ declare module '../claudeBrainView' {
 }
 
 export function installChatRenderer(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as ClaudeBrainView;
+	const proto = ViewClass.prototype as SynapseView;
 
 	proto.addUserMessage = function (content: string, attachments: ChatAttachment[], scopePaths: string[]): void {
 		// Combine file/clipboard attachments with scope path entries for display
@@ -80,22 +80,22 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	proto.renderMessageBubble = function (msg: ChatMessage): Promise<void> {
 		if (msg.role === 'info') {
-			const el = this.chatContainer.createDiv({cls: 'claude-brain-msg claude-brain-msg-info'});
+			const el = this.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-info'});
 			el.createSpan({text: msg.content});
 			return Promise.resolve();
 		}
 
 		const wrapper = this.chatContainer.createDiv({
-			cls: `claude-brain-msg claude-brain-msg-${msg.role}`,
+			cls: `synapse-msg synapse-msg-${msg.role}`,
 		});
 
-		const bodyWrapper = wrapper.createDiv({cls: 'claude-brain-msg-body-wrapper'});
+		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
 
 		// Attachments
 		if (msg.attachments && msg.attachments.length > 0) {
-			const attRow = bodyWrapper.createDiv({cls: 'claude-brain-msg-attachments'});
+			const attRow = bodyWrapper.createDiv({cls: 'synapse-msg-attachments'});
 			for (const att of msg.attachments) {
-				const chip = attRow.createSpan({cls: 'claude-brain-msg-att-chip claude-brain-att-clickable'});
+				const chip = attRow.createSpan({cls: 'synapse-msg-att-chip synapse-att-clickable'});
 				const ic = chip.createSpan();
 				const icon = att.type === 'directory' ? 'folder' : isImageAttachment(att) ? 'image' : att.type === 'clipboard' ? 'clipboard' : att.type === 'selection' ? 'text-cursor-input' : 'file-text';
 				setIcon(ic, icon);
@@ -207,7 +207,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			void this.renderReasoningBlock(msg.reasoning, bodyWrapper);
 		}
 
-		const body = bodyWrapper.createDiv({cls: 'claude-brain-msg-body'});
+		const body = bodyWrapper.createDiv({cls: 'synapse-msg-body'});
 
 		if (msg.role === 'assistant') {
 			return renderMarkdownSafe(this.app, msg.content, body, this.streamingComponent ?? this);
@@ -215,7 +215,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			this.renderUserMessageContent(msg.content, body);
 			// Copy button for user messages
 			const copyBtn = wrapper.createEl('button', {
-				cls: 'claude-brain-msg-copy',
+				cls: 'synapse-msg-copy',
 				attr: {title: 'Copy to clipboard'},
 			});
 			setIcon(copyBtn, 'copy');
@@ -229,12 +229,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.renderReasoningBlock = function (reasoning: string, parent: HTMLElement): Promise<void> {
-		const details = parent.createEl('details', {cls: 'claude-brain-reasoning'});
-		const summary = details.createEl('summary', {cls: 'claude-brain-reasoning-summary'});
-		const iconEl = summary.createSpan({cls: 'claude-brain-reasoning-icon'});
+		const details = parent.createEl('details', {cls: 'synapse-reasoning'});
+		const summary = details.createEl('summary', {cls: 'synapse-reasoning-summary'});
+		const iconEl = summary.createSpan({cls: 'synapse-reasoning-icon'});
 		setIcon(iconEl, 'lightbulb');
 		summary.appendText('Reasoning');
-		const body = details.createDiv({cls: 'claude-brain-reasoning-body'});
+		const body = details.createDiv({cls: 'synapse-reasoning-body'});
 		return renderMarkdownSafe(this.app, reasoning, body, this.streamingComponent ?? this);
 	};
 
@@ -248,7 +248,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			const matchedPrompt = this.prompts.find(p => p.name === cmdName);
 			if (matchedPrompt) {
 				const p = body.createEl('p');
-				const promptSpan = p.createSpan({cls: 'claude-brain-prompt-tag', text: `/${cmdName}`});
+				const promptSpan = p.createSpan({cls: 'synapse-prompt-tag', text: `/${cmdName}`});
 				promptSpan.setAttribute('title', matchedPrompt.content);
 				if (spaceIdx > 0) {
 					p.appendText(content.slice(spaceIdx));
@@ -260,20 +260,20 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.addAssistantPlaceholder = function (): void {
-		const wrapper = this.chatContainer.createDiv({cls: 'claude-brain-msg claude-brain-msg-assistant'});
+		const wrapper = this.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-assistant'});
 
-		const bodyWrapper = wrapper.createDiv({cls: 'claude-brain-msg-body-wrapper'});
+		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
 
 		// Container for collapsible tool call blocks
-		this.toolCallsContainer = bodyWrapper.createDiv({cls: 'claude-brain-tool-calls'});
+		this.toolCallsContainer = bodyWrapper.createDiv({cls: 'synapse-tool-calls'});
 
-		const body = bodyWrapper.createDiv({cls: 'claude-brain-msg-body'});
-		const thinking = body.createDiv({cls: 'claude-brain-thinking'});
+		const body = bodyWrapper.createDiv({cls: 'synapse-msg-body'});
+		const thinking = body.createDiv({cls: 'synapse-thinking'});
 		thinking.createSpan({text: 'Thinking'});
-		const dots = thinking.createSpan({cls: 'claude-brain-thinking-dots'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
+		const dots = thinking.createSpan({cls: 'synapse-thinking-dots'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
 
 		// Clean up any previous streaming component
 		if (this.streamingComponent) {
@@ -290,19 +290,19 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.showProcessingIndicator = function (): void {
 		if (!this.streamingBodyEl) return;
 		// Remove any existing thinking/processing indicator
-		const existing = this.streamingBodyEl.querySelector('.claude-brain-thinking');
+		const existing = this.streamingBodyEl.querySelector('.synapse-thinking');
 		if (existing) existing.remove();
-		const processing = this.streamingBodyEl.createDiv({cls: 'claude-brain-thinking'});
+		const processing = this.streamingBodyEl.createDiv({cls: 'synapse-thinking'});
 		processing.createSpan({text: 'Processing'});
-		const dots = processing.createSpan({cls: 'claude-brain-thinking-dots'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-		dots.createSpan({cls: 'claude-brain-dot', text: '.'});
+		const dots = processing.createSpan({cls: 'synapse-thinking-dots'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		dots.createSpan({cls: 'synapse-dot', text: '.'});
 	};
 
 	proto.removeProcessingIndicator = function (): void {
 		if (!this.streamingBodyEl) return;
-		const indicator = this.streamingBodyEl.querySelector('.claude-brain-thinking');
+		const indicator = this.streamingBodyEl.querySelector('.synapse-thinking');
 		if (indicator) indicator.remove();
 	};
 
@@ -331,23 +331,23 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (!this.streamingWrapperEl || !this.streamingBodyEl || this.reasoningEl) return;
 
 		// Remove the thinking placeholder from the answer body
-		const thinking = this.streamingBodyEl?.querySelector('.claude-brain-thinking');
+		const thinking = this.streamingBodyEl?.querySelector('.synapse-thinking');
 		if (thinking) thinking.remove();
 
 		const details = document.createElement('details') as HTMLDetailsElement;
-		details.className = 'claude-brain-reasoning';
+		details.className = 'synapse-reasoning';
 		details.open = true;
 
 		const summary = document.createElement('summary');
-		summary.className = 'claude-brain-reasoning-summary';
+		summary.className = 'synapse-reasoning-summary';
 		const spinner = document.createElement('span');
-		spinner.className = 'claude-brain-reasoning-spinner';
+		spinner.className = 'synapse-reasoning-spinner';
 		summary.appendChild(spinner);
 		summary.appendChild(document.createTextNode('Thinking\u2026'));
 		details.appendChild(summary);
 
 		const body = document.createElement('div');
-		body.className = 'claude-brain-reasoning-body';
+		body.className = 'synapse-reasoning-body';
 		details.appendChild(body);
 
 		// Insert before the answer body element
@@ -412,7 +412,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			const summary = this.reasoningEl.querySelector<HTMLElement>('summary');
 			if (summary) {
 				summary.empty();
-				const iconEl = summary.createSpan({cls: 'claude-brain-reasoning-icon'});
+				const iconEl = summary.createSpan({cls: 'synapse-reasoning-icon'});
 				setIcon(iconEl, 'lightbulb');
 				summary.appendText('Reasoning');
 			}
@@ -420,12 +420,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Restore the thinking indicator in the answer body if no answer content has arrived yet
 		if (!this.streamingContent && this.streamingBodyEl) {
-			const thinking = this.streamingBodyEl.createDiv({cls: 'claude-brain-thinking'});
+			const thinking = this.streamingBodyEl.createDiv({cls: 'synapse-thinking'});
 			thinking.createSpan({text: 'Thinking'});
-			const dots = thinking.createSpan({cls: 'claude-brain-thinking-dots'});
-			dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-			dots.createSpan({cls: 'claude-brain-dot', text: '.'});
-			dots.createSpan({cls: 'claude-brain-dot', text: '.'});
+			const dots = thinking.createSpan({cls: 'synapse-thinking-dots'});
+			dots.createSpan({cls: 'synapse-dot', text: '.'});
+			dots.createSpan({cls: 'synapse-dot', text: '.'});
+			dots.createSpan({cls: 'synapse-dot', text: '.'});
 		}
 	};
 
@@ -512,7 +512,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			// No text was streamed — show a subtle fallback
 			this.streamingBodyEl.empty();
 			this.streamingBodyEl.createDiv({
-				cls: 'claude-brain-thinking claude-brain-cancelled',
+				cls: 'synapse-thinking synapse-cancelled',
 				text: 'No response',
 			});
 		}
@@ -565,14 +565,14 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		if (!hasTime && !hasTokens && !hasTools && !hasSkills) return;
 
-		const footer = this.streamingWrapperEl.createDiv({cls: 'claude-brain-msg-metadata'});
+		const footer = this.streamingWrapperEl.createDiv({cls: 'synapse-msg-metadata'});
 
 		// Elapsed time
 		if (hasTime) {
 			const elapsed = Date.now() - this.turnStartTime;
 			const timeText = elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`;
-			const timeSpan = footer.createSpan({cls: 'claude-brain-metadata-item'});
-			const timeIcon = timeSpan.createSpan({cls: 'claude-brain-metadata-icon'});
+			const timeSpan = footer.createSpan({cls: 'synapse-metadata-item'});
+			const timeIcon = timeSpan.createSpan({cls: 'synapse-metadata-icon'});
 			setIcon(timeIcon, 'clock');
 			timeSpan.appendText(timeText);
 		}
@@ -588,8 +588,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			tooltipLines.push(`Output: ${u.outputTokens}`);
 			if (u.cacheReadTokens > 0) tooltipLines.push(`Cached: ${u.cacheReadTokens}`);
 			if (u.cacheWriteTokens > 0) tooltipLines.push(`Cache write: ${u.cacheWriteTokens}`);
-			const tokenSpan = footer.createSpan({cls: 'claude-brain-metadata-item'});
-			const tokenIcon = tokenSpan.createSpan({cls: 'claude-brain-metadata-icon'});
+			const tokenSpan = footer.createSpan({cls: 'synapse-metadata-item'});
+			const tokenIcon = tokenSpan.createSpan({cls: 'synapse-metadata-icon'});
 			setIcon(tokenIcon, 'hash');
 			tokenSpan.appendText(`${rounded} tokens`);
 			tokenSpan.setAttribute('title', tooltipLines.join('\n'));
@@ -597,8 +597,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Tools used
 		if (hasTools) {
-			const toolSpan = footer.createSpan({cls: 'claude-brain-metadata-item claude-brain-metadata-tools'});
-			const toolIcon = toolSpan.createSpan({cls: 'claude-brain-metadata-icon'});
+			const toolSpan = footer.createSpan({cls: 'synapse-metadata-item synapse-metadata-tools'});
+			const toolIcon = toolSpan.createSpan({cls: 'synapse-metadata-icon'});
 			setIcon(toolIcon, 'wrench');
 			const toolLabel = uniqueTools.length === 1 ? '1 tool' : `${uniqueTools.length} tools`;
 			toolSpan.appendText(toolLabel);
@@ -607,8 +607,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Skills used
 		if (hasSkills) {
-			const skillSpan = footer.createSpan({cls: 'claude-brain-metadata-item claude-brain-metadata-tools'});
-			const skillIcon = skillSpan.createSpan({cls: 'claude-brain-metadata-icon'});
+			const skillSpan = footer.createSpan({cls: 'synapse-metadata-item synapse-metadata-tools'});
+			const skillIcon = skillSpan.createSpan({cls: 'synapse-metadata-icon'});
 			setIcon(skillIcon, 'wand-2');
 			const skillLabel = uniqueSkills.length === 1 ? '1 skill' : `${uniqueSkills.length} skills`;
 			skillSpan.appendText(skillLabel);
@@ -619,19 +619,19 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.addToolCallBlock = function (toolCallId: string, toolName: string, args?: unknown): void {
 		if (!this.toolCallsContainer) return;
 
-		const details = this.toolCallsContainer.createEl('details', {cls: 'claude-brain-tool-call'});
-		const summary = details.createEl('summary', {cls: 'claude-brain-tool-call-summary'});
-		const iconEl = summary.createSpan({cls: 'claude-brain-tool-call-icon'});
+		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-tool-call'});
+		const summary = details.createEl('summary', {cls: 'synapse-tool-call-summary'});
+		const iconEl = summary.createSpan({cls: 'synapse-tool-call-icon'});
 		setIcon(iconEl, 'wrench');
-		summary.createSpan({cls: 'claude-brain-tool-call-name', text: toolName});
-		const spinner = summary.createSpan({cls: 'claude-brain-tool-call-spinner'});
+		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName});
+		const spinner = summary.createSpan({cls: 'synapse-tool-call-spinner'});
 		setIcon(spinner, 'loader');
 
 		// Input section
 		if (args && Object.keys(args as Record<string, unknown>).length > 0) {
-			const inputSection = details.createDiv({cls: 'claude-brain-tool-call-section'});
-			inputSection.createDiv({cls: 'claude-brain-tool-call-label', text: 'Input'});
-			const pre = inputSection.createEl('pre', {cls: 'claude-brain-tool-call-code'});
+			const inputSection = details.createDiv({cls: 'synapse-tool-call-section'});
+			inputSection.createDiv({cls: 'synapse-tool-call-label', text: 'Input'});
+			const pre = inputSection.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: JSON.stringify(args, null, 2)});
 		}
 
@@ -650,20 +650,20 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const {detailsEl} = entry;
 
 		// Remove spinner, add status icon
-		const spinner = detailsEl.querySelector('.claude-brain-tool-call-spinner');
+		const spinner = detailsEl.querySelector('.synapse-tool-call-spinner');
 		if (spinner) spinner.remove();
 		const summaryEl = detailsEl.querySelector('summary');
 		if (summaryEl) {
-			const statusEl = summaryEl.createSpan({cls: `claude-brain-tool-call-status ${success ? 'is-success' : 'is-error'}`});
+			const statusEl = summaryEl.createSpan({cls: `synapse-tool-call-status ${success ? 'is-success' : 'is-error'}`});
 			setIcon(statusEl, success ? 'check' : 'x');
 		}
 
 		// Output section
 		const output = error ? `Error: ${error.message}` : (result?.detailedContent || result?.content || '');
 		if (output) {
-			const outputSection = detailsEl.createDiv({cls: 'claude-brain-tool-call-section'});
-			outputSection.createDiv({cls: 'claude-brain-tool-call-label', text: success ? 'Output' : 'Error'});
-			const pre = outputSection.createEl('pre', {cls: 'claude-brain-tool-call-code'});
+			const outputSection = detailsEl.createDiv({cls: 'synapse-tool-call-section'});
+			outputSection.createDiv({cls: 'synapse-tool-call-label', text: success ? 'Output' : 'Error'});
+			const pre = outputSection.createEl('pre', {cls: 'synapse-tool-call-code'});
 			const displayText = output.length > MAX_DEBUG_DISPLAY_LEN ? output.slice(0, MAX_DEBUG_DISPLAY_LEN) + '\n… (truncated)' : output;
 			pre.createEl('code', {text: displayText});
 		}
@@ -677,21 +677,21 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.addCompactionStartBlock = function (data: {conversationTokens?: number; systemTokens?: number; toolDefinitionsTokens?: number}): void {
 		if (!this.toolCallsContainer) return;
 
-		const details = this.toolCallsContainer.createEl('details', {cls: 'claude-brain-compaction-block'});
-		const summary = details.createEl('summary', {cls: 'claude-brain-compaction-summary'});
-		const iconEl = summary.createSpan({cls: 'claude-brain-compaction-icon'});
+		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
+		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
+		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
 		setIcon(iconEl, 'archive');
 		summary.createSpan({text: 'Compaction started'});
-		const spinner = summary.createSpan({cls: 'claude-brain-tool-call-spinner'});
+		const spinner = summary.createSpan({cls: 'synapse-tool-call-spinner'});
 		setIcon(spinner, 'loader');
 
-		const body = details.createDiv({cls: 'claude-brain-compaction-body'});
+		const body = details.createDiv({cls: 'synapse-compaction-body'});
 		const lines: string[] = [];
 		if (data.conversationTokens != null) lines.push(`Conversation tokens: ${data.conversationTokens.toLocaleString()}`);
 		if (data.systemTokens != null) lines.push(`System tokens: ${data.systemTokens.toLocaleString()}`);
 		if (data.toolDefinitionsTokens != null) lines.push(`Tool definition tokens: ${data.toolDefinitionsTokens.toLocaleString()}`);
 		if (lines.length > 0) {
-			const pre = body.createEl('pre', {cls: 'claude-brain-tool-call-code'});
+			const pre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: lines.join('\n')});
 		}
 
@@ -702,27 +702,27 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (!this.toolCallsContainer) return;
 
 		// Try to update the existing compaction_start block's spinner
-		const blocks = Array.from(this.toolCallsContainer.querySelectorAll('.claude-brain-compaction-block'));
-		const startBlock = blocks.reverse().find(b => b.querySelector('.claude-brain-tool-call-spinner'));
+		const blocks = Array.from(this.toolCallsContainer.querySelectorAll('.synapse-compaction-block'));
+		const startBlock = blocks.reverse().find(b => b.querySelector('.synapse-tool-call-spinner'));
 		if (startBlock) {
-			const spinner = startBlock.querySelector('.claude-brain-tool-call-spinner');
+			const spinner = startBlock.querySelector('.synapse-tool-call-spinner');
 			if (spinner) spinner.remove();
 			const summaryEl = startBlock.querySelector('summary');
 			if (summaryEl) {
-				const statusEl = summaryEl.createSpan({cls: `claude-brain-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
+				const statusEl = summaryEl.createSpan({cls: `synapse-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
 				setIcon(statusEl, data.success ? 'check' : 'x');
 			}
 		}
 
-		const details = this.toolCallsContainer.createEl('details', {cls: 'claude-brain-compaction-block'});
-		const summary = details.createEl('summary', {cls: 'claude-brain-compaction-summary'});
-		const iconEl = summary.createSpan({cls: 'claude-brain-compaction-icon'});
+		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
+		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
+		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
 		setIcon(iconEl, 'archive');
 		summary.createSpan({text: data.success ? 'Compaction complete' : 'Compaction failed'});
-		const statusEl = summary.createSpan({cls: `claude-brain-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
+		const statusEl = summary.createSpan({cls: `synapse-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
 		setIcon(statusEl, data.success ? 'check' : 'x');
 
-		const body = details.createDiv({cls: 'claude-brain-compaction-body'});
+		const body = details.createDiv({cls: 'synapse-compaction-body'});
 		const lines: string[] = [];
 		if (data.success) {
 			if (data.preCompactionTokens != null) lines.push(`Pre-compaction tokens: ${data.preCompactionTokens.toLocaleString()}`);
@@ -734,12 +734,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			if (data.error) lines.push(`Error: ${data.error}`);
 		}
 		if (lines.length > 0) {
-			const pre = body.createEl('pre', {cls: 'claude-brain-tool-call-code'});
+			const pre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: lines.join('\n')});
 		}
 		if (data.summaryContent) {
-			body.createDiv({cls: 'claude-brain-compaction-label', text: 'Summary'});
-			const summaryPre = body.createEl('pre', {cls: 'claude-brain-tool-call-code'});
+			body.createDiv({cls: 'synapse-compaction-label', text: 'Summary'});
+			const summaryPre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
 			const displayText = data.summaryContent.length > MAX_DEBUG_DISPLAY_LEN ? data.summaryContent.slice(0, MAX_DEBUG_DISPLAY_LEN) + '\n… (truncated)' : data.summaryContent;
 			summaryPre.createEl('code', {text: displayText});
 		}
@@ -748,13 +748,13 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.renderWelcome = function (): void {
-		const welcome = this.chatContainer.createDiv({cls: 'claude-brain-welcome'});
-		const icon = welcome.createDiv({cls: 'claude-brain-welcome-icon'});
+		const welcome = this.chatContainer.createDiv({cls: 'synapse-welcome'});
+		const icon = welcome.createDiv({cls: 'synapse-welcome-icon'});
 		setIcon(icon, 'brain');
-		welcome.createEl('h3', {text: 'Claude Brain'});
+		welcome.createEl('h3', {text: 'Synapse'});
 		welcome.createEl('p', {
 			text: 'Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!',
-			cls: 'claude-brain-welcome-desc',
+			cls: 'synapse-welcome-desc',
 		});
 	};
 

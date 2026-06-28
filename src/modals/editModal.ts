@@ -1,9 +1,9 @@
 import {Modal, Notice, setIcon} from 'obsidian';
-import type ClaudeBrainPlugin from '../main';
+import type SynapsePlugin from '../main';
 // Agent SDK types imported via AgentService
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TaskLabel} from '../tasks';
-import {ClaudeBrainView, CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
+import {SynapseView, SYNAPSE_VIEW_TYPE} from '../synapseView';
 import {DEFAULT_EDIT_MODAL} from '../settings';
 
 /** Tone options for the edit modal. */
@@ -71,7 +71,7 @@ export type EditResultCallback = (text: string) => void;
  * and an optional edit prompt before sending to the LLM.
  */
 export class EditModal extends Modal {
-	private plugin: ClaudeBrainPlugin;
+	private plugin: SynapsePlugin;
 	private initialText: string;
 	private onChoose: EditResultCallback;
 
@@ -109,7 +109,7 @@ export class EditModal extends Modal {
 	private readonly promptAreaMaxHeight = 98;
 
 	constructor(
-		plugin: ClaudeBrainPlugin,
+		plugin: SynapsePlugin,
 		initialText: string,
 		onChoose: EditResultCallback,
 	) {
@@ -134,13 +134,13 @@ export class EditModal extends Modal {
 
 	onOpen(): void {
 		const {contentEl, titleEl} = this;
-		titleEl.setText('Claude Brain edit');
-		contentEl.addClass('claude-brain-edit-modal');
+		titleEl.setText('Synapse edit');
+		contentEl.addClass('synapse-edit-modal');
 
-		this.formContainer = contentEl.createDiv({cls: 'claude-brain-edit-form'});
+		this.formContainer = contentEl.createDiv({cls: 'synapse-edit-form'});
 		this.buildForm(this.formContainer);
 
-		this.resultsContainer = contentEl.createDiv({cls: 'claude-brain-edit-results is-hidden'});
+		this.resultsContainer = contentEl.createDiv({cls: 'synapse-edit-results is-hidden'});
 	}
 
 	onClose(): void {
@@ -166,9 +166,9 @@ export class EditModal extends Modal {
 
 	private buildForm(parent: HTMLElement): void {
 		// Text area
-		const textGroup = parent.createDiv({cls: 'claude-brain-edit-group'});
+		const textGroup = parent.createDiv({cls: 'synapse-edit-group'});
 		this.textArea = textGroup.createEl('textarea', {
-			cls: 'claude-brain-edit-textarea',
+			cls: 'synapse-edit-textarea',
 			attr: {rows: '5', placeholder: 'Enter text to edit…', title: 'The text you want to edit or transform'},
 		});
 		this.textArea.value = this.initialText;
@@ -180,19 +180,19 @@ export class EditModal extends Modal {
 		});
 
 		// Options row
-		const optionsRow = parent.createDiv({cls: 'claude-brain-edit-options'});
+		const optionsRow = parent.createDiv({cls: 'synapse-edit-options'});
 
 		// Task (with adjust checkbox)
-		const taskGroup = optionsRow.createDiv({cls: 'claude-brain-edit-option-group'});
-		const taskLabelRow = taskGroup.createDiv({cls: 'claude-brain-edit-label claude-brain-edit-checkbox-row'});
+		const taskGroup = optionsRow.createDiv({cls: 'synapse-edit-option-group'});
+		const taskLabelRow = taskGroup.createDiv({cls: 'synapse-edit-label synapse-edit-checkbox-row'});
 		const taskCheckbox = taskLabelRow.createEl('input', {
 			type: 'checkbox',
-			cls: 'claude-brain-edit-adjust-checkbox',
+			cls: 'synapse-edit-adjust-checkbox',
 			attr: {title: 'Enable task selection'},
 		});
 		taskCheckbox.checked = this.adjustTask;
 		taskLabelRow.createSpan({text: 'Task'});
-		this.taskSelect = taskGroup.createEl('select', {cls: 'claude-brain-edit-select', attr: {title: 'Select the editing task'}});
+		this.taskSelect = taskGroup.createEl('select', {cls: 'synapse-edit-select', attr: {title: 'Select the editing task'}});
 		for (const task of TASKS) {
 			const opt = this.taskSelect.createEl('option', {text: `${task.emoji} ${task.label}`});
 			opt.value = task.label;
@@ -213,16 +213,16 @@ export class EditModal extends Modal {
 		});
 
 		// Tone (with adjust checkbox)
-		const toneGroup = optionsRow.createDiv({cls: 'claude-brain-edit-option-group'});
-		const toneLabelRow = toneGroup.createDiv({cls: 'claude-brain-edit-label claude-brain-edit-checkbox-row'});
+		const toneGroup = optionsRow.createDiv({cls: 'synapse-edit-option-group'});
+		const toneLabelRow = toneGroup.createDiv({cls: 'synapse-edit-label synapse-edit-checkbox-row'});
 		const toneCheckbox = toneLabelRow.createEl('input', {
 			type: 'checkbox',
-			cls: 'claude-brain-edit-adjust-checkbox',
+			cls: 'synapse-edit-adjust-checkbox',
 			attr: {title: 'Enable tone adjustment'},
 		});
 		toneCheckbox.checked = this.adjustTone;
 		toneLabelRow.createSpan({text: 'Tone'});
-		this.toneSelect = toneGroup.createEl('select', {cls: 'claude-brain-edit-select', attr: {title: 'Select the desired tone'}});
+		this.toneSelect = toneGroup.createEl('select', {cls: 'synapse-edit-select', attr: {title: 'Select the desired tone'}});
 		for (const tone of TONES) {
 			const opt = this.toneSelect.createEl('option', {text: `${TONE_ICONS[tone]} ${tone}`});
 			opt.value = tone;
@@ -243,16 +243,16 @@ export class EditModal extends Modal {
 		});
 
 		// Format (with adjust checkbox)
-		const formatGroup = optionsRow.createDiv({cls: 'claude-brain-edit-option-group'});
-		const formatLabelRow = formatGroup.createDiv({cls: 'claude-brain-edit-label claude-brain-edit-checkbox-row'});
+		const formatGroup = optionsRow.createDiv({cls: 'synapse-edit-option-group'});
+		const formatLabelRow = formatGroup.createDiv({cls: 'synapse-edit-label synapse-edit-checkbox-row'});
 		const formatCheckbox = formatLabelRow.createEl('input', {
 			type: 'checkbox',
-			cls: 'claude-brain-edit-adjust-checkbox',
+			cls: 'synapse-edit-adjust-checkbox',
 			attr: {title: 'Enable format adjustment'},
 		});
 		formatCheckbox.checked = this.adjustFormat;
 		formatLabelRow.createSpan({text: 'Format'});
-		this.formatSelect = formatGroup.createEl('select', {cls: 'claude-brain-edit-select', attr: {title: 'Select the desired output format'}});
+		this.formatSelect = formatGroup.createEl('select', {cls: 'synapse-edit-select', attr: {title: 'Select the desired output format'}});
 		for (const fmt of FORMATS) {
 			const opt = this.formatSelect.createEl('option', {text: `${FORMAT_ICONS[fmt]} ${fmt}`});
 			opt.value = fmt;
@@ -273,18 +273,18 @@ export class EditModal extends Modal {
 		});
 
 		// Length (with adjust checkbox)
-		const lengthGroup = optionsRow.createDiv({cls: 'claude-brain-edit-option-group'});
-		const lengthLabelRow = lengthGroup.createDiv({cls: 'claude-brain-edit-label claude-brain-edit-checkbox-row'});
+		const lengthGroup = optionsRow.createDiv({cls: 'synapse-edit-option-group'});
+		const lengthLabelRow = lengthGroup.createDiv({cls: 'synapse-edit-label synapse-edit-checkbox-row'});
 		const lengthCheckbox = lengthLabelRow.createEl('input', {
 			type: 'checkbox',
-			cls: 'claude-brain-edit-adjust-checkbox',
+			cls: 'synapse-edit-adjust-checkbox',
 			attr: {title: 'Enable length adjustment'},
 		});
 		lengthCheckbox.checked = this.adjustLength;
-		this.lengthValue = lengthLabelRow.createSpan({text: String(this.length), cls: 'claude-brain-edit-slider-value'});
+		this.lengthValue = lengthLabelRow.createSpan({text: String(this.length), cls: 'synapse-edit-slider-value'});
 		this.lengthSlider = lengthGroup.createEl('input', {
 			type: 'range',
-			cls: 'claude-brain-edit-slider',
+			cls: 'synapse-edit-slider',
 			attr: {min: '1', max: '10', value: String(this.length), title: 'Relative output length (1 = shortest, 10 = longest)'},
 		});
 		if (!this.adjustLength) this.lengthSlider.addClass('is-disabled');
@@ -306,7 +306,7 @@ export class EditModal extends Modal {
 
 		// Edit instructions textarea
 		this.promptArea = parent.createEl('textarea', {
-			cls: 'claude-brain-edit-textarea claude-brain-edit-prompt-area',
+			cls: 'synapse-edit-textarea synapse-edit-prompt-area',
 			attr: {rows: '1', placeholder: 'Make it...', title: 'Optional instructions for how to edit the text'},
 		});
 		if (this.editPrompt) {
@@ -328,16 +328,16 @@ export class EditModal extends Modal {
 		});
 
 		// Bottom row: Choices (left) + buttons (right)
-		const btnRow = parent.createDiv({cls: 'claude-brain-edit-buttons'});
+		const btnRow = parent.createDiv({cls: 'synapse-edit-buttons'});
 
 		// Choices slider (left side)
-		const choicesGroup = btnRow.createDiv({cls: 'claude-brain-edit-choices-inline'});
-		const choicesLabel = choicesGroup.createEl('label', {cls: 'claude-brain-edit-label'});
+		const choicesGroup = btnRow.createDiv({cls: 'synapse-edit-choices-inline'});
+		const choicesLabel = choicesGroup.createEl('label', {cls: 'synapse-edit-label'});
 		choicesLabel.createSpan({text: 'Choices: '});
-		this.choicesValue = choicesLabel.createSpan({text: String(this.choices), cls: 'claude-brain-edit-slider-value'});
+		this.choicesValue = choicesLabel.createSpan({text: String(this.choices), cls: 'synapse-edit-slider-value'});
 		this.choicesSlider = choicesGroup.createEl('input', {
 			type: 'range',
-			cls: 'claude-brain-edit-slider',
+			cls: 'synapse-edit-slider',
 			attr: {min: '1', max: '5', value: String(this.choices), title: 'Number of alternative results to generate'},
 		});
 		this.choicesSlider.addEventListener('input', () => {
@@ -346,9 +346,9 @@ export class EditModal extends Modal {
 		});
 
 		// Spacer to push buttons right
-		btnRow.createDiv({cls: 'claude-brain-edit-btn-spacer'});
+		btnRow.createDiv({cls: 'synapse-edit-btn-spacer'});
 
-		this.cancelBtn = btnRow.createEl('button', {text: 'Cancel', cls: 'claude-brain-edit-btn-secondary', attr: {title: 'Cancel or stop generation'}});
+		this.cancelBtn = btnRow.createEl('button', {text: 'Cancel', cls: 'synapse-edit-btn-secondary', attr: {title: 'Cancel or stop generation'}});
 		this.cancelBtn.addEventListener('click', () => {
 			if (this.isProcessing) {
 				this.abortController?.abort();
@@ -359,8 +359,8 @@ export class EditModal extends Modal {
 			}
 		});
 
-		this.sendBtn = btnRow.createEl('button', {cls: 'claude-brain-edit-btn-primary', attr: {title: 'Generate choices (ctrl+enter)'}});
-		this.sendBtnIcon = this.sendBtn.createSpan({cls: 'claude-brain-edit-btn-icon'});
+		this.sendBtn = btnRow.createEl('button', {cls: 'synapse-edit-btn-primary', attr: {title: 'Generate choices (ctrl+enter)'}});
+		this.sendBtnIcon = this.sendBtn.createSpan({cls: 'synapse-edit-btn-icon'});
 		setIcon(this.sendBtnIcon, 'arrow-right');
 		this.sendBtn.addEventListener('click', () => {
 			if (this.isProcessing) {
@@ -412,18 +412,18 @@ export class EditModal extends Modal {
 			if (!this.isProcessing) return; // cancelled
 
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const modelUsed = this.plugin.settings.inlineModel || 'default';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
 
 			// Replace generating indicator with results
 			this.resultsContainer.empty();
-			this.showResults(results, modelUsed, elapsed);
+			this.showResults(results, agentUsed, elapsed);
 		} catch (e) {
 			if (!this.isProcessing) return;
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const modelUsed = this.plugin.settings.inlineModel || 'default';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
 			this.resultsContainer.empty();
-			const errorHeader = this.resultsContainer.createDiv({cls: 'claude-brain-edit-results-header claude-brain-edit-error'});
-			errorHeader.createSpan({text: `\u26A0\uFE0F \uD83E\uDDE0 ${modelUsed} | \u231A ${elapsed}s | Error: ${String(e)}`});
+			const errorHeader = this.resultsContainer.createDiv({cls: 'synapse-edit-results-header synapse-edit-error'});
+			errorHeader.createSpan({text: `\u26A0\uFE0F \uD83E\uDDE0 ${agentUsed} | \u231A ${elapsed}s | Error: ${String(e)}`});
 		} finally {
 			this.isProcessing = false;
 			this.abortController = null;
@@ -458,7 +458,7 @@ export class EditModal extends Modal {
 
 		const {content: result, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt,
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.inline || 'General',
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
 			tools: [],
@@ -471,9 +471,9 @@ export class EditModal extends Modal {
 		this.plugin.settings.sessionNames[sessionId] = `[inline] Edit: ${editDesc.slice(0, 30)}`;
 		void this.plugin.saveSettings();
 
-		const leaves = this.plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
+		const leaves = this.plugin.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
 		if (leaves.length > 0 && leaves[0]) {
-			const view = leaves[0].view as ClaudeBrainView;
+			const view = leaves[0].view as SynapseView;
 			if (typeof view.registerInlineSession === 'function') {
 				view.registerInlineSession(sessionId, `Edit: ${editDesc.slice(0, 30)}`);
 			}
@@ -526,11 +526,11 @@ export class EditModal extends Modal {
 
 	private showResults(choices: string[], model: string, elapsed: string): void {
 		// Header
-		const header = this.resultsContainer.createDiv({cls: 'claude-brain-edit-results-header'});
+		const header = this.resultsContainer.createDiv({cls: 'synapse-edit-results-header'});
 		header.createSpan({text: `🧠 ${model} | ⌚ ${elapsed}s | ${choices.length} choice${choices.length > 1 ? 's' : ''} generated`});
 
 		// Choice cards
-		const cardsContainer = this.resultsContainer.createDiv({cls: 'claude-brain-edit-cards'});
+		const cardsContainer = this.resultsContainer.createDiv({cls: 'synapse-edit-cards'});
 		for (let i = 0; i < choices.length; i++) {
 			const choice = choices[i];
 			if (!choice) continue;
@@ -539,12 +539,12 @@ export class EditModal extends Modal {
 	}
 
 	private buildChoiceCard(parent: HTMLElement, text: string, index: number): void {
-		const card = parent.createDiv({cls: 'claude-brain-edit-card'});
+		const card = parent.createDiv({cls: 'synapse-edit-card'});
 
-		const cardHeader = card.createDiv({cls: 'claude-brain-edit-card-header'});
+		const cardHeader = card.createDiv({cls: 'synapse-edit-card-header'});
 
 		// Expand / collapse toggle (before the title)
-		const expandBtn = cardHeader.createEl('button', {cls: 'clickable-icon claude-brain-edit-card-btn', attr: {title: 'Expand'}});
+		const expandBtn = cardHeader.createEl('button', {cls: 'clickable-icon synapse-edit-card-btn', attr: {title: 'Expand'}});
 		setIcon(expandBtn, 'maximize-2');
 		expandBtn.addEventListener('click', () => {
 			const expanded = card.classList.toggle('is-expanded');
@@ -552,12 +552,12 @@ export class EditModal extends Modal {
 			expandBtn.title = expanded ? 'Collapse' : 'Expand';
 		});
 
-		cardHeader.createSpan({text: `Choice ${index}`, cls: 'claude-brain-edit-card-title'});
+		cardHeader.createSpan({text: `Choice ${index}`, cls: 'synapse-edit-card-title'});
 
-		const actions = cardHeader.createDiv({cls: 'claude-brain-edit-card-actions'});
+		const actions = cardHeader.createDiv({cls: 'synapse-edit-card-actions'});
 
 		// Refine: copy choice text back to input and go back to form
-		const refineBtn = actions.createEl('button', {cls: 'clickable-icon claude-brain-edit-card-btn', attr: {title: 'Refine this choice'}});
+		const refineBtn = actions.createEl('button', {cls: 'clickable-icon synapse-edit-card-btn', attr: {title: 'Refine this choice'}});
 		setIcon(refineBtn, 'pencil');
 		refineBtn.addEventListener('click', () => {
 			this.textArea.value = text;
@@ -566,7 +566,7 @@ export class EditModal extends Modal {
 			this.textArea.focus();
 		});
 
-		const copyBtn = actions.createEl('button', {cls: 'clickable-icon claude-brain-edit-card-btn', attr: {title: 'Copy to clipboard'}});
+		const copyBtn = actions.createEl('button', {cls: 'clickable-icon synapse-edit-card-btn', attr: {title: 'Copy to clipboard'}});
 		setIcon(copyBtn, 'copy');
 		copyBtn.addEventListener('click', () => {
 			void navigator.clipboard.writeText(text);
@@ -575,16 +575,16 @@ export class EditModal extends Modal {
 			new Notice('Copied to clipboard.');
 		});
 
-		const useBtn = actions.createEl('button', {cls: 'clickable-icon claude-brain-edit-card-btn claude-brain-edit-card-use', attr: {title: 'Use this choice'}});
+		const useBtn = actions.createEl('button', {cls: 'clickable-icon synapse-edit-card-btn synapse-edit-card-use', attr: {title: 'Use this choice'}});
 		setIcon(useBtn, 'check');
 		useBtn.addEventListener('click', () => {
 			this.onChoose(text);
 			this.close();
 		});
 
-		const cardBody = card.createDiv({cls: 'claude-brain-edit-card-body'});
+		const cardBody = card.createDiv({cls: 'synapse-edit-card-body'});
 		const ta = cardBody.createEl('textarea', {
-			cls: 'claude-brain-edit-card-text',
+			cls: 'synapse-edit-card-text',
 			attr: {readonly: '', tabindex: '-1'},
 		});
 		ta.value = text;

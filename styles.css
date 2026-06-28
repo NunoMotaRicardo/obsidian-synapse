@@ -1,6 +1,6 @@
 /* ── Claude Brain Chat View ───────────────────────────────────────── */
 
-.claude-brain-root {
+.synapse-root {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -8,7 +8,7 @@
 	font-family: var(--font-interface);
 }
 
-.claude-brain-main {
+.synapse-main {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -18,7 +18,7 @@
 
 /* ── Tab bar ──────────────────────────────────────────────────── */
 
-.claude-brain-tab-bar {
+.synapse-tab-bar {
 	display: flex;
 	flex-direction: row;
 	gap: 0;
@@ -27,7 +27,7 @@
 	flex-shrink: 0;
 }
 
-.claude-brain-tab {
+.synapse-tab {
 	display: flex;
 	align-items: center;
 	gap: 5px;
@@ -40,28 +40,28 @@
 	user-select: none;
 }
 
-.claude-brain-tab:hover {
+.synapse-tab:hover {
 	color: var(--text-normal);
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-tab.is-active {
+.synapse-tab.is-active {
 	color: var(--text-normal);
 	border-bottom-color: var(--interactive-accent);
 }
 
-.claude-brain-tab-icon svg {
+.synapse-tab-icon svg {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-tab-label {
+.synapse-tab-label {
 	line-height: 1;
 }
 
 /* ── Tab panels ───────────────────────────────────────────────── */
 
-.claude-brain-tab-panel {
+.synapse-tab-panel {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -69,11 +69,11 @@
 	overflow: hidden;
 }
 
-.claude-brain-tab-panel-chat {
+.synapse-tab-panel-chat {
 	flex-direction: row;
 }
 
-.claude-brain-chat-content {
+.synapse-chat-content {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -81,7 +81,7 @@
 	overflow: hidden;
 }
 
-.claude-brain-tab-empty {
+.synapse-tab-empty {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -93,7 +93,7 @@
 
 /* ── Search panel ─────────────────────────────────────────────── */
 
-.claude-brain-search-wrapper {
+.synapse-search-wrapper {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -101,22 +101,22 @@
 	gap: 8px;
 }
 
-.claude-brain-search-toolbar {
+.synapse-search-toolbar {
 	flex-shrink: 0;
 }
 
-.claude-brain-search-advanced-group {
+.synapse-search-advanced-group {
 	display: contents;
 }
 
-.claude-brain-search-input-row {
+.synapse-search-input-row {
 	display: flex;
 	gap: 6px;
 	align-items: flex-start;
 	flex-shrink: 0;
 }
 
-.claude-brain-search-input {
+.synapse-search-input {
 	flex: 1;
 	resize: vertical;
 	min-height: 36px;
@@ -130,12 +130,12 @@
 	font-family: inherit;
 }
 
-.claude-brain-search-input:focus {
+.synapse-search-input:focus {
 	border-color: var(--interactive-accent);
 	outline: none;
 }
 
-.claude-brain-search-btn {
+.synapse-search-btn {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -149,76 +149,76 @@
 	flex-shrink: 0;
 }
 
-.claude-brain-search-btn:hover {
+.synapse-search-btn:hover {
 	opacity: 0.85;
 }
 
-.claude-brain-search-btn.is-searching {
+.synapse-search-btn.is-searching {
 	background: var(--text-error);
 }
 
-.claude-brain-search-results {
+.synapse-search-results {
 	flex: 1;
 	overflow-y: auto;
 	min-height: 0;
 }
 
-.claude-brain-search-loading {
+.synapse-search-loading {
 	text-align: center;
 	padding: 24px;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-search-empty {
+.synapse-search-empty {
 	text-align: center;
 	padding: 24px;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-search-result {
+.synapse-search-result {
 	padding: 8px 10px;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-search-result:last-child {
+.synapse-search-result:last-child {
 	border-bottom: none;
 }
 
-.claude-brain-search-result-file {
+.synapse-search-result-file {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 }
 
-.claude-brain-search-result-icon {
+.synapse-search-result-icon {
 	flex-shrink: 0;
 	color: var(--text-muted);
 }
 
-.claude-brain-search-result-icon svg {
+.synapse-search-result-icon svg {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-search-result-name {
+.synapse-search-result-name {
 	font-weight: var(--font-semibold);
 	color: var(--text-accent);
 	cursor: pointer;
 }
 
-.claude-brain-search-result-name:hover {
+.synapse-search-result-name:hover {
 	text-decoration: underline;
 }
 
-.claude-brain-search-result-folder {
+.synapse-search-result-folder {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	margin-left: auto;
 }
 
-.claude-brain-search-result-reason {
+.synapse-search-result-reason {
 	margin-top: 4px;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
@@ -227,24 +227,24 @@
 
 /* ── Triggers panel ───────────────────────────────────────────── */
 
-.claude-brain-triggers-section {
+.synapse-triggers-section {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
 }
 
-.claude-brain-triggers-history-section {
+.synapse-triggers-history-section {
 	flex: 1;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-triggers-config-section {
+.synapse-triggers-config-section {
 	flex: 0 0 auto;
 	max-height: 40%;
 }
 
-.claude-brain-triggers-header {
+.synapse-triggers-header {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -253,7 +253,7 @@
 	flex-shrink: 0;
 }
 
-.claude-brain-triggers-title {
+.synapse-triggers-title {
 	font-size: var(--font-ui-small);
 	font-weight: var(--font-semibold);
 	color: var(--text-muted);
@@ -262,14 +262,14 @@
 	flex-shrink: 0;
 }
 
-.claude-brain-triggers-controls {
+.synapse-triggers-controls {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	margin-left: auto;
 }
 
-.claude-brain-triggers-search {
+.synapse-triggers-search {
 	width: 90px;
 	padding: 2px 6px;
 	font-size: var(--font-ui-smaller);
@@ -279,35 +279,35 @@
 	color: var(--text-normal);
 }
 
-.claude-brain-triggers-search:focus {
+.synapse-triggers-search:focus {
 	border-color: var(--interactive-accent);
 	outline: none;
 }
 
-.claude-brain-triggers-ctrl-btn {
+.synapse-triggers-ctrl-btn {
 	padding: 2px;
 }
 
-.claude-brain-triggers-list {
+.synapse-triggers-list {
 	overflow-y: auto;
 	flex: 1;
 	min-height: 0;
 }
 
-.claude-brain-triggers-empty {
+.synapse-triggers-empty {
 	padding: 16px;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 	text-align: center;
 }
 
-/* Trigger config/history items reuse .claude-brain-session-item for consistency */
+/* Trigger config/history items reuse .synapse-session-item for consistency */
 
-.claude-brain-triggers-config-item.is-disabled {
+.synapse-triggers-config-item.is-disabled {
 	opacity: 0.5;
 }
 
-.claude-brain-triggers-enabled-dot {
+.synapse-triggers-enabled-dot {
 	position: absolute;
 	bottom: -2px;
 	right: -2px;
@@ -318,14 +318,14 @@
 	border: 1.5px solid var(--background-secondary);
 }
 
-.claude-brain-toolbar-icon.is-disabled {
+.synapse-toolbar-icon.is-disabled {
 	opacity: 0.35;
 	pointer-events: none;
 }
 
 /* ── Chat area ────────────────────────────────────────────────── */
 
-.claude-brain-chat {
+.synapse-chat {
 	flex: 1 1 0;
 	min-height: 0;
 	overflow-y: auto;
@@ -335,14 +335,14 @@
 	gap: 6px;
 }
 
-.claude-brain-chat::before {
+.synapse-chat::before {
 	content: '';
 	flex: 1;
 }
 
 /* Welcome */
 
-.claude-brain-welcome {
+.synapse-welcome {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -353,22 +353,22 @@
 	flex: 1;
 }
 
-.claude-brain-welcome-icon {
+.synapse-welcome-icon {
 	margin-bottom: 12px;
 }
 
-.claude-brain-welcome-icon svg {
+.synapse-welcome-icon svg {
 	width: 48px;
 	height: 48px;
 	color: var(--interactive-accent);
 }
 
-.claude-brain-welcome h3 {
+.synapse-welcome h3 {
 	margin: 0 0 8px;
 	font-size: 1.2em;
 }
 
-.claude-brain-welcome-desc {
+.synapse-welcome-desc {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 	max-width: 280px;
@@ -376,26 +376,26 @@
 
 /* ── Messages ─────────────────────────────────────────────────── */
 
-.claude-brain-msg {
+.synapse-msg {
 	display: flex;
 	padding: 8px 6px;
 	border-radius: var(--radius-m);
-	animation: claude-brain-fade-in 0.2s ease;
+	animation: synapse-fade-in 0.2s ease;
 }
 
-@keyframes claude-brain-fade-in {
+@keyframes synapse-fade-in {
 	from { opacity: 0; transform: translateY(4px); }
 	to   { opacity: 1; transform: translateY(0); }
 }
 
-.claude-brain-msg-user {
+.synapse-msg-user {
 	flex-direction: row-reverse;
 	gap: 4px;
 	justify-content: flex-start;
 	background: transparent;
 }
 
-.claude-brain-msg-user .claude-brain-msg-body-wrapper {
+.synapse-msg-user .synapse-msg-body-wrapper {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	border-radius: var(--radius-l);
@@ -404,16 +404,16 @@
 	max-width: 85%;
 }
 
-.claude-brain-msg-user .claude-brain-msg-body-wrapper a {
+.synapse-msg-user .synapse-msg-body-wrapper a {
 	color: var(--text-on-accent);
 	text-decoration: underline;
 }
 
-.claude-brain-msg-assistant {
+.synapse-msg-assistant {
 	background: transparent;
 }
 
-.claude-brain-msg-info {
+.synapse-msg-info {
 	justify-content: center;
 	padding: 4px 8px;
 	font-size: var(--font-ui-smaller);
@@ -423,7 +423,7 @@
 }
 
 /* Copy button on user messages */
-.claude-brain-msg-copy {
+.synapse-msg-copy {
 	flex-shrink: 0;
 	align-self: flex-start;
 	margin-top: 6px;
@@ -436,46 +436,46 @@
 	opacity: 0;
 	transition: opacity 0.15s ease, color 0.15s ease;
 }
-.claude-brain-msg-user:hover .claude-brain-msg-copy {
+.synapse-msg-user:hover .synapse-msg-copy {
 	opacity: 1;
 }
-.claude-brain-msg-copy:hover {
+.synapse-msg-copy:hover {
 	color: var(--text-muted);
 }
-.claude-brain-msg-copy svg {
+.synapse-msg-copy svg {
 	width: 14px;
 	height: 14px;
 }
 
 /* Message text is selectable/copyable */
-.claude-brain-msg-body {
+.synapse-msg-body {
 	user-select: text;
 	-webkit-user-select: text;
 	cursor: text;
 }
 
-.claude-brain-msg-body-wrapper {
+.synapse-msg-body-wrapper {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
 }
 
-.claude-brain-msg-body {
+.synapse-msg-body {
 	font-size: var(--font-ui-small);
 	line-height: 1.5;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
 }
 
-.claude-brain-msg-body p:first-child {
+.synapse-msg-body p:first-child {
 	margin-top: 0;
 }
 
-.claude-brain-msg-body p:last-child {
+.synapse-msg-body p:last-child {
 	margin-bottom: 0;
 }
 
-.claude-brain-msg-body pre {
+.synapse-msg-body pre {
 	background: var(--background-primary-alt);
 	border-radius: var(--radius-s);
 	padding: 8px;
@@ -483,18 +483,18 @@
 	font-size: var(--font-ui-smaller);
 }
 
-.claude-brain-msg-body code {
+.synapse-msg-body code {
 	font-size: 0.9em;
 }
 
-.claude-brain-msg-attachments {
+.synapse-msg-attachments {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
 	margin-bottom: 4px;
 }
 
-.claude-brain-msg-att-chip {
+.synapse-msg-att-chip {
 	display: inline-flex;
 	align-items: center;
 	gap: 2px;
@@ -505,40 +505,40 @@
 	padding: 1px 6px;
 }
 
-.claude-brain-att-clickable {
+.synapse-att-clickable {
 	cursor: pointer;
 }
 
-.claude-brain-att-clickable:hover {
+.synapse-att-clickable:hover {
 	color: var(--text-normal);
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-msg-att-chip svg {
+.synapse-msg-att-chip svg {
 	width: 12px;
 	height: 12px;
 }
 
 /* Tool call collapsible blocks */
 
-.claude-brain-tool-calls {
+.synapse-tool-calls {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 }
 
-.claude-brain-tool-calls:empty {
+.synapse-tool-calls:empty {
 	display: none;
 }
 
-.claude-brain-tool-call {
+.synapse-tool-call {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
 	font-size: var(--font-ui-smaller);
 	overflow: hidden;
 }
 
-.claude-brain-tool-call-summary {
+.synapse-tool-call-summary {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -550,11 +550,11 @@
 	list-style: none;
 }
 
-.claude-brain-tool-call-summary::-webkit-details-marker {
+.synapse-tool-call-summary::-webkit-details-marker {
 	display: none;
 }
 
-.claude-brain-tool-call-summary::before {
+.synapse-tool-call-summary::before {
 	content: '';
 	display: inline-block;
 	width: 0;
@@ -566,22 +566,22 @@
 	flex-shrink: 0;
 }
 
-.claude-brain-tool-call[open] > .claude-brain-tool-call-summary::before {
+.synapse-tool-call[open] > .synapse-tool-call-summary::before {
 	transform: rotate(90deg);
 }
 
-.claude-brain-tool-call-summary:hover {
+.synapse-tool-call-summary:hover {
 	color: var(--text-normal);
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-tool-call-icon svg {
+.synapse-tool-call-icon svg {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
 }
 
-.claude-brain-tool-call-name {
+.synapse-tool-call-name {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
@@ -589,41 +589,41 @@
 	white-space: nowrap;
 }
 
-.claude-brain-tool-call-spinner {
+.synapse-tool-call-spinner {
 	flex-shrink: 0;
-	animation: claude-brain-spin 1s linear infinite;
+	animation: synapse-spin 1s linear infinite;
 }
 
-.claude-brain-tool-call-spinner svg {
+.synapse-tool-call-spinner svg {
 	width: 14px;
 	height: 14px;
 }
 
-@keyframes claude-brain-spin {
+@keyframes synapse-spin {
 	from { transform: rotate(0deg); }
 	to { transform: rotate(360deg); }
 }
 
-.claude-brain-tool-call-status svg {
+.synapse-tool-call-status svg {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
 }
 
-.claude-brain-tool-call-status.is-success {
+.synapse-tool-call-status.is-success {
 	color: var(--text-success);
 }
 
-.claude-brain-tool-call-status.is-error {
+.synapse-tool-call-status.is-error {
 	color: var(--text-error);
 }
 
-.claude-brain-tool-call-section {
+.synapse-tool-call-section {
 	padding: 4px 8px 6px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-tool-call-label {
+.synapse-tool-call-label {
 	font-size: var(--font-ui-smaller);
 	font-weight: var(--font-semibold);
 	color: var(--text-muted);
@@ -632,7 +632,7 @@
 	letter-spacing: 0.05em;
 }
 
-.claude-brain-tool-call-code {
+.synapse-tool-call-code {
 	margin: 0;
 	padding: 6px 8px;
 	background: var(--code-background);
@@ -646,7 +646,7 @@
 	word-break: break-all;
 }
 
-.claude-brain-tool-call-code code {
+.synapse-tool-call-code code {
 	background: none;
 	padding: 0;
 	font-size: inherit;
@@ -654,22 +654,22 @@
 
 /* ── Tool approval modal ──────────────────────────────────────── */
 
-.claude-brain-approval-modal h3 {
+.synapse-approval-modal h3 {
 	margin-top: 0;
 	margin-bottom: 12px;
 }
 
-.claude-brain-approval-info {
+.synapse-approval-info {
 	margin-bottom: 16px;
 }
 
-.claude-brain-approval-row {
+.synapse-approval-row {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 	margin-bottom: 6px;
 }
 
-.claude-brain-approval-details {
+.synapse-approval-details {
 	margin: 8px 0 0;
 	padding: 8px 10px;
 	background: var(--code-background);
@@ -682,13 +682,13 @@
 	word-break: break-all;
 }
 
-.claude-brain-approval-details code {
+.synapse-approval-details code {
 	background: none;
 	padding: 0;
 	font-size: inherit;
 }
 
-.claude-brain-approval-buttons {
+.synapse-approval-buttons {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
@@ -696,33 +696,33 @@
 
 /* ── User input modal (ask_user) ──────────────────────────────── */
 
-.claude-brain-userinput-modal h3 {
+.synapse-userinput-modal h3 {
 	margin-top: 0;
 	margin-bottom: 12px;
 }
 
-.claude-brain-userinput-question {
+.synapse-userinput-question {
 	font-size: var(--font-ui-medium);
 	margin-bottom: 16px;
 	line-height: 1.5;
 }
 
-.claude-brain-userinput-choices {
+.synapse-userinput-choices {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
 	margin-bottom: 12px;
 }
 
-.claude-brain-userinput-choice {
+.synapse-userinput-choice {
 	cursor: pointer;
 }
 
-.claude-brain-userinput-freeform {
+.synapse-userinput-freeform {
 	margin-top: 8px;
 }
 
-.claude-brain-userinput-textarea {
+.synapse-userinput-textarea {
 	width: 100%;
 	resize: vertical;
 	font-family: var(--font-interface);
@@ -734,12 +734,12 @@
 	color: var(--text-normal);
 }
 
-.claude-brain-userinput-textarea:focus {
+.synapse-userinput-textarea:focus {
 	border-color: var(--interactive-accent);
 	outline: none;
 }
 
-.claude-brain-userinput-buttons {
+.synapse-userinput-buttons {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
@@ -748,42 +748,42 @@
 
 /* ── Elicitation modal (structured input) ─────────────────────── */
 
-.claude-brain-elicitation-modal h3 {
+.synapse-elicitation-modal h3 {
 	margin-top: 0;
 	margin-bottom: 12px;
 }
 
-.claude-brain-elicitation-message {
+.synapse-elicitation-message {
 	font-size: var(--font-ui-medium);
 	margin-bottom: 16px;
 	line-height: 1.5;
 }
 
-.claude-brain-elicitation-form {
+.synapse-elicitation-form {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
 	margin-bottom: 16px;
 }
 
-.claude-brain-elicitation-field {
+.synapse-elicitation-field {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 }
 
-.claude-brain-elicitation-label {
+.synapse-elicitation-label {
 	font-weight: var(--font-semibold);
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-elicitation-description {
+.synapse-elicitation-description {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 	margin-bottom: 2px;
 }
 
-.claude-brain-elicitation-input {
+.synapse-elicitation-input {
 	width: 100%;
 	padding: 6px 8px;
 	font-family: var(--font-interface);
@@ -794,33 +794,33 @@
 	color: var(--text-normal);
 }
 
-.claude-brain-elicitation-input:focus {
+.synapse-elicitation-input:focus {
 	border-color: var(--interactive-accent);
 	outline: none;
 }
 
-.claude-brain-elicitation-select {
+.synapse-elicitation-select {
 	width: 100%;
 }
 
-.claude-brain-elicitation-checklist {
+.synapse-elicitation-checklist {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
 
-.claude-brain-elicitation-check-row {
+.synapse-elicitation-check-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-elicitation-url {
+.synapse-elicitation-url {
 	margin-bottom: 16px;
 }
 
-.claude-brain-elicitation-buttons {
+.synapse-elicitation-buttons {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
@@ -829,7 +829,7 @@
 
 /* ── Message metadata footer ──────────────────────────────────── */
 
-.claude-brain-msg-metadata {
+.synapse-msg-metadata {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -841,23 +841,23 @@
 	border-top: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-metadata-item {
+.synapse-metadata-item {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
 }
 
-.claude-brain-metadata-tools {
+.synapse-metadata-tools {
 	cursor: default;
 }
 
-.claude-brain-metadata-icon {
+.synapse-metadata-icon {
 	display: inline-flex;
 	align-items: center;
 	opacity: 0.7;
 }
 
-.claude-brain-metadata-icon svg {
+.synapse-metadata-icon svg {
 	width: 12px;
 	height: 12px;
 	stroke-width: 2px;
@@ -865,7 +865,7 @@
 
 /* Thinking indicator */
 
-.claude-brain-thinking {
+.synapse-thinking {
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -874,26 +874,26 @@
 	padding: 4px 0;
 }
 
-.claude-brain-thinking-dots {
+.synapse-thinking-dots {
 	display: inline-flex;
 	gap: 2px;
 	margin-left: 1px;
 }
 
-.claude-brain-dot {
+.synapse-dot {
 	display: inline-block;
-	animation: claude-brain-bounce 1.4s ease-in-out infinite;
+	animation: synapse-bounce 1.4s ease-in-out infinite;
 }
 
-.claude-brain-dot:nth-child(2) {
+.synapse-dot:nth-child(2) {
 	animation-delay: 0.2s;
 }
 
-.claude-brain-dot:nth-child(3) {
+.synapse-dot:nth-child(3) {
 	animation-delay: 0.4s;
 }
 
-@keyframes claude-brain-bounce {
+@keyframes synapse-bounce {
 	0%, 60%, 100% {
 		transform: translateY(0);
 		opacity: 0.4;
@@ -904,20 +904,20 @@
 	}
 }
 
-.claude-brain-cancelled {
+.synapse-cancelled {
 	color: var(--text-muted);
 	font-style: italic;
 }
 
 /* ── Reasoning block ──────────────────────────────────────────── */
 
-.claude-brain-reasoning {
+.synapse-reasoning {
 	border-left: 2px solid var(--color-accent);
 	margin-bottom: 6px;
 	padding-left: 8px;
 }
 
-.claude-brain-reasoning > summary {
+.synapse-reasoning > summary {
 	cursor: pointer;
 	list-style: none;
 	display: flex;
@@ -929,37 +929,37 @@
 	user-select: none;
 }
 
-.claude-brain-reasoning > summary::-webkit-details-marker {
+.synapse-reasoning > summary::-webkit-details-marker {
 	display: none;
 }
 
-.claude-brain-reasoning-spinner {
+.synapse-reasoning-spinner {
 	display: inline-block;
 	width: 12px;
 	height: 12px;
 	border: 2px solid var(--color-accent);
 	border-top-color: transparent;
 	border-radius: 50%;
-	animation: claude-brain-spin 0.8s linear infinite;
+	animation: synapse-spin 0.8s linear infinite;
 	flex-shrink: 0;
 }
 
-.claude-brain-reasoning:not([open]) .claude-brain-reasoning-spinner {
+.synapse-reasoning:not([open]) .synapse-reasoning-spinner {
 	display: none;
 }
 
-.claude-brain-reasoning-icon {
+.synapse-reasoning-icon {
 	display: inline-flex;
 	align-items: center;
 	flex-shrink: 0;
 }
 
-.claude-brain-reasoning-icon .svg-icon {
+.synapse-reasoning-icon .svg-icon {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-reasoning-body {
+.synapse-reasoning-body {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 	max-height: 300px;
@@ -967,13 +967,13 @@
 	padding: 4px 0;
 }
 
-.claude-brain-reasoning-body p {
+.synapse-reasoning-body p {
 	margin: 0 0 4px;
 }
 
 /* ── Ghost-text autocomplete ──────────────────────────────────── */
 
-.claude-brain-ghost-text {
+.synapse-ghost-text {
 	opacity: 0.4;
 	font-style: italic;
 	pointer-events: none;
@@ -983,18 +983,18 @@
 
 /* ── Claude Brain gutter ──────────────────────────────────────────── */
 
-.cm-editor .claude-brain-gutter {
+.cm-editor .synapse-gutter {
 	width: 26px;
 	cursor: default;
 }
 
-.claude-brain-no-inline-icon .cm-editor .claude-brain-gutter {
+.synapse-no-inline-icon .cm-editor .synapse-gutter {
 	width: 0;
 	overflow: hidden;
 }
 
 /* Indicator button inside the gutter */
-.claude-brain-autocomplete-indicator {
+.synapse-autocomplete-indicator {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1010,36 +1010,36 @@
 	transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 
-.claude-brain-autocomplete-indicator .svg-icon {
+.synapse-autocomplete-indicator .svg-icon {
 	width: 16px;
 	height: 16px;
 }
 
-.claude-brain-autocomplete-indicator:hover {
+.synapse-autocomplete-indicator:hover {
 	opacity: 1;
 	color: var(--interactive-accent);
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-autocomplete-indicator:active {
+.synapse-autocomplete-indicator:active {
 	background: var(--background-modifier-active-hover);
 }
 
 /* Animated pulse when fetching a completion */
-.claude-brain-autocomplete-indicator.is-loading {
+.synapse-autocomplete-indicator.is-loading {
 	opacity: 1;
 	color: var(--interactive-accent);
-	animation: claude-brain-indicator-pulse 1s ease-in-out infinite;
+	animation: synapse-indicator-pulse 1s ease-in-out infinite;
 }
 
-@keyframes claude-brain-indicator-pulse {
+@keyframes synapse-indicator-pulse {
 	0%, 100% { opacity: 0.5; transform: scale(1); }
 	50%      { opacity: 1;   transform: scale(1.15); }
 }
 
 /* ── Bottom panel ─────────────────────────────────────────────── */
 
-.claude-brain-bottom {
+.synapse-bottom {
 	flex-shrink: 0;
 	border-top: 1px solid var(--background-modifier-border);
 	padding: 8px 10px;
@@ -1051,7 +1051,7 @@
 
 /* Attachments bar */
 
-.claude-brain-attachments-bar {
+.synapse-attachments-bar {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -1060,14 +1060,14 @@
 
 /* ── Settings tab bar ─────────────────────────────────────────── */
 
-.claude-brain-settings-tab-bar {
+.synapse-settings-tab-bar {
 	display: flex;
 	gap: 4px;
 	border-bottom: 1px solid var(--background-modifier-border);
 	margin-bottom: 12px;
 }
 
-.claude-brain-settings-tab {
+.synapse-settings-tab {
 	padding: 6px 16px;
 	border: none;
 	background: none;
@@ -1079,16 +1079,16 @@
 	transition: color 0.15s, border-color 0.15s;
 }
 
-.claude-brain-settings-tab:hover {
+.synapse-settings-tab:hover {
 	color: var(--text-normal);
 }
 
-.claude-brain-settings-tab.is-active {
+.synapse-settings-tab.is-active {
 	color: var(--text-accent);
 	border-bottom-color: var(--text-accent);
 }
 
-.claude-brain-settings-warning {
+.synapse-settings-warning {
 	background: var(--background-modifier-error);
 	color: var(--text-on-accent);
 	border-radius: var(--radius-s);
@@ -1103,7 +1103,7 @@
 	display: none;
 }
 
-.claude-brain-attachment-tag {
+.synapse-attachment-tag {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
@@ -1114,36 +1114,36 @@
 	color: var(--text-normal);
 }
 
-.claude-brain-attachment-icon svg {
+.synapse-attachment-icon svg {
 	width: 12px;
 	height: 12px;
 }
 
-.claude-brain-attachment-name {
+.synapse-attachment-name {
 	max-width: 120px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.claude-brain-attachment-remove {
+.synapse-attachment-remove {
 	cursor: pointer;
 	opacity: 0.5;
 	transition: opacity 0.15s;
 }
 
-.claude-brain-attachment-remove:hover {
+.synapse-attachment-remove:hover {
 	opacity: 1;
 }
 
-.claude-brain-attachment-remove svg {
+.synapse-attachment-remove svg {
 	width: 12px;
 	height: 12px;
 }
 
 /* Scope bar */
 
-.claude-brain-scope-bar {
+.synapse-scope-bar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -1153,19 +1153,19 @@
 
 
 
-.claude-brain-scope-label {
+.synapse-scope-label {
 	display: flex;
 	align-items: center;
 	gap: 3px;
 	cursor: pointer;
 }
 
-.claude-brain-scope-label svg {
+.synapse-scope-label svg {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-scope-remove {
+.synapse-scope-remove {
 	cursor: pointer;
 	opacity: 0.5;
 	transition: opacity 0.15s;
@@ -1173,18 +1173,18 @@
 	align-items: center;
 }
 
-.claude-brain-scope-remove:hover {
+.synapse-scope-remove:hover {
 	opacity: 1;
 }
 
-.claude-brain-scope-remove svg {
+.synapse-scope-remove svg {
 	width: 12px;
 	height: 12px;
 }
 
 /* ── Input area ───────────────────────────────────────────────── */
 
-.claude-brain-input-area {
+.synapse-input-area {
 	position: relative;
 	display: flex;
 	flex-direction: column;
@@ -1196,30 +1196,30 @@
 	transition: border-color 0.15s;
 }
 
-.claude-brain-input-area:focus-within {
+.synapse-input-area:focus-within {
 	border-color: var(--interactive-accent);
 }
 
-.claude-brain-input-area.claude-brain-drag-over {
+.synapse-input-area.synapse-drag-over {
 	border-color: var(--interactive-accent);
 	background: var(--background-secondary-alt);
 	box-shadow: inset 0 0 0 2px var(--interactive-accent-hover);
 }
 
-.claude-brain-input-actions {
+.synapse-input-actions {
 	display: flex;
 	align-items: center;
 	gap: 4px;
 	flex-wrap: wrap;
 }
 
-.claude-brain-input-row {
+.synapse-input-row {
 	display: flex;
 	align-items: flex-end;
 	gap: 6px;
 }
 
-.claude-brain-input {
+.synapse-input {
 	flex: 1;
 	border: none;
 	background: transparent;
@@ -1235,11 +1235,11 @@
 	padding: 2px 0;
 }
 
-.claude-brain-input::placeholder {
+.synapse-input::placeholder {
 	color: var(--text-faint);
 }
 
-.claude-brain-send-btn {
+.synapse-send-btn {
 	flex-shrink: 0;
 	width: 28px;
 	height: 28px;
@@ -1254,16 +1254,16 @@
 	transition: opacity 0.15s;
 }
 
-.claude-brain-send-btn:hover {
+.synapse-send-btn:hover {
 	opacity: 0.85;
 	background: var(--interactive-accent) !important;
 }
 
-.claude-brain-send-btn.is-streaming {
+.synapse-send-btn.is-streaming {
 	background: var(--text-error) !important;
 }
 
-.claude-brain-send-btn svg {
+.synapse-send-btn svg {
 	width: 16px;
 	height: 16px;
 	stroke: var(--text-on-accent);
@@ -1271,18 +1271,18 @@
 
 /* ── Config toolbar ───────────────────────────────────────────── */
 
-.claude-brain-toolbar {
+.synapse-toolbar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	flex-wrap: wrap;
 }
 
-.claude-brain-toolbar-spacer {
+.synapse-toolbar-spacer {
 	flex: 1;
 }
 
-.claude-brain-debug-toggle {
+.synapse-debug-toggle {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -1297,35 +1297,35 @@
 	margin-left: auto;
 }
 
-.claude-brain-debug-toggle:hover {
+.synapse-debug-toggle:hover {
 	border-color: var(--interactive-accent);
 	color: var(--text-normal);
 }
 
-.claude-brain-debug-toggle:has(.claude-brain-debug-checkbox:checked) {
+.synapse-debug-toggle:has(.synapse-debug-checkbox:checked) {
 	background: var(--interactive-accent);
 	border-color: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
-.claude-brain-debug-icon svg {
+.synapse-debug-icon svg {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-debug-checkbox {
+.synapse-debug-checkbox {
 	display: none;
 }
 
 /* Hide debug info (tool calls + metadata + compaction blocks) when unchecked */
-.claude-brain-hide-debug .claude-brain-tool-calls,
-.claude-brain-hide-debug .claude-brain-msg-metadata {
+.synapse-hide-debug .synapse-tool-calls,
+.synapse-hide-debug .synapse-msg-metadata {
 	display: none;
 }
 
 /* ── Compaction debug blocks ─────────────────────────────────── */
 
-.claude-brain-compaction-block {
+.synapse-compaction-block {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 	border: 1px solid var(--background-modifier-border);
@@ -1334,7 +1334,7 @@
 	padding: 0;
 }
 
-.claude-brain-compaction-summary {
+.synapse-compaction-summary {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -1343,54 +1343,54 @@
 	user-select: none;
 }
 
-.claude-brain-compaction-icon svg {
+.synapse-compaction-icon svg {
 	width: 14px;
 	height: 14px;
 	color: var(--text-muted);
 }
 
-.claude-brain-compaction-body {
+.synapse-compaction-body {
 	padding: 4px 8px 8px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-compaction-label {
+.synapse-compaction-label {
 	font-weight: var(--font-semibold);
 	margin: 6px 0 2px;
 	color: var(--text-muted);
 }
 
-.claude-brain-toolbar-group {
+.synapse-toolbar-group {
 	display: flex;
 	align-items: center;
 	gap: 3px;
 }
 
-.claude-brain-toolbar-icon svg {
+.synapse-toolbar-icon svg {
 	width: 14px;
 	height: 14px;
 	color: var(--text-muted);
 }
 
-.claude-brain-toolbar-icon.clickable-icon {
+.synapse-toolbar-icon.clickable-icon {
 	cursor: pointer;
 	border-radius: var(--radius-s);
 	padding: 2px;
 }
 
-.claude-brain-toolbar-icon.clickable-icon:hover {
+.synapse-toolbar-icon.clickable-icon:hover {
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-toolbar-icon.clickable-icon.is-non-interactive {
+.synapse-toolbar-icon.clickable-icon.is-non-interactive {
 	cursor: default;
 }
 
-.claude-brain-toolbar-icon.is-active svg {
+.synapse-toolbar-icon.is-active svg {
 	color: var(--interactive-accent);
 }
 
-.claude-brain-select {
+.synapse-select {
 	font-size: var(--font-ui-smaller);
 	padding: 2px 4px;
 	border-radius: var(--radius-s);
@@ -1401,18 +1401,18 @@
 	cursor: pointer;
 }
 
-.claude-brain-model-select {
+.synapse-model-select {
 	width: 17ch;
 }
 
-.claude-brain-toolbar-actions {
+.synapse-toolbar-actions {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	margin-left: auto;
 }
 
-.claude-brain-icon-btn {
+.synapse-icon-btn {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1427,16 +1427,16 @@
 	padding: 4px;
 }
 
-.claude-brain-icon-btn:hover {
+.synapse-icon-btn:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
-.claude-brain-icon-btn.is-active {
+.synapse-icon-btn.is-active {
 	color: var(--interactive-accent);
 }
 
-.claude-brain-icon-btn svg {
+.synapse-icon-btn svg {
 	width: 16px;
 	height: 16px;
 	stroke-width: 2px;
@@ -1444,20 +1444,20 @@
 
 /* ── Skills & tools chips (inline in toolbar) ─────────────────── */
 
-.claude-brain-toolbar-chips {
+.synapse-toolbar-chips {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 3px;
 	align-items: center;
 }
 
-.claude-brain-chips-empty {
+.synapse-chips-empty {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
 	font-style: italic;
 }
 
-.claude-brain-chip {
+.synapse-chip {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
@@ -1471,12 +1471,12 @@
 	transition: all 0.15s ease;
 }
 
-.claude-brain-chip:hover {
+.synapse-chip:hover {
 	border-color: var(--interactive-accent);
 	color: var(--text-normal);
 }
 
-.claude-brain-chip.is-active {
+.synapse-chip.is-active {
 	background: var(--interactive-accent);
 	border-color: var(--interactive-accent);
 	color: var(--text-on-accent);
@@ -1484,18 +1484,18 @@
 
 /* ── Vault scope modal ────────────────────────────────────────── */
 
-.claude-brain-scope-modal {
+.synapse-scope-modal {
 	max-height: 80vh;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 }
 
-.claude-brain-scope-modal h3 {
+.synapse-scope-modal h3 {
 	margin: 0 0 10px;
 }
 
-.claude-brain-scope-search {
+.synapse-scope-search {
 	width: 100%;
 	padding: 6px 10px;
 	border-radius: var(--radius-s);
@@ -1506,7 +1506,7 @@
 	margin-bottom: 8px;
 }
 
-.claude-brain-scope-tree {
+.synapse-scope-tree {
 	flex: 1;
 	overflow-y: auto;
 	max-height: 50vh;
@@ -1515,7 +1515,7 @@
 	padding: 4px 0;
 }
 
-.claude-brain-scope-item {
+.synapse-scope-item {
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -1524,16 +1524,16 @@
 	cursor: pointer;
 }
 
-.claude-brain-scope-item:hover {
+.synapse-scope-item:hover {
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-scope-item.is-active {
+.synapse-scope-item.is-active {
 	background: var(--background-modifier-active-hover);
 	color: var(--text-accent);
 }
 
-.claude-brain-scope-toggle {
+.synapse-scope-toggle {
 	flex-shrink: 0;
 	width: 16px;
 	height: 16px;
@@ -1545,41 +1545,41 @@
 	color: var(--text-muted);
 }
 
-.claude-brain-scope-toggle:hover {
+.synapse-scope-toggle:hover {
 	color: var(--text-normal);
 }
 
-.claude-brain-scope-toggle svg {
+.synapse-scope-toggle svg {
 	width: 14px;
 	height: 14px;
 }
 
-.claude-brain-scope-toggle-spacer {
+.synapse-scope-toggle-spacer {
 	visibility: hidden;
 }
 
-.claude-brain-scope-root-name {
+.synapse-scope-root-name {
 	font-weight: 600;
 }
 
-.claude-brain-scope-item input[type="checkbox"] {
+.synapse-scope-item input[type="checkbox"] {
 	margin: 0;
 	cursor: pointer;
 }
 
-.claude-brain-scope-icon svg {
+.synapse-scope-icon svg {
 	width: 14px;
 	height: 14px;
 	color: var(--text-muted);
 }
 
-.claude-brain-scope-name {
+.synapse-scope-name {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.claude-brain-scope-buttons {
+.synapse-scope-buttons {
 	display: flex;
 	gap: 8px;
 	justify-content: flex-end;
@@ -1588,28 +1588,28 @@
 
 /* ── Settings page models list ────────────────────────────────── */
 
-.claude-brain-models-list {
+.synapse-models-list {
 	margin: 4px 0;
 }
 
-.claude-brain-models-ul {
+.synapse-models-ul {
 	list-style: none;
 	padding: 0;
 	margin: 0;
 }
 
-.claude-brain-models-ul li {
+.synapse-models-ul li {
 	padding: 2px 0;
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-models-error {
+.synapse-models-error {
 	color: var(--text-error);
 }
 
 /* ── Session sidebar ──────────────────────────────────────────── */
 
-.claude-brain-splitter {
+.synapse-splitter {
 	width: 4px;
 	flex-shrink: 0;
 	cursor: col-resize;
@@ -1617,17 +1617,17 @@
 	transition: background 0.15s;
 }
 
-.claude-brain-splitter:hover,
-.claude-brain-splitter.is-dragging {
+.synapse-splitter:hover,
+.synapse-splitter.is-dragging {
 	background: var(--interactive-accent);
 }
 
-body.claude-brain-no-select {
+body.synapse-no-select {
 	user-select: none !important;
 	-webkit-user-select: none !important;
 }
 
-.claude-brain-sidebar {
+.synapse-sidebar {
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;
@@ -1636,7 +1636,7 @@ body.claude-brain-no-select {
 	width: var(--sidebar-width, 40px);
 }
 
-.claude-brain-sidebar-header {
+.synapse-sidebar-header {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -1645,28 +1645,28 @@ body.claude-brain-no-select {
 	align-items: stretch;
 }
 
-.claude-brain-sidebar-btn-row {
+.synapse-sidebar-btn-row {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 2px;
 }
 
-.claude-brain-sidebar-new-btn {
+.synapse-sidebar-new-btn {
 	flex-shrink: 0;
 }
 
-.claude-brain-sidebar-filter-btn,
-.claude-brain-sidebar-sort-btn {
+.synapse-sidebar-filter-btn,
+.synapse-sidebar-sort-btn {
 	flex-shrink: 0;
 	padding: 2px;
 	color: var(--text-muted);
 }
-.claude-brain-sidebar-filter-btn.is-active {
+.synapse-sidebar-filter-btn.is-active {
 	color: var(--interactive-accent);
 }
 
-.claude-brain-sidebar-search {
+.synapse-sidebar-search {
 	width: 100%;
 	padding: 4px 6px;
 	font-size: var(--font-ui-smaller);
@@ -1677,19 +1677,19 @@ body.claude-brain-no-select {
 	outline: none;
 }
 
-.claude-brain-sidebar-search:focus {
+.synapse-sidebar-search:focus {
 	border-color: var(--interactive-accent);
 }
 
 /* Session list */
 
-.claude-brain-sidebar-list {
+.synapse-sidebar-list {
 	flex: 1;
 	overflow-y: auto;
 	padding: 4px 0;
 }
 
-.claude-brain-session-item {
+.synapse-session-item {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -1699,15 +1699,15 @@ body.claude-brain-no-select {
 	min-height: 32px;
 }
 
-.claude-brain-session-item:hover {
+.synapse-session-item:hover {
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-session-item.is-active {
+.synapse-session-item.is-active {
 	background: var(--background-modifier-active-hover);
 }
 
-.claude-brain-session-icon {
+.synapse-session-icon {
 	flex-shrink: 0;
 	display: flex;
 	align-items: center;
@@ -1717,19 +1717,19 @@ body.claude-brain-no-select {
 	position: relative;
 }
 
-.claude-brain-session-icon svg {
+.synapse-session-icon svg {
 	width: 16px;
 	height: 16px;
 	color: var(--text-faint);
 	opacity: 0.45;
 }
 
-.claude-brain-session-item.is-active .claude-brain-session-icon svg {
+.synapse-session-item.is-active .synapse-session-icon svg {
 	color: var(--interactive-accent);
 	opacity: 1;
 }
 
-.claude-brain-session-active-dot {
+.synapse-session-active-dot {
 	position: absolute;
 	bottom: -2px;
 	right: -2px;
@@ -1738,21 +1738,21 @@ body.claude-brain-no-select {
 	border-radius: 50%;
 	background: var(--text-success);
 	border: 1.5px solid var(--background-secondary);
-	animation: claude-brain-pulse 1.5s ease-in-out infinite;
+	animation: synapse-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes claude-brain-pulse {
+@keyframes synapse-pulse {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.4; }
 }
 
-.claude-brain-session-details {
+.synapse-session-details {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
 }
 
-.claude-brain-session-name {
+.synapse-session-name {
 	font-size: var(--font-ui-smaller);
 	white-space: nowrap;
 	overflow: hidden;
@@ -1761,7 +1761,7 @@ body.claude-brain-no-select {
 	line-height: 1.3;
 }
 
-.claude-brain-session-time {
+.synapse-session-time {
 	font-size: 10px;
 	color: var(--text-faint);
 	white-space: nowrap;
@@ -1770,7 +1770,7 @@ body.claude-brain-no-select {
 
 /* ── Prompt dropdown ─────────────────────────────────────────── */
 
-.claude-brain-prompt-dropdown {
+.synapse-prompt-dropdown {
 	position: absolute;
 	bottom: 100%;
 	left: 0;
@@ -1786,7 +1786,7 @@ body.claude-brain-no-select {
 	padding: 4px 0;
 }
 
-.claude-brain-prompt-item {
+.synapse-prompt-item {
 	padding: 6px 10px;
 	cursor: pointer;
 	display: flex;
@@ -1796,26 +1796,26 @@ body.claude-brain-no-select {
 	overflow: hidden;
 }
 
-.claude-brain-prompt-item:hover,
-.claude-brain-prompt-item.is-selected {
+.synapse-prompt-item:hover,
+.synapse-prompt-item.is-selected {
 	background: var(--background-modifier-hover);
 }
 
-.claude-brain-prompt-item-agent {
+.synapse-prompt-item-agent {
 	font-size: var(--font-ui-small);
 	color: var(--text-accent);
 	font-weight: 600;
 	flex-shrink: 0;
 }
 
-.claude-brain-prompt-item-name {
+.synapse-prompt-item-name {
 	font-weight: 600;
 	font-size: var(--font-ui-small);
 	color: var(--text-normal);
 	flex-shrink: 0;
 }
 
-.claude-brain-prompt-item-desc {
+.synapse-prompt-item-desc {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 	white-space: nowrap;
@@ -1826,7 +1826,7 @@ body.claude-brain-no-select {
 
 /* ── Prompt tag in conversation messages ──────────────────────── */
 
-.claude-brain-prompt-tag {
+.synapse-prompt-tag {
 	display: inline;
 	font-weight: 600;
 	color: inherit;
@@ -1839,21 +1839,21 @@ body.claude-brain-no-select {
 
 /* ── Modal helper classes ─────────────────────────────────────── */
 
-.claude-brain-menu-modal-desc {
+.synapse-menu-modal-desc {
 	margin-bottom: 8px;
 }
 
-.claude-brain-modal-text-input {
+.synapse-modal-text-input {
 	width: 100%;
 }
 
-.claude-brain-modal-label {
+.synapse-modal-label {
 	display: block;
 	margin-bottom: 4px;
 	font-size: var(--font-ui-small);
 }
 
-.claude-brain-rename-input {
+.synapse-rename-input {
 	width: 100%;
 	margin-bottom: 12px;
 	padding: 6px 10px;
@@ -1865,42 +1865,42 @@ body.claude-brain-no-select {
 }
 
 /* Hidden file input for attach button */
-.claude-brain-file-input-hidden {
+.synapse-file-input-hidden {
 	display: none;
 }
 
 /* ── Edit Modal ───────────────────────────────────────────────── */
 
-.claude-brain-edit-modal {
+.synapse-edit-modal {
 	max-width: 560px;
 }
 
-.claude-brain-edit-form {
+.synapse-edit-form {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 }
 
-.claude-brain-edit-group {
+.synapse-edit-group {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 }
 
-.claude-brain-edit-label {
+.synapse-edit-label {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 	font-weight: 500;
 }
 
-.claude-brain-edit-slider-value {
+.synapse-edit-slider-value {
 	font-variant-numeric: tabular-nums;
 	min-width: 1.2em;
 	text-align: right;
 	color: var(--text-normal);
 }
 
-.claude-brain-edit-textarea {
+.synapse-edit-textarea {
 	width: 100%;
 	padding: 8px 10px;
 	font-size: var(--font-ui-small);
@@ -1913,18 +1913,18 @@ body.claude-brain-no-select {
 	line-height: 1.5;
 }
 
-.claude-brain-edit-textarea:focus {
+.synapse-edit-textarea:focus {
 	border-color: var(--interactive-accent);
 	outline: none;
 	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.15);
 }
 
-.claude-brain-edit-userinput-textarea {
+.synapse-edit-userinput-textarea {
 	width: 100%;
 	margin-top: 8px;
 }
 
-.claude-brain-edit-prompt-area {
+.synapse-edit-prompt-area {
 	min-height: unset;
 	resize: vertical;
 	height: var(--prompt-height, auto);
@@ -1932,13 +1932,13 @@ body.claude-brain-no-select {
 	line-height: 1.5;
 }
 
-.claude-brain-edit-options {
+.synapse-edit-options {
 	display: flex;
 	gap: 16px;
 	flex-wrap: wrap;
 }
 
-.claude-brain-edit-option-group {
+.synapse-edit-option-group {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -1946,7 +1946,7 @@ body.claude-brain-no-select {
 	min-width: 100px;
 }
 
-.claude-brain-edit-select {
+.synapse-edit-select {
 	padding: 4px 8px;
 	font-size: var(--font-ui-small);
 	border: 1px solid var(--background-modifier-border);
@@ -1955,50 +1955,50 @@ body.claude-brain-no-select {
 	color: var(--text-normal);
 }
 
-.claude-brain-edit-slider {
+.synapse-edit-slider {
 	width: 100%;
 	accent-color: var(--interactive-accent);
 }
 
-.claude-brain-edit-checkbox-row {
+.synapse-edit-checkbox-row {
 	display: flex;
 	align-items: center;
 	gap: 4px;
 }
 
-.claude-brain-edit-adjust-checkbox {
+.synapse-edit-adjust-checkbox {
 	margin: 0;
 	cursor: pointer;
 }
 
-.claude-brain-edit-select.is-disabled,
-.claude-brain-edit-slider.is-disabled {
+.synapse-edit-select.is-disabled,
+.synapse-edit-slider.is-disabled {
 	opacity: 0.4;
 	pointer-events: none;
 }
 
-.claude-brain-edit-buttons {
+.synapse-edit-buttons {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	margin-top: 4px;
 }
 
-.claude-brain-edit-choices-inline {
+.synapse-edit-choices-inline {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 }
 
-.claude-brain-edit-choices-inline .claude-brain-edit-slider {
+.synapse-edit-choices-inline .synapse-edit-slider {
 	width: 80px;
 }
 
-.claude-brain-edit-btn-spacer {
+.synapse-edit-btn-spacer {
 	flex: 1;
 }
 
-.claude-brain-edit-btn-primary {
+.synapse-edit-btn-primary {
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -2013,15 +2013,15 @@ body.claude-brain-no-select {
 	transition: opacity 0.15s;
 }
 
-.claude-brain-edit-btn-primary:hover {
+.synapse-edit-btn-primary:hover {
 	opacity: 0.9;
 }
 
-.claude-brain-edit-btn-primary.is-streaming {
+.synapse-edit-btn-primary.is-streaming {
 	background: var(--background-modifier-error);
 }
 
-.claude-brain-edit-btn-secondary {
+.synapse-edit-btn-secondary {
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -2035,23 +2035,23 @@ body.claude-brain-no-select {
 	transition: color 0.15s;
 }
 
-.claude-brain-edit-btn-secondary:hover {
+.synapse-edit-btn-secondary:hover {
 	color: var(--text-normal);
 }
 
-.claude-brain-edit-btn-icon {
+.synapse-edit-btn-icon {
 	display: flex;
 	align-items: center;
 }
 
-.claude-brain-edit-btn-icon svg {
+.synapse-edit-btn-icon svg {
 	width: 14px;
 	height: 14px;
 }
 
 /* Results */
 
-.claude-brain-edit-results-header {
+.synapse-edit-results-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -2060,20 +2060,20 @@ body.claude-brain-no-select {
 	color: var(--text-muted);
 }
 
-.claude-brain-edit-generating {
-	animation: claude-brain-pulse 1.5s ease-in-out infinite;
+.synapse-edit-generating {
+	animation: synapse-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes claude-brain-pulse {
+@keyframes synapse-pulse {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.3; }
 }
 
-.claude-brain-edit-error {
+.synapse-edit-error {
 	color: var(--text-error);
 }
 
-.claude-brain-edit-cards {
+.synapse-edit-cards {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -2081,7 +2081,7 @@ body.claude-brain-no-select {
 	overflow-y: auto;
 }
 
-.claude-brain-edit-card {
+.synapse-edit-card {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	overflow: hidden;
@@ -2089,11 +2089,11 @@ body.claude-brain-no-select {
 	flex-shrink: 0;
 }
 
-.claude-brain-edit-card:hover {
+.synapse-edit-card:hover {
 	border-color: var(--interactive-accent);
 }
 
-.claude-brain-edit-card-header {
+.synapse-edit-card-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -2102,41 +2102,41 @@ body.claude-brain-no-select {
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-brain-edit-card-title {
+.synapse-edit-card-title {
 	font-size: var(--font-ui-smaller);
 	font-weight: 500;
 	color: var(--text-muted);
 }
 
-.claude-brain-edit-card-actions {
+.synapse-edit-card-actions {
 	display: flex;
 	gap: 2px;
 }
 
-.claude-brain-edit-card-btn {
+.synapse-edit-card-btn {
 	padding: 2px;
 	color: var(--text-muted);
 }
 
-.claude-brain-edit-card-btn:hover {
+.synapse-edit-card-btn:hover {
 	color: var(--text-normal);
 }
 
-.claude-brain-edit-card-use {
+.synapse-edit-card-use {
 	color: var(--interactive-accent);
 }
 
-.claude-brain-edit-card-body {
+.synapse-edit-card-body {
 	padding: 10px 12px;
 	max-height: 120px;
 	overflow-y: auto;
 }
 
-.claude-brain-edit-card.is-expanded .claude-brain-edit-card-body {
+.synapse-edit-card.is-expanded .synapse-edit-card-body {
 	max-height: none;
 }
 
-.claude-brain-edit-card-text {
+.synapse-edit-card-text {
 	width: 100%;
 	min-height: 1.6em;
 	padding: 0;
@@ -2155,21 +2155,21 @@ body.claude-brain-no-select {
 
 /* ── Bot settings status ──────────────────────────────────────── */
 
-.claude-brain-bot-status {
+.synapse-bot-status {
 	font-size: var(--font-ui-small);
 	font-weight: normal;
 }
 
-.claude-brain-bot-status-ok {
+.synapse-bot-status-ok {
 	color: var(--text-success);
 }
 
-.claude-brain-bot-status-error {
+.synapse-bot-status-error {
 	color: var(--text-error);
 }
 
 /* ── Resolved Copilot binary path (settings) ──────────────────── */
-.claude-brain-resolved-binary {
+.synapse-resolved-binary {
 	word-break: break-all;
 }
 

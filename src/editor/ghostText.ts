@@ -24,8 +24,8 @@ import {
 	GutterMarker,
 } from '@codemirror/view';
 import {setIcon, Menu, Notice} from 'obsidian';
-import type ClaudeBrainPlugin from '../main';
-import {buildClaudeBrainMenu} from './editorMenu';
+import type SynapsePlugin from '../main';
+import {buildSynapseMenu} from './editorMenu';
 
 /* ── Constants ───────────────────────────────────────────────── */
 
@@ -85,7 +85,7 @@ class GhostTextWidget extends WidgetType {
 	}
 	toDOM(): HTMLElement {
 		const span = document.createElement('span');
-		span.className = 'claude-brain-ghost-text';
+		span.className = 'synapse-ghost-text';
 		span.textContent = this.text;
 		return span;
 	}
@@ -126,11 +126,11 @@ const ghostField = StateField.define<GhostState | null>({
  * GutterMarker that renders the brain-icon button on the active line.
  * CM6 handles alignment natively — works in bullets, tables, headings, etc.
  */
-class ClaudeBrainGutterMarker extends GutterMarker {
-	private plugin: ClaudeBrainPlugin;
+class SynapseGutterMarker extends GutterMarker {
+	private plugin: SynapsePlugin;
 	private view: EditorView;
 
-	constructor(plugin: ClaudeBrainPlugin, view: EditorView) {
+	constructor(plugin: SynapsePlugin, view: EditorView) {
 		super();
 		this.plugin = plugin;
 		this.view = view;
@@ -138,8 +138,8 @@ class ClaudeBrainGutterMarker extends GutterMarker {
 
 	toDOM(): HTMLElement {
 		const btn = document.createElement('button');
-		btn.className = 'claude-brain-autocomplete-indicator';
-		btn.setAttribute('aria-label', 'Claude Brain autocomplete');
+		btn.className = 'synapse-autocomplete-indicator';
+		btn.setAttribute('aria-label', 'Synapse autocomplete');
 		setIcon(btn, 'brain');
 
 		// Toggle loading state based on fetchingField
@@ -167,7 +167,7 @@ class ClaudeBrainGutterMarker extends GutterMarker {
 		return btn;
 	}
 
-	eq(_other: ClaudeBrainGutterMarker): boolean {
+	eq(_other: SynapseGutterMarker): boolean {
 		// Always re-render so the loading state stays fresh
 		return false;
 	}
@@ -178,15 +178,15 @@ class ClaudeBrainGutterMarker extends GutterMarker {
  * cursor line. CM6 positions gutter markers automatically for all line
  * types including bullet points, tables, headings, blockquotes, etc.
  */
-function buildIndicatorGutter(plugin: ClaudeBrainPlugin): Extension {
+function buildIndicatorGutter(plugin: SynapsePlugin): Extension {
 	return gutter({
-		class: 'claude-brain-gutter',
+		class: 'synapse-gutter',
 		lineMarker(view: EditorView, line) {
 			if (!plugin.settings.inlineIconEnabled) return null;
 			const cursorLine = view.state.doc.lineAt(view.state.selection.main.head);
 			const thisLine = view.state.doc.lineAt(line.from);
 			if (thisLine.number === cursorLine.number) {
-				return new ClaudeBrainGutterMarker(plugin, view);
+				return new SynapseGutterMarker(plugin, view);
 			}
 			return null;
 		},
@@ -206,9 +206,9 @@ function buildIndicatorGutter(plugin: ClaudeBrainPlugin): Extension {
 /* ── Menu actions ────────────────────────────────────────────── */
 
 /** Show the indicator context menu anchored to the button element. */
-function showIndicatorMenu(plugin: ClaudeBrainPlugin, view: EditorView, button: HTMLElement): void {
+function showIndicatorMenu(plugin: SynapsePlugin, view: EditorView, button: HTMLElement): void {
 	const menu = new Menu();
-	buildClaudeBrainMenu(menu, plugin, view);
+	buildSynapseMenu(menu, plugin, view);
 	const rect = button.getBoundingClientRect();
 	menu.showAtPosition({x: rect.right + 4, y: rect.top});
 }
@@ -316,7 +316,7 @@ function buildPrompt(state: EditorState): string {
  * Build the CM6 extension array for ghost-text autocomplete.
  * Call `plugin.registerEditorExtension(buildGhostTextExtension(plugin))`.
  */
-export function buildGhostTextExtension(plugin: ClaudeBrainPlugin): Extension {
+export function buildGhostTextExtension(plugin: SynapsePlugin): Extension {
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let abortController: AbortController | null = null;
 	let prewarmed = false;
@@ -346,7 +346,7 @@ export function buildGhostTextExtension(plugin: ClaudeBrainPlugin): Extension {
 		}
 
 		const sel = view.state.selection.main;
-		if (!sel.empty) { new Notice('Claude Brain: place cursor without selection.'); return; }
+		if (!sel.empty) { new Notice('Synapse: place cursor without selection.'); return; }
 
 		const version = view.state.doc.length;
 		void fetchCompletion(view, version);
@@ -395,11 +395,11 @@ export function buildGhostTextExtension(plugin: ClaudeBrainPlugin): Extension {
 
 		try {
 			const prompt = buildPrompt(view.state);
-			const model = plugin.settings.inlineModel || undefined;
+			const agent = plugin.settings.featureAgents?.inline || 'General';
 
 			const result = await plugin.copilot!.chat({
 				prompt,
-				model,
+				agent,
 				systemMessage: SYSTEM_MESSAGE,
 			});
 
