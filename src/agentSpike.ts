@@ -47,19 +47,19 @@ export async function runAgentSpike(): Promise<SpikeResult> {
 			const sdkMsg = msg as SDKMessage;
 			messageTypes.push(sdkMsg.type);
 
-			if (sdkMsg.type === 'assistant') {
-				// Full assistant message — extract text content blocks
+			if (sdkMsg.type === 'stream_event') {
+				// Partial streaming event — extract text deltas
+				const event = sdkMsg.event;
+				if (event.type === 'content_block_delta' && 'delta' in event && event.delta.type === 'text_delta') {
+					textParts.push(event.delta.text);
+				}
+			} else if (sdkMsg.type === 'assistant' && textParts.length === 0) {
+				// Fallback to full assistant message if no streaming deltas were received
 				const betaMsg = sdkMsg.message;
 				for (const block of betaMsg.content) {
 					if (block.type === 'text') {
 						textParts.push(block.text);
 					}
-				}
-			} else if (sdkMsg.type === 'stream_event') {
-				// Partial streaming event — extract text deltas
-				const event = sdkMsg.event;
-				if (event.type === 'content_block_delta' && 'delta' in event && event.delta.type === 'text_delta') {
-					textParts.push(event.delta.text);
 				}
 			}
 		}

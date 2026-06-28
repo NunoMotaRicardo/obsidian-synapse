@@ -147,10 +147,10 @@ export default class ClaudeBrainPlugin extends Plugin {
 			id: 'test-claude-agent-sdk',
 			name: 'Test Claude Agent SDK',
 			callback: async () => {
-				new Notice('Sidekick: running Claude Agent SDK spike…');
-				console.info('[sidekick] Agent SDK spike: starting');
+				new Notice('Claude Brain: running Claude Agent SDK spike…');
+				console.info('[claude-brain] Agent SDK spike: starting');
 				const result = await runAgentSpike();
-				console.info('[sidekick] Agent SDK spike result:', result);
+				console.info('[claude-brain] Agent SDK spike result:', result);
 				if (result.ok) {
 					new Notice(`Claude Agent SDK: ${result.text} (${result.durationMs}ms)`, 15000);
 				} else {
