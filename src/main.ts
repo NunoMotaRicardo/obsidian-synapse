@@ -1,6 +1,7 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, getAgentsFolder} from "./settings";
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
+import {fetchProviderModels} from "./providerModels";
 import {loadAgents} from "./configLoader";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from "./synapseView";
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
@@ -209,6 +210,12 @@ export default class SynapsePlugin extends Plugin {
 				type: s.authType,
 				apiKey: s.authType === 'apiKey' ? s.anthropicApiKey : undefined,
 			},
+			providerConfig: {
+				preset: s.providerPreset,
+				baseUrl: s.providerBaseUrl,
+				apiKey: s.providerApiKey,
+				bearerToken: s.providerBearerToken,
+			},
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
 				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
@@ -228,6 +235,18 @@ export default class SynapsePlugin extends Plugin {
 				return map;
 			},
 		});
+		if (s.providerBaseUrl) {
+			void fetchProviderModels({
+				preset: s.providerPreset,
+				baseUrl: s.providerBaseUrl,
+				apiKey: s.providerApiKey,
+				bearerToken: s.providerBearerToken,
+			}).then(res => {
+				if (res.ok && res.models.length > 0) {
+					this.setProviderModels(res.models);
+				}
+			}).catch(() => {});
+		}
 		this.notifySidebarModelsChanged(this.copilot.getModels());
 	}
 
@@ -295,6 +314,13 @@ export default class SynapsePlugin extends Plugin {
 	disconnectTelegram(): void {
 		if (this.telegramBot) {
 			this.telegramBot.disconnect();
+		}
+	}
+
+	setProviderModels(models: import('./copilot').ModelInfo[]): void {
+		if (this.copilot) {
+			this.copilot.setCustomModels(models);
+			this.notifySidebarModelsChanged(this.copilot.getModels());
 		}
 	}
 
