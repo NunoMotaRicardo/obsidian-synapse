@@ -1,0 +1,9 @@
+description = "Cut a release of the plugin — version bump, build, and GitHub release with BRAT-compatible artifacts."
+
+prompt = """
+Follow this playbook to cut a release.
+
+@{.claude/skills/release/SKILL.md}
+
+{{args}}
+"""

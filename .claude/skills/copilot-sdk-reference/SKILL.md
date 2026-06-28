@@ -5,6 +5,11 @@ description: Reference for the @github/copilot-sdk 1.x TypeScript API used by th
 
 # Copilot SDK 1.x reference (TypeScript)
 
+> **Transitional / being superseded.** The plugin is migrating to the Claude Agent SDK — see
+> `.claude/skills/claude-agent-sdk-reference/` and
+> `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`. This reference documents the
+> **current** Copilot-SDK code and stays useful only until the engine-swap issue removes it.
+
 Authoritative source: `node_modules/@github/copilot-sdk/dist/*.d.ts` — especially `types.d.ts`
 (options/configs), `client.d.ts`, `session.d.ts`. **Read them; don't trust memory.** The SDK
 went GA 1.0.0 on 2026-06-02; CLIs ≥ ~1.0.5x dropped the old `--headless --stdio` interface,

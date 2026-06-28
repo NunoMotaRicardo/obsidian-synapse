@@ -1,0 +1,9 @@
+description = "Build the plugin and deploy it to the Obsidian vault for verification."
+
+prompt = """
+Follow this playbook to build, deploy, and verify the plugin in the real vault.
+
+@{.claude/skills/deploy-test/SKILL.md}
+
+{{args}}
+"""
