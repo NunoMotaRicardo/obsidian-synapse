@@ -8,18 +8,14 @@ import {
 	Component,
 } from 'obsidian';
 import type ClaudeBrainPlugin from './main';
-import {approveAll} from './copilot';
 import type {
-	CopilotSession,
 	SessionConfig,
 	MCPServerConfig,
 	ModelInfo,
-	PermissionRequest,
-	ProviderConfig,
 	ReasoningEffort,
-	ReasoningSummary,
-	CustomAgentConfig,
+	SessionEvent,
 } from './copilot';
+import {Session} from './copilot';
 import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {loadAgents, loadSkills, loadMcpServers, loadPrompts, loadTriggers} from './configLoader';
 import type {InputResolver} from './configLoader';
@@ -27,17 +23,13 @@ import {getAgentsFolder, getSkillsFolder, getToolsFolder, getPromptsFolder, getT
 import {TriggerScheduler} from './triggerScheduler';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
-import {UserInputModal} from './modals/userInputModal';
-import type {UserInputRequest} from './modals/userInputModal';
+// UserInputModal removed — Agent SDK handles user input via hooks
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
-const EMPTY_EVENT_BUFFER: readonly import('./copilot').SessionEvent[] = Object.freeze([]);
+const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 import {buildPrompt, buildSdkAttachments, mapMcpServers, resolveNoteImageEmbeds} from './view/sessionConfig';
-import {fetchProviderModels} from './providerModels';
-import type {ByokProviderPreset} from './providerModels';
-import {friendlyOllamaError, isToolUseError, isVisionError, TOOL_USE_GUIDANCE, VISION_GUIDANCE} from './ollamaErrors';
 
 export const CLAUDE_BRAIN_VIEW_TYPE = 'claude-brain-view';
 
@@ -49,7 +41,7 @@ export class ClaudeBrainView extends ItemView {
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
 	messages: ChatMessage[] = [];
-	currentSession: CopilotSession | null = null;
+	currentSession: Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
 	skills: SkillInfo[] = [];
@@ -127,11 +119,11 @@ export class ClaudeBrainView extends ItemView {
 	searchInputEl!: HTMLTextAreaElement;
 	searchBtnEl!: HTMLButtonElement;
 	searchResultsEl!: HTMLElement;
-	searchSession: CopilotSession | null = null;
+	searchSession: Session | null = null;
 	isSearching = false;
 	searchModeToggleEl!: HTMLButtonElement;
 	searchAdvancedToolbarEl!: HTMLElement;
-	basicSearchSession: CopilotSession | null = null;
+	basicSearchSession: Session | null = null;
 
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
@@ -179,7 +171,7 @@ export class ClaudeBrainView extends ItemView {
 	splitterEl!: HTMLElement;
 
 	eventUnsubscribers: (() => void)[] = [];
-	earlyEventBuffer: import('./copilot').SessionEvent[] = [];
+	earlyEventBuffer: SessionEvent[] | readonly SessionEvent[] = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: ClaudeBrainPlugin) {
 		super(leaf);
@@ -209,9 +201,8 @@ export class ClaudeBrainView extends ItemView {
 			const now = new Date();
 			this.sessionList.unshift({
 				sessionId,
-				startTime: now,
-				modifiedTime: now,
-				isRemote: false,
+				summary: '',
+				lastModified: now.getTime(),
 			} as import('./copilot').SessionMetadata);
 		}
 
@@ -383,39 +374,8 @@ export class ClaudeBrainView extends ItemView {
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
 			this.enabledMcpServers = new Set(this.mcpServers.map(s => s.name));
 
-			// Populate model list: BYOK direct providers don't need a copilot connection
-			if (!options?.silent) {
-				const preset = this.plugin.settings.providerPreset;
-				const isByok = preset !== 'github';
-				if (isByok) {
-					// Sync-first: show configured model immediately
-					if (this.plugin.settings.providerModel) {
-						const id = this.plugin.settings.providerModel;
-						this.models = [{id, name: id} as ModelInfo];
-					}
-					// Background fetch: populate full list from provider
-					if (this.plugin.settings.providerBaseUrl) {
-					void fetchProviderModels({
-							preset: preset as ByokProviderPreset,
-							baseUrl: this.plugin.settings.providerBaseUrl,
-							apiKey: this.plugin.settings.providerApiKey,
-							bearerToken: this.plugin.settings.providerBearerToken,
-						}).then(result => {
-							if (result.ok && result.models.length > 0) {
-								this.models = result.models;
-								this.selectedModel = this.plugin.settings.providerModel || result.models[0]!.id;
-								this.populateModelSelect();
-							}
-						}).catch(() => { /* keep configured model */ });
-					}
-				} else if (this.plugin.copilot) {
-					try {
-						this.models = await this.plugin.copilot.listModels();
-					} catch {
-						// silently ignore — models list stays empty
-					}
-				}
-			}
+			// Agent SDK does not have a model-listing API; models are handled by the CLI.
+			// The inline model is set via settings as a free-text model ID.
 		} catch (e) {
 			console.error('Claude Brain: failed to load configs', e);
 		} finally {
@@ -433,7 +393,7 @@ export class ClaudeBrainView extends ItemView {
 	refreshProviderModels(models: ModelInfo[]): void {
 		this.models = models;
 
-		const preferred = this.selectedModel || this.plugin.settings.providerModel;
+		const preferred = this.selectedModel;
 		if (preferred && models.some(m => m.id === preferred)) {
 			this.selectedModel = preferred;
 		} else if (models.length > 0) {
@@ -595,9 +555,10 @@ export class ClaudeBrainView extends ItemView {
 
 					// Determine effective cap: min of plugin setting and SDK model limit
 					const selectedModelInfo = this.models.find(m => m.id === this.selectedModel);
-					const sdkLimit = selectedModelInfo?.capabilities?.limits?.vision?.max_prompt_images;
+					const sdkLimit = (selectedModelInfo?.capabilities?.limits as Record<string, unknown> | undefined)?.['vision'] as {max_prompt_images?: number} | undefined;
+					const maxPromptImages = sdkLimit?.max_prompt_images;
 					const configuredCap = Math.max(1, Math.min(20, this.plugin.settings.maxNoteImages));
-					const effectiveCap = sdkLimit != null ? Math.min(configuredCap, sdkLimit) : configuredCap;
+					const effectiveCap = maxPromptImages != null ? Math.min(configuredCap, maxPromptImages) : configuredCap;
 
 					// Deduplicate against manually attached images (match by vault-relative path)
 					const existingPaths = new Set(
@@ -741,7 +702,12 @@ export class ClaudeBrainView extends ItemView {
 		});
 
 		this.earlyEventBuffer = [];
-		this.currentSession = await this.plugin.copilot!.createSession(sessionConfig);
+		const onEvent = (event: SessionEvent) => {
+			if (this.earlyEventBuffer !== EMPTY_EVENT_BUFFER) {
+				(this.earlyEventBuffer as SessionEvent[]).push(event);
+			}
+		};
+		this.currentSession = await this.plugin.copilot!.createSession(sessionConfig, onEvent);
 		this.currentSessionId = this.currentSession.sessionId;
 
 		// Explicitly select the agent via RPC — the `agent` field in SessionConfig
@@ -763,16 +729,15 @@ export class ClaudeBrainView extends ItemView {
 			const now = new Date();
 			this.sessionList.unshift({
 				sessionId: this.currentSession.sessionId,
-				startTime: now,
-				modifiedTime: now,
-				isRemote: false,
+				summary: '',
+				lastModified: now.getTime(),
 			} as import('./copilot').SessionMetadata);
 		}
 		this.renderSessionList();
 	}
 
 	/** Central event dispatcher — used by both onEvent (early) and typed handlers. */
-	handleSessionEvent(event: import('./copilot').SessionEvent): void {
+	handleSessionEvent(event: SessionEvent): void {
 		const type = event.type;
 		const data = event.data as Record<string, unknown>;
 		switch (type) {
@@ -848,14 +813,7 @@ export class ClaudeBrainView extends ItemView {
 					data.result as {content?: string; detailedContent?: string} | undefined,
 					toolError,
 				);
-				// Show Ollama-specific guidance for tool/vision failures
-				if (this.isOllamaPreset() && toolError?.message) {
-					if (isToolUseError(toolError.message)) {
-						this.addInfoMessage(`Ollama: ${TOOL_USE_GUIDANCE}`);
-					} else if (isVisionError(toolError.message)) {
-						this.addInfoMessage(`Ollama: ${VISION_GUIDANCE}`);
-					}
-				}
+				// Tool error guidance removed (BYOK cleanup)
 				break;
 			}
 			case 'skill.invoked':
@@ -884,7 +842,7 @@ export class ClaudeBrainView extends ItemView {
 
 		// Replay any events that arrived via onEvent before typed handlers were registered
 		const buffered = this.earlyEventBuffer;
-		this.earlyEventBuffer = EMPTY_EVENT_BUFFER as import('./copilot').SessionEvent[];
+		this.earlyEventBuffer = EMPTY_EVENT_BUFFER;
 		for (const event of buffered) {
 			this.handleSessionEvent(event);
 		}
@@ -916,7 +874,7 @@ export class ClaudeBrainView extends ItemView {
 	unsubscribeEvents(): void {
 		for (const unsub of this.eventUnsubscribers) unsub();
 		this.eventUnsubscribers = [];
-		this.earlyEventBuffer = EMPTY_EVENT_BUFFER as import('./copilot').SessionEvent[];
+		this.earlyEventBuffer = EMPTY_EVENT_BUFFER;
 	}
 
 	async disconnectSession(): Promise<void> {
@@ -997,34 +955,29 @@ export class ClaudeBrainView extends ItemView {
 		if (this.skills.length > 0) {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
-		const disabledSkills = this.skills
-			.filter(s => !this.enabledSkills.has(s.name))
-			.map(s => s.name);
-
-		// Custom agents — register all agents so the session knows about them;
-		// the `agent` field in the returned config selects the active one.
-		const customAgents: CustomAgentConfig[] = this.agents.map(a => ({
+		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
+		const customAgents: {name: string; description: string; prompt: string; tools?: string[]}[] = this.agents.map(a => ({
 			name: a.name,
-			displayName: a.name,
-			description: a.description || undefined,
+			description: a.description || '',
 			prompt: a.instructions,
-			tools: a.tools ?? null,
-			infer: true,
+			...(a.tools ? {tools: a.tools} : {}),
 		}));
 
 		// Permission handler
-		const permissionHandler = (request: PermissionRequest) => {
+		// Permission handler — canUseTool for Agent SDK
+		const permissionHandler: import('./copilot').PermissionHandler = async (toolName, input, options) => {
 			if (this.plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
+				return {behavior: 'allow' as const, ...(options.suggestions ? {updatedPermissions: options.suggestions} : {})};
 			}
-			const modal = new ToolApprovalModal(this.app, request);
-			modal.open();
-			return modal.promise;
-		};
-
-		// User input handler — shows a modal when the agent invokes ask_user
-		const userInputHandler = (request: UserInputRequest) => {
-			const modal = new UserInputModal(this.app, request);
+			const modal = new ToolApprovalModal(this.app, {
+				toolName,
+				input,
+				title: options.title,
+				displayName: options.displayName,
+				description: options.description,
+				suggestions: options.suggestions,
+				toolUseID: options.toolUseID,
+			});
 			modal.open();
 			return modal.promise;
 		};
@@ -1036,63 +989,43 @@ export class ClaudeBrainView extends ItemView {
 			return modal.promise;
 		};
 
-		// BYOK provider config — shared with CopilotService (built once in main.ts)
-		const providerPreset = this.plugin.settings.providerPreset;
-		const provider: ProviderConfig | undefined = this.plugin.buildProviderConfig();
-
 		const reasoningEffort = this.plugin.settings.reasoningEffort;
-		const reasoningSummary = this.plugin.settings.reasoningSummary;
-		const contextTier = this.plugin.settings.contextTier;
-		const infiniteSessionsEnabled = this.plugin.settings.infiniteSessionsEnabled;
 
-		return {
-			model: (provider && this.plugin.settings.providerModel) ? this.plugin.settings.providerModel : opts.model,
-			streaming: providerPreset !== 'foundry-local',
-			onPermissionRequest: permissionHandler,
-			onUserInputRequest: userInputHandler,
-			onElicitationRequest: elicitationHandler,
-			workingDirectory: this.getWorkingDirectory(),
-			// Cast at the SDK boundary: models report effort/summary values beyond the
-			// SDK's narrow unions (see issue 7); validity is enforced in the toolbar.
-			...(reasoningEffort !== '' ? {reasoningEffort: reasoningEffort as ReasoningEffort} : {}),
-			...(reasoningSummary !== '' ? {reasoningSummary: reasoningSummary as ReasoningSummary} : {}),
-			// No per-model support signal exists; the SDK ignores contextTier for models
-			// that don't support the long-context tier. Omitted when 'default'.
-			...(contextTier !== 'default' ? {contextTier} : {}),
-			// Infinite sessions: omit when enabled (SDK default); pass { enabled: false } to disable.
-			...(!infiniteSessionsEnabled ? {infiniteSessions: {enabled: false}} : {}),
-			...(provider ? {provider} : {}),
+		// Build workspace path info for system prompt
+		const parts: string[] = [];
+		const vaultRoot = this.getVaultBasePath().replace(/\\/g, '/');
+		const activeFile = this.app.workspace.getActiveFile();
+		const workDir = this.getWorkingDirectory().replace(/\\/g, '/');
+		parts.push('[Workspace Path Information]');
+		parts.push(`Vault root: ${vaultRoot}`);
+		if (activeFile) {
+			parts.push(`Active note: ${vaultRoot}/${activeFile.path}`);
+		}
+		parts.push(`Working directory: ${workDir}`);
+		const wsInfo = parts.join('\n');
+		const systemContent = opts.systemContent
+			? opts.systemContent + '\n\n' + wsInfo
+			: wsInfo;
+
+		// Build agent definitions (Agent SDK uses Record<string, AgentDefinition>)
+		const agents: Record<string, import('./copilot').CustomAgentConfig> = {};
+		for (const a of customAgents) {
+			agents[a.name] = a;
+		}
+
+		const config: SessionConfig = {
+			model: opts.model,
+			canUseTool: permissionHandler,
+			onElicitation: elicitationHandler,
+			cwd: this.getWorkingDirectory(),
+			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
-			...(customAgents.length > 0 ? {customAgents} : {}),
+			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			...(opts.selectedAgentName ? {agent: opts.selectedAgentName} : {}),
-			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
-			...(disabledSkills.length > 0 ? {disabledSkills} : {}),
-			...(() => {
-				const parts: string[] = [];
-				// Workspace path information for the LLM
-				const vaultRoot = this.getVaultBasePath().replace(/\\/g, '/');
-				const activeFile = this.app.workspace.getActiveFile();
-				const workDir = this.getWorkingDirectory().replace(/\\/g, '/');
-				parts.push('[Workspace Path Information]');
-				parts.push(`Vault root: ${vaultRoot}`);
-				if (activeFile) {
-					parts.push(`Active note: ${vaultRoot}/${activeFile.path}`);
-				}
-				parts.push(`Working directory: ${workDir}`);
-				const wsInfo = parts.join('\n');
-				const combined = opts.systemContent
-					? opts.systemContent + '\n\n' + wsInfo
-					: wsInfo;
-				return {systemMessage: {mode: 'append' as const, content: combined}};
-			})(),
-			onEvent: (event: import('./copilot').SessionEvent) => {
-				// Buffer early events until registerSessionEvents() drains
-				// and sets earlyEventBuffer to a frozen empty array.
-				if (this.earlyEventBuffer !== EMPTY_EVENT_BUFFER) {
-					this.earlyEventBuffer.push(event);
-				}
-			},
+			systemPrompt: systemContent,
 		};
+
+		return config;
 	}
 
 	getSessionExtras(): {
@@ -1108,7 +1041,7 @@ export class ClaudeBrainView extends ItemView {
 		if (this.skills.length > 0) {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
-		const disabledSkills = this.skills
+		const _disabledSkills = this.skills
 			.filter(s => !this.enabledSkills.has(s.name))
 			.map(s => s.name);
 
@@ -1117,7 +1050,7 @@ export class ClaudeBrainView extends ItemView {
 
 		return {
 			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
-			...(disabledSkills.length > 0 ? {disabledSkills} : {}),
+			...(_disabledSkills.length > 0 ? {disabledSkills: _disabledSkills} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			workingDirectory: this.getWorkingDirectory(),
 		};
@@ -1137,17 +1070,10 @@ export class ClaudeBrainView extends ItemView {
 		return base + '/' + normalizePath(this.workingDir);
 	}
 
-	/** Whether the active provider preset is Ollama. */
-	isOllamaPreset(): boolean {
-		return this.plugin.settings.providerPreset === 'ollama';
-	}
-
-	/** Format an error for display, using Ollama-friendly messages when applicable. */
+	/** Format an error for display. */
 	formatErrorForChat(rawError: string): string {
 		const cleanError = rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
-		if (!this.isOllamaPreset()) return `Error: ${cleanError}`;
-		const friendly = friendlyOllamaError(cleanError);
-		return friendly ? `Ollama: ${friendly}` : `Error: ${cleanError}`;
+		return `Error: ${cleanError}`;
 	}
 
 	getVaultBasePath(): string {

@@ -7,8 +7,8 @@ import {normalizePath, Notice} from 'obsidian';
 import type ClaudeBrainPlugin from '../main';
 import type {ClaudeBrainView} from '../claudeBrainView';
 import {CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
-import type {SessionConfig, CopilotSession, PermissionRequest, CustomAgentConfig} from '../copilot';
-import {approveAll} from '../copilot';
+import type {SessionConfig, CustomAgentConfig} from '../copilot';
+// Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
 import {getSkillsFolder, getMcpInputValue} from '../settings';
 import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
@@ -251,27 +251,18 @@ export class TelegramBotService {
 			// resume it to maintain conversation history. This avoids all shared-state
 			// issues with the chat view's resumeSession taking over event listeners.
 			const config = this.buildBotSessionConfig();
-			let session: CopilotSession;
-			if (entry.sessionId) {
-				// Resume existing session to continue conversation
-				session = await this.plugin.copilot!.resumeSession(entry.sessionId, config);
-			} else {
-				// First message — create new session
-				session = await this.plugin.copilot!.createSession(config);
-				entry.sessionId = session.sessionId;
+			// Use inlineChat which handles session resume internally
+			const {content, sessionId} = await this.plugin.copilot!.inlineChat({
+				prompt: sendOpts.prompt,
+				...(entry.sessionId ? {resume: entry.sessionId} : {}),
+				...config,
+			});
+			if (sessionId) {
+				entry.sessionId = sessionId;
 			}
 
-			try {
-				const response = await session.sendAndWait(sendOpts, Math.max(120_000, this.plugin.copilot?.timeout ?? 0));
-				const content = response?.data.content ?? '';
-
-				if (content) {
-					await this.sendReply(chatId, threadId, content, msg.message_id);
-				}
-			} finally {
-				// Always disconnect our handle — the session persists server-side
-				// and can be resumed by the next message or the chat view.
-				try { await session.disconnect(); } catch { /* ignore */ }
+			if (content) {
+				await this.sendReply(chatId, threadId, content, msg.message_id);
 			}
 
 		} catch (e) {
@@ -313,85 +304,44 @@ export class TelegramBotService {
 		if (this.skills.length > 0) {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
-		let disabledSkills: string[] = [];
 		if (agent?.skills !== undefined) {
-			const allowed = new Set(agent.skills);
-			disabledSkills = this.skills.filter(s => !allowed.has(s.name)).map(s => s.name);
+			// Skills filtering will be applied via agent definition
 		}
 
-		// Custom agents
+		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
 		const agentPool = agent ? [agent] : this.agents;
-		const customAgents: CustomAgentConfig[] = agentPool.map(a => ({
-			name: a.name,
-			displayName: a.name,
-			description: a.description || undefined,
-			prompt: a.instructions,
-			tools: a.tools ?? null,
-			infer: true,
-		}));
+		const agents: Record<string, CustomAgentConfig> = {};
+		for (const a of agentPool) {
+			agents[a.name] = {
+				description: a.description || '',
+				prompt: a.instructions,
+				...(a.tools ? {tools: a.tools} : {}),
+			};
+		}
 
 		// Model
 		const models = this.getAvailableModels();
 		const model = resolveModelForAgent(agent, models, undefined);
 
-		// Permission handler — auto-approve for bot sessions
-		const permissionHandler = (request: PermissionRequest) => {
-			if (this.plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
-			}
-			// For bot sessions, auto-approve since there's no UI to ask
-			return approveAll(request, {sessionId: ''});
-		};
-
-		// BYOK provider
-		const providerPreset = this.plugin.settings.providerPreset;
-		let provider: import('../copilot').ProviderConfig | undefined;
-		if (providerPreset !== 'github' && this.plugin.settings.providerBaseUrl) {
-			const typeMap: Record<string, 'openai' | 'azure' | 'anthropic'> = {
-				openai: 'openai', azure: 'azure', anthropic: 'anthropic',
-				ollama: 'openai', 'foundry-local': 'openai', 'other-openai': 'openai',
-			};
-			provider = {
-				type: typeMap[providerPreset] ?? 'openai',
-				baseUrl: this.plugin.settings.providerBaseUrl,
-				...(this.plugin.settings.providerApiKey ? {apiKey: this.plugin.settings.providerApiKey} : {}),
-				...(this.plugin.settings.providerBearerToken ? {bearerToken: this.plugin.settings.providerBearerToken} : {}),
-				wireApi: this.plugin.settings.providerWireApi,
-			};
-		}
-
 		const reasoningEffort = this.plugin.settings.reasoningEffort;
-		const reasoningSummary = this.plugin.settings.reasoningSummary;
-		const contextTier = this.plugin.settings.contextTier;
-		const infiniteSessionsEnabled = this.plugin.settings.infiniteSessionsEnabled;
+		const normalizedBasePath = basePath.replace(/\\/g, '/');
+		const systemContent = [
+			'[Workspace Path Information]',
+			`Vault root: ${normalizedBasePath}`,
+			`Working directory: ${normalizedBasePath}`,
+		].join('\n');
 
 		return {
-			model: (provider && this.plugin.settings.providerModel) ? this.plugin.settings.providerModel : model,
-			streaming: providerPreset !== 'foundry-local',
-			onPermissionRequest: permissionHandler,
-			workingDirectory: basePath,
-			// Cast at the SDK boundary: models report effort/summary values beyond the
-			// SDK's narrow unions (see issue 7); validity is enforced in the toolbar.
-			...(reasoningEffort !== '' ? {reasoningEffort: reasoningEffort as import('../copilot').ReasoningEffort} : {}),
-			...(reasoningSummary !== '' ? {reasoningSummary: reasoningSummary as import('../copilot').ReasoningSummary} : {}),
-			// No per-model support signal; the SDK ignores contextTier for unsupported models.
-			...(contextTier !== 'default' ? {contextTier} : {}),
-			// Infinite sessions: omit when enabled (SDK default); pass { enabled: false } to disable.
-			...(!infiniteSessionsEnabled ? {infiniteSessions: {enabled: false}} : {}),
-			...(provider ? {provider} : {}),
+			model,
+			// Bot sessions auto-approve tools since there's no UI
+			permissionMode: 'bypassPermissions' as const,
+			allowDangerouslySkipPermissions: true,
+			cwd: basePath,
+			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../copilot').ReasoningEffort} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
-			...(customAgents.length > 0 ? {customAgents} : {}),
+			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
-			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
-			...(disabledSkills.length > 0 ? {disabledSkills} : {}),
-			...(() => {
-				const parts: string[] = [];
-				const normalizedBasePath = basePath.replace(/\\/g, '/');
-				parts.push('[Workspace Path Information]');
-				parts.push(`Vault root: ${normalizedBasePath}`);
-				parts.push(`Working directory: ${normalizedBasePath}`);
-				return {systemMessage: {mode: 'append' as const, content: parts.join('\n')}};
-			})(),
+			systemPrompt: systemContent,
 		};
 	}
 
