@@ -62,14 +62,16 @@ export async function resolveDefaultCliPath(): Promise<ResolvedCliPath> {
 	const candidates: {path: string; source: CliPathSource}[] = [];
 
 	// 1. Global npm prefix (Windows) + the __dirname/node_modules search root.
+	//    Note: we do NOT include %APPDATA%\npm\claude.cmd / claude.exe here.
+	//    .cmd wrapper scripts cannot be executed by execFile() or passed as
+	//    pathToClaudeCodeExecutable — they require shell: true. Instead, we
+	//    detect the npm global install by probing the native package binary
+	//    under %APPDATA%\npm\node_modules directly.
 	const searchRoots: string[] = [];
 	if (process.platform === 'win32') {
 		const appData = process.env['APPDATA'];
 		if (appData) {
 			searchRoots.push(path.join(appData, 'npm', 'node_modules'));
-			candidates.push({path: path.join(appData, 'npm', 'claude.cmd'), source: 'global-npm'});
-			candidates.push({path: path.join(appData, 'npm', 'claude.exe'), source: 'global-npm'});
-			candidates.push({path: path.join(appData, 'npm', 'claude'), source: 'global-npm'});
 		}
 	}
 	searchRoots.push(path.join(__dirname, 'node_modules'));
@@ -120,22 +122,61 @@ export async function resolveDefaultCliPath(): Promise<ResolvedCliPath> {
 	}
 
 	// 3. Fallback to SDK native package binary.
+	//    Both nested and flat paths are existence-checked. If neither exists, we
+	//    return the flat path anyway so callers get a consistent "not found"
+	//    error pointing at a real expected location (ensureConnected() will
+	//    throw after an fs.access check of its own).
 	const sdkFallbackPath = path.join(__dirname, 'node_modules', '@anthropic-ai', nativePkg, `claude${ext}`);
 	const sdkFallbackNested = path.join(__dirname, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'node_modules', '@anthropic-ai', nativePkg, `claude${ext}`);
-	try {
-		await fs.access(sdkFallbackNested);
-		return {path: sdkFallbackNested, source: 'sdk-fallback'};
-	} catch {
-		// return default fallback path
+	for (const fbPath of [sdkFallbackNested, sdkFallbackPath]) {
+		try {
+			await fs.access(fbPath);
+			return {path: fbPath, source: 'sdk-fallback'};
+		} catch {
+			// not found, try next
+		}
 	}
 
+	// No binary found anywhere — return the canonical expected path so the
+	// caller's fs.access check surfaces a clear "file not found" error.
 	return {path: sdkFallbackPath, source: 'sdk-fallback'};
 }
 
 /**
+ * Validate that a path is safe to pass to execFile.
+ * Accepts absolute paths ending in a known binary extension (or no extension
+ * on non-Windows). Rejects relative paths and unexpected extensions.
+ */
+function isSafeBinaryPath(binaryPath: string): boolean {
+	// Must be an absolute path
+	if (!binaryPath || binaryPath.trim() !== binaryPath) return false;
+	// Basic absoluteness check without importing path (may not be loaded yet)
+	const isAbsolute = binaryPath.startsWith('/') ||
+		// Windows: drive letter (C:\) or UNC (\\server)
+		/^[A-Za-z]:[\\/]/.test(binaryPath) ||
+		binaryPath.startsWith('\\\\');
+	if (!isAbsolute) return false;
+	// Extension allowlist: .exe, .cmd (cmd is accepted here since we only read
+	// version output, but the SDK call path rejects .cmd separately), or none.
+	// Reject .sh, .bat, .ps1, .vbs etc. that could be shell-script attacks.
+	const ALLOWED_EXT = /(\.exe|\.cmd)?$/i;
+	const ext = binaryPath.match(/\.[^./\\]*$/)?.[0]?.toLowerCase() ?? '';
+	if (ext && !['', '.exe', '.cmd'].includes(ext)) return false;
+	return ALLOWED_EXT.test(binaryPath);
+}
+
+/**
  * Check and return the version and protocol version of the resolved CLI binary.
+ *
+ * Security: `binaryPath` is validated by `isSafeBinaryPath` before execution.
+ * Only absolute paths with expected binary extensions are accepted.
  */
 export async function getCliVersion(binaryPath: string): Promise<{version: string; protocolVersion?: string}> {
+	// Validate the path before executing to guard against user-controlled input
+	// (claudeLocation setting) being passed to a subprocess.
+	if (!isSafeBinaryPath(binaryPath)) {
+		return {version: 'unknown'};
+	}
 	const childProcess = nodeRequire?.('node:child_process') as typeof import('node:child_process') ?? await import('node:child_process');
 	return new Promise((resolve) => {
 		childProcess.execFile(binaryPath, ['--version'], {timeout: 5000}, (error, stdout) => {
@@ -147,7 +188,9 @@ export async function getCliVersion(binaryPath: string): Promise<{version: strin
 			// E.g. "2.1.195 (Claude Code)" -> "2.1.195"
 			const match = trimmed.match(/(\d+\.\d+\.\d+)/);
 			const version = match ? match[1]! : trimmed;
-			// Protocol version for Claude Agent SDK stream is protocol 1
+			// Protocol version is a fixed constant for Claude Agent SDK (protocol 1).
+			// The claude CLI --version output does not include a protocol version;
+			// this value should be updated if the SDK protocol changes.
 			resolve({version, protocolVersion: '1'});
 		});
 	});

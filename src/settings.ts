@@ -366,7 +366,11 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 			cliStatusEl.empty();
 			if (this.plugin.copilot) {
 				try {
-					const resolved = await this.plugin.copilot.resolveCliPath();
+					// Use getVersionInfo() (not resolveCliPath()) so that version and
+					// protocol are always awaited \u2014 resolveCliPath() alone returns a
+					// cached object whose version fields may not yet be populated if
+					// the fire-and-forget check in ensureConnected() hasn't finished.
+					const resolved = await this.plugin.copilot.getVersionInfo();
 					const sourceLabels: Record<string, string> = {
 						'settings': 'settings override',
 						'global-npm': 'global npm install',
@@ -376,7 +380,7 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 					const sourceStr = sourceLabels[resolved.source] ?? resolved.source;
 					let infoStr = `Resolved CLI: ${resolved.path} (from ${sourceStr})`;
 					if (resolved.version) {
-						infoStr += ` — v${resolved.version}${resolved.protocolVersion ? `, protocol ${resolved.protocolVersion}` : ''}`;
+						infoStr += ` \u2014 v${resolved.version}${resolved.protocolVersion ? `, protocol ${resolved.protocolVersion}` : ''}`;
 					}
 					cliStatusEl.setText(infoStr);
 				} catch {
@@ -385,6 +389,7 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 			}
 		};
 		void renderCliStatus();
+
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 2: Models

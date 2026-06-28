@@ -13,20 +13,23 @@ Tracked by #4.
   `{path, source}` where `source` is one of `'global-npm' | 'os-links' | 'sdk-fallback'`.
 - `ResolvedCliPath = {path: string; source: CliPathSource; version?: string; protocolVersion?: string}`
   where `CliPathSource` also includes `'settings'` (used by `AgentService` when an explicit `claudeLocation` is set).
-- `getCliVersion(binaryPath: string): Promise<{version: string; protocolVersion?: string}>` — spawns `binaryPath --version` to extract CLI version and protocol version.
+- `getCliVersion(binaryPath: string): Promise<{version: string; protocolVersion?: string}>` — validates `binaryPath` (absolute, allowlisted extension) then spawns `binaryPath --version` to extract CLI version. Protocol version is a fixed constant (`'1'`) for Claude Agent SDK — not parsed from CLI output.
 - `cleanEnv(): Record<string, string>` — allowlisted subprocess environment.
 
 `AgentService` (`src/copilot.ts`) is the only `@anthropic-ai/claude-agent-sdk` consumer: it calls
 `resolveDefaultCliPath` when no explicit `claudeLocation` is set, caches the
-`ResolvedCliPath`, passes `pathToClaudeCodeExecutable` to query options, and exposes `resolveCliPath(): Promise<ResolvedCliPath>` for the settings UI.
+`ResolvedCliPath`, performs an `fs.access` check to throw early when the binary is missing,
+passes `pathToClaudeCodeExecutable` to query options, and exposes:
+- `resolveCliPath(): Promise<ResolvedCliPath>` — returns the cached resolved path (settings override or auto-detected).
+- `getVersionInfo(): Promise<ResolvedCliPath>` — awaits `getCliVersion()` and returns the resolved path with version fields populated; used by the settings UI instead of the fire-and-forget path.
 
 ## Responsibilities
 
 1. **Resolve** the Claude CLI binary, in priority order:
    1. Explicit path from settings (`claudeLocation`, when non-empty). Handled in `AgentService.resolveCliPath()`.
-   2. Global npm prefix: `%APPDATA%\npm\node_modules\@anthropic-ai\claude-agent-sdk-<platform>-<arch>\claude(.exe)`, global wrappers, or `__dirname/node_modules`.
+   2. Global npm prefix: native package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`) under `%APPDATA%\npm\node_modules` (Windows) or `__dirname/node_modules`. Note: `.cmd` wrapper files (created by npm for global installs) are **not** used as binary candidates — they cannot be passed to `execFile()` or to `pathToClaudeCodeExecutable`.
    3. OS links: WinGet links (`%LOCALAPPDATA%\Microsoft\WinGet\Links\claude.exe`), `~/.claude/bin/claude`, `/usr/local/bin/claude`, `/usr/bin/claude`, `~/.local/bin/claude`.
-   4. SDK package binary fallback (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)` under `__dirname/node_modules`).
+   4. SDK package binary fallback — both nested and flat paths under `__dirname/node_modules` are existence-checked. Returns the canonical expected path if neither exists (so `ensureConnected()` can surface a clear error).
 
 2. **Version / protocol check** (#4):
    - After connect, `AgentService` calls `getCliVersion(resolved.path)` fire-and-forget and fires its `onVersionInfo` constructor callback with `{version, protocolVersion, path}`.

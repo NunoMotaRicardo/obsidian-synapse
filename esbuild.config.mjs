@@ -17,6 +17,11 @@ const context = await esbuild.context({
 		js: banner,
 	},
 	define: {
+		// The Claude Agent SDK uses `import.meta.url` in some paths that esbuild
+		// encounters when bundling. Since this plugin targets CJS (Obsidian/Electron),
+		// `import.meta.url` doesn't exist at runtime. The banner above shims
+		// `__import_meta_url__` to `pathToFileURL(__filename).href` so the polyfill
+		// works correctly. This define must stay paired with the banner shim.
 		'import.meta.url': '__import_meta_url__',
 	},
 	entryPoints: ["src/main.ts"],

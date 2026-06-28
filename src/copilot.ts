@@ -32,6 +32,9 @@ import type {
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 
+// Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
+const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+
 // Re-export types that consumers need (architecture rule: all SDK types via this module)
 export type {
 	Options as SessionConfig,
@@ -152,7 +155,7 @@ export class AgentService {
 
 	/**
 	 * Ensure the service is ready. For the Agent SDK this resolves the CLI binary
-	 * path and verifies configuration.
+	 * path, verifies it exists on disk, and kicks off an async version check.
 	 */
 	async ensureConnected(): Promise<void> {
 		if (this.state === 'connected') return;
@@ -163,6 +166,17 @@ export class AgentService {
 				throw new Error('Anthropic API key is required. Set it in Settings → Claude.');
 			}
 			const resolved = await this.resolveCliPath();
+
+			// Verify the binary exists before marking as connected. This ensures
+			// that the install-guidance Notice in main.ts fires when no CLI is found,
+			// rather than failing silently at first query time.
+			const fs = nodeRequire?.('node:fs/promises') as typeof import('node:fs/promises') ?? await import('node:fs/promises');
+			try {
+				await fs.access(resolved.path);
+			} catch {
+				throw new Error(`Claude CLI not found at "${resolved.path}". Install with npm install -g @anthropic-ai/claude-code and restart the plugin.`);
+			}
+
 			// Fire-and-forget version check to populate version info and trigger callback
 			void getCliVersion(resolved.path).then(v => {
 				resolved.version = v.version;
@@ -186,6 +200,26 @@ export class AgentService {
 	/** Current connection state. */
 	getState(): ConnectionState {
 		return this.state;
+	}
+
+	/**
+	 * Resolve the CLI path and await its version info. Returns the resolved
+	 * path (with version/protocolVersion populated) after the version check
+	 * completes. Safe to call from the settings UI to get a stable, consistent
+	 * snapshot rather than relying on the fire-and-forget mutation in
+	 * ensureConnected().
+	 *
+	 * Returns undefined in remote-only mode (not used by this plugin currently).
+	 */
+	async getVersionInfo(): Promise<ResolvedCliPath> {
+		const resolved = await this.resolveCliPath();
+		// If already populated by a previous ensureConnected() version check, return it.
+		if (resolved.version) return resolved;
+		// Otherwise run the version check now and populate the shared object.
+		const v = await getCliVersion(resolved.path);
+		resolved.version = v.version;
+		resolved.protocolVersion = v.protocolVersion;
+		return resolved;
 	}
 
 	// ── Sessions ────────────────────────────────────────────────────
