@@ -232,9 +232,8 @@ export class AgentService {
 		effort?: EffortLevel;
 		resume?: string;
 		cwd?: string;
+		attachments?: unknown[];
 		onEvent?: (msg: SDKMessage) => void;
-		/** Extra properties are accepted and ignored. */
-		[key: string]: unknown;
 	}): Promise<{content: string | undefined; sessionId: string}> {
 		try {
 			await this.ensureConnected();
@@ -369,9 +368,9 @@ export class AgentService {
 	 * compatible with the chat panel's expectations. Each send() call creates
 	 * a new query() under the hood, using resume to continue the conversation.
 	 */
-	async createSession(config: Options): Promise<Session> {
+	async createSession(config: Options, onEvent?: (event: SessionEvent) => void): Promise<Session> {
 		await this.ensureConnected();
-		return new Session(this, config);
+		return new Session(this, config, onEvent);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────
@@ -428,12 +427,10 @@ export class Session {
 		},
 	};
 
-	constructor(service: AgentService, config: Options) {
+	constructor(service: AgentService, config: Options, onEvent?: (event: SessionEvent) => void) {
 		this.service = service;
 		this.config = config;
-		if ((config as Record<string, unknown>)['onEvent']) {
-			this.onEventCallback = (config as Record<string, unknown>)['onEvent'] as (event: SessionEvent) => void;
-		}
+		this.onEventCallback = onEvent ?? null;
 	}
 
 	get sessionId(): string {
@@ -466,13 +463,10 @@ export class Session {
 			abortController: this.abortController,
 			...(this._sessionId ? {resume: this._sessionId} : {}),
 		};
-		// Remove onEvent from queryOpts — not part of Agent SDK Options
-		const cleanOpts = {...queryOpts};
-		delete (cleanOpts as Record<string, unknown>)['onEvent'];
 
 		const stream = this.service.createQuery({
 			prompt: options.prompt,
-			queryOptions: cleanOpts,
+			queryOptions: queryOpts,
 		});
 
 		try {
@@ -574,11 +568,12 @@ export class Session {
 						},
 					});
 				}
-				// Return the full message event
-				return {
+				// Dispatch the full message event directly (not returned, to avoid double-dispatch)
+				this.dispatch({
 					type: 'assistant.message',
 					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
-				};
+				});
+				return null;
 			}
 			case 'result': {
 				const resultMsg = msg as SDKResultMessage;

@@ -702,7 +702,12 @@ export class ClaudeBrainView extends ItemView {
 		});
 
 		this.earlyEventBuffer = [];
-		this.currentSession = await this.plugin.copilot!.createSession(sessionConfig);
+		const onEvent = (event: SessionEvent) => {
+			if (this.earlyEventBuffer !== EMPTY_EVENT_BUFFER) {
+				(this.earlyEventBuffer as SessionEvent[]).push(event);
+			}
+		};
+		this.currentSession = await this.plugin.copilot!.createSession(sessionConfig, onEvent);
 		this.currentSessionId = this.currentSession.sessionId;
 
 		// Explicitly select the agent via RPC — the `agent` field in SessionConfig
@@ -950,10 +955,6 @@ export class ClaudeBrainView extends ItemView {
 		if (this.skills.length > 0) {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
-		const _disabledSkills = this.skills
-			.filter(s => !this.enabledSkills.has(s.name))
-			.map(s => s.name);
-
 		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
 		const customAgents: {name: string; description: string; prompt: string; tools?: string[]}[] = this.agents.map(a => ({
 			name: a.name,
@@ -1022,14 +1023,6 @@ export class ClaudeBrainView extends ItemView {
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			...(opts.selectedAgentName ? {agent: opts.selectedAgentName} : {}),
 			systemPrompt: systemContent,
-		};
-
-		// Attach onEvent handler for early event buffering.
-		// This is not part of the Agent SDK Options type but is consumed by Session.
-		(config as Record<string, unknown>)['onEvent'] = (event: SessionEvent) => {
-			if (this.earlyEventBuffer !== EMPTY_EVENT_BUFFER) {
-				(this.earlyEventBuffer as SessionEvent[]).push(event);
-			}
 		};
 
 		return config;
