@@ -54,6 +54,7 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
+import type {AgentConfig} from './types';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
@@ -96,6 +97,17 @@ export interface ModelInfo {
 		supports?: {vision?: boolean; reasoningEffort?: boolean};
 		limits?: {max_context_window_tokens?: number};
 		supportedReasoningEfforts?: string[];
+	};
+}
+
+/** Map parsed AgentConfig from vault frontmatter to SDK AgentDefinition (CustomAgentConfig). */
+export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
+	return {
+		description: agent.description || '',
+		prompt: agent.instructions,
+		...(agent.model ? {model: agent.model} : {}),
+		...(agent.tools ? {tools: agent.tools} : {}),
+		...(agent.skills ? {skills: agent.skills} : {}),
 	};
 }
 
@@ -286,7 +298,7 @@ export class AgentService {
 
 			const stream = query({
 				prompt: options.prompt,
-				options: {
+				options: this.routeQueryOptions({
 					model: options.model,
 					systemPrompt: options.systemMessage,
 					agents: options.customAgents,
@@ -298,7 +310,7 @@ export class AgentService {
 					tools: options.tools ?? [],
 					env: this.buildEnv(),
 					pathToClaudeCodeExecutable: this.resolvedCli?.path,
-				},
+				}),
 			});
 
 			const text = await this.collectText(stream);
@@ -342,7 +354,7 @@ export class AgentService {
 
 			const stream = query({
 				prompt: options.prompt,
-				options: {
+				options: this.routeQueryOptions({
 					model: options.model,
 					systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
 					agents: options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined),
@@ -359,7 +371,7 @@ export class AgentService {
 					...(options.effort ? {effort: options.effort} : {}),
 					...(options.resume ? {resume: options.resume} : {}),
 					...(options.cwd ? {cwd: options.cwd} : {}),
-				},
+				}),
 			});
 
 			let sessionId = '';
@@ -420,15 +432,29 @@ export class AgentService {
 	}): Query {
 		return query({
 			prompt: options.prompt,
-			options: {
+			options: this.routeQueryOptions({
 				...options.queryOptions,
 				env: {
 					...this.buildEnv(),
 					...options.queryOptions.env,
 				},
 				pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
-			},
+			}),
 		});
+	}
+
+	/**
+	 * Route query options. Resolves bound model for named agent if configured.
+	 */
+	private routeQueryOptions(options: Options): Options {
+		const opts = {...options};
+		if (opts.agent && opts.agents) {
+			const agentDef = opts.agents[opts.agent];
+			if (agentDef?.model) {
+				opts.model = agentDef.model;
+			}
+		}
+		return opts;
 	}
 
 	// ── Error detection ────────────────────────────────────────────
