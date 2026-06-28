@@ -1,7 +1,7 @@
 /**
  * Minimal Telegram Bot API client.
  *
- * Uses only the subset of the Telegram Bot API needed by Claude Brain:
+ * Uses only the subset of the Telegram Bot API needed by Synapse:
  * - getMe (validate token)
  * - getUpdates (long-polling)
  * - sendMessage

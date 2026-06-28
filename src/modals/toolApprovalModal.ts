@@ -28,28 +28,28 @@ export class ToolApprovalModal extends Modal {
 	onOpen(): void {
 		const {contentEl} = this;
 		contentEl.empty();
-		contentEl.addClass('claude-brain-approval-modal');
+		contentEl.addClass('synapse-approval-modal');
 
 		contentEl.createEl('h3', {text: 'Tool approval required'});
 
-		const info = contentEl.createDiv({cls: 'claude-brain-approval-info'});
+		const info = contentEl.createDiv({cls: 'synapse-approval-info'});
 		if (this.request.title) {
-			info.createDiv({cls: 'claude-brain-approval-row', text: this.request.title});
+			info.createDiv({cls: 'synapse-approval-row', text: this.request.title});
 		} else {
-			info.createDiv({cls: 'claude-brain-approval-row', text: `Tool: ${this.request.toolName}`});
+			info.createDiv({cls: 'synapse-approval-row', text: `Tool: ${this.request.toolName}`});
 		}
 		if (this.request.description) {
-			info.createDiv({cls: 'claude-brain-approval-row', text: this.request.description});
+			info.createDiv({cls: 'synapse-approval-row', text: this.request.description});
 		}
 
 		// Show input details
 		const inputKeys = Object.keys(this.request.input);
 		if (inputKeys.length > 0) {
-			const pre = info.createEl('pre', {cls: 'claude-brain-approval-details'});
+			const pre = info.createEl('pre', {cls: 'synapse-approval-details'});
 			pre.createEl('code', {text: JSON.stringify(this.request.input, null, 2)});
 		}
 
-		const btnRow = contentEl.createDiv({cls: 'claude-brain-approval-buttons'});
+		const btnRow = contentEl.createDiv({cls: 'synapse-approval-buttons'});
 
 		const allowBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Allow'});
 		allowBtn.addEventListener('click', () => {

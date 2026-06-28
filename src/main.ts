@@ -1,29 +1,42 @@
 import {MarkdownView, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, ClaudeBrainSettings, ClaudeBrainSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
+import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {AgentService} from "./copilot";
-import {ClaudeBrainView, CLAUDE_BRAIN_VIEW_TYPE} from "./claudeBrainView";
-import {registerEditorMenu, registerFileMenu, openClaudeBrainView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
+import {SynapseView, SYNAPSE_VIEW_TYPE} from "./synapseView";
+import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import type {EditorView} from '@codemirror/view';
 
-export default class ClaudeBrainPlugin extends Plugin {
-	settings!: ClaudeBrainSettings;
+export default class SynapsePlugin extends Plugin {
+	settings!: SynapseSettings;
 	copilot: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 
 	async onload() {
-		await this.loadSettings();
-		this.applyInlineIconClass();
-		this.addSettingTab(new ClaudeBrainSettingTab(this.app, this));
+		// ── Migrate localStorage keys from old prefix ──
+		this.migrateLocalStorageKeys();
 
-		// Register the Claude Brain chat view
-		this.registerView(CLAUDE_BRAIN_VIEW_TYPE, (leaf) => new ClaudeBrainView(leaf, this));
+		await this.loadSettings();
+
+		// ── Migrate settings field: claudeBrainFolder → synapseFolder ──
+		const rawData = await this.loadData() as Record<string, unknown> | null;
+		if (rawData && typeof rawData['claudeBrainFolder'] === 'string') {
+			this.settings.synapseFolder = rawData['claudeBrainFolder'] as string;
+			delete rawData['claudeBrainFolder'];
+			await this.saveSettings();
+		}
+
+		this.applyInlineIconClass();
+		this.addSettingTab(new SynapseSettingTab(this.app, this));
+
+		// Register the Synapse chat view
+		this.registerView(SYNAPSE_VIEW_TYPE, (leaf) => new SynapseView(leaf, this));
 
 		// Ribbon icon to open view
-		this.addRibbonIcon('brain', 'Open Claude Brain', () => void this.activateView());
+		const SYNAPSE_ICON = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g transform="translate(50,50)" fill="currentColor"><circle r="9"/><g transform="rotate(-90)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(30)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(150)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g></g></svg>';
+		this.addRibbonIcon(SYNAPSE_ICON, 'Open Synapse', () => void this.activateView());
 
 		// Command to open view
 		this.addCommand({
@@ -40,10 +53,10 @@ export default class ClaudeBrainPlugin extends Plugin {
 			return (mdView as unknown as {editor?: {cm?: EditorView}}).editor?.cm ?? null;
 		};
 
-		// Command: Chat with Claude Brain (send selection or open chat)
+		// Command: Chat with Synapse (send selection or open chat)
 		this.addCommand({
-			id: 'chat-with-claude-brain',
-			name: 'Chat with Claude Brain',
+			id: 'chat-with-synapse',
+			name: 'Chat with Synapse',
 			hotkeys: [{modifiers: ['Mod', 'Shift'], key: 'l'}],
 			callback: () => {
 				const cmView = getEditorView();
@@ -54,7 +67,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 						const startLine = cmView.state.doc.lineAt(sel.from);
 						const endLine = cmView.state.doc.lineAt(sel.to);
 						const activeFile = this.app.workspace.getActiveFile();
-						openClaudeBrainView(this, text, {
+						openSynapseView(this, text, {
 							filePath: activeFile?.path,
 							fileName: activeFile?.name ?? 'unknown',
 							startLine: startLine.number,
@@ -65,7 +78,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 						return;
 					}
 				}
-				openClaudeBrainView(this);
+				openSynapseView(this);
 			},
 		});
 
@@ -99,7 +112,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 				if (!cmView) return;
 				const sel = cmView.state.selection.main;
 				if (sel.empty) {
-					new Notice('Claude Brain: select some text first.');
+					new Notice('Synapse: select some text first.');
 					return;
 				}
 				const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
@@ -120,7 +133,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 					if (!cmView) return;
 					const sel = cmView.state.selection.main;
 					if (sel.empty) {
-						new Notice('Claude Brain: select some text first.');
+						new Notice('Synapse: select some text first.');
 						return;
 					}
 					const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
@@ -136,7 +149,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 			callback: async () => {
 				this.settings.autocompleteEnabled = !this.settings.autocompleteEnabled;
 				await this.saveData(this.settings);
-				new Notice(`Claude Brain: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+				new Notice(`Synapse: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
 			},
 		});
 
@@ -150,10 +163,10 @@ export default class ClaudeBrainPlugin extends Plugin {
 			},
 		});
 
-		// Editor context menu (Claude Brain submenu for selected text)
+		// Editor context menu (Synapse submenu for selected text)
 		registerEditorMenu(this);
 
-		// Vault tree context menu (Claude Brain submenu for note files)
+		// Vault tree context menu (Synapse submenu for note files)
 		registerFileMenu(this);
 
 		// Ghost-text autocomplete (inline suggestions)
@@ -166,7 +179,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 				await this.copilot.ensureConnected();
 			}
 		} catch (e) {
-			console.error('Claude Brain: failed to initialize agent service', e);
+			console.error('Synapse: failed to initialize agent service', e);
 			const msg = e instanceof Error ? e.message : String(e);
 			if (/enoent|spawn|not found/i.test(msg)) {
 				const isWin = process.platform === 'win32';
@@ -199,14 +212,46 @@ export default class ClaudeBrainPlugin extends Plugin {
 			},
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
-				console.log(`Claude Brain: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
+				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
 		});
 		this.notifySidebarModelsChanged(this.copilot.getModels());
 	}
 
+	/**
+	 * Migrate Obsidian vault-scoped localStorage keys from old 'claude-brain-secure-'
+	 * and 'claude-brain-mcp-input-' prefixes to 'synapse-secure-' and 'synapse-mcp-input-'.
+	 */
+	private migrateLocalStorageKeys(): void {
+		const migrations: [string, string][] = [
+			['claude-brain-secure-', 'synapse-secure-'],
+			['claude-brain-mcp-input-', 'synapse-mcp-input-'],
+		];
+		// Obsidian's app.loadLocalStorage/saveLocalStorage adds a vault-specific
+		// prefix internally, so we use those APIs for correct namespacing.
+		for (const [oldPrefix, newPrefix] of migrations) {
+			// Known key suffixes for secure fields
+			const suffixes = oldPrefix.includes('secure')
+				? ['anthropicApiKey', 'telegramBotToken']
+				: [];
+
+			// For MCP inputs we cannot enumerate keys via the Obsidian API,
+			// but secure fields have known names.
+			for (const suffix of suffixes) {
+				const oldValue = this.app.loadLocalStorage(oldPrefix + suffix);
+				if (oldValue != null) {
+					const existing = this.app.loadLocalStorage(newPrefix + suffix);
+					if (existing == null) {
+						this.app.saveLocalStorage(newPrefix + suffix, oldValue);
+					}
+					this.app.saveLocalStorage(oldPrefix + suffix, null);
+				}
+			}
+		}
+	}
+
 	onunload() {
-		document.body.removeClass('claude-brain-no-inline-icon');
+		document.body.removeClass('synapse-no-inline-icon');
 		if (this.copilot) {
 			void this.copilot.stop();
 		}
@@ -231,29 +276,29 @@ export default class ClaudeBrainPlugin extends Plugin {
 	}
 
 	notifySidebarModelsChanged(models: import('./copilot').ModelInfo[]): void {
-		for (const leaf of this.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE)) {
+		for (const leaf of this.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE)) {
 			const view = leaf.view;
-			if (view instanceof ClaudeBrainView) {
+			if (view instanceof SynapseView) {
 				view.refreshProviderModels(models);
 			}
 		}
 	}
 
 	async activateView(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
+		const existing = this.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
 		if (existing.length > 0 && existing[0]) {
 			void this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (leaf) {
-			await leaf.setViewState({type: CLAUDE_BRAIN_VIEW_TYPE, active: true});
+			await leaf.setViewState({type: SYNAPSE_VIEW_TYPE, active: true});
 			void this.app.workspace.revealLeaf(leaf);
 		}
 	}
 
 	async loadSettings() {
-		const raw = await this.loadData() as Partial<ClaudeBrainSettings> | null;
+		const raw = await this.loadData() as Partial<SynapseSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
@@ -279,7 +324,7 @@ export default class ClaudeBrainPlugin extends Plugin {
 	}
 
 	applyInlineIconClass() {
-		document.body.toggleClass('claude-brain-no-inline-icon', !this.settings.inlineIconEnabled);
+		document.body.toggleClass('synapse-no-inline-icon', !this.settings.inlineIconEnabled);
 	}
 
 	async saveSettings() {

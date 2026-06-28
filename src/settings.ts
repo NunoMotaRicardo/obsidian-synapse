@@ -1,29 +1,29 @@
 import {App, Modal, Notice, PluginSettingTab, Setting, normalizePath} from "obsidian";
-import ClaudeBrainPlugin from "./main";
+import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
 
 /** Helper to update a secure field in both runtime settings and local storage. */
-function updateSecureField(app: App, plugin: ClaudeBrainPlugin, key: keyof ClaudeBrainSettings, value: string): void {
+function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
 	(plugin.settings as unknown as Record<string, unknown>)[key] = value;
 	saveSecureField(app, key, value);
 }
 
-export interface ClaudeBrainSettings {
+export interface SynapseSettings {
 	/** Auth type: 'subscription' uses Claude CLI OAuth, 'apiKey' uses an Anthropic API key. */
 	authType: 'subscription' | 'apiKey';
 	/** Anthropic API key (stored securely via local storage). */
 	anthropicApiKey: string;
 	/** Custom path to the claude CLI binary. Empty = auto-detect. */
 	claudeLocation: string;
-	claudeBrainFolder: string;
+	synapseFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
 	/** Enable ghost-text autocomplete in the editor. */
 	autocompleteEnabled: boolean;
-	/** Show the inline Claude Brain icon on the active editor line. */
+	/** Show the inline Synapse icon on the active editor line. */
 	inlineIconEnabled: boolean;
 	/** Persisted form defaults for the Edit modal. */
 	editModalDefaults?: EditModalDefaults;
@@ -109,11 +109,11 @@ export const DEFAULT_EDIT_MODAL: EditModalDefaults = {
 	editPrompt: '',
 };
 
-export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
+export const DEFAULT_SETTINGS: SynapseSettings = {
 	authType: 'subscription',
 	anthropicApiKey: '',
 	claudeLocation: '',
-	claudeBrainFolder: 'claude-brain',
+	synapseFolder: 'synapse',
 	toolApproval: 'ask',
 	inlineModel: '',
 	autocompleteEnabled: false,
@@ -134,9 +134,9 @@ export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof ClaudeBrainSettings> = ['anthropicApiKey', 'telegramBotToken'];
+export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken'];
 
-const SECURE_PREFIX = 'claude-brain-secure-';
+const SECURE_PREFIX = 'synapse-secure-';
 
 /** Load a secure field from vault-specific local storage. */
 export function loadSecureField(app: App, key: string): string {
@@ -149,29 +149,29 @@ export function saveSecureField(app: App, key: string, value: string): void {
 	app.saveLocalStorage(SECURE_PREFIX + key, value || null);
 }
 
-/** Derive the agents subfolder from the base Claude Brain folder. */
-export function getAgentsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/agents`);
+/** Derive the agents subfolder from the base Synapse folder. */
+export function getAgentsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/agents`);
 }
 
-/** Derive the skills subfolder from the base Claude Brain folder. */
-export function getSkillsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/skills`);
+/** Derive the skills subfolder from the base Synapse folder. */
+export function getSkillsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/skills`);
 }
 
-/** Derive the tools subfolder from the base Claude Brain folder. */
-export function getToolsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/tools`);
+/** Derive the tools subfolder from the base Synapse folder. */
+export function getToolsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/tools`);
 }
 
-/** Derive the prompts subfolder from the base Claude Brain folder. */
-export function getPromptsFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/prompts`);
+/** Derive the prompts subfolder from the base Synapse folder. */
+export function getPromptsFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/prompts`);
 }
 
-/** Derive the triggers subfolder from the base Claude Brain folder. */
-export function getTriggersFolder(settings: ClaudeBrainSettings): string {
-	return normalizePath(`${settings.claudeBrainFolder}/triggers`);
+/** Derive the triggers subfolder from the base Synapse folder. */
+export function getTriggersFolder(settings: SynapseSettings): string {
+	return normalizePath(`${settings.synapseFolder}/triggers`);
 }
 
 const SAMPLE_SKILL_CONTENT = `---
@@ -220,10 +220,10 @@ enabled: true
 Help me prepare my day, including asks on me, recommendations for clear actions to prepare, and suggestions on which items to prioritize over others.
 `;
 
-export class ClaudeBrainSettingTab extends PluginSettingTab {
-	plugin: ClaudeBrainPlugin;
+export class SynapseSettingTab extends PluginSettingTab {
+	plugin: SynapsePlugin;
 
-	constructor(app: App, plugin: ClaudeBrainPlugin) {
+	constructor(app: App, plugin: SynapsePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -232,10 +232,10 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
-		containerEl.addClass('claude-brain-settings');
+		containerEl.addClass('synapse-settings');
 
 		// ── Tab bar ──────────────────────────────────────────────
-		const tabBar = containerEl.createDiv({cls: 'claude-brain-settings-tab-bar'});
+		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
 		const tabIds = ['claude', 'models', 'capabilities', 'tools', 'bots'] as const;
@@ -256,7 +256,7 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 		for (const id of tabIds) {
 			const btn = tabBar.createEl('button', {
-				cls: 'claude-brain-settings-tab',
+				cls: 'synapse-settings-tab',
 				text: tabLabels[id],
 			});
 			btn.addEventListener('click', () => switchSettingsTab(id));
@@ -264,16 +264,16 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		}
 
 		// ── Panels ───────────────────────────────────────────────
-		const toolsFolder = normalizePath(`${this.plugin.settings.claudeBrainFolder}/tools`);
+		const toolsFolder = normalizePath(`${this.plugin.settings.synapseFolder}/tools`);
 		if (!this.app.vault.getAbstractFileByPath(toolsFolder)) {
-			const warning = containerEl.createDiv({cls: 'claude-brain-settings-warning'});
+			const warning = containerEl.createDiv({cls: 'synapse-settings-warning'});
 			warning.createEl('p', {
-				text: 'Claude Brain folder is not initialized. Go to the capabilities tab to configure and initialize it.',
+				text: 'Synapse folder is not initialized. Go to the capabilities tab to configure and initialize it.',
 			});
 		}
 
 		for (const id of tabIds) {
-			panels[id] = containerEl.createDiv({cls: `claude-brain-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
+			panels[id] = containerEl.createDiv({cls: `synapse-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
 		}
 		tabButtons['claude']?.addClass('is-active');
 
@@ -413,25 +413,25 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 		const capPanel = panels['capabilities']!;
 
 		new Setting(capPanel)
-			.setName('Claude Brain folder')
+			.setName('Synapse folder')
 			.setDesc('Vault folder for agents, skills, tools and triggers.')
 			.addText(text => text
-				.setPlaceholder('Ex: claude-brain')
-				.setValue(this.plugin.settings.claudeBrainFolder)
+				.setPlaceholder('Ex: synapse')
+				.setValue(this.plugin.settings.synapseFolder)
 				.onChange(async (value) => {
 					const sanitized = value.trim().replace(/\.\./g, '');
 					if (!sanitized || /[;|&`$(){}]/.test(sanitized)) {
-						new Notice('Claude Brain folder name is invalid.');
+						new Notice('Synapse folder name is invalid.');
 						return;
 					}
-					this.plugin.settings.claudeBrainFolder = sanitized;
+					this.plugin.settings.synapseFolder = sanitized;
 					await this.plugin.saveSettings();
 				}))
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const base = normalizePath(this.plugin.settings.claudeBrainFolder);
+						const base = normalizePath(this.plugin.settings.synapseFolder);
 
 						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/tools', '/prompts', '/triggers']) {
 							const dir = normalizePath(`${base}${sub}`);
@@ -473,9 +473,9 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 							await this.app.vault.create(triggerPath, SAMPLE_TRIGGER_CONTENT);
 						}
 
-						new Notice('Claude Brain folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
+						new Notice('Synapse folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
 					} catch (e) {
-						new Notice(`Failed to initialize claude-brain folder: ${String(e)}`);
+						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}
 				}));
 
@@ -490,8 +490,8 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(capPanel)
-			.setName('Show inline Claude Brain icon')
-			.setDesc('Show the Claude Brain icon in the editor gutter next to the active line.')
+			.setName('Show inline icon')
+			.setDesc('Show the plugin icon in the editor gutter next to the active line.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.inlineIconEnabled)
 				.onChange(async (value) => {
@@ -622,14 +622,14 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 			.setName('Telegram')
 			.setHeading();
 
-		const statusEl = headingSetting.nameEl.createSpan({cls: 'claude-brain-bot-status'});
+		const statusEl = headingSetting.nameEl.createSpan({cls: 'synapse-bot-status'});
 
 		const updateStatusDisplay = (status: string, isError = false) => {
 			statusEl.empty();
 			if (status) {
 				statusEl.createSpan({
 					text: ` — ${status}`,
-					cls: isError ? 'claude-brain-bot-status-error' : 'claude-brain-bot-status-ok',
+					cls: isError ? 'synapse-bot-status-error' : 'synapse-bot-status-ok',
 				});
 			}
 		};
@@ -750,10 +750,10 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 // ── MCP Input value helpers ─────────────────────────────────
 
-const MCP_SECRET_PREFIX = 'claude-brain-mcp-input-';
+const MCP_SECRET_PREFIX = 'synapse-mcp-input-';
 
 /** Retrieve the stored value for an MCP input variable. */
-export function getMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): string | undefined {
+export function getMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): string | undefined {
 	if (isPassword) {
 		const stored = app.loadLocalStorage(MCP_SECRET_PREFIX + id);
 		return stored != null ? String(stored) : undefined;
@@ -762,7 +762,7 @@ export function getMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string
 }
 
 /** Store a value for an MCP input variable. */
-export async function setMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, value: string, isPassword: boolean): Promise<void> {
+export async function setMcpInputValue(app: App, plugin: SynapsePlugin, id: string, value: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, value);
 	} else {
@@ -773,7 +773,7 @@ export async function setMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: 
 }
 
 /** Delete the stored value for an MCP input variable. */
-export async function deleteMcpInputValue(app: App, plugin: ClaudeBrainPlugin, id: string, isPassword: boolean): Promise<void> {
+export async function deleteMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): Promise<void> {
 	if (isPassword) {
 		app.saveLocalStorage(MCP_SECRET_PREFIX + id, null);
 	} else {

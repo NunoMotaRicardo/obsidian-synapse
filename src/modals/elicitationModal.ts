@@ -33,7 +33,7 @@ export class ElicitationModal extends Modal {
 	onOpen(): void {
 		const {contentEl} = this;
 		contentEl.empty();
-		contentEl.addClass('claude-brain-elicitation-modal');
+		contentEl.addClass('synapse-elicitation-modal');
 
 		// Header
 		const header = contentEl.createEl('h3', {text: 'Input requested'});
@@ -42,7 +42,7 @@ export class ElicitationModal extends Modal {
 		}
 
 		// Message
-		contentEl.createDiv({cls: 'claude-brain-elicitation-message', text: this.context.message});
+		contentEl.createDiv({cls: 'synapse-elicitation-message', text: this.context.message});
 
 		// URL mode — show link instead of form
 		if (this.context.mode === 'url' && this.context.url) {
@@ -53,7 +53,7 @@ export class ElicitationModal extends Modal {
 		// Form fields
 		const schema = this.context.requestedSchema as {properties?: Record<string, ElicitationSchemaField>; required?: string[]} | undefined;
 		if (schema?.properties) {
-			const formEl = contentEl.createDiv({cls: 'claude-brain-elicitation-form'});
+			const formEl = contentEl.createDiv({cls: 'synapse-elicitation-form'});
 			const required = new Set(schema.required ?? []);
 
 			for (const [key, field] of Object.entries(schema.properties)) {
@@ -62,7 +62,7 @@ export class ElicitationModal extends Modal {
 		}
 
 		// Action buttons
-		const btnRow = contentEl.createDiv({cls: 'claude-brain-elicitation-buttons'});
+		const btnRow = contentEl.createDiv({cls: 'synapse-elicitation-buttons'});
 
 		const submitBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Submit'});
 		submitBtn.addEventListener('click', () => this.submit());
@@ -96,12 +96,12 @@ export class ElicitationModal extends Modal {
 	/* ── URL mode ────────────────────────────────────────────── */
 
 	private renderUrlMode(parent: HTMLElement, url: string): void {
-		const linkRow = parent.createDiv({cls: 'claude-brain-elicitation-url'});
+		const linkRow = parent.createDiv({cls: 'synapse-elicitation-url'});
 		const link = linkRow.createEl('a', {text: 'Open in browser', href: url});
 		link.setAttr('target', '_blank');
 		link.setAttr('rel', 'noopener noreferrer');
 
-		const btnRow = parent.createDiv({cls: 'claude-brain-elicitation-buttons'});
+		const btnRow = parent.createDiv({cls: 'synapse-elicitation-buttons'});
 
 		const doneBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Done'});
 		doneBtn.addEventListener('click', () => {
@@ -117,13 +117,13 @@ export class ElicitationModal extends Modal {
 	/* ── Field rendering ─────────────────────────────────────── */
 
 	private renderField(parent: HTMLElement, key: string, field: ElicitationSchemaField, _isRequired: boolean): void {
-		const wrapper = parent.createDiv({cls: 'claude-brain-elicitation-field'});
+		const wrapper = parent.createDiv({cls: 'synapse-elicitation-field'});
 
 		const label = field.title ?? key;
-		wrapper.createEl('label', {text: label, cls: 'claude-brain-elicitation-label'});
+		wrapper.createEl('label', {text: label, cls: 'synapse-elicitation-label'});
 
 		if (field.description) {
-			wrapper.createDiv({cls: 'claude-brain-elicitation-description', text: field.description});
+			wrapper.createDiv({cls: 'synapse-elicitation-description', text: field.description});
 		}
 
 		switch (field.type) {
@@ -160,7 +160,7 @@ export class ElicitationModal extends Modal {
 	private renderNumberField(parent: HTMLElement, key: string, field: Extract<ElicitationSchemaField, {type: 'number' | 'integer'}>): void {
 		const input = parent.createEl('input', {
 			type: 'number',
-			cls: 'claude-brain-elicitation-input',
+			cls: 'synapse-elicitation-input',
 		});
 		if (field.minimum !== undefined) input.setAttr('min', String(field.minimum));
 		if (field.maximum !== undefined) input.setAttr('max', String(field.maximum));
@@ -191,7 +191,7 @@ export class ElicitationModal extends Modal {
 		// Plain text input
 		const input = parent.createEl('input', {
 			type: 'text',
-			cls: 'claude-brain-elicitation-input',
+			cls: 'synapse-elicitation-input',
 		});
 		if (field.default) {
 			input.value = field.default;
@@ -223,9 +223,9 @@ export class ElicitationModal extends Modal {
 		const selected = new Set<string>(defaults);
 		this.fieldValues.set(key, [...selected]);
 
-		const list = parent.createDiv({cls: 'claude-brain-elicitation-checklist'});
+		const list = parent.createDiv({cls: 'synapse-elicitation-checklist'});
 		for (const opt of options) {
-			const row = list.createDiv({cls: 'claude-brain-elicitation-check-row'});
+			const row = list.createDiv({cls: 'synapse-elicitation-check-row'});
 			const cb = row.createEl('input', {type: 'checkbox'});
 			cb.checked = defaults.has(opt.value);
 			row.createEl('span', {text: opt.label});
@@ -238,7 +238,7 @@ export class ElicitationModal extends Modal {
 	}
 
 	private renderSelectField(parent: HTMLElement, key: string, values: string[], labels?: string[], defaultValue?: string): void {
-		const select = parent.createEl('select', {cls: 'dropdown claude-brain-elicitation-select'});
+		const select = parent.createEl('select', {cls: 'dropdown synapse-elicitation-select'});
 
 		// Empty placeholder option
 		const emptyOpt = select.createEl('option', {text: 'Select an option', value: ''});

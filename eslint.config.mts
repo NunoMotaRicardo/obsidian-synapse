@@ -4,7 +4,7 @@ import { globalIgnores } from "eslint/config";
 
 /** Known brand names / acronyms that should NOT be lowercased. */
 const ALLOWED_UPPERCASE = new Set([
-	'Sidekick', 'Copilot', 'Claude', 'Brain', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
+	'Sidekick', 'Copilot', 'Claude', 'Brain', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
 	'MCP', 'CLI', 'JSON', 'YAML', 'HTML', 'CSS', 'UI', 'ID',
 	'Settings', 'Community', 'Enter', 'Ollama',
 ]);

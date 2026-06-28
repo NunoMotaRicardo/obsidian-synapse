@@ -200,7 +200,7 @@ export class AgentService {
 	private buildEnv(): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
 			...cleanEnv(),
-			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-claude-brain/1.0.0',
+			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-synapse/1.0.0',
 		};
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
