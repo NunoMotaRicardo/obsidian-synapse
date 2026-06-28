@@ -799,7 +799,10 @@ export class SynapseView extends ItemView {
 				this.finalizeStreamingMessage();
 				break;
 			case 'session.error': {
-				const errMsg = (data as {message?: string}).message ?? '';
+				const errMsg = (data as {message?: string; error?: string}).message ?? (data as {error?: string}).error ?? '';
+				if (this.currentSession) {
+					try { void this.currentSession.abort(); } catch { /* ignore */ }
+				}
 				this.finalizeStreamingMessage();
 				this.addInfoMessage(this.formatErrorForChat(errMsg));
 				break;

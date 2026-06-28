@@ -99,6 +99,8 @@ export interface SynapseSettings {
 	telegramAllowedUsers: string;
 	/** Default agent for Telegram bot sessions. */
 	telegramDefaultAgent: string;
+	/** Custom request timeout in seconds (0 = use adaptive default). */
+	providerRequestTimeout?: number;
 }
 
 /** Persisted preferences for the Edit modal form. */
@@ -161,6 +163,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	telegramBotToken: '',
 	telegramAllowedUsers: '',
 	telegramDefaultAgent: '',
+	providerRequestTimeout: 0,
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */

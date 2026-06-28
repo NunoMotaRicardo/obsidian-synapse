@@ -14,7 +14,7 @@ import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
 import {getSkillsFolder, getMcpInputValue} from '../settings';
 import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
 import type {InputResolver} from '../configLoader';
-import {mapMcpServers} from '../view/sessionConfig';
+import {mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError} from './telegramApi';
@@ -36,6 +36,7 @@ interface ActiveBotSession {
 	lastActivity: number;
 	/** Serializes message processing — each message waits for the previous one. */
 	queue: Promise<void>;
+	abortController?: AbortController | null;
 }
 
 /**
@@ -117,7 +118,13 @@ export class TelegramBotService {
 			this.pollAbort = null;
 		}
 
-		// Clear all sessions (no handles to disconnect — they disconnect after each message)
+		// Clear all sessions (abort any in-flight requests)
+		for (const sess of this.sessions.values()) {
+			if (sess.abortController) {
+				try { sess.abortController.abort(); } catch { /* ignore */ }
+				sess.abortController = null;
+			}
+		}
 		this.sessions.clear();
 
 		this.api = null;
@@ -200,6 +207,11 @@ export class TelegramBotService {
 		// Handle /new command — reset the session for this chat/topic
 		if (text === '/new') {
 			const key = sessionKey(chatId, threadId);
+			const existing = this.sessions.get(key);
+			if (existing?.abortController) {
+				try { existing.abortController.abort(); } catch { /* ignore */ }
+				existing.abortController = null;
+			}
 			this.sessions.delete(key);
 			await this.sendReply(chatId, threadId, 'Session reset. Send a new message to start fresh.');
 			return;
@@ -233,6 +245,7 @@ export class TelegramBotService {
 
 		try {
 			entry.lastActivity = Date.now();
+			entry.abortController = new AbortController();
 
 			// Download attachments if any
 			const attachmentPaths = await this.downloadAttachments(msg);
@@ -252,11 +265,15 @@ export class TelegramBotService {
 			// resume it to maintain conversation history. This avoids all shared-state
 			// issues with the chat view's resumeSession taking over event listeners.
 			const config = this.buildBotSessionConfig();
+			const timeoutMs = getAdaptiveTimeout(this.plugin.app, undefined, this.plugin.settings.providerRequestTimeout);
+
 			// Use inlineChat which handles session resume internally
 			const {content, sessionId} = await this.plugin.copilot!.inlineChat({
 				prompt: sendOpts.prompt,
 				...(entry.sessionId ? {resume: entry.sessionId} : {}),
 				...config,
+				timeoutMs,
+				abortController: entry.abortController,
 			});
 			if (sessionId) {
 				entry.sessionId = sessionId;
@@ -275,6 +292,7 @@ export class TelegramBotService {
 			const errorText = e instanceof Error ? e.message : String(e);
 			await this.sendReply(chatId, threadId, `Error: ${errorText}`);
 		} finally {
+			entry.abortController = null;
 			stopTyping();
 		}
 	}

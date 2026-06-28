@@ -5,10 +5,11 @@ import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
 import {getSkillsFolder} from '../settings';
 import {FolderTreeModal} from '../modals';
-import {mapMcpServers} from './sessionConfig';
+import {mapMcpServers, getAdaptiveTimeout} from './sessionConfig';
 
 declare module '../synapseView' {
 	interface SynapseView {
+		searchAbortController?: AbortController | null;
 		buildSearchPanel(parent: HTMLElement): void;
 		readonly searchMode: 'basic' | 'advanced';
 		toggleSearchMode(): void;
@@ -341,6 +342,10 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.handleSearch = async function (this: SynapseView): Promise<void> {
 		if (this.isSearching) {
 			// Cancel in-progress search
+			if (this.searchAbortController) {
+				this.searchAbortController.abort();
+				this.searchAbortController = null;
+			}
 			const session = this.searchMode === 'basic' ? this.basicSearchSession : this.searchSession;
 			if (session) {
 				try { await session.abort(); } catch { /* ignore */ }
@@ -363,6 +368,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		}
 
 		this.isSearching = true;
+		this.searchAbortController = new AbortController();
 		this.updateSearchButton();
 		this.searchResultsEl.empty();
 		this.searchResultsEl.createDiv({cls: 'synapse-search-loading', text: 'Searching…'});
@@ -380,12 +386,15 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			}
 		} finally {
 			this.isSearching = false;
+			this.searchAbortController = null;
 			this.updateSearchButton();
 		}
 	};
 
 	proto.handleBasicSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
+
+		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
 		const {content} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
@@ -394,6 +403,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			permissionMode: 'plan',
 			tools: [],
 			maxTurns: 1,
+			timeoutMs,
+			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 		this.renderSearchResults(content || '');
 	};
@@ -402,9 +413,13 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		const sessionConfig = this.buildSearchSessionConfig();
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
+		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
+
 		const {content, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
 			...sessionConfig,
+			timeoutMs,
+			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 
 		// Name the session
