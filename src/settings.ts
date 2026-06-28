@@ -3,7 +3,7 @@ import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
-import {fetchProviderModels, ProviderPreset} from "./providerModels";
+import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
 /** Helper to update a secure field in both runtime settings and local storage. */
 function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
@@ -554,6 +554,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						button.setDisabled(true);
 						button.setButtonText('Testing…');
+						clearOllamaShowCache();
 						try {
 							const res = await fetchProviderModels({
 								preset: this.plugin.settings.providerPreset,
