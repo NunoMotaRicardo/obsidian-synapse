@@ -1,4 +1,4 @@
-import {App, Modal, Notice, PluginSettingTab, Setting, normalizePath} from "obsidian";
+import {App, Modal, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
 import type {McpInputVariable} from "./types";
@@ -8,6 +8,14 @@ import {loadMcpInputs, loadAgents} from "./configLoader";
 function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
 	(plugin.settings as unknown as Record<string, unknown>)[key] = value;
 	saveSecureField(app, key, value);
+}
+
+export interface FeatureAgentMap {
+	chat: string;
+	inline: string;
+	search: string;
+	telegram: string;
+	vision: string;
 }
 
 export interface SynapseSettings {
@@ -21,6 +29,8 @@ export interface SynapseSettings {
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
+	/** Feature to Agent mapping for plugin features. */
+	featureAgents: FeatureAgentMap;
 	/** Enable ghost-text autocomplete in the editor. */
 	autocompleteEnabled: boolean;
 	/** Show the inline Synapse icon on the active editor line. */
@@ -116,6 +126,13 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	synapseFolder: 'synapse',
 	toolApproval: 'ask',
 	inlineModel: '',
+	featureAgents: {
+		chat: 'General',
+		inline: 'General',
+		search: 'General',
+		telegram: 'General',
+		vision: 'Vision',
+	},
 	autocompleteEnabled: false,
 	inlineIconEnabled: false,
 	reasoningEffort: '',
@@ -188,26 +205,98 @@ This skill generates ASCII art representations of text using block-style Unicode
 When a user requests ASCII art for any word or phrase, generate the block-style representation immediately without asking for clarification on style preferences.
 `;
 
-const SAMPLE_AGENT_CONTENT = `---
-name: Grammar
-description: The Grammar Assistant agent helps users improve their writing
-tools:
-  - github
-skills:
-  - ascii-art
-model: Claude Sonnet 4.5
+const SAMPLE_GENERAL_AGENT = `---
+name: General
+description: General-purpose assistant for chat, editor operations, search, and bot tasks.
+model: claude-3-7-sonnet
 ---
 
-# Grammar Assistant agent Instructions
+# General Assistant Instructions
 
-You are the **Grammar Assistant agent** - the primary task is to helps users improve their writing
+You are a helpful general assistant for Obsidian. Help the user draft notes, answer questions, structure thoughts, and perform vault tasks.
+`;
+
+const SAMPLE_VISION_AGENT = `---
+name: Vision
+description: Vision-capable agent for analyzing note images, diagrams, and attachments.
+model: claude-3-7-sonnet
+---
+
+# Vision Assistant Instructions
+
+You are an AI assistant specialized in analyzing visual content, diagrams, images, and attachments embedded in Obsidian notes.
+`;
+
+const SAMPLE_ZETTELKASTEN_AGENT = `---
+name: Zettelkasten
+description: Methodology agent tuned for atomic notes, dense interlinking, and slip-box workflows.
+model: claude-3-7-sonnet
+---
+
+# Zettelkasten Assistant Instructions
+
+You are a Zettelkasten methodology assistant. Focus on creating atomic, single-concept notes with clear titles, rich context, and bi-directional links ([[note]]).
+`;
+
+const SAMPLE_PARA_AGENT = `---
+name: PARA
+description: Methodology agent tuned for Projects, Areas, Resources, and Archives organization.
+model: claude-3-7-sonnet
+---
+
+# PARA Assistant Instructions
+
+You are a PARA methodology assistant. Help organize information into Projects (goal-oriented), Areas (responsibilities), Resources (topics of interest), and Archives (inactive items).
+`;
+
+const SAMPLE_LYT_AGENT = `---
+name: LYT
+description: Methodology agent tuned for Linking Your Thinking and Maps of Content (MOCs).
+model: claude-3-7-sonnet
+---
+
+# LYT Assistant Instructions
+
+You are a Linking Your Thinking (LYT) methodology assistant. Help synthesize notes into Maps of Content (MOCs), facilitating fluid knowledge navigation.
 `;
 
 const SAMPLE_PROMPT_CONTENT = `---
-agent: Grammar
+agent: General
 ---
-Translate the provided text from English to Portuguese.
+Summarize the key points of the current note into bullet points.
 `;
+
+/** Helper to update frontmatter model property in markdown file content. */
+export function updateAgentModelInContent(content: string, newModel: string): string {
+	const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+	if (!fmMatch) {
+		return `---\nmodel: ${newModel}\n---\n${content}`;
+	}
+	let fm = fmMatch[1]!;
+	const body = fmMatch[2]!;
+	if (/^model\s*:/m.test(fm)) {
+		if (newModel.trim()) {
+			fm = fm.replace(/^model\s*:.*$/m, `model: ${newModel.trim()}`);
+		} else {
+			fm = fm.replace(/^model\s*:.*$\r?\n?/m, '');
+		}
+	} else {
+		if (newModel.trim()) {
+			fm = fm.trim() + `\nmodel: ${newModel.trim()}`;
+		}
+	}
+	return `---\n${fm.trim()}\n---\n${body}`;
+}
+
+/** Helper to update an agent file's bound model in vault. */
+export async function updateAgentModelFile(app: App, filePath: string, newModel: string): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(normalizePath(filePath));
+	if (file instanceof TFile) {
+		const content = await app.vault.read(file);
+		const updated = updateAgentModelInContent(content, newModel);
+		await app.vault.modify(file, updated);
+	}
+}
 
 const SAMPLE_TRIGGER_CONTENT = `---
 name: Daily planner
@@ -238,10 +327,10 @@ export class SynapseSettingTab extends PluginSettingTab {
 		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
-		const tabIds = ['claude', 'models', 'capabilities', 'tools', 'bots'] as const;
+		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots'] as const;
 		const tabLabels: Record<string, string> = {
 			claude: 'Claude',
-			models: 'Models',
+			agents: 'Feature Map & Agents',
 			capabilities: 'Capabilities',
 			tools: 'Tools',
 			bots: 'Bots',
@@ -366,10 +455,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 			cliStatusEl.empty();
 			if (this.plugin.copilot) {
 				try {
-					// Use getVersionInfo() (not resolveCliPath()) so that version and
-					// protocol are always awaited \u2014 resolveCliPath() alone returns a
-					// cached object whose version fields may not yet be populated if
-					// the fire-and-forget check in ensureConnected() hasn't finished.
 					const resolved = await this.plugin.copilot.getVersionInfo();
 					const sourceLabels: Record<string, string> = {
 						'settings': 'settings override',
@@ -392,20 +477,89 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 
 		// ══════════════════════════════════════════════════════════
-		// TAB 2: Models
+		// TAB 2: Feature Map & Agents
 		// ══════════════════════════════════════════════════════════
-		const modelsPanel = panels['models']!;
+		const agentsPanel = panels['agents']!;
 
-		new Setting(modelsPanel)
-			.setName('Inline operations model')
-			.setDesc('Model ID used for editor context-menu actions (fix grammar, summarize, etc.). Leave blank for CLI default.')
-			.addText(text => text
-				.setPlaceholder('e.g. claude-sonnet-4-6')
-				.setValue(this.plugin.settings.inlineModel)
-				.onChange(async (value) => {
-					this.plugin.settings.inlineModel = value.trim();
-					await this.plugin.saveSettings();
-				}));
+		new Setting(agentsPanel)
+			.setName('Feature -> Agent map')
+			.setHeading();
+		agentsPanel.createEl('p', {
+			text: 'Map each plugin feature to a specific agent persona. Lightweight features default to a Claude model out of the box.',
+			cls: 'setting-item-description',
+		});
+
+		const renderAgentsPanel = async () => {
+			const dynamicContainerId = 'synapse-agents-dynamic';
+			let dynamicContainer = agentsPanel.querySelector(`#${dynamicContainerId}`) as HTMLElement;
+			if (dynamicContainer) {
+				dynamicContainer.empty();
+			} else {
+				dynamicContainer = agentsPanel.createDiv({attr: {id: dynamicContainerId}});
+			}
+
+			const vaultAgents = await loadAgents(this.app, getAgentsFolder(this.plugin.settings));
+			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
+			const agentOptions: Record<string, string> = {};
+			for (const name of agentNamesSet) {
+				agentOptions[name] = name;
+			}
+
+			const features: Array<{id: keyof FeatureAgentMap; name: string; desc: string}> = [
+				{id: 'chat', name: 'Chat panel', desc: 'Default agent for main conversation sidebar.'},
+				{id: 'inline', name: 'Inline editor operations', desc: 'Default agent for context-menu actions (rewrite, summarize, structure).'},
+				{id: 'search', name: 'Semantic search', desc: 'Default agent for vault semantic search.'},
+				{id: 'telegram', name: 'Telegram bot', desc: 'Default agent for responding to incoming Telegram messages.'},
+				{id: 'vision', name: 'Vision & image reading', desc: 'Handler agent for analyzing note images and visual attachments.'},
+			];
+
+			for (const feat of features) {
+				const currentAgent = this.plugin.settings.featureAgents?.[feat.id] || (feat.id === 'vision' ? 'Vision' : 'General');
+				new Setting(dynamicContainer)
+					.setName(feat.name)
+					.setDesc(feat.desc)
+					.addDropdown(dropdown => dropdown
+						.addOptions(agentOptions)
+						.setValue(currentAgent)
+						.onChange(async (val) => {
+							if (!this.plugin.settings.featureAgents) {
+								this.plugin.settings.featureAgents = {...DEFAULT_SETTINGS.featureAgents};
+							}
+							this.plugin.settings.featureAgents[feat.id] = val;
+							if (feat.id === 'search') this.plugin.settings.searchAgent = val;
+							if (feat.id === 'telegram') this.plugin.settings.telegramDefaultAgent = val;
+							await this.plugin.saveSettings();
+						}));
+			}
+
+			new Setting(dynamicContainer)
+				.setName('Agent model bindings')
+				.setHeading();
+			dynamicContainer.createEl('p', {
+				text: 'Configure per-agent model bindings. Model bindings determine which AI model runs when the agent is invoked.',
+				cls: 'setting-item-description',
+			});
+
+			if (vaultAgents.length === 0) {
+				dynamicContainer.createEl('p', {
+					text: 'No custom agents found in vault. Shipped defaults are active.',
+					cls: 'setting-item-description',
+				});
+			} else {
+				for (const agent of vaultAgents) {
+					new Setting(dynamicContainer)
+						.setName(`Agent: ${agent.name}`)
+						.setDesc(`${agent.description || 'Custom vault agent'} (${agent.filePath})`)
+						.addText(text => text
+							.setPlaceholder('e.g. claude-3-7-sonnet')
+							.setValue(agent.model || '')
+							.onChange(async (val) => {
+								await updateAgentModelFile(this.app, agent.filePath, val);
+							}));
+				}
+			}
+		};
+		void renderAgentsPanel();
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 3: Capabilities
@@ -440,9 +594,18 @@ export class SynapseSettingTab extends PluginSettingTab {
 							}
 						}
 
-						const agentPath = normalizePath(`${base}/agents/grammar.agent.md`);
-						if (!this.app.vault.getAbstractFileByPath(agentPath)) {
-							await this.app.vault.create(agentPath, SAMPLE_AGENT_CONTENT);
+						const sampleAgents: Array<{name: string; content: string}> = [
+							{name: 'general.agent.md', content: SAMPLE_GENERAL_AGENT},
+							{name: 'vision.agent.md', content: SAMPLE_VISION_AGENT},
+							{name: 'zettelkasten.agent.md', content: SAMPLE_ZETTELKASTEN_AGENT},
+							{name: 'para.agent.md', content: SAMPLE_PARA_AGENT},
+							{name: 'lyt.agent.md', content: SAMPLE_LYT_AGENT},
+						];
+						for (const ag of sampleAgents) {
+							const p = normalizePath(`${base}/agents/${ag.name}`);
+							if (!this.app.vault.getAbstractFileByPath(p)) {
+								await this.app.vault.create(p, ag.content);
+							}
 						}
 
 						const skillPath = normalizePath(`${base}/skills/ascii-art/SKILL.md`);

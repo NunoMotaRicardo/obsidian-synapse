@@ -7,7 +7,7 @@ import {
 	setIcon,
 	Component,
 } from 'obsidian';
-import type SynapsePlugin from './main';
+import SynapsePlugin, {SYNAPSE_ICON_ID} from './main';
 import type {
 	SessionConfig,
 	MCPServerConfig,
@@ -186,7 +186,7 @@ export class SynapseView extends ItemView {
 		return 'Synapse';
 	}
 	getIcon(): string {
-		return 'brain';
+		return SYNAPSE_ICON_ID;
 	}
 
 	saveSessionNames(): void {
@@ -1015,7 +1015,7 @@ export class SynapseView extends ItemView {
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
-			...(opts.selectedAgentName ? {agent: opts.selectedAgentName} : {}),
+			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
 			systemPrompt: systemContent,
 		};
 

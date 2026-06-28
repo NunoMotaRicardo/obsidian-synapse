@@ -180,6 +180,8 @@ export default tseslint.config(
 	globalIgnores([
 		"node_modules",
 		"dist",
+		".claude",
+		".gemini",
 		"esbuild.config.mjs",
 		"eslint.config.js",
 		"version-bump.mjs",

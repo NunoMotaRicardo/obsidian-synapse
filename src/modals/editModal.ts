@@ -412,18 +412,18 @@ export class EditModal extends Modal {
 			if (!this.isProcessing) return; // cancelled
 
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const modelUsed = this.plugin.settings.inlineModel || 'default';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
 
 			// Replace generating indicator with results
 			this.resultsContainer.empty();
-			this.showResults(results, modelUsed, elapsed);
+			this.showResults(results, agentUsed, elapsed);
 		} catch (e) {
 			if (!this.isProcessing) return;
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const modelUsed = this.plugin.settings.inlineModel || 'default';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
 			this.resultsContainer.empty();
 			const errorHeader = this.resultsContainer.createDiv({cls: 'synapse-edit-results-header synapse-edit-error'});
-			errorHeader.createSpan({text: `\u26A0\uFE0F \uD83E\uDDE0 ${modelUsed} | \u231A ${elapsed}s | Error: ${String(e)}`});
+			errorHeader.createSpan({text: `\u26A0\uFE0F \uD83E\uDDE0 ${agentUsed} | \u231A ${elapsed}s | Error: ${String(e)}`});
 		} finally {
 			this.isProcessing = false;
 			this.abortController = null;
@@ -458,7 +458,7 @@ export class EditModal extends Modal {
 
 		const {content: result, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt,
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.inline || 'General',
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
 			tools: [],

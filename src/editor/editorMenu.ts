@@ -1,6 +1,6 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
-import type SynapsePlugin from '../main';
+import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 // Agent SDK types imported transitively via AgentService
 import {loadSkills} from '../configLoader';
 import {getSkillsFolder} from '../settings';
@@ -34,7 +34,7 @@ export function registerEditorMenu(plugin: SynapsePlugin): void {
 
 			menu.addItem((item) => {
 				item.setTitle('Synapse')
-					.setIcon('brain');
+					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 				buildSynapseMenu(submenu, plugin, cmView);
@@ -81,7 +81,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 
 			menu.addItem((item) => {
 				item.setTitle('Synapse')
-					.setIcon('brain');
+					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -106,7 +106,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 
 				submenu.addItem((si) =>
 					si.setTitle('Chat with Synapse')
-						.setIcon('brain')
+						.setIcon(SYNAPSE_ICON_ID)
 						.onClick(async () => {
 							const leaf = plugin.app.workspace.getLeaf();
 							await leaf.openFile(abstractFile);
@@ -146,7 +146,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): void {
 	menu.addItem((item) => {
 		item.setTitle('Synapse')
-			.setIcon('brain');
+			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -175,7 +175,7 @@ function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): vo
 		);
 		submenu.addItem((si) =>
 			si.setTitle('Chat with Synapse')
-				.setIcon('brain')
+				.setIcon(SYNAPSE_ICON_ID)
 				.onClick(() => void openSynapseViewWithScope(plugin, folder.path)),
 		);
 	});
@@ -257,7 +257,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 				`TITLE: <short descriptive title for the note>\n` +
 				`---\n` +
 				`<note content in Markdown>`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.inline || 'General',
 			systemMessage:
 				'You are a note creation assistant. When asked to create a note, return a title line ' +
 				'followed by the separator --- and then the note body in Markdown. ' +
@@ -344,7 +344,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 				`TITLE: <short descriptive title for the canvas>\n` +
 				`---\n` +
 				`<valid Obsidian canvas JSON>`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.inline || 'General',
 			systemMessage:
 				'You are a canvas creation assistant for Obsidian. When asked to create a canvas, return a title line ' +
 				'followed by the separator --- and then valid Obsidian .canvas JSON.\n\n' +
@@ -436,7 +436,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 				`Summarize the following ${mdFiles.length} notes from the folder "${folder.name}". ` +
 				`Produce a single cohesive summary note in Markdown that captures the key topics, ` +
 				`themes, and important details across all notes.\n\n${combined}`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.inline || 'General',
 			systemMessage:
 				'You are a note summarisation assistant. Return ONLY the summary note in Markdown. ' +
 				'Do not include markdown code fences, introductory text, or explanations.',
@@ -515,7 +515,7 @@ async function runActionPrompt(
 
 	const {content: result, sessionId} = await plugin.copilot.inlineChat({
 		prompt: action.prompt(selectedText),
-		model: plugin.settings.inlineModel || undefined,
+		agent: plugin.settings.featureAgents?.inline || 'General',
 		systemMessage: TEXT_ACTION_SYSTEM_MESSAGE,
 		permissionMode: plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
 		tools: [],
@@ -641,7 +641,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt: userPrompt,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.vision || 'Vision',
 			systemMessage:
 				'You are an image analysis assistant. Answer the user’s question about the provided image. ' +
 				'Return your answer as clean Markdown. Do not include markdown code fences or introductory text.',
@@ -665,7 +665,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 	menu.addItem((item) => {
 		item.setTitle('Synapse')
-			.setIcon('brain');
+			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
@@ -732,7 +732,7 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 			`Extract all visible content from this image and convert it to well-structured Markdown. ` +
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
 			`If the image contains a diagram or chart, describe it in detail.`,
-		model: plugin.settings.inlineModel || undefined,
+		agent: plugin.settings.featureAgents?.vision || 'Vision',
 		systemMessage:
 			'You are an image content extraction assistant. Extract all visible content from the provided image ' +
 			'and return it as clean Markdown. Do not include markdown code fences, introductory text, or explanations. ' +
@@ -877,7 +877,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				`Choose the most appropriate diagram type (e.g. flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, mindmap, etc.) ` +
 				`that best represents the content of the image. ` +
 				`Return only the Mermaid code block, with no additional explanation.`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.vision || 'Vision',
 			systemMessage:
 				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. Use <br> to break lines instead of \\n for obsidian compatibility. ' +
 				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
@@ -960,7 +960,7 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 			prompt:
 				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
 				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.inline || 'General',
 			systemMessage:
 				'You are a note editor. When given a note and an edit instruction, return ONLY the updated note content. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
@@ -1025,7 +1025,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 				`Structure and refine the following note using Markdown. ${templateClause}` +
 				`Organise the content with headings, lists, and emphasis where appropriate. ` +
 				`Improve clarity and readability while preserving all original information.\n\nNOTE:\n${doc}`,
-			model: plugin.settings.inlineModel || undefined,
+			agent: plugin.settings.featureAgents?.inline || 'General',
 			systemMessage:
 				'You are a note structuring assistant. Return ONLY the restructured note in Markdown. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
@@ -1163,7 +1163,7 @@ export function buildSynapseMenu(menu: Menu, plugin: SynapsePlugin, view: Editor
 
 	menu.addItem((item) =>
 		item.setTitle('Chat with Synapse')
-			.setIcon('brain')
+			.setIcon(SYNAPSE_ICON_ID)
 			.onClick(() => {
 				if (hasSelection) {
 					const text = view.state.sliceDoc(sel.from, sel.to);

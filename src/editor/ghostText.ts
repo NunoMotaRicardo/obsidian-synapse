@@ -24,7 +24,7 @@ import {
 	GutterMarker,
 } from '@codemirror/view';
 import {setIcon, Menu, Notice} from 'obsidian';
-import type SynapsePlugin from '../main';
+import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 import {buildSynapseMenu} from './editorMenu';
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -140,7 +140,7 @@ class SynapseGutterMarker extends GutterMarker {
 		const btn = document.createElement('button');
 		btn.className = 'synapse-autocomplete-indicator';
 		btn.setAttribute('aria-label', 'Synapse autocomplete');
-		setIcon(btn, 'brain');
+		setIcon(btn, SYNAPSE_ICON_ID);
 
 		// Toggle loading state based on fetchingField
 		const fetching = this.view.state.field(fetchingField);
@@ -395,11 +395,11 @@ export function buildGhostTextExtension(plugin: SynapsePlugin): Extension {
 
 		try {
 			const prompt = buildPrompt(view.state);
-			const model = plugin.settings.inlineModel || undefined;
+			const agent = plugin.settings.featureAgents?.inline || 'General';
 
 			const result = await plugin.copilot!.chat({
 				prompt,
-				model,
+				agent,
 				systemMessage: SYSTEM_MESSAGE,
 			});
 

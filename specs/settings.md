@@ -4,37 +4,23 @@ Source: `src/settings.ts` — settings interface, defaults, and the settings tab
 
 ## Groups
 
-- **GitHub Copilot Client** — type (Local CLI / Remote CLI), CLI path, remote URL,
-  use-logged-in-user, GitHub token, **Test** button. Runtime-manager additions:
-  resolved-binary source/path display (#13), **Download** / **Update** / **Remove** fallback
-  runtime buttons (#14).
-- **Models** — provider picker (GitHub built-in or BYOK: OpenAI, Azure/Foundry, Anthropic,
-  Ollama, Foundry Local, other), base URL, model name, API key / bearer, wire API
-  (completions/responses). BYOK flows into `SessionConfigBase.provider` and a custom
-  `onListModels` handler in `main.ts`. For BYOK presets, **Test** fetches the provider's model
-  list directly (`fetchProviderModels()` in `src/providerModels.ts`) rather than creating an
-  SDK session — see "Models tab: Test / model discovery" below. The `github` preset's Copilot
-  tab "Client type" Test button is unchanged (still `createSession` + `ping`/disconnect).
-- **Sidekick** — inline-operations model, sidekick folder name, tools approval (allow/ask),
-  ghost-text toggle, inline Sidekick icon toggle (`inlineIconEnabled`, default off — gutter
-  icon next to the active line, issue 0008), reasoning effort (`string`, `''` = model default;
-  validated against the model's `supportedReasoningEfforts`), reasoning summary
-  (`'' | none | concise | detailed`), infinite sessions toggle
-  (`infiniteSessionsEnabled: boolean`, default `true` — matches SDK default; issue #5),
-  search mode/agent. Reasoning and context controls live in the chat toolbar's model-icon
-  menu, not a settings-tab field. Planned: long-context default (0004).
-  **Auto-update working directory** toggle (`autoUpdateWorkingDirectory: boolean`, default `false` —
-  when disabled, working directory remains at the vault root to prevent session restarts on folder changes).
-  **Auto-include note images** toggle (`autoIncludeNoteImages: boolean`, default `true`) and
-  **Max note images** number field (`maxNoteImages: number`, default `3`, range 1-20) control
-  automatic attachment of note-embedded images as context (issue #27). The effective cap is
-  `min(maxNoteImages, model.capabilities.limits.vision.max_prompt_images)` when the SDK
-  reports a vision limit.
-- **Bots** — Telegram bot config (token stored via `localStorage`, not `data.json`).
-- **MCP input variables** — stored values for `${input:...}` placeholders; passwords kept in
-  localStorage only.
+- **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
+- **Feature Map & Agents** (replaces legacy Models tab) — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
+- **Capabilities** — Claude Brain base folder path and **Initialize** button (creates default subfolders, sample skill, MCP configuration, sample prompt, daily planner trigger, and default methodology agents `general.agent.md`, `vision.agent.md`, `zettelkasten.agent.md`, `para.agent.md`, `lyt.agent.md`). Also includes editor integration toggles (ghost-text autocomplete, inline gutter icon, auto-update working directory, auto-include note images, and max note images).
+- **Tools** — tools approval mode (`ask` or `allow`), and MCP input variable management (with secure storage for password inputs).
+- **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
 
-## Models tab: Test / model discovery (BYOK presets, issue #19)
+## Feature Map & Agents (Issue #6)
+
+The **Feature Map & Agents** tab replaces the former Models tab:
+- **Feature -> Agent map**: Allows mapping each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent persona loaded from vault or shipped defaults. Lightweight features default to `General` (or a Claude model backend) out of the box with zero required local setup. Vision-dependent features map to `Vision`.
+- **Shipped Default & Methodology Agents**: Folder initialization creates five distinct agent files in `claude-brain/agents/`:
+  - `general.agent.md`: General-purpose assistant for general chat, editing, and search.
+  - `vision.agent.md`: Vision-capable assistant for image and diagram analysis.
+  - `zettelkasten.agent.md`: Methodology assistant for atomic notes and dense linking.
+  - `para.agent.md`: Methodology assistant for Projects, Areas, Resources, and Archives.
+  - `lyt.agent.md`: Methodology assistant for Linking Your Thinking and Maps of Content (MOCs).
+- **Per-Agent Model Bindings**: Each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the underlying `.agent.md` file in the vault.
 
 For every BYOK preset (`openai`, `azure`, `anthropic`, `ollama`, `foundry-local`,
 `other-openai` — everything except `github`), the Models-tab **Test** button performs a
