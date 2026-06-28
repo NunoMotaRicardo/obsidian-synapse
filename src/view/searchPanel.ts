@@ -1,10 +1,9 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {ClaudeBrainView} from '../claudeBrainView';
-import type {SessionConfig, SessionMetadata, ProviderConfig, PermissionRequest, CustomAgentConfig} from '../copilot';
-import {approveAll} from '../copilot';
+import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
 import {getSkillsFolder} from '../settings';
-import {FolderTreeModal, ToolApprovalModal} from '../modals';
+import {FolderTreeModal} from '../modals';
 import {mapMcpServers} from './sessionConfig';
 
 declare module '../claudeBrainView' {
@@ -315,7 +314,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		if (this.skills.length > 0) {
 			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
 		}
-		const disabledSkills = this.skills
+		const _disabledSkills = this.skills
 			.filter(s => !this.searchEnabledSkills.has(s.name))
 			.map(s => s.name);
 
@@ -323,52 +322,22 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		const agentPool = this.searchAgent
 			? this.agents.filter(a => a.name === this.searchAgent)
 			: this.agents;
-		const customAgents: CustomAgentConfig[] = agentPool.map(a => ({
-			name: a.name,
-			displayName: a.name,
-			description: a.description || undefined,
-			prompt: a.instructions,
-			tools: a.tools ?? null,
-			infer: true,
-		}));
-
-		// Permission handler
-		const permissionHandler = (request: PermissionRequest) => {
-			if (this.plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
-			}
-			const modal = new ToolApprovalModal(this.app, request);
-			modal.open();
-			return modal.promise;
-		};
-
-		// BYOK provider
-		const providerPreset = this.plugin.settings.providerPreset;
-		let provider: ProviderConfig | undefined;
-		if (providerPreset !== 'github' && this.plugin.settings.providerBaseUrl) {
-			const typeMap: Record<string, 'openai' | 'azure' | 'anthropic'> = {
-				openai: 'openai', azure: 'azure', anthropic: 'anthropic',
-				ollama: 'openai', 'foundry-local': 'openai', 'other-openai': 'openai',
-			};
-			provider = {
-				type: typeMap[providerPreset] ?? 'openai',
-				baseUrl: this.plugin.settings.providerBaseUrl,
-				...(this.plugin.settings.providerApiKey ? {apiKey: this.plugin.settings.providerApiKey} : {}),
-				...(this.plugin.settings.providerBearerToken ? {bearerToken: this.plugin.settings.providerBearerToken} : {}),
-				wireApi: this.plugin.settings.providerWireApi,
+		const agents: Record<string, CustomAgentConfig> = {};
+		for (const a of agentPool) {
+			agents[a.name] = {
+				description: a.description || '',
+				prompt: a.instructions,
+				...(a.tools ? {tools: a.tools} : {}),
 			};
 		}
 
 		return {
-			model: (provider && this.plugin.settings.providerModel) ? this.plugin.settings.providerModel : (this.searchModel || undefined),
-			streaming: providerPreset !== 'foundry-local',
-			onPermissionRequest: permissionHandler,
-			workingDirectory: this.getSearchWorkingDirectory(),
-			...(provider ? {provider} : {}),
+			model: this.searchModel || undefined,
+			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
+			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
+			cwd: this.getSearchWorkingDirectory(),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
-			...(customAgents.length > 0 ? {customAgents} : {}),
-			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
-			...(disabledSkills.length > 0 ? {disabledSkills} : {}),
+			...(Object.keys(agents).length > 0 ? {agents} : {}),
 		};
 	};
 
@@ -419,38 +388,31 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.handleBasicSearch = async function (this: ClaudeBrainView, query: string): Promise<void> {
-		// Reuse persistent session; create only if missing
-		if (!this.basicSearchSession) {
-			this.basicSearchSession = await this.plugin.copilot!.createSession(this.buildBasicSearchSessionConfig());
-		}
-
-		const scopePath = this.getSearchWorkingDirectory();
-		const scopeLabel = this.searchWorkingDir || this.app.vault.getName();
 		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
 
-		try {
-			const response = await this.basicSearchSession.sendAndWait({
-				prompt: searchPrompt,
-				attachments: [{type: 'directory', path: scopePath, displayName: scopeLabel}],
-			}, Math.max(120_000, this.plugin.copilot?.timeout ?? 0));
-			const content = response?.data.content || '';
-			this.renderSearchResults(content);
-		} catch (e) {
-			// Session may be broken — discard and rethrow so outer catch handles it
-			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
-			this.basicSearchSession = null;
-			throw e;
-		}
+		const {content} = await this.plugin.copilot!.inlineChat({
+			prompt: searchPrompt,
+			model: this.plugin.settings.inlineModel || undefined,
+			cwd: this.getSearchWorkingDirectory(),
+			permissionMode: 'plan',
+			tools: [],
+			maxTurns: 1,
+		});
+		this.renderSearchResults(content || '');
 	};
 
 	proto.handleAdvancedSearch = async function (this: ClaudeBrainView, query: string): Promise<void> {
 		const sessionConfig = this.buildSearchSessionConfig();
-		this.searchSession = await this.plugin.copilot!.createSession(sessionConfig);
-		const sessionId = this.searchSession.sessionId;
+		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
+
+		const {content, sessionId} = await this.plugin.copilot!.inlineChat({
+			prompt: searchPrompt,
+			...sessionConfig,
+		});
 
 		// Name the session
 		const agentLabel = this.searchAgent || 'Search';
-		const truncated = query.length > 40 ? query.slice(0, 40) + '…' : query;
+		const truncated = query.length > 40 ? query.slice(0, 40) + '...' : query;
 		this.sessionNames[sessionId] = `[search] ${agentLabel}: ${truncated}`;
 		this.saveSessionNames();
 
@@ -459,73 +421,21 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			const now = new Date();
 			this.sessionList.unshift({
 				sessionId,
-				startTime: now,
-				modifiedTime: now,
-				isRemote: false,
+				summary: '',
+				lastModified: now.getTime(),
 			} as SessionMetadata);
 		}
 		this.renderSessionList();
 
-		const searchPrompt = this.searchAgent
-			? `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`
-			: `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
-
-		const scopePath = this.getSearchWorkingDirectory();
-		const scopeLabel = this.searchWorkingDir || this.app.vault.getName();
-		try {
-			const response = await this.searchSession.sendAndWait({
-				prompt: searchPrompt,
-				attachments: [{type: 'directory', path: scopePath, displayName: scopeLabel}],
-			}, Math.max(120_000, this.plugin.copilot?.timeout ?? 0));
-			const content = response?.data.content || '';
-			this.renderSearchResults(content);
-		} finally {
-			if (this.searchSession) {
-				try { await this.searchSession.disconnect(); } catch { /* ignore */ }
-				this.searchSession = null;
-			}
-		}
+		this.renderSearchResults(content || '');
 	};
 
 	proto.buildBasicSearchSessionConfig = function (this: ClaudeBrainView): SessionConfig {
-		const permissionHandler = (request: PermissionRequest) => {
-			if (this.plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
-			}
-			const modal = new ToolApprovalModal(this.app, request);
-			modal.open();
-			return modal.promise;
-		};
-
-		// Use inline model setting, fall back to first available model
-		let model = this.plugin.settings.inlineModel || undefined;
-		if (!model && this.models.length > 0 && this.models[0]) {
-			model = this.models[0].id;
-		}
-
-		// BYOK provider
-		const providerPreset = this.plugin.settings.providerPreset;
-		let provider: ProviderConfig | undefined;
-		if (providerPreset !== 'github' && this.plugin.settings.providerBaseUrl) {
-			const typeMap: Record<string, 'openai' | 'azure' | 'anthropic'> = {
-				openai: 'openai', azure: 'azure', anthropic: 'anthropic',
-				ollama: 'openai', 'foundry-local': 'openai', 'other-openai': 'openai',
-			};
-			provider = {
-				type: typeMap[providerPreset] ?? 'openai',
-				baseUrl: this.plugin.settings.providerBaseUrl,
-				...(this.plugin.settings.providerApiKey ? {apiKey: this.plugin.settings.providerApiKey} : {}),
-				...(this.plugin.settings.providerBearerToken ? {bearerToken: this.plugin.settings.providerBearerToken} : {}),
-				wireApi: this.plugin.settings.providerWireApi,
-			};
-		}
-
 		return {
-			model: (provider && this.plugin.settings.providerModel) ? this.plugin.settings.providerModel : model,
-			streaming: providerPreset !== 'foundry-local',
-			onPermissionRequest: permissionHandler,
-			workingDirectory: this.getSearchWorkingDirectory(),
-			...(provider ? {provider} : {}),
+			model: this.plugin.settings.inlineModel || undefined,
+			permissionMode: 'plan',
+			cwd: this.getSearchWorkingDirectory(),
+			tools: [],
 		};
 	};
 

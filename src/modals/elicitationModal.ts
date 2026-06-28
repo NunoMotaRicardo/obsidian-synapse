@@ -1,5 +1,15 @@
 import {App, Modal} from 'obsidian';
-import type {ElicitationContext, ElicitationResult, ElicitationSchemaField, ElicitationFieldValue} from '@github/copilot-sdk';
+import type {ElicitationContext, ElicitationResult} from '../copilot';
+
+// Elicitation schema types — the Agent SDK uses a generic JSON Schema Record
+// rather than typed field descriptors. We define compatible shapes here.
+type ElicitationSchemaField =
+	| {type: 'boolean'; title?: string; description?: string; default?: boolean}
+	| {type: 'number' | 'integer'; title?: string; description?: string; default?: number; minimum?: number; maximum?: number}
+	| {type: 'string'; title?: string; description?: string; default?: string; enum?: string[]; oneOf?: {const: string; title: string}[]; maxLength?: number; format?: string}
+	| {type: 'array'; title?: string; description?: string; default?: string[]; items: {enum?: string[]; anyOf?: {const: string; title: string}[]}};
+
+type ElicitationFieldValue = string | number | boolean | string[];
 
 /**
  * Modal that renders a dynamic form based on an ElicitationContext's requestedSchema.
@@ -27,8 +37,8 @@ export class ElicitationModal extends Modal {
 
 		// Header
 		const header = contentEl.createEl('h3', {text: 'Input requested'});
-		if (this.context.elicitationSource) {
-			header.textContent = `Input requested by ${this.context.elicitationSource}`;
+		if (this.context.serverName) {
+			header.textContent = `Input requested by ${this.context.serverName}`;
 		}
 
 		// Message
@@ -41,13 +51,13 @@ export class ElicitationModal extends Modal {
 		}
 
 		// Form fields
-		const schema = this.context.requestedSchema;
+		const schema = this.context.requestedSchema as {properties?: Record<string, ElicitationSchemaField>; required?: string[]} | undefined;
 		if (schema?.properties) {
 			const formEl = contentEl.createDiv({cls: 'claude-brain-elicitation-form'});
 			const required = new Set(schema.required ?? []);
 
 			for (const [key, field] of Object.entries(schema.properties)) {
-				this.renderField(formEl, key, field, required.has(key));
+				this.renderField(formEl, key, field as ElicitationSchemaField, required.has(key));
 			}
 		}
 
@@ -202,7 +212,7 @@ export class ElicitationModal extends Modal {
 
 		if ('items' in field) {
 			const items = field.items;
-			if ('enum' in items) {
+			if ('enum' in items && items.enum) {
 				options = items.enum.map(v => ({value: v, label: v}));
 			} else if ('anyOf' in items) {
 				options = (items.anyOf as {const: string; title: string}[]).map(o => ({value: o.const, label: o.title}));

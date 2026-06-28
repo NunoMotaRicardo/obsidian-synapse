@@ -160,15 +160,15 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		switch (this.sessionSort) {
 			case 'modified':
 				this.sessionList.sort((a, b) => {
-					const ta = a.modifiedTime instanceof Date ? a.modifiedTime.getTime() : new Date(a.modifiedTime).getTime();
-					const tb = b.modifiedTime instanceof Date ? b.modifiedTime.getTime() : new Date(b.modifiedTime).getTime();
+					const ta = a.lastModified;
+					const tb = b.lastModified;
 					return tb - ta;
 				});
 				break;
 			case 'created':
 				this.sessionList.sort((a, b) => {
-					const ta = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
-					const tb = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+					const ta = a.lastModified;
+					const tb = b.lastModified;
 					return tb - ta;
 				});
 				break;
@@ -252,9 +252,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		if (expanded) {
 			const details = item.createDiv({cls: 'claude-brain-session-details'});
 			details.createDiv({cls: 'claude-brain-session-name', text: name});
-			const modTime = session.modifiedTime instanceof Date
-				? session.modifiedTime
-				: new Date(session.modifiedTime);
+			const modTime = new Date(session.lastModified);
 			details.createDiv({cls: 'claude-brain-session-time', text: formatTimeAgo(modTime)});
 		}
 
@@ -365,9 +363,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			for (const [key, bg] of this.activeSessions) {
 				if (bg.isStreaming) continue; // don't evict active streams
 				const entry = this.sessionList.find(s => s.sessionId === key);
-				const t = entry?.modifiedTime instanceof Date
-					? entry.modifiedTime.getTime()
-					: entry ? new Date(entry.modifiedTime).getTime() : 0;
+				const t = entry?.lastModified ?? 0;
 				if (t < oldestTime) {
 					oldestTime = t;
 					oldestKey = key;
@@ -528,12 +524,12 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			}),
 			session.on('assistant.reasoning', (event) => {
 				if (event.data.content) {
-					bg.streamingReasoning = event.data.content;
+					bg.streamingReasoning = event.data.content as string;
 				}
 				bg.reasoningComplete = bg.streamingReasoning.length > 0;
 			}),
 			session.on('assistant.message_delta', (event) => {
-				bg.streamingContent += event.data.deltaContent;
+				bg.streamingContent += (event.data.deltaContent ?? event.data.content ?? '') as string;
 				// No DOM rendering — session is hidden
 			}),
 			session.on('assistant.message', (event) => {
@@ -546,21 +542,21 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				}
 			}),
 			session.on('assistant.usage', (event) => {
-				const d = event.data;
+				const d = event.data as Record<string, number | string | undefined>;
 				if (!bg.turnUsage) {
 					bg.turnUsage = {
-						inputTokens: d.inputTokens ?? 0,
-						outputTokens: d.outputTokens ?? 0,
-						cacheReadTokens: d.cacheReadTokens ?? 0,
-						cacheWriteTokens: d.cacheWriteTokens ?? 0,
-						model: d.model,
+						inputTokens: (d.inputTokens as number) ?? 0,
+						outputTokens: (d.outputTokens as number) ?? 0,
+						cacheReadTokens: (d.cacheReadTokens as number) ?? 0,
+						cacheWriteTokens: (d.cacheWriteTokens as number) ?? 0,
+						model: d.model as string | undefined,
 					};
 				} else {
-					bg.turnUsage.inputTokens += d.inputTokens ?? 0;
-					bg.turnUsage.outputTokens += d.outputTokens ?? 0;
-					bg.turnUsage.cacheReadTokens += d.cacheReadTokens ?? 0;
-					bg.turnUsage.cacheWriteTokens += d.cacheWriteTokens ?? 0;
-					if (d.model) bg.turnUsage.model = d.model;
+					bg.turnUsage.inputTokens += (d.inputTokens as number) ?? 0;
+					bg.turnUsage.outputTokens += (d.outputTokens as number) ?? 0;
+					bg.turnUsage.cacheReadTokens += (d.cacheReadTokens as number) ?? 0;
+					bg.turnUsage.cacheWriteTokens += (d.cacheWriteTokens as number) ?? 0;
+					if (d.model) bg.turnUsage.model = d.model as string;
 				}
 			}),
 			session.on('session.idle', () => {
@@ -614,14 +610,14 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				this.renderSessionList();
 			}),
 			session.on('tool.execution_start', (event) => {
-				bg.turnToolsUsed.push(event.data.toolName);
+				bg.turnToolsUsed.push(event.data.toolName as string);
 				// No DOM manipulation — hidden session
 			}),
 			session.on('tool.execution_complete', () => {
 				// No DOM manipulation — hidden session
 			}),
 			session.on('skill.invoked', (event) => {
-				bg.turnSkillsUsed.push(event.data.name);
+				bg.turnSkillsUsed.push(event.data.name as string);
 			}),
 		);
 	};
@@ -688,8 +684,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			});
 
 			this.earlyEventBuffer = [];
-			const session = await this.plugin.copilot!.resumeSession(sessionId, {
+			const session = await this.plugin.copilot!.createSession({
 				...sessionConfig,
+				resume: sessionId,
 			});
 
 			// Explicitly select the agent via RPC after resume
@@ -701,8 +698,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				}
 			}
 
-			// Load message history from SDK
-			const events = await session.getEvents();
+			// Load message history — Agent SDK doesn't expose getEvents();
+			// Session history replay is a follow-up (issue #4).
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const events: {type: string; id: string; data: Record<string, any>; timestamp: string}[] = [];
 			const renderPromises: Promise<void>[] = [];
 			let pendingReasoning: string | undefined;
 			for (const event of events) {

@@ -1,16 +1,26 @@
 import {App, Modal} from 'obsidian';
-import type {PermissionRequest, PermissionRequestResult} from '../copilot';
+import type {PermissionResult, PermissionUpdate} from '../copilot';
+
+export interface ToolApprovalRequest {
+	toolName: string;
+	input: Record<string, unknown>;
+	title?: string;
+	displayName?: string;
+	description?: string;
+	suggestions?: PermissionUpdate[];
+	toolUseID: string;
+}
 
 export class ToolApprovalModal extends Modal {
 	private resolved = false;
-	private resolve!: (result: PermissionRequestResult) => void;
-	private readonly request: PermissionRequest;
-	readonly promise: Promise<PermissionRequestResult>;
+	private resolve!: (result: PermissionResult) => void;
+	private readonly request: ToolApprovalRequest;
+	readonly promise: Promise<PermissionResult>;
 
-	constructor(app: App, request: PermissionRequest) {
+	constructor(app: App, request: ToolApprovalRequest) {
 		super(app);
 		this.request = request;
-		this.promise = new Promise<PermissionRequestResult>((res) => {
+		this.promise = new Promise<PermissionResult>((res) => {
 			this.resolve = res;
 		});
 	}
@@ -23,15 +33,20 @@ export class ToolApprovalModal extends Modal {
 		contentEl.createEl('h3', {text: 'Tool approval required'});
 
 		const info = contentEl.createDiv({cls: 'claude-brain-approval-info'});
-		info.createDiv({cls: 'claude-brain-approval-row', text: `Kind: ${this.request.kind}`});
+		if (this.request.title) {
+			info.createDiv({cls: 'claude-brain-approval-row', text: this.request.title});
+		} else {
+			info.createDiv({cls: 'claude-brain-approval-row', text: `Tool: ${this.request.toolName}`});
+		}
+		if (this.request.description) {
+			info.createDiv({cls: 'claude-brain-approval-row', text: this.request.description});
+		}
 
-		// Show relevant details based on request kind
-		const details: Record<string, unknown> = {...this.request};
-		delete details.kind;
-		delete details.toolCallId;
-		if (Object.keys(details).length > 0) {
+		// Show input details
+		const inputKeys = Object.keys(this.request.input);
+		if (inputKeys.length > 0) {
 			const pre = info.createEl('pre', {cls: 'claude-brain-approval-details'});
-			pre.createEl('code', {text: JSON.stringify(details, null, 2)});
+			pre.createEl('code', {text: JSON.stringify(this.request.input, null, 2)});
 		}
 
 		const btnRow = contentEl.createDiv({cls: 'claude-brain-approval-buttons'});
@@ -39,21 +54,24 @@ export class ToolApprovalModal extends Modal {
 		const allowBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Allow'});
 		allowBtn.addEventListener('click', () => {
 			this.resolved = true;
-			this.resolve({kind: 'approved'});
+			this.resolve({
+				behavior: 'allow',
+				...(this.request.suggestions ? {updatedPermissions: this.request.suggestions} : {}),
+			});
 			this.close();
 		});
 
 		const denyBtn = btnRow.createEl('button', {text: 'Deny'});
 		denyBtn.addEventListener('click', () => {
 			this.resolved = true;
-			this.resolve({kind: 'denied-interactively-by-user'});
+			this.resolve({behavior: 'deny', message: 'Denied by user'});
 			this.close();
 		});
 	}
 
 	onClose(): void {
 		if (!this.resolved) {
-			this.resolve({kind: 'denied-interactively-by-user'});
+			this.resolve({behavior: 'deny', message: 'Denied by user'});
 		}
 	}
 }

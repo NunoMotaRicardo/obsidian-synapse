@@ -1,8 +1,7 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import type ClaudeBrainPlugin from '../main';
-import {approveAll} from '../copilot';
-import type {PermissionRequest, PermissionRequestResult, UserInputRequest, UserInputResponse} from '../copilot';
+// Agent SDK types imported transitively via AgentService
 import {loadSkills} from '../configLoader';
 import {getSkillsFolder} from '../settings';
 import {setFetching, triggerComplete} from './ghostText';
@@ -11,7 +10,12 @@ import {EditModal} from '../modals/editModal';
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TextTask} from '../tasks';
 import type {SelectionInfo} from '../types';
-import {formatErrorForNotice} from '../ollamaErrors';
+/** Format an error for display in a Notice. */
+function formatErrorForNotice(error: unknown): string {
+	const rawError = String(error);
+	const cleanError = rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
+	return `Claude Brain: error — ${cleanError}`;
+}
 
 // Re-export for consumers that still import from editorMenu
 export {TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
@@ -290,7 +294,7 @@ async function createNewNote(plugin: ClaudeBrainPlugin, folder: TFolder, templat
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -397,7 +401,7 @@ async function createNewCanvas(plugin: ClaudeBrainPlugin, folder: TFolder, templ
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -452,7 +456,7 @@ async function createSummaryNote(plugin: ClaudeBrainPlugin, folder: TFolder): Pr
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -493,7 +497,7 @@ export async function runSelectionAction(
 	} catch (e) {
 		notice.hide();
 		console.error('Claude Brain: editor action error', e);
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	} finally {
 		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}
@@ -509,67 +513,13 @@ async function runActionPrompt(
 ): Promise<string | null> {
 	if (!plugin.copilot) return null;
 
-	// Build permission handler that respects the plugin's toolApproval setting
-	const permissionHandler = (request: PermissionRequest) => {
-			if (plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
-			}
-			// For 'ask' mode, show a simple confirmation modal
-			return new Promise<PermissionRequestResult>((resolve) => {
-				const modal = new Modal(plugin.app);
-				modal.titleEl.setText('Tool approval required');
-				const desc = modal.contentEl.createEl('p');
-				desc.setText(`Permission: ${request.kind}${request.toolCallId ? ` (${request.toolCallId})` : ''}`);
-				const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-				const allowBtn = btnRow.createEl('button', {text: 'Allow', cls: 'mod-cta'});
-				const denyBtn = btnRow.createEl('button', {text: 'Deny'});
-				allowBtn.addEventListener('click', () => { modal.close(); resolve({kind: 'approved'}); });
-				denyBtn.addEventListener('click', () => { modal.close(); resolve({kind: 'denied-interactively-by-user'}); });
-				modal.open();
-			});
-		};
-
-	// Build user input handler that shows a simple modal when the agent asks
-	const userInputHandler = (request: UserInputRequest) => {
-		return new Promise<UserInputResponse>((resolve) => {
-			const modal = new Modal(plugin.app);
-			modal.titleEl.setText('Copilot needs your input');
-			modal.contentEl.createEl('p', {text: request.question});
-
-			if (request.choices && request.choices.length > 0) {
-				const choiceRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-				for (const choice of request.choices) {
-					const btn = choiceRow.createEl('button', {text: choice});
-					btn.addEventListener('click', () => { modal.close(); resolve({answer: choice, wasFreeform: false}); });
-				}
-			}
-
-			if (request.allowFreeform !== false) {
-				const input = modal.contentEl.createEl('textarea', {cls: 'claude-brain-edit-userinput-textarea', attr: {placeholder: 'Type your answer\u2026', rows: '3'}});
-				const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-				const submitBtn = btnRow.createEl('button', {text: 'Submit', cls: 'mod-cta'});
-				submitBtn.addEventListener('click', () => {
-					const answer = input.value.trim();
-					if (!answer) return;
-					modal.close();
-					resolve({answer, wasFreeform: true});
-				});
-				input.addEventListener('keydown', (e) => {
-					if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitBtn.click(); }
-				});
-			}
-
-			modal.onClose = () => { resolve({answer: '', wasFreeform: true}); };
-			modal.open();
-		});
-	};
-
 	const {content: result, sessionId} = await plugin.copilot.inlineChat({
 		prompt: action.prompt(selectedText),
 		model: plugin.settings.inlineModel || undefined,
 		systemMessage: TEXT_ACTION_SYSTEM_MESSAGE,
-		onPermissionRequest: permissionHandler,
-		onUserInputRequest: userInputHandler,
+		permissionMode: plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
+		tools: [],
+		maxTurns: 1,
 	});
 	registerInlineSession(plugin, sessionId, action.label);
 
@@ -707,7 +657,7 @@ async function askAboutImage(plugin: ClaudeBrainPlugin, file: TFile, userPrompt:
 		new Notice('Claude Brain: response inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -882,7 +832,7 @@ async function extractAndInsertBelow(plugin: ClaudeBrainPlugin, file: TFile, emb
 		new Notice('Claude Brain: extracted content inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -904,7 +854,7 @@ async function extractAndReplace(plugin: ClaudeBrainPlugin, file: TFile): Promis
 		new Notice('Claude Brain: image replaced with extracted content.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -962,7 +912,7 @@ async function convertToMermaidBelow(plugin: ClaudeBrainPlugin, file: TFile, emb
 		new Notice('Claude Brain: Mermaid diagram inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	}
 }
 
@@ -1022,7 +972,7 @@ async function applyEditNote(plugin: ClaudeBrainPlugin, view: EditorView, userPr
 		new Notice('Claude Brain: note edited.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	} finally {
 		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}
@@ -1087,7 +1037,7 @@ async function applyStructure(plugin: ClaudeBrainPlugin, view: EditorView, templ
 		new Notice('Claude Brain: note structured.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
+		new Notice(formatErrorForNotice(e));
 	} finally {
 		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}

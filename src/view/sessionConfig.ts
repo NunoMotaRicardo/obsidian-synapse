@@ -1,6 +1,11 @@
 import {normalizePath, TFile, TFolder} from 'obsidian';
 import type {App} from 'obsidian';
-import type {MCPServerConfig, ModelInfo, MessageOptions} from '../copilot';
+import type {MCPServerConfig, ModelInfo} from '../copilot';
+
+/** Minimal MessageOptions shape for SDK attachments. */
+interface MessageOptions {
+	attachments?: Array<{type: string; path?: string; data?: string; mimeType?: string; displayName?: string}>;
+}
 import type {AgentConfig, McpServerEntry, ChatAttachment} from '../types';
 import {IMAGE_EXTS} from '../types';
 
@@ -13,24 +18,21 @@ export function mapMcpServers(mcpServers: McpServerEntry[], enabledMcpServers: S
 		if (!enabledMcpServers.has(server.name)) continue;
 		const cfg = server.config;
 		const serverType = cfg['type'] as string | undefined;
-		const tools = (cfg['tools'] as string[] | undefined) ?? ['*'];
+		const _tools = (cfg['tools'] as string[] | undefined) ?? ['*'];
 
 		if (serverType === 'http' || serverType === 'sse') {
 			result[server.name] = {
 				type: serverType,
 				url: cfg['url'] as string,
-				tools,
 				...(cfg['headers'] ? {headers: cfg['headers'] as Record<string, string>} : {}),
 				...(cfg['timeout'] != null ? {timeout: cfg['timeout'] as number} : {}),
 			} as MCPServerConfig;
 		} else if (cfg['command']) {
 			result[server.name] = {
-				type: 'local',
+				type: 'stdio',
 				command: cfg['command'] as string,
 				args: (cfg['args'] as string[] | undefined) ?? [],
-				tools,
 				...(cfg['env'] ? {env: cfg['env'] as Record<string, string>} : {}),
-				...(cfg['cwd'] ? {cwd: cfg['cwd'] as string} : {}),
 				...(cfg['timeout'] != null ? {timeout: cfg['timeout'] as number} : {}),
 			} as MCPServerConfig;
 		}

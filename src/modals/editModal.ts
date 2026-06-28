@@ -1,7 +1,6 @@
 import {Modal, Notice, setIcon} from 'obsidian';
 import type ClaudeBrainPlugin from '../main';
-import {approveAll} from '../copilot';
-import type {PermissionRequest, PermissionRequestResult, UserInputRequest, UserInputResponse} from '../copilot';
+// Agent SDK types imported via AgentService
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TaskLabel} from '../tasks';
 import {ClaudeBrainView, CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
@@ -457,65 +456,13 @@ export class EditModal extends Modal {
 			`When asked for multiple variations, separate them with ===CHOICE=== on its own line. ` +
 			`Do not add any labels, numbers, or headings before each choice.`;
 
-		const permissionHandler = (request: PermissionRequest) => {
-			if (this.plugin.settings.toolApproval === 'allow') {
-				return approveAll(request, {sessionId: ''});
-			}
-			return new Promise<PermissionRequestResult>((resolve) => {
-				const modal = new Modal(this.app);
-				modal.titleEl.setText('Tool approval required');
-				const desc = modal.contentEl.createEl('p');
-				desc.setText(`Permission: ${request.kind}${request.toolCallId ? ` (${request.toolCallId})` : ''}`);
-				const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-				const allowBtn = btnRow.createEl('button', {text: 'Allow', cls: 'mod-cta'});
-				const denyBtn = btnRow.createEl('button', {text: 'Deny'});
-				allowBtn.addEventListener('click', () => { modal.close(); resolve({kind: 'approved'}); });
-				denyBtn.addEventListener('click', () => { modal.close(); resolve({kind: 'denied-interactively-by-user'}); });
-				modal.open();
-			});
-		};
-
-		// Build user input handler that shows a simple modal when the agent asks
-		const userInputHandler = (request: UserInputRequest) => {
-			return new Promise<UserInputResponse>((resolve) => {
-				const modal = new Modal(this.app);
-				modal.titleEl.setText('Copilot needs your input');
-				modal.contentEl.createEl('p', {text: request.question});
-
-				if (request.choices && request.choices.length > 0) {
-					const choiceRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-					for (const choice of request.choices) {
-						const btn = choiceRow.createEl('button', {text: choice});
-						btn.addEventListener('click', () => { modal.close(); resolve({answer: choice, wasFreeform: false}); });
-					}
-				}
-
-				if (request.allowFreeform !== false) {
-					const input = modal.contentEl.createEl('textarea', {cls: 'claude-brain-edit-userinput-textarea', attr: {placeholder: 'Type your answer\u2026', rows: '3'}});
-					const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-					const submitBtn = btnRow.createEl('button', {text: 'Submit', cls: 'mod-cta'});
-					submitBtn.addEventListener('click', () => {
-						const answer = input.value.trim();
-						if (!answer) return;
-						modal.close();
-						resolve({answer, wasFreeform: true});
-					});
-					input.addEventListener('keydown', (e) => {
-						if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitBtn.click(); }
-					});
-				}
-
-				modal.onClose = () => { resolve({answer: '', wasFreeform: true}); };
-				modal.open();
-			});
-		};
-
 		const {content: result, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt,
 			model: this.plugin.settings.inlineModel || undefined,
 			systemMessage,
-			onPermissionRequest: permissionHandler,
-			onUserInputRequest: userInputHandler,
+			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
+			tools: [],
+			maxTurns: 1,
 		});
 
 		// Register as inline session so the sidebar filter can distinguish it

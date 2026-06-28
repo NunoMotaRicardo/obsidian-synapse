@@ -1,19 +1,17 @@
 import {MarkdownView, Notice, Plugin} from 'obsidian';
 import {DEFAULT_SETTINGS, ClaudeBrainSettings, ClaudeBrainSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
-import {CopilotService} from "./copilot";
-import {fetchProviderModels} from "./providerModels";
+import {AgentService} from "./copilot";
 import {ClaudeBrainView, CLAUDE_BRAIN_VIEW_TYPE} from "./claudeBrainView";
 import {registerEditorMenu, registerFileMenu, openClaudeBrainView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
-import {runAgentSpike} from './agentSpike';
 import type {EditorView} from '@codemirror/view';
 
 export default class ClaudeBrainPlugin extends Plugin {
 	settings!: ClaudeBrainSettings;
-	copilot: CopilotService | null = null;
+	copilot: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 
 	async onload() {
@@ -142,23 +140,6 @@ export default class ClaudeBrainPlugin extends Plugin {
 			},
 		});
 
-		// Command: Test Claude Agent SDK (spike)
-		this.addCommand({
-			id: 'test-claude-agent-sdk',
-			name: 'Test Claude Agent SDK',
-			callback: async () => {
-				new Notice('Claude Brain: running Claude Agent SDK spike…');
-				console.info('[claude-brain] Agent SDK spike: starting');
-				const result = await runAgentSpike();
-				console.info('[claude-brain] Agent SDK spike result:', result);
-				if (result.ok) {
-					new Notice(`Claude Agent SDK: ${result.text} (${result.durationMs}ms)`, 15000);
-				} else {
-					new Notice(`Claude Agent SDK error: ${result.error}`, 15000);
-				}
-			},
-		});
-
 		// Command: Trigger autocomplete
 		this.addCommand({
 			id: 'trigger-autocomplete',
@@ -180,22 +161,18 @@ export default class ClaudeBrainPlugin extends Plugin {
 
 		try {
 			await this.initCopilot();
-			// Eagerly connect so CLI-not-found errors surface at startup
-			// (triggers getStatus → version log as a side-effect).
+			// Eagerly connect so auth errors surface at startup.
 			if (this.copilot) {
 				await this.copilot.ensureConnected();
 			}
 		} catch (e) {
-			console.error('Claude Brain: failed to initialize Copilot service', e);
+			console.error('Claude Brain: failed to initialize agent service', e);
 			const msg = e instanceof Error ? e.message : String(e);
-			// Try to detect "missing CLI" specifically (spawn ENOENT / not found), not any CLI error.
-			const detail = msg.match(/\(([^)]*)\)\./)?.[1] ?? msg;
-			if (/enoent|spawn|not found/i.test(detail)) {
-				const isWin = typeof process !== 'undefined' && process.platform === 'win32';
-				const installHint = isWin
-					? 'No Copilot CLI found. Install with `winget install GitHub.CopilotCLI` or `npm install -g @github/copilot`, then restart the plugin.'
-					: 'No Copilot CLI found. Install with `npm install -g @github/copilot`, then restart the plugin.';
-				new Notice(installHint, 30000);
+			if (/enoent|spawn|not found/i.test(msg)) {
+				new Notice(
+					'No Claude CLI found. Install with "npm install -g @anthropic-ai/claude-code", then restart the plugin.',
+					30000,
+				);
 			}
 		}
 	}
@@ -211,101 +188,12 @@ export default class ClaudeBrainPlugin extends Plugin {
 		}
 		const s = this.settings;
 
-		// BYOK model listing: when a non-GitHub provider is configured, fetch
-		// models from the provider endpoint so client.listModels() returns them.
-		const onListModels = this.buildOnListModels();
-
-		const onVersionInfo = (status: {version: string; protocolVersion: number}) => {
-			console.info('Claude Brain: Copilot CLI v%s (protocol %d)', status.version, status.protocolVersion);
-		};
-
-		// Build BYOK provider config for inline/editor operations
-		const providerConfig = this.buildProviderConfig();
-
-		// Ollama-specific connection error notice
-		const ollamaErrorMsg = 'Could not reach Ollama at localhost:11434. ' +
-			'Is it running? Start it with `ollama serve`.';
-		const onConnectionError = s.providerPreset === 'ollama'
-			? () => { new Notice(ollamaErrorMsg, 8000); }
-			: undefined;
-
-		const requestTimeout = s.providerRequestTimeout > 0 ? s.providerRequestTimeout * 1000 : undefined;
-
-		const providerOpts = {
-			...(onListModels ? {onListModels} : {}),
-			onVersionInfo,
-			...(onConnectionError ? {onConnectionError} : {}),
-			...(providerConfig ? {provider: providerConfig} : {}),
-			// foundry-local requires non-streaming mode
-			...(s.providerPreset === 'foundry-local' ? {streaming: false} : {}),
-			...(requestTimeout ? {requestTimeout} : {}),
-		};
-
-		if (s.copilotType === 'remote') {
-			const url = s.cliUrl.trim();
-			this.copilot = new CopilotService({
-				cliUrl: url || undefined,
-				githubToken: s.githubToken || undefined,
-				...providerOpts,
-			});
-		} else {
-			const loc = s.copilotLocation.trim();
-			this.copilot = new CopilotService({
-				cliPath: loc.length > 0 ? loc : undefined,
-				useLoggedInUser: s.useLoggedInUser,
-				githubToken: !s.useLoggedInUser && s.githubToken ? s.githubToken : undefined,
-				...providerOpts,
-			});
-		}
-	}
-
-	/**
-	 * Build the BYOK ProviderConfig from current settings, or undefined for
-	 * the GitHub preset. Used by both CopilotService (for inline operations)
-	 * and buildSessionConfig (for the chat panel).
-	 */
-	buildProviderConfig(): import('./copilot').ProviderConfig | undefined {
-		const s = this.settings;
-		if (s.providerPreset === 'github' || !s.providerBaseUrl) return undefined;
-
-		const typeMap: Record<string, 'openai' | 'azure' | 'anthropic'> = {
-			openai: 'openai',
-			azure: 'azure',
-			anthropic: 'anthropic',
-			ollama: 'openai',
-			'foundry-local': 'openai',
-			'other-openai': 'openai',
-		};
-
-		return {
-			type: typeMap[s.providerPreset] ?? 'openai',
-			baseUrl: s.providerBaseUrl,
-			...(s.providerApiKey ? {apiKey: s.providerApiKey} : {}),
-			...(s.providerBearerToken ? {bearerToken: s.providerBearerToken} : {}),
-			wireApi: s.providerWireApi,
-			...(s.providerMaxPromptTokens > 0 ? {maxPromptTokens: s.providerMaxPromptTokens} : {}),
-		};
-	}
-
-	/**
-	 * Build an onListModels callback for BYOK providers that fetches models
-	 * from the provider's endpoint. Returns undefined for GitHub preset.
-	 */
-	private buildOnListModels(): (() => Promise<import('./copilot').ModelInfo[]>) | undefined {
-		const s = this.settings;
-		if (s.providerPreset === 'github' || !s.providerBaseUrl) return undefined;
-
-		const params = {
-			preset: s.providerPreset,
-			baseUrl: s.providerBaseUrl,
-			apiKey: s.providerApiKey,
-			bearerToken: s.providerBearerToken,
-		};
-
-		return async (): Promise<import('./copilot').ModelInfo[]> => {
-			const result = await fetchProviderModels(params);
-			return result.ok ? result.models : [];
-		};
+		this.copilot = new AgentService({
+			auth: {
+				type: s.authType,
+				apiKey: s.authType === 'apiKey' ? s.anthropicApiKey : undefined,
+			},
+		});
 	}
 
 	onunload() {

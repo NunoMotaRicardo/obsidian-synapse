@@ -34,7 +34,7 @@ function summaryLabel(mode: string): string {
  * values models actually report, so the cast is localized here (see issue 7).
  * Returns `undefined` when nothing applies, so model defaults take over.
  */
-function buildSetModelOptions(settings: ClaudeBrainSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
+function _buildSetModelOptions(settings: ClaudeBrainSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
 	const opts: {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} = {};
 	if (supportsReasoning) {
 		if (settings.reasoningEffort && (supported?.includes(settings.reasoningEffort) ?? false)) {
@@ -157,7 +157,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const model = this.getSelectedModelInfo();
 		// The SDK narrows supportedReasoningEfforts to its ReasoningEffort union, but
 		// models report values beyond it (e.g. 'max', 'none'); treat them as strings.
-		const supported = model?.supportedReasoningEfforts as string[] | undefined;
+		const supported = model?.capabilities?.supportedReasoningEfforts as string[] | undefined;
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && !!supported && supported.length > 0;
 		const menu = new Menu();
 
@@ -228,16 +228,9 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applyReasoningToSession = function(): void {
-		if (this.currentSession && !this.configDirty) {
-			const model = this.getSelectedModelInfo();
-			const supported = model?.supportedReasoningEfforts as string[] | undefined;
-			const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
-			// Mid-session change — pass effort + summary + context tier together so none
-			// resets. Reasoning options are skipped for models that don't support them;
-			// the context tier is always included (the SDK ignores it when unsupported).
-			const opts = buildSetModelOptions(this.plugin.settings, supported, supportsReasoning);
-			void this.currentSession.setModel(this.selectedModel, opts);
-		} else {
+		// Agent SDK doesn't support mid-session config changes;
+		// mark config as dirty so the next send creates a new session.
+		if (!this.configDirty) {
 			this.configDirty = true;
 		}
 	};
@@ -251,7 +244,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 
 	proto.updateReasoningBadge = function(): void {
 		const model = this.getSelectedModelInfo();
-		const supported = model?.supportedReasoningEfforts as string[] | undefined;
+		const supported = model?.capabilities?.supportedReasoningEfforts as string[] | undefined;
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
 		const level = this.plugin.settings.reasoningEffort;
 		// Reset if current level isn't supported by the new model
