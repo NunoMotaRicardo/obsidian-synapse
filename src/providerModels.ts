@@ -199,6 +199,25 @@ export function isLocalBackendConfigured(options?: ProviderConfigOptions): boole
 	return Boolean(options && options.baseUrl && options.baseUrl.trim().length > 0);
 }
 
+let cachedDefaultModel: {baseUrl: string; model: string} | null = null;
+
+export function clearCachedDefaultModel(): void {
+	cachedDefaultModel = null;
+}
+
+async function resolveDefaultModel(options: ProviderConfigOptions): Promise<string> {
+	const baseUrl = (options.baseUrl || '').trim();
+	if (cachedDefaultModel && cachedDefaultModel.baseUrl === baseUrl) {
+		return cachedDefaultModel.model;
+	}
+	const modelsRes = await fetchProviderModels(options);
+	const firstModel = modelsRes.ok && modelsRes.models.length > 0 ? modelsRes.models[0] : undefined;
+	const preset = (options.preset || 'openai').toLowerCase();
+	const model = firstModel ? firstModel.id : (preset === 'ollama' ? 'llama3' : 'gpt-3.5-turbo');
+	cachedDefaultModel = {baseUrl, model};
+	return model;
+}
+
 export async function executeLocalProviderQuery(
 	options: ProviderConfigOptions,
 	params: {prompt: string; systemPrompt?: string; model?: string}
@@ -211,16 +230,7 @@ export async function executeLocalProviderQuery(
 	const preset = (options.preset || 'openai').toLowerCase();
 	const token = options.bearerToken || options.apiKey || '';
 
-	let targetModel = params.model;
-	if (!targetModel) {
-		const modelsRes = await fetchProviderModels(options);
-		const firstModel = modelsRes.ok && modelsRes.models.length > 0 ? modelsRes.models[0] : undefined;
-		if (firstModel) {
-			targetModel = firstModel.id;
-		} else {
-			targetModel = preset === 'ollama' ? 'llama3' : 'gpt-3.5-turbo';
-		}
-	}
+	const targetModel = params.model || await resolveDefaultModel(options);
 
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',

@@ -56,7 +56,7 @@ import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import type {AgentConfig} from './types';
-import {isLocalBackendConfigured, executeLocalProviderQuery} from './providerModels';
+import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel} from './providerModels';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
@@ -348,9 +348,16 @@ export class AgentService {
 		return isLocalBackendConfigured(this.providerConfig);
 	}
 
+	/** Invalidate the cached delegation server (call when provider config changes). */
+	clearDelegationCache(): void {
+		this.cachedDelegationServer = null;
+		clearCachedDefaultModel();
+	}
+
 	/** Get or create the in-process dynamic delegation MCP server config. */
 	getDelegationMcpServer(): McpServerConfig | undefined {
 		if (!this.isLocalBackendAvailable()) {
+			this.cachedDelegationServer = null;
 			return undefined;
 		}
 		if (this.cachedDelegationServer) {
@@ -365,10 +372,7 @@ export class AgentService {
 				systemPrompt: z.string().optional().describe('Optional instructions for the sub-task'),
 			}).shape,
 			async (args) => {
-				if (!this.providerConfig || !isLocalBackendConfigured(this.providerConfig)) {
-					return {content: [{type: 'text', text: 'Error: Local backend is not configured or available.'}], isError: true};
-				}
-				const res = await executeLocalProviderQuery(this.providerConfig, {
+				const res = await executeLocalProviderQuery(this.providerConfig!, {
 					prompt: args.prompt,
 					systemPrompt: args.systemPrompt,
 				});
@@ -388,23 +392,17 @@ export class AgentService {
 				instruction: z.string().optional().describe('Specific summarization focus or format'),
 			}).shape,
 			async (args) => {
-				if (!this.providerConfig || !isLocalBackendConfigured(this.providerConfig)) {
-					return {content: [{type: 'text', text: 'Error: Local backend is not configured or available.'}], isError: true};
-				}
-				const results: string[] = [];
 				const sysPrompt = args.instruction ? `Summarize concisely according to instruction: ${args.instruction}` : 'Summarize the following text concisely.';
-				for (let i = 0; i < args.items.length; i++) {
-					const item = args.items[i]!;
-					const res = await executeLocalProviderQuery(this.providerConfig, {
-						prompt: item,
-						systemPrompt: sysPrompt,
-					});
-					if (res.ok) {
-						results.push(`Item ${i + 1}:\n${res.content}`);
-					} else {
-						results.push(`Item ${i + 1} failed: ${res.error}`);
-					}
-				}
+				const settled = await Promise.allSettled(
+					args.items.map(async (item, i) => {
+						const res = await executeLocalProviderQuery(this.providerConfig!, {
+							prompt: item,
+							systemPrompt: sysPrompt,
+						});
+						return res.ok ? `Item ${i + 1}:\n${res.content}` : `Item ${i + 1} failed: ${res.error}`;
+					})
+				);
+				const results = settled.map((r) => r.status === 'fulfilled' ? r.value : `Item failed: ${String(r.reason)}`);
 				return {content: [{type: 'text', text: results.join('\n\n---\n\n')}]};
 			}
 		);
