@@ -542,12 +542,12 @@ export class Session {
 					if (block.type === 'text') {
 						this.dispatch({
 							type: 'assistant.message_delta',
-							data: {content: block.text},
+							data: {content: block.text, deltaContent: block.text},
 						});
 					} else if (block.type === 'thinking') {
 						this.dispatch({
 							type: 'assistant.reasoning_delta',
-							data: {content: (block as {thinking: string}).thinking},
+							data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
 						});
 					} else if (block.type === 'tool_use') {
 						const toolBlock = block as {id: string; name: string; input: unknown};
