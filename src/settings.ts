@@ -15,6 +15,8 @@ export interface ClaudeBrainSettings {
 	authType: 'subscription' | 'apiKey';
 	/** Anthropic API key (stored securely via local storage). */
 	anthropicApiKey: string;
+	/** Custom path to the claude CLI binary. Empty = auto-detect. */
+	claudeLocation: string;
 	claudeBrainFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
@@ -110,6 +112,7 @@ export const DEFAULT_EDIT_MODAL: EditModalDefaults = {
 export const DEFAULT_SETTINGS: ClaudeBrainSettings = {
 	authType: 'subscription',
 	anthropicApiKey: '',
+	claudeLocation: '',
 	claudeBrainFolder: 'claude-brain',
 	toolApproval: 'ask',
 	inlineModel: '',
@@ -343,6 +346,45 @@ export class ClaudeBrainSettingTab extends PluginSettingTab {
 
 		claudePanel.appendChild(authFieldsEl);
 		renderAuthFields();
+
+		new Setting(claudePanel)
+			.setName('Claude CLI location')
+			.setDesc('Custom path to the claude CLI binary. Leave blank to auto-detect.')
+			.addText(text => text
+				.setPlaceholder('Auto-detect')
+				.setValue(this.plugin.settings.claudeLocation)
+				.onChange(async (value) => {
+					this.plugin.settings.claudeLocation = value.trim();
+					await this.plugin.saveSettings();
+					await this.plugin.initCopilot();
+					await renderCliStatus();
+				}));
+
+		const cliStatusEl = claudePanel.createDiv({cls: 'setting-item-description'});
+		cliStatusEl.style.marginTop = '8px';
+		const renderCliStatus = async () => {
+			cliStatusEl.empty();
+			if (this.plugin.copilot) {
+				try {
+					const resolved = await this.plugin.copilot.resolveCliPath();
+					const sourceLabels: Record<string, string> = {
+						'settings': 'settings override',
+						'global-npm': 'global npm install',
+						'os-links': 'OS links',
+						'sdk-fallback': 'SDK package fallback',
+					};
+					const sourceStr = sourceLabels[resolved.source] ?? resolved.source;
+					let infoStr = `Resolved CLI: ${resolved.path} (from ${sourceStr})`;
+					if (resolved.version) {
+						infoStr += ` — v${resolved.version}${resolved.protocolVersion ? `, protocol ${resolved.protocolVersion}` : ''}`;
+					}
+					cliStatusEl.setText(infoStr);
+				} catch {
+					cliStatusEl.setText('Resolved CLI: not found');
+				}
+			}
+		};
+		void renderCliStatus();
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 2: Models
