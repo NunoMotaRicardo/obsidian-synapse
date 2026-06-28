@@ -50,6 +50,14 @@ Named agents parsed from `*.agent.md` carry an optional `model` binding (Claude 
 
 `AgentService` includes a internal routing layer (`routeQueryOptions`) that intercepts queries. When a named agent is specified (`agent`) and its matching `AgentDefinition` carries a model binding (`model`), `AgentService` routes the request's effective model to the bound model backend. Tool delegation to subagents via the Agent tool similarly resolves each subagent's bound model.
 
+## Dynamic Delegation via MCP Tool (#8)
+
+Tier-1 Claude sessions can dynamically delegate sub-work to a cheap/local-backed agent using an in-process MCP server (`delegation`).
+- **Gating:** Gated on local-backend availability/capability (`isLocalBackendAvailable()`, checking if `providerConfig` has a valid `baseUrl`). If not configured or unavailable, the delegation MCP server is omitted from session options.
+- **Tools exposed:** `cheap_generate` (for single prompts/sub-tasks) and `bulk_summarize` (for multi-item summaries, processed in parallel via `Promise.allSettled`).
+- **Routing & Cost Control:** The in-process tool handler executes sub-tasks directly via `executeLocalProviderQuery()`, keeping routing, formatting, and cost strictly under plugin control. `routeQueryOptions()` automatically merges the delegation MCP server into `mcpServers` whenever the local backend is available.
+- **Caching:** The resolved default model ID is cached per base URL to avoid repeated `fetchProviderModels` HTTP calls. The delegation MCP server instance is cached but automatically invalidated when `isLocalBackendAvailable()` returns false. Call `clearDelegationCache()` when provider config changes.
+
 ## Session options passed through (selected)
 
 | Option | Source |

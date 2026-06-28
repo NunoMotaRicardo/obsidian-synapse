@@ -190,3 +190,110 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 		}
 	}
 }
+
+export type LocalQueryResult =
+	| {ok: true; content: string}
+	| {ok: false; error: string};
+
+export function isLocalBackendConfigured(options?: ProviderConfigOptions): boolean {
+	return Boolean(options && options.baseUrl && options.baseUrl.trim().length > 0);
+}
+
+let cachedDefaultModel: {baseUrl: string; model: string} | null = null;
+
+export function clearCachedDefaultModel(): void {
+	cachedDefaultModel = null;
+}
+
+async function resolveDefaultModel(options: ProviderConfigOptions): Promise<string> {
+	const baseUrl = (options.baseUrl || '').trim();
+	if (cachedDefaultModel && cachedDefaultModel.baseUrl === baseUrl) {
+		return cachedDefaultModel.model;
+	}
+	const modelsRes = await fetchProviderModels(options);
+	const firstModel = modelsRes.ok && modelsRes.models.length > 0 ? modelsRes.models[0] : undefined;
+	const preset = (options.preset || 'openai').toLowerCase();
+	const model = firstModel ? firstModel.id : (preset === 'ollama' ? 'llama3' : 'gpt-3.5-turbo');
+	cachedDefaultModel = {baseUrl, model};
+	return model;
+}
+
+export async function executeLocalProviderQuery(
+	options: ProviderConfigOptions,
+	params: {prompt: string; systemPrompt?: string; model?: string}
+): Promise<LocalQueryResult> {
+	let baseUrl = (options.baseUrl || '').trim();
+	if (!baseUrl) {
+		return {ok: false, error: 'Local backend base URL is not configured.'};
+	}
+
+	const preset = (options.preset || 'openai').toLowerCase();
+	const token = options.bearerToken || options.apiKey || '';
+
+	const targetModel = params.model || await resolveDefaultModel(options);
+
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+	};
+	if (token) {
+		if (preset === 'azure') {
+			headers['api-key'] = token;
+		} else if (preset === 'anthropic') {
+			headers['x-api-key'] = token;
+			headers['anthropic-version'] = '2023-06-01';
+		} else {
+			headers['Authorization'] = `Bearer ${token}`;
+		}
+	}
+
+	const messages: Array<{role: string; content: string}> = [];
+	if (params.systemPrompt) {
+		messages.push({role: 'system', content: params.systemPrompt});
+	}
+	messages.push({role: 'user', content: params.prompt});
+
+	try {
+		if (preset === 'ollama') {
+			baseUrl = baseUrl.replace(/\/+$/, '');
+			if (baseUrl.endsWith('/v1')) {
+				baseUrl = baseUrl.slice(0, -3).replace(/\/+$/, '');
+			}
+			const chatUrl = `${baseUrl}/api/chat`;
+			const res = await fetch(chatUrl, {
+				method: 'POST',
+				headers,
+				body: JSON.stringify({
+					model: targetModel,
+					messages,
+					stream: false,
+				}),
+			});
+			if (!res.ok) {
+				return {ok: false, error: `Ollama error: HTTP ${res.status} ${res.statusText}`};
+			}
+			const data = (await res.json()) as {message?: {content?: string}};
+			const content = data.message?.content || '';
+			return {ok: true, content};
+		} else {
+			baseUrl = baseUrl.replace(/\/+$/, '');
+			const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+			const res = await fetch(chatUrl, {
+				method: 'POST',
+				headers,
+				body: JSON.stringify({
+					model: targetModel,
+					messages,
+				}),
+			});
+			if (!res.ok) {
+				return {ok: false, error: `Provider error: HTTP ${res.status} ${res.statusText}`};
+			}
+			const data = (await res.json()) as {choices?: Array<{message?: {content?: string}}>};
+			const content = data.choices?.[0]?.message?.content || '';
+			return {ok: true, content};
+		}
+	} catch (e) {
+		return {ok: false, error: `Local query failed: ${String(e)}`};
+	}
+}
+

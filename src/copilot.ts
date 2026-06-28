@@ -30,7 +30,7 @@ try {
 	// ignore polyfill errors
 }
 
-import {query, listSessions, deleteSession, renameSession} from '@anthropic-ai/claude-agent-sdk';
+import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
 	Query,
@@ -52,9 +52,11 @@ import type {
 	ElicitationResult,
 	EffortLevel,
 } from '@anthropic-ai/claude-agent-sdk';
+import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import type {AgentConfig} from './types';
+import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel} from './providerModels';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
@@ -192,6 +194,7 @@ export class AgentService {
 	private readonly getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	private resolvedCli: ResolvedCliPath | null = null;
 	private customModels: ModelInfo[] = [];
+	private cachedDelegationServer: McpServerConfig | null = null;
 
 	constructor(opts?: {
 		auth?: AuthConfig;
@@ -338,6 +341,79 @@ export class AgentService {
 			return [...this.customModels, ...DEFAULT_CLAUDE_MODELS];
 		}
 		return DEFAULT_CLAUDE_MODELS;
+	}
+
+	/** Check if local backend is configured and available for dynamic delegation. */
+	isLocalBackendAvailable(): boolean {
+		return isLocalBackendConfigured(this.providerConfig);
+	}
+
+	/** Invalidate the cached delegation server (call when provider config changes). */
+	clearDelegationCache(): void {
+		this.cachedDelegationServer = null;
+		clearCachedDefaultModel();
+	}
+
+	/** Get or create the in-process dynamic delegation MCP server config. */
+	getDelegationMcpServer(): McpServerConfig | undefined {
+		if (!this.isLocalBackendAvailable()) {
+			this.cachedDelegationServer = null;
+			return undefined;
+		}
+		if (this.cachedDelegationServer) {
+			return this.cachedDelegationServer;
+		}
+
+		const cheapGenerateTool = tool(
+			'cheap_generate',
+			'Delegate a single prompt or lightweight sub-task to the cheap/local-backed model cascade agent.',
+			z.object({
+				prompt: z.string().describe('The sub-task prompt to execute'),
+				systemPrompt: z.string().optional().describe('Optional instructions for the sub-task'),
+			}).shape,
+			async (args) => {
+				const res = await executeLocalProviderQuery(this.providerConfig!, {
+					prompt: args.prompt,
+					systemPrompt: args.systemPrompt,
+				});
+				if (res.ok) {
+					return {content: [{type: 'text', text: res.content}]};
+				} else {
+					return {content: [{type: 'text', text: `Local agent execution failed: ${res.error}`}], isError: true};
+				}
+			}
+		);
+
+		const bulkSummarizeTool = tool(
+			'bulk_summarize',
+			'Delegate bulk summarization of multiple items/notes to the cheap/local-backed model cascade agent.',
+			z.object({
+				items: z.array(z.string()).describe('List of texts or items to summarize'),
+				instruction: z.string().optional().describe('Specific summarization focus or format'),
+			}).shape,
+			async (args) => {
+				const sysPrompt = args.instruction ? `Summarize concisely according to instruction: ${args.instruction}` : 'Summarize the following text concisely.';
+				const settled = await Promise.allSettled(
+					args.items.map(async (item, i) => {
+						const res = await executeLocalProviderQuery(this.providerConfig!, {
+							prompt: item,
+							systemPrompt: sysPrompt,
+						});
+						return res.ok ? `Item ${i + 1}:\n${res.content}` : `Item ${i + 1} failed: ${res.error}`;
+					})
+				);
+				const results = settled.map((r) => r.status === 'fulfilled' ? r.value : `Item failed: ${String(r.reason)}`);
+				return {content: [{type: 'text', text: results.join('\n\n---\n\n')}]};
+			}
+		);
+
+		const server = createSdkMcpServer({
+			name: 'delegation',
+			tools: [cheapGenerateTool, bulkSummarizeTool],
+		});
+
+		this.cachedDelegationServer = server;
+		return server;
 	}
 
 	// ── Sessions ────────────────────────────────────────────────────
@@ -539,6 +615,15 @@ export class AgentService {
 			const agentDef = opts.agents[opts.agent];
 			if (agentDef?.model) {
 				opts.model = agentDef.model;
+			}
+		}
+		if (this.isLocalBackendAvailable()) {
+			const delegationServer = this.getDelegationMcpServer();
+			if (delegationServer) {
+				opts.mcpServers = {
+					...opts.mcpServers,
+					delegation: delegationServer,
+				};
 			}
 		}
 		return opts;
