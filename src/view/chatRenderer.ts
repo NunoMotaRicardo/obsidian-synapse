@@ -8,6 +8,7 @@ import {
 	setIcon,
 } from 'obsidian';
 import type {SynapseView} from '../synapseView';
+import {SYNAPSE_ICON_ID} from '../main';
 import {isImageAttachment, type ChatMessage, type ChatAttachment} from '../types';
 import {renderMarkdownSafe} from './utils';
 
@@ -750,7 +751,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.renderWelcome = function (): void {
 		const welcome = this.chatContainer.createDiv({cls: 'synapse-welcome'});
 		const icon = welcome.createDiv({cls: 'synapse-welcome-icon'});
-		setIcon(icon, 'brain');
+		setIcon(icon, SYNAPSE_ICON_ID);
 		welcome.createEl('h3', {text: 'Synapse'});
 		welcome.createEl('p', {
 			text: 'Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!',

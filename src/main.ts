@@ -1,4 +1,4 @@
-import {MarkdownView, Notice, Plugin} from 'obsidian';
+import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, getAgentsFolder} from "./settings";
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
 import {loadAgents} from "./configLoader";
@@ -10,24 +10,23 @@ import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import type {EditorView} from '@codemirror/view';
 
+export const SYNAPSE_ICON_ID = 'synapse-icon';
+export const SYNAPSE_ICON_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g transform="translate(50,50)" fill="currentColor"><circle r="9"/><g transform="rotate(-90)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(30)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(150)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g></g></svg>';
+
 export default class SynapsePlugin extends Plugin {
 	settings!: SynapseSettings;
 	copilot: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 
 	async onload() {
+		// Register custom Synapse icon in Obsidian's global icon registry
+		addIcon(SYNAPSE_ICON_ID, SYNAPSE_ICON_SVG);
+
 		// ── Migrate localStorage keys from old prefix ──
 		this.migrateLocalStorageKeys();
 
 		await this.loadSettings();
 
-		// ── Migrate settings field: claudeBrainFolder → synapseFolder ──
-		const rawData = await this.loadData() as Record<string, unknown> | null;
-		if (rawData && typeof rawData['claudeBrainFolder'] === 'string') {
-			this.settings.synapseFolder = rawData['claudeBrainFolder'] as string;
-			delete rawData['claudeBrainFolder'];
-			await this.saveSettings();
-		}
 
 		this.applyInlineIconClass();
 		this.addSettingTab(new SynapseSettingTab(this.app, this));
@@ -36,8 +35,7 @@ export default class SynapsePlugin extends Plugin {
 		this.registerView(SYNAPSE_VIEW_TYPE, (leaf) => new SynapseView(leaf, this));
 
 		// Ribbon icon to open view
-		const SYNAPSE_ICON = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g transform="translate(50,50)" fill="currentColor"><circle r="9"/><g transform="rotate(-90)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(30)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g><g transform="rotate(150)"><rect x="10.4" y="-2.2" width="17" height="4.4" rx="2.2"/><circle cx="34" cy="0" r="5.6"/></g></g></svg>';
-		this.addRibbonIcon(SYNAPSE_ICON, 'Open Synapse', () => void this.activateView());
+		this.addRibbonIcon(SYNAPSE_ICON_ID, 'Open Synapse', () => void this.activateView());
 
 		// Command to open view
 		this.addCommand({
@@ -149,7 +147,7 @@ export default class SynapsePlugin extends Plugin {
 			name: 'Toggle autocomplete',
 			callback: async () => {
 				this.settings.autocompleteEnabled = !this.settings.autocompleteEnabled;
-				await this.saveData(this.settings);
+				await this.saveSettings();
 				new Notice(`Synapse: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
 			},
 		});
@@ -250,8 +248,18 @@ export default class SynapsePlugin extends Plugin {
 				? ['anthropicApiKey', 'telegramBotToken']
 				: [];
 
-			// For MCP inputs we cannot enumerate keys via the Obsidian API,
-			// but secure fields have known names.
+			if (oldPrefix.includes('mcp-input')) {
+				for (let i = 0; i < window.localStorage.length; i++) {
+					const fullKey = window.localStorage.key(i);
+					if (fullKey && fullKey.includes(':' + oldPrefix)) {
+						const suffix = fullKey.substring(fullKey.indexOf(':' + oldPrefix) + 1 + oldPrefix.length);
+						if (suffix) {
+							suffixes.push(suffix);
+						}
+					}
+				}
+			}
+
 			for (const suffix of suffixes) {
 				const oldValue = this.app.loadLocalStorage(oldPrefix + suffix);
 				if (oldValue != null) {
@@ -313,12 +321,22 @@ export default class SynapsePlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const raw = await this.loadData() as Partial<SynapseSettings> | null;
+		const raw = await this.loadData() as (Partial<SynapseSettings> & Record<string, unknown>) | null;
+		let needsSave = false;
+
+		if (raw && typeof raw['claudeBrainFolder'] === 'string') {
+			if (!raw['synapseFolder']) {
+				raw['synapseFolder'] = raw['claudeBrainFolder'];
+			}
+			delete raw['claudeBrainFolder'];
+			needsSave = true;
+		}
+
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		this.settings.featureAgents = Object.assign({}, DEFAULT_SETTINGS.featureAgents, raw?.featureAgents);
+		delete (this.settings as unknown as Record<string, unknown>)['claudeBrainFolder'];
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
-		let needsSave = false;
 		for (const key of SECURE_FIELDS) {
 			const plaintext = raw?.[key];
 			if (plaintext && typeof plaintext === 'string') {
