@@ -263,7 +263,7 @@ export async function loadMcpServers(
 			}
 		}
 	} catch (e) {
-		console.error('Sidekick: failed to parse mcp.json', e);
+		console.error('Claude Brain: failed to parse mcp.json', e);
 	}
 	return entries;
 }

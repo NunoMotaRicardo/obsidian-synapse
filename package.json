@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sidekick",
+	"name": "obsidian-claude-brain",
 	"version": "1.2.2",
-	"description": "Your Obsidian sidekick.",
+	"description": "Your Claude-native second brain for Obsidian.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

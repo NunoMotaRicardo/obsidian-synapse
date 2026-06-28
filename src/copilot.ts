@@ -228,7 +228,7 @@ export class CopilotService {
 	 */
 	async createSession(config: SessionConfig): Promise<CopilotSession> {
 		await this.ensureConnected();
-		return await this.client!.createSession({clientName: 'obsidian-sidekick', ...config});
+		return await this.client!.createSession({clientName: 'obsidian-claude-brain', ...config});
 	}
 
 	/**
@@ -243,7 +243,7 @@ export class CopilotService {
 	): Promise<CopilotSession> {
 		await this.ensureConnected();
 		return await this.client!.resumeSession(sessionId, {
-			clientName: 'obsidian-sidekick',
+			clientName: 'obsidian-claude-brain',
 			...config,
 		});
 	}

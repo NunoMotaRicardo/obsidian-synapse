@@ -7,7 +7,7 @@ import {
 	setIcon,
 	Component,
 } from 'obsidian';
-import type SidekickPlugin from './main';
+import type ClaudeBrainPlugin from './main';
 import {approveAll} from './copilot';
 import type {
 	CopilotSession,
@@ -39,12 +39,12 @@ import {fetchProviderModels} from './providerModels';
 import type {ByokProviderPreset} from './providerModels';
 import {friendlyOllamaError, isToolUseError, isVisionError, TOOL_USE_GUIDANCE, VISION_GUIDANCE} from './ollamaErrors';
 
-export const SIDEKICK_VIEW_TYPE = 'sidekick-view';
+export const CLAUDE_BRAIN_VIEW_TYPE = 'claude-brain-view';
 
-// ── Sidekick view ───────────────────────────────────────────────
+// ── Claude Brain view ───────────────────────────────────────────────
 
-export class SidekickView extends ItemView {
-	plugin: SidekickPlugin;
+export class ClaudeBrainView extends ItemView {
+	plugin: ClaudeBrainPlugin;
 
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
@@ -181,16 +181,16 @@ export class SidekickView extends ItemView {
 	eventUnsubscribers: (() => void)[] = [];
 	earlyEventBuffer: import('./copilot').SessionEvent[] = [];
 
-	constructor(leaf: WorkspaceLeaf, plugin: SidekickPlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: ClaudeBrainPlugin) {
 		super(leaf);
 		this.plugin = plugin;
 	}
 
 	getViewType(): string {
-		return SIDEKICK_VIEW_TYPE;
+		return CLAUDE_BRAIN_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return 'Sidekick';
+		return 'Claude Brain';
 	}
 	getIcon(): string {
 		return 'brain';
@@ -237,7 +237,7 @@ export class SidekickView extends ItemView {
 		// Initialize trigger scheduler
 		this.initTriggerScheduler();
 
-		// Watch sidekick folder for config changes and auto-refresh
+		// Watch claude-brain folder for config changes and auto-refresh
 		this.registerConfigFileWatcher();
 
 		// Track active note and editor selection
@@ -264,26 +264,26 @@ export class SidekickView extends ItemView {
 	buildUI(): void {
 		const root = this.containerEl.children[1] as HTMLElement;
 		root.empty();
-		root.addClass('sidekick-root');
+		root.addClass('claude-brain-root');
 
 		// Main area (tab bar + panels)
-		this.mainEl = root.createDiv({cls: 'sidekick-main'});
+		this.mainEl = root.createDiv({cls: 'claude-brain-main'});
 
 		// Tab bar
 		this.buildTabBar(this.mainEl);
 
 		// ── Chat panel ───────────────────────────────────────
-		this.chatPanelEl = this.mainEl.createDiv({cls: 'sidekick-tab-panel sidekick-tab-panel-chat'});
+		this.chatPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-chat'});
 
 		// Chat content wrapper (chat + bottom)
-		const chatContent = this.chatPanelEl.createDiv({cls: 'sidekick-chat-content'});
+		const chatContent = this.chatPanelEl.createDiv({cls: 'claude-brain-chat-content'});
 
 		// Chat history (scrollable)
-		this.chatContainer = chatContent.createDiv({cls: 'sidekick-chat sidekick-hide-debug'});
+		this.chatContainer = chatContent.createDiv({cls: 'claude-brain-chat claude-brain-hide-debug'});
 		this.renderWelcome();
 
 		// Bottom panel
-		const bottom = chatContent.createDiv({cls: 'sidekick-bottom'});
+		const bottom = chatContent.createDiv({cls: 'claude-brain-bottom'});
 
 		// Input area
 		this.buildInputArea(bottom);
@@ -292,32 +292,32 @@ export class SidekickView extends ItemView {
 		this.buildConfigToolbar(bottom);
 
 		// Splitter + session sidebar inside chat panel
-		this.splitterEl = this.chatPanelEl.createDiv({cls: 'sidekick-splitter'});
+		this.splitterEl = this.chatPanelEl.createDiv({cls: 'claude-brain-splitter'});
 		this.initSplitter();
 		this.buildSessionSidebar(this.chatPanelEl);
 
 		// ── Triggers panel ────────────────────────────────────
-		this.triggersPanelEl = this.mainEl.createDiv({cls: 'sidekick-tab-panel sidekick-tab-panel-triggers is-hidden'});
+		this.triggersPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-triggers is-hidden'});
 		this.buildTriggersPanel(this.triggersPanelEl);
 
 		// ── Search panel ─────────────────────────────────────
-		this.searchPanelEl = this.mainEl.createDiv({cls: 'sidekick-tab-panel sidekick-tab-panel-search is-hidden'});
+		this.searchPanelEl = this.mainEl.createDiv({cls: 'claude-brain-tab-panel claude-brain-tab-panel-search is-hidden'});
 		this.buildSearchPanel(this.searchPanelEl);
 	}
 
 	buildTabBar(parent: HTMLElement): void {
-		this.tabBarEl = parent.createDiv({cls: 'sidekick-tab-bar'});
+		this.tabBarEl = parent.createDiv({cls: 'claude-brain-tab-bar'});
 		const tabs: {id: 'chat' | 'triggers' | 'search'; icon: string; label: string}[] = [
 			{id: 'chat', icon: 'message-square', label: 'Chat'},
 			{id: 'triggers', icon: 'zap', label: 'Triggers'},
 			{id: 'search', icon: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
-			const btn = this.tabBarEl.createDiv({cls: 'sidekick-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
+			const btn = this.tabBarEl.createDiv({cls: 'claude-brain-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
 			btn.dataset.tab = tab.id;
-			const iconEl = btn.createSpan({cls: 'sidekick-tab-icon'});
+			const iconEl = btn.createSpan({cls: 'claude-brain-tab-icon'});
 			setIcon(iconEl, tab.icon);
-			btn.createSpan({cls: 'sidekick-tab-label', text: tab.label});
+			btn.createSpan({cls: 'claude-brain-tab-label', text: tab.label});
 			btn.addEventListener('click', () => this.switchTab(tab.id));
 		}
 	}
@@ -327,7 +327,7 @@ export class SidekickView extends ItemView {
 		this.activeTab = tab;
 
 		// Update tab bar active state
-		this.tabBarEl.querySelectorAll('.sidekick-tab').forEach(el => {
+		this.tabBarEl.querySelectorAll('.claude-brain-tab').forEach(el => {
 			el.toggleClass('is-active', (el as HTMLElement).dataset.tab === tab);
 		});
 
@@ -417,7 +417,7 @@ export class SidekickView extends ItemView {
 				}
 			}
 		} catch (e) {
-			console.error('Sidekick: failed to load configs', e);
+			console.error('Claude Brain: failed to load configs', e);
 		} finally {
 			this.configLoading = false;
 			this.configLoadedAt = Date.now();
@@ -452,10 +452,10 @@ export class SidekickView extends ItemView {
 		const DEBOUNCE_MS = 500;
 
 		const scheduleRefresh = (filePath: string) => {
-			const base = normalizePath(this.plugin.settings.sidekickFolder);
+			const base = normalizePath(this.plugin.settings.claudeBrainFolder);
 			if (!filePath.startsWith(base + '/')) return;
 			if (this.configLoading || (Date.now() - this.configLoadedAt < 2_000)) return;
-			debugTrace(`Sidekick: config file changed: ${filePath}`);
+			debugTrace(`Claude Brain: config file changed: ${filePath}`);
 			if (this.configRefreshTimer) clearTimeout(this.configRefreshTimer);
 			this.configRefreshTimer = setTimeout(() => {
 				this.configRefreshTimer = null;
@@ -620,7 +620,7 @@ export class SidekickView extends ItemView {
 					}
 				}
 			} catch (e) {
-				console.error('[sidekick] Failed to resolve note-embedded images:', e);
+				console.error('[claude-brain] Failed to resolve note-embedded images:', e);
 			}
 		}
 
@@ -697,9 +697,9 @@ export class SidekickView extends ItemView {
 		} catch (e) {
 			this.finalizeStreamingMessage();
 			// DEBUG: log full error with stack trace
-			console.error('[sidekick] Send error:', e);
+			console.error('[claude-brain] Send error:', e);
 			if (e instanceof Error) {
-				console.error('[sidekick] Stack:', e.stack);
+				console.error('[claude-brain] Stack:', e.stack);
 			}
 			this.addInfoMessage(this.formatErrorForChat(String(e)));
 		}
@@ -715,7 +715,7 @@ export class SidekickView extends ItemView {
 		// If no content was streamed yet, replace "Thinking..." with "Cancelled"
 		if (!this.streamingContent && this.streamingBodyEl) {
 			this.streamingBodyEl.empty();
-			this.streamingBodyEl.createDiv({cls: 'sidekick-thinking sidekick-cancelled', text: 'Cancelled'});
+			this.streamingBodyEl.createDiv({cls: 'claude-brain-thinking claude-brain-cancelled', text: 'Cancelled'});
 		}
 
 		this.finalizeStreamingMessage();
@@ -750,7 +750,7 @@ export class SidekickView extends ItemView {
 			try {
 				await this.currentSession.rpc.agent.select({name: sessionConfig.agent});
 			} catch (e) {
-				console.warn('[sidekick] agent.select failed:', e);
+				console.warn('[claude-brain] agent.select failed:', e);
 			}
 		}
 
@@ -1176,7 +1176,7 @@ export class SidekickView extends ItemView {
 }
 
 // ── Install feature modules ─────────────────────────────────────
-// These extend SidekickView.prototype with methods organized by feature area.
+// These extend ClaudeBrainView.prototype with methods organized by feature area.
 import {installChatRenderer} from './view/chatRenderer';
 import {installSearchPanel} from './view/searchPanel';
 import {installTriggersPanel} from './view/triggersPanel';
@@ -1184,9 +1184,9 @@ import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
 import {installConfigToolbar} from './view/configToolbar';
 
-installChatRenderer(SidekickView);
-installSearchPanel(SidekickView);
-installTriggersPanel(SidekickView);
-installSessionSidebar(SidekickView);
-installInputArea(SidekickView);
-installConfigToolbar(SidekickView);
+installChatRenderer(ClaudeBrainView);
+installSearchPanel(ClaudeBrainView);
+installTriggersPanel(ClaudeBrainView);
+installSessionSidebar(ClaudeBrainView);
+installInputArea(ClaudeBrainView);
+installConfigToolbar(ClaudeBrainView);

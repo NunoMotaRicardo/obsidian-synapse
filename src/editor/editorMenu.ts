@@ -1,12 +1,12 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
-import type SidekickPlugin from '../main';
+import type ClaudeBrainPlugin from '../main';
 import {approveAll} from '../copilot';
 import type {PermissionRequest, PermissionRequestResult, UserInputRequest, UserInputResponse} from '../copilot';
 import {loadSkills} from '../configLoader';
 import {getSkillsFolder} from '../settings';
 import {setFetching, triggerComplete} from './ghostText';
-import {SIDEKICK_VIEW_TYPE, SidekickView} from '../sidekickView';
+import {CLAUDE_BRAIN_VIEW_TYPE, ClaudeBrainView} from '../claudeBrainView';
 import {EditModal} from '../modals/editModal';
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TextTask} from '../tasks';
@@ -18,22 +18,22 @@ export {TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 export type {TextTask as TextAction} from '../tasks';
 
 /**
- * Register a "Sidekick" submenu on the editor right-click context menu.
+ * Register a "Claude Brain" submenu on the editor right-click context menu.
  * Shows selection-level actions when text is selected, or note-level
  * actions when nothing is selected.
  */
-export function registerEditorMenu(plugin: SidekickPlugin): void {
+export function registerEditorMenu(plugin: ClaudeBrainPlugin): void {
 	plugin.registerEvent(
 		(plugin.app.workspace as unknown as {on: (name: string, cb: (menu: Menu, editor: Editor, view: MarkdownView) => void) => EventRef}).on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
 			const cmView: EditorView | undefined = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
 			if (!cmView) return;
 
 			menu.addItem((item) => {
-				item.setTitle('Sidekick')
+				item.setTitle('Claude Brain')
 					.setIcon('brain');
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
-				buildSidekickMenu(submenu, plugin, cmView);
+				buildClaudeBrainMenu(submenu, plugin, cmView);
 			});
 		}),
 	);
@@ -43,7 +43,7 @@ export function registerEditorMenu(plugin: SidekickPlugin): void {
  * Open a markdown file and resolve its CM6 EditorView.
  * Returns null if the view cannot be obtained.
  */
-async function openFileAndGetView(plugin: SidekickPlugin, file: TFile): Promise<EditorView | null> {
+async function openFileAndGetView(plugin: ClaudeBrainPlugin, file: TFile): Promise<EditorView | null> {
 	const leaf = plugin.app.workspace.getLeaf();
 	await leaf.openFile(file);
 	const view = leaf.view;
@@ -54,10 +54,10 @@ async function openFileAndGetView(plugin: SidekickPlugin, file: TFile): Promise<
 }
 
 /**
- * Register a "Sidekick" submenu on the vault file-explorer context menu.
+ * Register a "Claude Brain" submenu on the vault file-explorer context menu.
  * Shows note-level actions for markdown files and folder-level actions for folders.
  */
-export function registerFileMenu(plugin: SidekickPlugin): void {
+export function registerFileMenu(plugin: ClaudeBrainPlugin): void {
 	plugin.registerEvent(
 		(plugin.app.workspace as unknown as {on: (name: string, cb: (menu: Menu, abstractFile: TFile | TFolder) => void) => EventRef}).on('file-menu', (menu: Menu, abstractFile: TFile | TFolder) => {
 			if (abstractFile instanceof TFolder) {
@@ -76,7 +76,7 @@ export function registerFileMenu(plugin: SidekickPlugin): void {
 			if (abstractFile.extension !== 'md') return;
 
 			menu.addItem((item) => {
-				item.setTitle('Sidekick')
+				item.setTitle('Claude Brain')
 					.setIcon('brain');
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -101,12 +101,12 @@ export function registerFileMenu(plugin: SidekickPlugin): void {
 				submenu.addSeparator();
 
 				submenu.addItem((si) =>
-					si.setTitle('Chat with sidekick')
+					si.setTitle('Chat with Claude Brain')
 						.setIcon('brain')
 						.onClick(async () => {
 							const leaf = plugin.app.workspace.getLeaf();
 							await leaf.openFile(abstractFile);
-							openSidekickView(plugin);
+							openClaudeBrainView(plugin);
 						}),
 				);
 
@@ -125,7 +125,7 @@ export function registerFileMenu(plugin: SidekickPlugin): void {
 							.onClick(async () => {
 								plugin.settings.autocompleteEnabled = !autoEnabled;
 								await plugin.saveData(plugin.settings);
-								new Notice(`Sidekick: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+								new Notice(`Claude Brain: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
 							}),
 					);
 				});
@@ -138,10 +138,10 @@ export function registerFileMenu(plugin: SidekickPlugin): void {
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 
-/** Add Sidekick submenu items for a folder in the vault tree. */
-function buildFolderMenu(menu: Menu, plugin: SidekickPlugin, folder: TFolder): void {
+/** Add Claude Brain submenu items for a folder in the vault tree. */
+function buildFolderMenu(menu: Menu, plugin: ClaudeBrainPlugin, folder: TFolder): void {
 	menu.addItem((item) => {
-		item.setTitle('Sidekick')
+		item.setTitle('Claude Brain')
 			.setIcon('brain');
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -167,12 +167,12 @@ function buildFolderMenu(menu: Menu, plugin: SidekickPlugin, folder: TFolder): v
 		submenu.addItem((si) =>
 			si.setTitle('Semantic search')
 				.setIcon('search')
-				.onClick(() => void openSidekickSearchWithScope(plugin, folder.path)),
+				.onClick(() => void openClaudeBrainSearchWithScope(plugin, folder.path)),
 		);
 		submenu.addItem((si) =>
-			si.setTitle('Chat with sidekick')
+			si.setTitle('Chat with Claude Brain')
 				.setIcon('brain')
-				.onClick(() => void openSidekickViewWithScope(plugin, folder.path)),
+				.onClick(() => void openClaudeBrainViewWithScope(plugin, folder.path)),
 		);
 	});
 }
@@ -207,17 +207,17 @@ function uniqueNoteName(folder: TFolder, stem: string): string {
 }
 
 /** Show a modal asking for an optional template type, then create a new note. */
-function showNewNoteModal(plugin: SidekickPlugin, folder: TFolder): void {
+function showNewNoteModal(plugin: ClaudeBrainPlugin, folder: TFolder): void {
 	const modal = new Modal(plugin.app);
 	modal.titleEl.setText('New note');
 
 	modal.contentEl.createEl('p', {
 		text: 'Optionally specify a template type for the note:',
-		cls: 'sidekick-menu-modal-desc',
+		cls: 'claude-brain-menu-modal-desc',
 	});
 
 	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('sidekick-modal-text-input');
+	tc.inputEl.classList.add('claude-brain-modal-text-input');
 	tc.setPlaceholder('Ex: daily notes, meeting notes, project brief');
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -236,14 +236,14 @@ function showNewNoteModal(plugin: SidekickPlugin, folder: TFolder): void {
 	tc.inputEl.focus();
 }
 
-async function createNewNote(plugin: SidekickPlugin, folder: TFolder, templateType: string): Promise<void> {
+async function createNewNote(plugin: ClaudeBrainPlugin, folder: TFolder, templateType: string): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	const templateClause = templateType
 		? `The note should follow a "${templateType}" template. `
 		: '';
 
-	const notice = new Notice('Sidekick: creating note…', 0);
+	const notice = new Notice('Claude Brain: creating note…', 0);
 	try {
 		// Ask the LLM for a suggested filename and structured content
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
@@ -261,7 +261,7 @@ async function createNewNote(plugin: SidekickPlugin, folder: TFolder, templateTy
 		});
 		registerInlineSession(plugin, sessionId, `New note in ${folder.name}`);
 
-		if (!result) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!result) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 
 		// Parse title and content
 		let title = 'New note';
@@ -283,7 +283,7 @@ async function createNewNote(plugin: SidekickPlugin, folder: TFolder, templateTy
 
 		const newFile = await plugin.app.vault.create(filePath, content);
 		notice.hide();
-		new Notice(`Sidekick: created "${basename}".`);
+		new Notice(`Claude Brain: created "${basename}".`);
 
 		// Open the new note
 		const leaf = plugin.app.workspace.getLeaf();
@@ -295,17 +295,17 @@ async function createNewNote(plugin: SidekickPlugin, folder: TFolder, templateTy
 }
 
 /** Show a modal asking for an optional template type, then create a new canvas. */
-function showNewCanvasModal(plugin: SidekickPlugin, folder: TFolder): void {
+function showNewCanvasModal(plugin: ClaudeBrainPlugin, folder: TFolder): void {
 	const modal = new Modal(plugin.app);
 	modal.titleEl.setText('New canvas');
 
 	modal.contentEl.createEl('p', {
 		text: 'Optionally specify a template type for the canvas:',
-		cls: 'sidekick-menu-modal-desc',
+		cls: 'claude-brain-menu-modal-desc',
 	});
 
 	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('sidekick-modal-text-input');
+	tc.inputEl.classList.add('claude-brain-modal-text-input');
 	tc.setPlaceholder('Ex: brainstorming, project plan, mind map');
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -324,14 +324,14 @@ function showNewCanvasModal(plugin: SidekickPlugin, folder: TFolder): void {
 	tc.inputEl.focus();
 }
 
-async function createNewCanvas(plugin: SidekickPlugin, folder: TFolder, templateType: string): Promise<void> {
+async function createNewCanvas(plugin: ClaudeBrainPlugin, folder: TFolder, templateType: string): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	const templateClause = templateType
 		? `The canvas should follow a "${templateType}" template. `
 		: '';
 
-	const notice = new Notice('Sidekick: creating canvas\u2026', 0);
+	const notice = new Notice('Claude Brain: creating canvas\u2026', 0);
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt:
@@ -355,7 +355,7 @@ async function createNewCanvas(plugin: SidekickPlugin, folder: TFolder, template
 		});
 		registerInlineSession(plugin, sessionId, `New canvas in ${folder.name}`);
 
-		if (!result) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!result) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 
 		// Parse title and content
 		let title = 'New canvas';
@@ -379,7 +379,7 @@ async function createNewCanvas(plugin: SidekickPlugin, folder: TFolder, template
 			content = JSON.stringify(parsed, null, '\t');
 		} catch (e) {
 			notice.hide();
-			new Notice(`Sidekick: invalid canvas format \u2014 ${String(e)}`);
+			new Notice(`Claude Brain: invalid canvas format \u2014 ${String(e)}`);
 			return;
 		}
 
@@ -390,7 +390,7 @@ async function createNewCanvas(plugin: SidekickPlugin, folder: TFolder, template
 
 		const newFile = await plugin.app.vault.create(filePath, content);
 		notice.hide();
-		new Notice(`Sidekick: created "${basename}".`);
+		new Notice(`Claude Brain: created "${basename}".`);
 
 		// Open the new canvas
 		const leaf = plugin.app.workspace.getLeaf();
@@ -401,7 +401,7 @@ async function createNewCanvas(plugin: SidekickPlugin, folder: TFolder, template
 	}
 }
 
-async function createSummaryNote(plugin: SidekickPlugin, folder: TFolder): Promise<void> {
+async function createSummaryNote(plugin: ClaudeBrainPlugin, folder: TFolder): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	// Gather markdown notes in the folder
@@ -410,11 +410,11 @@ async function createSummaryNote(plugin: SidekickPlugin, folder: TFolder): Promi
 		.sort((a, b) => a.basename.localeCompare(b.basename));
 
 	if (mdFiles.length === 0) {
-		new Notice('Sidekick: no notes found in this folder.');
+		new Notice('Claude Brain: no notes found in this folder.');
 		return;
 	}
 
-	const notice = new Notice('Sidekick: creating summary…', 0);
+	const notice = new Notice('Claude Brain: creating summary…', 0);
 	try {
 		// Read all notes (truncate each to keep within context limits)
 		const MAX_PER_NOTE = 2000;
@@ -439,14 +439,14 @@ async function createSummaryNote(plugin: SidekickPlugin, folder: TFolder): Promi
 		});
 		registerInlineSession(plugin, sessionId, `Summary of ${folder.name}`);
 
-		if (!result) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!result) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 
 		const basename = uniqueNoteName(folder, `${folder.name} — Summary`);
 		const filePath = normalizePath(`${folder.path}/${basename}.md`);
 
 		const newFile = await plugin.app.vault.create(filePath, result.trim());
 		notice.hide();
-		new Notice(`Sidekick: created "${basename}".`);
+		new Notice(`Claude Brain: created "${basename}".`);
 
 		const leaf = plugin.app.workspace.getLeaf();
 		await leaf.openFile(newFile);
@@ -461,7 +461,7 @@ async function createSummaryNote(plugin: SidekickPlugin, folder: TFolder): Promi
  * Used by both the gutter indicator menu and the context menu.
  */
 export async function runSelectionAction(
-	plugin: SidekickPlugin,
+	plugin: ClaudeBrainPlugin,
 	view: EditorView,
 	selectedText: string,
 	action: TextTask,
@@ -471,7 +471,7 @@ export async function runSelectionAction(
 		return;
 	}
 
-	const notice = new Notice(`Sidekick: ${action.label}…`, 0);
+	const notice = new Notice(`Claude Brain: ${action.label}…`, 0);
 	try { view.dispatch({effects: setFetching.of(true)}); } catch { /* ignore */ }
 
 	try {
@@ -479,7 +479,7 @@ export async function runSelectionAction(
 
 		if (!result) {
 			notice.hide();
-			new Notice('Sidekick: no response received.');
+			new Notice('Claude Brain: no response received.');
 			return;
 		}
 
@@ -489,10 +489,10 @@ export async function runSelectionAction(
 			changes: {from: sel.from, to: sel.to, insert: result.trim()},
 		});
 		notice.hide();
-		new Notice(`Sidekick: ${action.label} — done.`);
+		new Notice(`Claude Brain: ${action.label} — done.`);
 	} catch (e) {
 		notice.hide();
-		console.error('Sidekick: editor action error', e);
+		console.error('Claude Brain: editor action error', e);
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
 	} finally {
 		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
@@ -503,7 +503,7 @@ export async function runSelectionAction(
  * Core helper: send the action prompt to Copilot and return the result.
  */
 async function runActionPrompt(
-	plugin: SidekickPlugin,
+	plugin: ClaudeBrainPlugin,
 	action: TextTask,
 	selectedText: string,
 ): Promise<string | null> {
@@ -545,7 +545,7 @@ async function runActionPrompt(
 			}
 
 			if (request.allowFreeform !== false) {
-				const input = modal.contentEl.createEl('textarea', {cls: 'sidekick-edit-userinput-textarea', attr: {placeholder: 'Type your answer\u2026', rows: '3'}});
+				const input = modal.contentEl.createEl('textarea', {cls: 'claude-brain-edit-userinput-textarea', attr: {placeholder: 'Type your answer\u2026', rows: '3'}});
 				const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
 				const submitBtn = btnRow.createEl('button', {text: 'Submit', cls: 'mod-cta'});
 				submitBtn.addEventListener('click', () => {
@@ -590,7 +590,7 @@ const MARKDOWN_IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\(([^)]+\\.(?:${IMAGE_EXT_P
  * referenced file. Returns the resolved TFile or null.
  */
 function resolveImageEmbedOnLine(
-	plugin: SidekickPlugin,
+	plugin: ClaudeBrainPlugin,
 	view: EditorView,
 ): {file: TFile; embed: {from: number; to: number}} | null {
 	const sel = view.state.selection.main;
@@ -625,10 +625,10 @@ function resolveImageEmbedOnLine(
 }
 
 /**
- * Populate a menu with image-specific Sidekick actions for editor context menu.
+ * Populate a menu with image-specific Claude Brain actions for editor context menu.
  * Shown when the cursor is on a line containing an image embed.
  */
-function buildEditorImageMenu(menu: Menu, plugin: SidekickPlugin, file: TFile, embed: {from: number; to: number}): void {
+function buildEditorImageMenu(menu: Menu, plugin: ClaudeBrainPlugin, file: TFile, embed: {from: number; to: number}): void {
 	menu.addItem((item) =>
 		item.setTitle('Extract text below')
 			.setIcon('arrow-down-to-line')
@@ -647,17 +647,17 @@ function buildEditorImageMenu(menu: Menu, plugin: SidekickPlugin, file: TFile, e
 }
 
 /** "Ask about image" — user enters a free-form prompt about the image. */
-function showAskAboutImageModal(plugin: SidekickPlugin, file: TFile, embedHint?: {from: number; to: number}): void {
+function showAskAboutImageModal(plugin: ClaudeBrainPlugin, file: TFile, embedHint?: {from: number; to: number}): void {
 	const modal = new Modal(plugin.app);
 	modal.titleEl.setText('Ask about image');
 
 	modal.contentEl.createEl('p', {
 		text: `Ask a question about ${file.name}:`,
-		cls: 'sidekick-menu-modal-desc',
+		cls: 'claude-brain-menu-modal-desc',
 	});
 
 	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('sidekick-modal-text-input');
+	tc.inputEl.classList.add('claude-brain-modal-text-input');
 	tc.setPlaceholder('Ex: what does this diagram show?');
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -679,7 +679,7 @@ function showAskAboutImageModal(plugin: SidekickPlugin, file: TFile, embedHint?:
 }
 
 /** Send a user prompt about an image and insert the response below the embed. */
-async function askAboutImage(plugin: SidekickPlugin, file: TFile, userPrompt: string, embedHint?: {from: number; to: number}): Promise<void> {
+async function askAboutImage(plugin: ClaudeBrainPlugin, file: TFile, userPrompt: string, embedHint?: {from: number; to: number}): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	const ctx = getActiveEditorAndEmbed(plugin, file, embedHint);
@@ -687,7 +687,7 @@ async function askAboutImage(plugin: SidekickPlugin, file: TFile, userPrompt: st
 	const {cmView, embed} = ctx;
 
 	const absPath = getAbsolutePath(plugin, file);
-	const notice = new Notice('Sidekick: asking about image…', 0);
+	const notice = new Notice('Claude Brain: asking about image…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt: userPrompt,
@@ -700,21 +700,21 @@ async function askAboutImage(plugin: SidekickPlugin, file: TFile, userPrompt: st
 		registerInlineSession(plugin, sessionId, `Ask: ${userPrompt.slice(0, 30)}`);
 
 		const raw = result?.trim() ?? null;
-		if (!raw) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!raw) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 
 		insertBelowEmbed(cmView, embed, raw);
 		notice.hide();
-		new Notice('Sidekick: response inserted.');
+		new Notice('Claude Brain: response inserted.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
 	}
 }
 
-/** Add Sidekick submenu items for an image file in the vault tree. */
-function buildImageMenu(menu: Menu, plugin: SidekickPlugin, file: TFile): void {
+/** Add Claude Brain submenu items for an image file in the vault tree. */
+function buildImageMenu(menu: Menu, plugin: ClaudeBrainPlugin, file: TFile): void {
 	menu.addItem((item) => {
-		item.setTitle('Sidekick')
+		item.setTitle('Claude Brain')
 			.setIcon('brain');
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -743,13 +743,13 @@ function buildImageMenu(menu: Menu, plugin: SidekickPlugin, file: TFile): void {
 }
 
 /** Get the absolute OS path for a vault file. */
-function getAbsolutePath(plugin: SidekickPlugin, file: TFile): string {
+function getAbsolutePath(plugin: ClaudeBrainPlugin, file: TFile): string {
 	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
 	return basePath + '/' + file.path;
 }
 
 async function getInlineSkillOptions(
-	plugin: SidekickPlugin,
+	plugin: ClaudeBrainPlugin,
 	enabledSkillNames: string[],
 ): Promise<{skillDirectories?: string[]; disabledSkills?: string[]}> {
 	const skillsFolder = getSkillsFolder(plugin.settings);
@@ -772,7 +772,7 @@ async function getInlineSkillOptions(
 }
 
 /** Extract content from an image by sending it to the LLM. */
-async function extractImageContent(plugin: SidekickPlugin, file: TFile): Promise<string | null> {
+async function extractImageContent(plugin: ClaudeBrainPlugin, file: TFile): Promise<string | null> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return null; }
 
 	const absPath = getAbsolutePath(plugin, file);
@@ -840,13 +840,13 @@ function escapeRegex(s: string): string {
  * Returns `null` and shows an appropriate Notice when either is unavailable.
  */
 function getActiveEditorAndEmbed(
-	plugin: SidekickPlugin,
+	plugin: ClaudeBrainPlugin,
 	file: TFile,
 	embedHint?: {from: number; to: number},
 ): {cmView: EditorView; embed: {from: number; to: number}} | null {
 	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 	if (!activeView) {
-		new Notice('Sidekick: open a note that contains this image first.');
+		new Notice('Claude Brain: open a note that contains this image first.');
 		return null;
 	}
 	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
@@ -854,7 +854,7 @@ function getActiveEditorAndEmbed(
 
 	const embed = embedHint ?? findImageEmbed(cmView, file);
 	if (!embed) {
-		new Notice(`Sidekick: could not find a reference to "${file.name}" in the active note.`);
+		new Notice(`Claude Brain: could not find a reference to "${file.name}" in the active note.`);
 		return null;
 	}
 	return {cmView, embed};
@@ -867,19 +867,19 @@ function insertBelowEmbed(cmView: EditorView, embed: {from: number; to: number},
 }
 
 /** Extract image content and insert it below the embed in the active note. */
-async function extractAndInsertBelow(plugin: SidekickPlugin, file: TFile, embedHint?: {from: number; to: number}): Promise<void> {
+async function extractAndInsertBelow(plugin: ClaudeBrainPlugin, file: TFile, embedHint?: {from: number; to: number}): Promise<void> {
 	const ctx = getActiveEditorAndEmbed(plugin, file, embedHint);
 	if (!ctx) return;
 	const {cmView, embed} = ctx;
 
-	const notice = new Notice('Sidekick: extracting image content…', 0);
+	const notice = new Notice('Claude Brain: extracting image content…', 0);
 	try {
 		const content = await extractImageContent(plugin, file);
-		if (!content) { notice.hide(); new Notice('Sidekick: no content extracted.'); return; }
+		if (!content) { notice.hide(); new Notice('Claude Brain: no content extracted.'); return; }
 
 		insertBelowEmbed(cmView, embed, content);
 		notice.hide();
-		new Notice('Sidekick: extracted content inserted.');
+		new Notice('Claude Brain: extracted content inserted.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
@@ -887,21 +887,21 @@ async function extractAndInsertBelow(plugin: SidekickPlugin, file: TFile, embedH
 }
 
 /** Extract image content and replace the embed in the active note. */
-async function extractAndReplace(plugin: SidekickPlugin, file: TFile): Promise<void> {
+async function extractAndReplace(plugin: ClaudeBrainPlugin, file: TFile): Promise<void> {
 	const ctx = getActiveEditorAndEmbed(plugin, file);
 	if (!ctx) return;
 	const {cmView, embed} = ctx;
 
-	const notice = new Notice('Sidekick: extracting image content…', 0);
+	const notice = new Notice('Claude Brain: extracting image content…', 0);
 	try {
 		const content = await extractImageContent(plugin, file);
-		if (!content) { notice.hide(); new Notice('Sidekick: no content extracted.'); return; }
+		if (!content) { notice.hide(); new Notice('Claude Brain: no content extracted.'); return; }
 
 		cmView.dispatch({
 			changes: {from: embed.from, to: embed.to, insert: content},
 		});
 		notice.hide();
-		new Notice('Sidekick: image replaced with extracted content.');
+		new Notice('Claude Brain: image replaced with extracted content.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
@@ -909,7 +909,7 @@ async function extractAndReplace(plugin: SidekickPlugin, file: TFile): Promise<v
 }
 
 /** Convert an image to a Mermaid diagram and insert it below the embed in the active note. */
-async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedHint?: {from: number; to: number}): Promise<void> {
+async function convertToMermaidBelow(plugin: ClaudeBrainPlugin, file: TFile, embedHint?: {from: number; to: number}): Promise<void> {
 	const ctx = getActiveEditorAndEmbed(plugin, file, embedHint);
 	if (!ctx) return;
 	const {cmView, embed} = ctx;
@@ -918,7 +918,7 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedH
 
 	const absPath = getAbsolutePath(plugin, file);
 	const mermaidSkillOptions = await getInlineSkillOptions(plugin, ['mermaid']);
-	const notice = new Notice('Sidekick: converting image to Mermaid diagram…', 0);
+	const notice = new Notice('Claude Brain: converting image to Mermaid diagram…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt:
@@ -939,7 +939,7 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedH
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
 
 		const raw = result?.trim() ?? null;
-		if (!raw) { notice.hide(); new Notice('Sidekick: no diagram generated.'); return; }
+		if (!raw) { notice.hide(); new Notice('Claude Brain: no diagram generated.'); return; }
 
 		// Extract the first ```mermaid fenced block, or wrap bare Mermaid content in a fence
 		const fenceMatch = /```mermaid\b[\s\S]*?```/i.exec(raw);
@@ -951,7 +951,7 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedH
 			const looksLikeMermaid = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|block-beta|xychart-beta)\b/im.test(raw);
 			if (!looksLikeMermaid) {
 				notice.hide();
-				new Notice('Sidekick: could not find a valid Mermaid diagram in the response.');
+				new Notice('Claude Brain: could not find a valid Mermaid diagram in the response.');
 				return;
 			}
 			mermaid = '```mermaid\n' + raw + '\n```';
@@ -959,7 +959,7 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedH
 
 		insertBelowEmbed(cmView, embed, mermaid);
 		notice.hide();
-		new Notice('Sidekick: Mermaid diagram inserted.');
+		new Notice('Claude Brain: Mermaid diagram inserted.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
@@ -969,17 +969,17 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile, embedH
 /* ── Note-level actions ───────────────────────────────────────── */
 
 /** "Edit the note" — user enters a free-form editing prompt. */
-export function showEditNoteModal(plugin: SidekickPlugin, view: EditorView): void {
+export function showEditNoteModal(plugin: ClaudeBrainPlugin, view: EditorView): void {
 	const modal = new Modal(plugin.app);
 	modal.titleEl.setText('Edit the note');
 
 	modal.contentEl.createEl('p', {
 		text: 'Describe how the note should be edited:',
-		cls: 'sidekick-menu-modal-desc',
+		cls: 'claude-brain-menu-modal-desc',
 	});
 
 	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('sidekick-modal-text-input');
+	tc.inputEl.classList.add('claude-brain-modal-text-input');
 	tc.setPlaceholder('Ex: convert bullet points to a table');
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -1000,10 +1000,10 @@ export function showEditNoteModal(plugin: SidekickPlugin, view: EditorView): voi
 	tc.inputEl.focus();
 }
 
-async function applyEditNote(plugin: SidekickPlugin, view: EditorView, userPrompt: string): Promise<void> {
+async function applyEditNote(plugin: ClaudeBrainPlugin, view: EditorView, userPrompt: string): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 	const doc = view.state.doc.toString();
-	const notice = new Notice('Sidekick: editing note…', 0);
+	const notice = new Notice('Claude Brain: editing note…', 0);
 	view.dispatch({effects: setFetching.of(true)});
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
@@ -1016,10 +1016,10 @@ async function applyEditNote(plugin: SidekickPlugin, view: EditorView, userPromp
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
 		});
 		registerInlineSession(plugin, sessionId, `Edit: ${userPrompt.slice(0, 30)}`);
-		if (!result) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!result) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 		view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: result.trim()}});
 		notice.hide();
-		new Notice('Sidekick: note edited.');
+		new Notice('Claude Brain: note edited.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
@@ -1029,19 +1029,19 @@ async function applyEditNote(plugin: SidekickPlugin, view: EditorView, userPromp
 }
 
 /** "Structure and refine" — restructures the note with optional template type. */
-export function showStructureModal(plugin: SidekickPlugin, view: EditorView): void {
+export function showStructureModal(plugin: ClaudeBrainPlugin, view: EditorView): void {
 	const modal = new Modal(plugin.app);
 	modal.titleEl.setText('Structure and refine');
 
 	modal.contentEl.createEl('p', {
 		text: 'The note will be restructured using Markdown and refined for clarity.',
-		cls: 'sidekick-menu-modal-desc',
+		cls: 'claude-brain-menu-modal-desc',
 	});
 
-	modal.contentEl.createEl('label', {text: 'Template type (optional):', cls: 'sidekick-modal-label'});
+	modal.contentEl.createEl('label', {text: 'Template type (optional):', cls: 'claude-brain-modal-label'});
 
 	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('sidekick-modal-text-input');
+	tc.inputEl.classList.add('claude-brain-modal-text-input');
 	tc.setPlaceholder('Ex: daily notes, meeting notes, project brief');
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -1059,10 +1059,10 @@ export function showStructureModal(plugin: SidekickPlugin, view: EditorView): vo
 	modal.open();
 }
 
-async function applyStructure(plugin: SidekickPlugin, view: EditorView, templateType: string): Promise<void> {
+async function applyStructure(plugin: ClaudeBrainPlugin, view: EditorView, templateType: string): Promise<void> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 	const doc = view.state.doc.toString();
-	const notice = new Notice('Sidekick: structuring note…', 0);
+	const notice = new Notice('Claude Brain: structuring note…', 0);
 	view.dispatch({effects: setFetching.of(true)});
 
 	const templateClause = templateType
@@ -1081,10 +1081,10 @@ async function applyStructure(plugin: SidekickPlugin, view: EditorView, template
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
 		});
 		registerInlineSession(plugin, sessionId, 'Structure and refine');
-		if (!result) { notice.hide(); new Notice('Sidekick: no response.'); return; }
+		if (!result) { notice.hide(); new Notice('Claude Brain: no response.'); return; }
 		view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: result.trim()}});
 		notice.hide();
-		new Notice('Sidekick: note structured.');
+		new Notice('Claude Brain: note structured.');
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e, plugin.settings.providerPreset));
@@ -1094,18 +1094,18 @@ async function applyStructure(plugin: SidekickPlugin, view: EditorView, template
 }
 
 /**
- * Register an inline session in the SidekickView session list.
+ * Register an inline session in the ClaudeBrainView session list.
  * Stores the session name with an [inline] prefix so the sidebar
  * filter can distinguish inline sessions from chat sessions.
  */
-function registerInlineSession(plugin: SidekickPlugin, sessionId: string, description: string): void {
+function registerInlineSession(plugin: ClaudeBrainPlugin, sessionId: string, description: string): void {
 	plugin.settings.sessionNames ??= {};
 	plugin.settings.sessionNames[sessionId] = `[inline] ${description}`;
 	void plugin.saveSettings();
 
-	const leaves = plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+	const leaves = plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 	if (leaves.length > 0 && leaves[0]) {
-		const view = leaves[0].view as SidekickView;
+		const view = leaves[0].view as ClaudeBrainView;
 		if (typeof view.registerInlineSession === 'function') {
 			view.registerInlineSession(sessionId, description);
 		}
@@ -1114,14 +1114,14 @@ function registerInlineSession(plugin: SidekickPlugin, sessionId: string, descri
 
 export {type SelectionInfo} from '../types';
 
-/** "Chat with Sidekick" — open the sidebar view, optionally with prompt text and selection. */
-export function openSidekickView(plugin: SidekickPlugin, promptText?: string, selection?: SelectionInfo): void {
+/** "Chat with Claude Brain" — open the sidebar view, optionally with prompt text and selection. */
+export function openClaudeBrainView(plugin: ClaudeBrainPlugin, promptText?: string, selection?: SelectionInfo): void {
 	void (async () => {
 		await plugin.activateView();
 		if (promptText || selection) {
-			const leaves = plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+			const leaves = plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 			if (leaves.length > 0 && leaves[0]) {
-				const view = leaves[0].view as SidekickView;
+				const view = leaves[0].view as ClaudeBrainView;
 				if (promptText) view.setPromptText(promptText);
 				if (selection) view.addSelectionAttachment(promptText ?? '', selection);
 			}
@@ -1129,36 +1129,36 @@ export function openSidekickView(plugin: SidekickPlugin, promptText?: string, se
 	})();
 }
 
-/** Open the Sidekick chat view with a specific folder set as scope. */
-async function openSidekickViewWithScope(plugin: SidekickPlugin, folderPath: string): Promise<void> {
+/** Open the Claude Brain chat view with a specific folder set as scope. */
+async function openClaudeBrainViewWithScope(plugin: ClaudeBrainPlugin, folderPath: string): Promise<void> {
 	await plugin.activateView();
-	const leaves = plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+	const leaves = plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 	if (leaves.length > 0 && leaves[0]) {
-		const view = leaves[0].view as SidekickView;
+		const view = leaves[0].view as ClaudeBrainView;
 		view.setScope([folderPath]);
 		view.setWorkingDir(folderPath);
 	}
 }
 
-/** Open the Sidekick search tab scoped to a specific folder. */
-async function openSidekickSearchWithScope(plugin: SidekickPlugin, folderPath: string): Promise<void> {
+/** Open the Claude Brain search tab scoped to a specific folder. */
+async function openClaudeBrainSearchWithScope(plugin: ClaudeBrainPlugin, folderPath: string): Promise<void> {
 	await plugin.activateView();
-	const leaves = plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+	const leaves = plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 	if (leaves.length > 0 && leaves[0]) {
-		const view = leaves[0].view as SidekickView;
+		const view = leaves[0].view as ClaudeBrainView;
 		view.openSearchWithScope(folderPath);
 	}
 }
 
 /**
- * Populate a menu with Sidekick actions. Used by both the context menu
+ * Populate a menu with Claude Brain actions. Used by both the context menu
  * and the gutter brain-button to keep behaviour consistent.
  *
  * @param menu      The Obsidian Menu (or submenu) to populate.
- * @param plugin    The Sidekick plugin instance.
+ * @param plugin    The Claude Brain plugin instance.
  * @param view      The CM6 EditorView.
  */
-export function buildSidekickMenu(menu: Menu, plugin: SidekickPlugin, view: EditorView): void {
+export function buildClaudeBrainMenu(menu: Menu, plugin: ClaudeBrainPlugin, view: EditorView): void {
 	const sel = view.state.selection.main;
 	const hasSelection = !sel.empty;
 
@@ -1212,7 +1212,7 @@ export function buildSidekickMenu(menu: Menu, plugin: SidekickPlugin, view: Edit
 	menu.addSeparator();
 
 	menu.addItem((item) =>
-		item.setTitle('Chat with sidekick')
+		item.setTitle('Chat with Claude Brain')
 			.setIcon('brain')
 			.onClick(() => {
 				if (hasSelection) {
@@ -1222,7 +1222,7 @@ export function buildSidekickMenu(menu: Menu, plugin: SidekickPlugin, view: Edit
 					const activeFile = plugin.app.workspace.getActiveFile();
 					const filePath = activeFile?.path;
 					const fileName = activeFile?.name ?? 'unknown';
-					openSidekickView(plugin, text, {
+					openClaudeBrainView(plugin, text, {
 						filePath,
 						fileName,
 						startLine: startLine.number,
@@ -1231,7 +1231,7 @@ export function buildSidekickMenu(menu: Menu, plugin: SidekickPlugin, view: Edit
 						endChar: sel.to - endLine.from,
 					});
 				} else {
-					openSidekickView(plugin);
+					openClaudeBrainView(plugin);
 				}
 			}),
 	);
@@ -1251,7 +1251,7 @@ export function buildSidekickMenu(menu: Menu, plugin: SidekickPlugin, view: Edit
 				.onClick(async () => {
 					plugin.settings.autocompleteEnabled = !autoEnabled;
 					await plugin.saveData(plugin.settings);
-					new Notice(`Sidekick: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
+					new Notice(`Claude Brain: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
 				}),
 		);
 		sub.addItem((si) =>

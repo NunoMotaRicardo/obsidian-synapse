@@ -1,10 +1,10 @@
 {
-	"id": "sidekick",
-	"name": "Sidekick",
+	"id": "claude-brain",
+	"name": "Claude Brain",
 	"version": "1.2.2",
 	"minAppVersion": "1.13.0",
-	"description": "Meet your AI sidekick — a second brain that brings agents, tools, skills, autocompletion, and smart workflows directly into your notes.",
-	"author": "Alex Vieira",
-	"authorUrl": "https://github.com/vieiraae/",
+	"description": "Your Claude-native second brain — agents, tools, skills, and smart workflows directly in your notes.",
+	"author": "Nuno Mota Ricardo",
+	"authorUrl": "https://github.com/NunoMotaRicardo/",
 	"isDesktopOnly": true
 }

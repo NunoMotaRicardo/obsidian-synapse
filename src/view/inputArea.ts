@@ -1,10 +1,10 @@
 import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
-import type {SidekickView} from '../sidekickView';
+import type {ClaudeBrainView} from '../claudeBrainView';
 import {IMAGE_EXTS, isImageAttachment, type PromptConfig, type SelectionInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
 
-declare module '../sidekickView' {
-	interface SidekickView {
+declare module '../claudeBrainView' {
+	interface ClaudeBrainView {
 		buildInputArea(parent: HTMLElement): void;
 		handleAttachFile(): void;
 		handleClipboard(): Promise<void>;
@@ -33,36 +33,36 @@ declare module '../sidekickView' {
 }
 
 export function installInputArea(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as SidekickView;
+	const proto = ViewClass.prototype as ClaudeBrainView;
 
 	proto.buildInputArea = function (parent: HTMLElement): void {
-		const inputArea = parent.createDiv({cls: 'sidekick-input-area'});
+		const inputArea = parent.createDiv({cls: 'claude-brain-input-area'});
 
 		// Attach buttons row above textarea
-		const inputActions = inputArea.createDiv({cls: 'sidekick-input-actions'});
+		const inputActions = inputArea.createDiv({cls: 'claude-brain-input-actions'});
 
-		const scopeBtn = inputActions.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Select vault scope'}});
+		const scopeBtn = inputActions.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Select vault scope'}});
 		setIcon(scopeBtn, 'folder');
 		scopeBtn.addEventListener('click', () => this.openScopeModal());
 
-		const attachBtn = inputActions.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Attach file'}});
+		const attachBtn = inputActions.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Attach file'}});
 		setIcon(attachBtn, 'paperclip');
 		attachBtn.addEventListener('click', () => this.handleAttachFile());
 
-		const clipBtn = inputActions.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Paste clipboard'}});
+		const clipBtn = inputActions.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Paste clipboard'}});
 		setIcon(clipBtn, 'clipboard-paste');
 		clipBtn.addEventListener('click', () => void this.handleClipboard());
 
 		// Attachments, active note & scope (shown inline after action buttons)
-		this.attachmentsBar = inputActions.createDiv({cls: 'sidekick-attachments-bar'});
-		this.activeNoteBar = inputActions.createDiv({cls: 'sidekick-active-note-bar'});
-		this.scopeBar = inputActions.createDiv({cls: 'sidekick-scope-bar'});
+		this.attachmentsBar = inputActions.createDiv({cls: 'claude-brain-attachments-bar'});
+		this.activeNoteBar = inputActions.createDiv({cls: 'claude-brain-active-note-bar'});
+		this.scopeBar = inputActions.createDiv({cls: 'claude-brain-scope-bar'});
 
 		// Row for textarea + send button
-		const inputRow = inputArea.createDiv({cls: 'sidekick-input-row'});
+		const inputRow = inputArea.createDiv({cls: 'claude-brain-input-row'});
 
 		this.inputEl = inputRow.createEl('textarea', {
-			cls: 'sidekick-input',
+			cls: 'claude-brain-input',
 			attr: {placeholder: 'Ask or paste something to work on...', rows: '1'},
 		});
 
@@ -136,7 +136,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		inputArea.addEventListener('dragenter', (e: DragEvent) => {
 			e.preventDefault();
 			dragCounter++;
-			inputArea.addClass('sidekick-drag-over');
+			inputArea.addClass('claude-brain-drag-over');
 		});
 		inputArea.addEventListener('dragover', (e: DragEvent) => {
 			e.preventDefault();
@@ -146,24 +146,24 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			dragCounter--;
 			if (dragCounter <= 0) {
 				dragCounter = 0;
-				inputArea.removeClass('sidekick-drag-over');
+				inputArea.removeClass('claude-brain-drag-over');
 			}
 		});
 		inputArea.addEventListener('drop', (e: DragEvent) => {
 			e.preventDefault();
 			dragCounter = 0;
-			inputArea.removeClass('sidekick-drag-over');
+			inputArea.removeClass('claude-brain-drag-over');
 			this.handleFileDrop(e);
 		});
 
 		// Edit button (opens Edit modal with chat input text)
-		const editBtn = inputRow.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Edit text'}});
+		const editBtn = inputRow.createEl('button', {cls: 'clickable-icon claude-brain-icon-btn', attr: {title: 'Edit text'}});
 		setIcon(editBtn, 'pencil-line');
 		editBtn.addEventListener('click', () => this.openEditFromChat());
 
 		// Send / Stop button
 		this.sendBtn = inputRow.createEl('button', {
-			cls: 'clickable-icon sidekick-send-btn',
+			cls: 'clickable-icon claude-brain-send-btn',
 			attr: {title: 'Send message'},
 		});
 		setIcon(this.sendBtn, 'arrow-up');
@@ -180,7 +180,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.multiple = true;
-		input.classList.add('sidekick-file-input-hidden');
+		input.classList.add('claude-brain-file-input-hidden');
 		document.body.appendChild(input);
 
 		input.addEventListener('change', () => {
@@ -348,12 +348,12 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		for (let i = 0; i < this.attachments.length; i++) {
 			const att = this.attachments[i];
 			if (!att) continue;
-			const tag = this.attachmentsBar.createDiv({cls: 'sidekick-attachment-tag'});
+			const tag = this.attachmentsBar.createDiv({cls: 'claude-brain-attachment-tag'});
 			const typeIcon = isImageAttachment(att) ? 'image' : att.type === 'clipboard' ? 'clipboard' : att.type === 'selection' ? 'text-cursor-input' : 'file-text';
-			const ic = tag.createSpan({cls: 'sidekick-attachment-icon'});
+			const ic = tag.createSpan({cls: 'claude-brain-attachment-icon'});
 			setIcon(ic, typeIcon);
-			tag.createSpan({text: att.name, cls: 'sidekick-attachment-name'});
-			const removeBtn = tag.createSpan({cls: 'sidekick-attachment-remove'});
+			tag.createSpan({text: att.name, cls: 'claude-brain-attachment-name'});
+			const removeBtn = tag.createSpan({cls: 'claude-brain-attachment-remove'});
 			setIcon(removeBtn, 'x');
 			const idx = i;
 			removeBtn.addEventListener('click', () => {
@@ -372,7 +372,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		}
 		this.scopeBar.removeClass('is-hidden');
 
-		const label = this.scopeBar.createSpan({cls: 'sidekick-scope-label'});
+		const label = this.scopeBar.createSpan({cls: 'claude-brain-scope-label'});
 		setIcon(label, 'folder-tree');
 		const isEntireVault = this.scopePaths.length === 1 && this.scopePaths[0] === '/';
 		const scopeText = isEntireVault
@@ -391,7 +391,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			menu.showAtMouseEvent(e);
 		});
 
-		const removeBtn = this.scopeBar.createSpan({cls: 'sidekick-scope-remove'});
+		const removeBtn = this.scopeBar.createSpan({cls: 'claude-brain-scope-remove'});
 		setIcon(removeBtn, 'x');
 		removeBtn.addEventListener('click', () => {
 			this.scopePaths = [];
@@ -525,14 +525,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// If there's a live editor selection, show it instead of the active note
 		if (this.activeSelection) {
 			this.activeNoteBar.removeClass('is-hidden');
-			const tag = this.activeNoteBar.createDiv({cls: 'sidekick-attachment-tag sidekick-active-note-tag'});
-			const ic = tag.createSpan({cls: 'sidekick-attachment-icon'});
+			const tag = this.activeNoteBar.createDiv({cls: 'claude-brain-attachment-tag claude-brain-active-note-tag'});
+			const ic = tag.createSpan({cls: 'claude-brain-attachment-icon'});
 			setIcon(ic, 'text-cursor-input');
 			const sel = this.activeSelection;
 			const displayName = sel.startLine === sel.endLine
 				? `${sel.fileName}:${sel.startLine}`
 				: `${sel.fileName}:${sel.startLine}-${sel.endLine}`;
-			tag.createSpan({text: displayName, cls: 'sidekick-attachment-name'});
+			tag.createSpan({text: displayName, cls: 'claude-brain-attachment-name'});
 			tag.setAttribute('title', `Selection in ${sel.filePath} (${sel.startLine === sel.endLine ? `line ${sel.startLine}` : `lines ${sel.startLine}-${sel.endLine}`})`);
 			return;
 		}
@@ -548,11 +548,11 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			return;
 		}
 		this.activeNoteBar.removeClass('is-hidden');
-		const tag = this.activeNoteBar.createDiv({cls: 'sidekick-attachment-tag sidekick-active-note-tag'});
-		const ic = tag.createSpan({cls: 'sidekick-attachment-icon'});
+		const tag = this.activeNoteBar.createDiv({cls: 'claude-brain-attachment-tag claude-brain-active-note-tag'});
+		const ic = tag.createSpan({cls: 'claude-brain-attachment-icon'});
 		setIcon(ic, 'file-text');
 		const name = this.activeNotePath.split('/').pop() || this.activeNotePath;
-		tag.createSpan({text: name, cls: 'sidekick-attachment-name'});
+		tag.createSpan({text: name, cls: 'claude-brain-attachment-name'});
 		tag.setAttribute('title', `Active note: ${this.activeNotePath}`);
 	};
 
@@ -589,21 +589,21 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	proto.showPromptDropdown = function (prompts: PromptConfig[]): void {
 		this.closePromptDropdown();
 		this.promptDropdown = document.createElement('div');
-		this.promptDropdown.addClass('sidekick-prompt-dropdown');
+		this.promptDropdown.addClass('claude-brain-prompt-dropdown');
 		this.promptDropdownIndex = 0;
 
 		for (let i = 0; i < prompts.length; i++) {
 			const p = prompts[i];
 			if (!p) continue;
-			const item = this.promptDropdown.createDiv({cls: 'sidekick-prompt-item'});
+			const item = this.promptDropdown.createDiv({cls: 'claude-brain-prompt-item'});
 			if (i === 0) item.addClass('is-selected');
 			item.setAttribute('title', p.content);
 
-			item.createSpan({cls: 'sidekick-prompt-item-name', text: `/${p.name}`});
+			item.createSpan({cls: 'claude-brain-prompt-item-name', text: `/${p.name}`});
 			const descText = p.description || (p.content.length > 60 ? p.content.slice(0, 60) + '…' : p.content);
-			item.createSpan({cls: 'sidekick-prompt-item-desc', text: descText});
+			item.createSpan({cls: 'claude-brain-prompt-item-desc', text: descText});
 			if (p.agent) {
-				item.createSpan({cls: 'sidekick-prompt-item-agent', text: p.agent});
+				item.createSpan({cls: 'claude-brain-prompt-item-agent', text: p.agent});
 			}
 
 			item.addEventListener('click', () => {
@@ -617,7 +617,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		}
 
 		// Position above the input area
-		const inputArea = this.inputEl.closest('.sidekick-input-area');
+		const inputArea = this.inputEl.closest('.claude-brain-input-area');
 		if (inputArea) {
 			inputArea.appendChild(this.promptDropdown);
 		}
@@ -633,7 +633,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 	proto.navigatePromptDropdown = function (direction: number): void {
 		if (!this.promptDropdown) return;
-		const items = this.promptDropdown.querySelectorAll('.sidekick-prompt-item');
+		const items = this.promptDropdown.querySelectorAll('.claude-brain-prompt-item');
 		if (items.length === 0) return;
 		this.promptDropdownIndex = (this.promptDropdownIndex + direction + items.length) % items.length;
 		this.updatePromptDropdownSelection();
@@ -641,7 +641,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 	proto.updatePromptDropdownSelection = function (): void {
 		if (!this.promptDropdown) return;
-		const items = this.promptDropdown.querySelectorAll('.sidekick-prompt-item');
+		const items = this.promptDropdown.querySelectorAll('.claude-brain-prompt-item');
 		items.forEach((el, i) => {
 			el.toggleClass('is-selected', i === this.promptDropdownIndex);
 		});

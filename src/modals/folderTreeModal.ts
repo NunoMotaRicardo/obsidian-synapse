@@ -25,18 +25,18 @@ export class FolderTreeModal extends Modal {
 
 	onOpen(): void {
 		const {contentEl} = this;
-		contentEl.addClass('sidekick-scope-modal');
+		contentEl.addClass('claude-brain-scope-modal');
 
 		contentEl.createEl('h3', {text: 'Select working directory'});
 
 		this.searchInput = contentEl.createEl('input', {
 			type: 'text',
 			placeholder: 'Filter folders…',
-			cls: 'sidekick-scope-search',
+			cls: 'claude-brain-scope-search',
 		});
 		this.searchInput.addEventListener('input', () => this.renderTree());
 
-		this.listContainer = contentEl.createDiv({cls: 'sidekick-scope-tree'});
+		this.listContainer = contentEl.createDiv({cls: 'claude-brain-scope-tree'});
 
 		this.renderTree();
 	}
@@ -51,10 +51,10 @@ export class FolderTreeModal extends Modal {
 		const root = this.app.vault.getRoot();
 
 		// Root node
-		const rootRow = this.listContainer.createDiv({cls: 'sidekick-scope-item'});
+		const rootRow = this.listContainer.createDiv({cls: 'claude-brain-scope-item'});
 		if (this.currentPath === '') rootRow.addClass('is-active');
 
-		const toggle = rootRow.createSpan({cls: 'sidekick-scope-toggle'});
+		const toggle = rootRow.createSpan({cls: 'claude-brain-scope-toggle'});
 		setIcon(toggle, this.collapsed.has('/') ? 'chevron-right' : 'chevron-down');
 		toggle.addEventListener('click', (e) => {
 			e.stopPropagation();
@@ -63,10 +63,10 @@ export class FolderTreeModal extends Modal {
 			this.renderTree();
 		});
 
-		const iconSpan = rootRow.createSpan({cls: 'sidekick-scope-icon'});
+		const iconSpan = rootRow.createSpan({cls: 'claude-brain-scope-icon'});
 		setIcon(iconSpan, 'vault');
 
-		rootRow.createSpan({text: this.app.vault.getName(), cls: 'sidekick-scope-name sidekick-scope-root-name'});
+		rootRow.createSpan({text: this.app.vault.getName(), cls: 'claude-brain-scope-name claude-brain-scope-root-name'});
 
 		rootRow.addEventListener('click', () => {
 			this.onSelect(root);
@@ -88,13 +88,13 @@ export class FolderTreeModal extends Modal {
 			const hasMatch = this.hasMatchingDescendants(child, filter);
 			if (!matchesFilter && !hasMatch) continue;
 
-			const row = parent.createDiv({cls: 'sidekick-scope-item'});
+			const row = parent.createDiv({cls: 'claude-brain-scope-item'});
 			row.style.paddingLeft = `${depth * 20 + 8}px`;
 			if (child.path === this.currentPath) row.addClass('is-active');
 
 			const hasSubfolders = child.children.some(c => c instanceof TFolder && !c.name.startsWith('.'));
 			if (hasSubfolders) {
-				const toggle = row.createSpan({cls: 'sidekick-scope-toggle'});
+				const toggle = row.createSpan({cls: 'claude-brain-scope-toggle'});
 				setIcon(toggle, this.collapsed.has(child.path) ? 'chevron-right' : 'chevron-down');
 				toggle.addEventListener('click', (e) => {
 					e.stopPropagation();
@@ -103,13 +103,13 @@ export class FolderTreeModal extends Modal {
 					this.renderTree();
 				});
 			} else {
-				row.createSpan({cls: 'sidekick-scope-toggle sidekick-scope-toggle-spacer'});
+				row.createSpan({cls: 'claude-brain-scope-toggle claude-brain-scope-toggle-spacer'});
 			}
 
-			const iconEl = row.createSpan({cls: 'sidekick-scope-icon'});
+			const iconEl = row.createSpan({cls: 'claude-brain-scope-icon'});
 			setIcon(iconEl, 'folder');
 
-			row.createSpan({text: child.name, cls: 'sidekick-scope-name'});
+			row.createSpan({text: child.name, cls: 'claude-brain-scope-name'});
 
 			row.addEventListener('click', () => {
 				this.onSelect(child);

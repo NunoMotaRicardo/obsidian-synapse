@@ -1,7 +1,7 @@
 /**
  * Minimal Telegram Bot API client.
  *
- * Uses only the subset of the Telegram Bot API needed by Sidekick:
+ * Uses only the subset of the Telegram Bot API needed by Claude Brain:
  * - getMe (validate token)
  * - getUpdates (long-polling)
  * - sendMessage

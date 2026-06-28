@@ -28,19 +28,19 @@ export class UserInputModal extends Modal {
 	onOpen(): void {
 		const {contentEl} = this;
 		contentEl.empty();
-		contentEl.addClass('sidekick-userinput-modal');
+		contentEl.addClass('claude-brain-userinput-modal');
 
 		contentEl.createEl('h3', {text: 'Copilot needs your input'});
 
-		contentEl.createDiv({cls: 'sidekick-userinput-question', text: this.request.question});
+		contentEl.createDiv({cls: 'claude-brain-userinput-question', text: this.request.question});
 
 		const allowFreeform = this.request.allowFreeform !== false; // default true
 
 		// Choice buttons
 		if (this.request.choices && this.request.choices.length > 0) {
-			const choicesContainer = contentEl.createDiv({cls: 'sidekick-userinput-choices'});
+			const choicesContainer = contentEl.createDiv({cls: 'claude-brain-userinput-choices'});
 			for (const choice of this.request.choices) {
-				const btn = choicesContainer.createEl('button', {cls: 'sidekick-userinput-choice', text: choice});
+				const btn = choicesContainer.createEl('button', {cls: 'claude-brain-userinput-choice', text: choice});
 				btn.addEventListener('click', () => {
 					this.resolved = true;
 					this.resolve({answer: choice, wasFreeform: false});
@@ -51,13 +51,13 @@ export class UserInputModal extends Modal {
 
 		// Freeform text input
 		if (allowFreeform) {
-			const inputContainer = contentEl.createDiv({cls: 'sidekick-userinput-freeform'});
+			const inputContainer = contentEl.createDiv({cls: 'claude-brain-userinput-freeform'});
 			const input = inputContainer.createEl('textarea', {
-				cls: 'sidekick-userinput-textarea',
+				cls: 'claude-brain-userinput-textarea',
 				attr: {placeholder: 'Type your answer…', rows: '3'},
 			});
 
-			const btnRow = inputContainer.createDiv({cls: 'sidekick-userinput-buttons'});
+			const btnRow = inputContainer.createDiv({cls: 'claude-brain-userinput-buttons'});
 			const submitBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Submit'});
 			submitBtn.addEventListener('click', () => {
 				const answer = input.value.trim();

@@ -4,9 +4,9 @@
  */
 
 import {normalizePath, Notice} from 'obsidian';
-import type SidekickPlugin from '../main';
-import type {SidekickView} from '../sidekickView';
-import {SIDEKICK_VIEW_TYPE} from '../sidekickView';
+import type ClaudeBrainPlugin from '../main';
+import type {ClaudeBrainView} from '../claudeBrainView';
+import {CLAUDE_BRAIN_VIEW_TYPE} from '../claudeBrainView';
 import type {SessionConfig, CopilotSession, PermissionRequest, CustomAgentConfig} from '../copilot';
 import {approveAll} from '../copilot';
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
@@ -60,7 +60,7 @@ export class TelegramBotService {
 	/** Status change callbacks. */
 	private statusListeners: Array<(status: BotConnectionStatus) => void> = [];
 
-	constructor(private plugin: SidekickPlugin) {}
+	constructor(private plugin: ClaudeBrainPlugin) {}
 
 	onStatusChange(cb: (status: BotConnectionStatus) => void): () => void {
 		this.statusListeners.push(cb);
@@ -149,7 +149,7 @@ export class TelegramBotService {
 				}
 			} catch (e) {
 				if (!this.polling) break; // disconnect was called
-				console.error('Sidekick Telegram: poll error', e);
+				console.error('Claude Brain Telegram: poll error', e);
 				// Back off on error
 				await new Promise(r => setTimeout(r, 5000));
 			}
@@ -178,14 +178,14 @@ export class TelegramBotService {
 
 		// Handle /start command
 		if (text === '/start') {
-			await this.sendReply(chatId, threadId, `Hello! I'm your Sidekick assistant. Send me a message and I'll help you.`);
+			await this.sendReply(chatId, threadId, `Hello! I'm your Claude Brain assistant. Send me a message and I'll help you.`);
 			return;
 		}
 
 		// Handle /help command
 		if (text === '/help') {
 			await this.sendReply(chatId, threadId,
-				`I'm your Obsidian Sidekick bot. Here's what you can do:\n` +
+				`I'm your Obsidian Claude Brain bot. Here's what you can do:\n` +
 				`• Send me any text message to chat\n` +
 				`• Attach photos, documents, or audio\n` +
 				`• Use forum topics for parallel conversations\n` +
@@ -275,7 +275,7 @@ export class TelegramBotService {
 			}
 
 		} catch (e) {
-			console.error('Sidekick Telegram: message handling error', e);
+			console.error('Claude Brain Telegram: message handling error', e);
 			// If session is broken, clear it so next message creates a fresh one
 			if (String(e).includes('Session not found')) {
 				entry.sessionId = '';
@@ -510,7 +510,7 @@ export class TelegramBotService {
 				const data = await this.api.downloadFile(fileInfo.file_path);
 
 				// Save to temp location in vault
-				const tempDir = normalizePath(`${this.plugin.settings.sidekickFolder}/bot-attachments`);
+				const tempDir = normalizePath(`${this.plugin.settings.claudeBrainFolder}/bot-attachments`);
 				const adapter = this.plugin.app.vault.adapter;
 				if (!await adapter.exists(tempDir)) {
 					await adapter.mkdir(tempDir);
@@ -524,7 +524,7 @@ export class TelegramBotService {
 				const basePath = this.getVaultBasePath();
 				results.push({name: safeName, path: `${basePath}/${filePath}`});
 			} catch (e) {
-				console.error(`Sidekick Telegram: failed to download file ${file.name}`, e);
+				console.error(`Claude Brain Telegram: failed to download file ${file.name}`, e);
 			}
 		}
 
@@ -533,10 +533,10 @@ export class TelegramBotService {
 
 	// ── Helpers ──────────────────────────────────────────────────
 
-	private getSidekickView(): SidekickView | null {
-		const leaves = this.plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
+	private getClaudeBrainView(): ClaudeBrainView | null {
+		const leaves = this.plugin.app.workspace.getLeavesOfType(CLAUDE_BRAIN_VIEW_TYPE);
 		if (leaves.length > 0 && leaves[0]) {
-			return leaves[0].view as SidekickView;
+			return leaves[0].view as ClaudeBrainView;
 		}
 		return null;
 	}
@@ -546,7 +546,7 @@ export class TelegramBotService {
 	}
 
 	private getAvailableModels(): import('../copilot').ModelInfo[] {
-		const view = this.getSidekickView();
+		const view = this.getClaudeBrainView();
 		return view?.models ?? [];
 	}
 
@@ -562,15 +562,15 @@ export class TelegramBotService {
 			};
 
 			const [agents, skills, mcpServers] = await Promise.all([
-				loadAgents(app, normalizePath(`${s.sidekickFolder}/agents`)),
-				loadSkills(app, normalizePath(`${s.sidekickFolder}/skills`)),
-				loadMcpServers(app, normalizePath(`${s.sidekickFolder}/tools`), inputResolver),
+				loadAgents(app, normalizePath(`${s.claudeBrainFolder}/agents`)),
+				loadSkills(app, normalizePath(`${s.claudeBrainFolder}/skills`)),
+				loadMcpServers(app, normalizePath(`${s.claudeBrainFolder}/tools`), inputResolver),
 			]);
 			this.agents = agents;
 			this.skills = skills;
 			this.mcpServers = mcpServers;
 		} catch (e) {
-			console.error('Sidekick Telegram: failed to reload configs', e);
+			console.error('Claude Brain Telegram: failed to reload configs', e);
 		}
 	}
 }

@@ -33,7 +33,7 @@ export interface McpInputVariable {
 	password?: boolean;
 }
 
-/** A message in the Sidekick chat conversation. */
+/** A message in the Claude Brain chat conversation. */
 export interface ChatMessage {
 	id: string;
 	role: 'user' | 'assistant' | 'info';
@@ -77,7 +77,7 @@ export interface ChatAttachment {
 	};
 }
 
-/** Selection info passed when "Chat with sidekick" is invoked on selected text. */
+/** Selection info passed when "Chat with Claude Brain" is invoked on selected text. */
 export interface SelectionInfo {
 	filePath?: string;
 	fileName: string;
