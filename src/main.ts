@@ -169,8 +169,12 @@ export default class ClaudeBrainPlugin extends Plugin {
 			console.error('Claude Brain: failed to initialize agent service', e);
 			const msg = e instanceof Error ? e.message : String(e);
 			if (/enoent|spawn|not found/i.test(msg)) {
+				const isWin = process.platform === 'win32';
+				const installCmd = isWin
+					? 'winget install Anthropic.ClaudeCode or npm install -g @anthropic-ai/claude-code'
+					: 'npm install -g @anthropic-ai/claude-code';
 				new Notice(
-					'No Claude CLI found. Install with "npm install -g @anthropic-ai/claude-code", then restart the plugin.',
+					`No Claude CLI found. Install with "${installCmd}", then restart the plugin.`,
 					30000,
 				);
 			}
@@ -192,6 +196,10 @@ export default class ClaudeBrainPlugin extends Plugin {
 			auth: {
 				type: s.authType,
 				apiKey: s.authType === 'apiKey' ? s.anthropicApiKey : undefined,
+			},
+			claudeLocation: s.claudeLocation,
+			onVersionInfo: (info) => {
+				console.log(`Claude Brain: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
 		});
 	}

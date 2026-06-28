@@ -29,6 +29,11 @@ import type {
 	ElicitationResult,
 	EffortLevel,
 } from '@anthropic-ai/claude-agent-sdk';
+import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
+import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
+
+// Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
+const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
 
 // Re-export types that consumers need (architecture rule: all SDK types via this module)
 export type {
@@ -51,6 +56,8 @@ export type {
 	ElicitationRequest as ElicitationContext,
 	ElicitationResult,
 	EffortLevel as ReasoningEffort,
+	ResolvedCliPath,
+	CliPathSource,
 };
 
 // Note: Session and SessionEvent are exported as classes/interfaces below.
@@ -87,6 +94,8 @@ export interface AuthConfig {
 	apiKey?: string;
 }
 
+export type VersionInfoCallback = (info: {version: string; protocolVersion?: string; path: string}) => void;
+
 /**
  * Manages Claude Agent SDK interactions and provides high-level methods
  * for chat and inline operations from within Obsidian.
@@ -94,14 +103,21 @@ export interface AuthConfig {
 export class AgentService {
 	private state: ConnectionState = 'disconnected';
 	private readonly auth: AuthConfig;
+	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
+	private readonly onVersionInfo?: VersionInfoCallback;
+	private resolvedCli: ResolvedCliPath | null = null;
 
 	constructor(opts?: {
 		auth?: AuthConfig;
+		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
+		onVersionInfo?: VersionInfoCallback;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
+		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
+		this.onVersionInfo = opts?.onVersionInfo;
 	}
 
 	/**
@@ -111,7 +127,7 @@ export class AgentService {
 	 */
 	private buildEnv(): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
-			...globalThis.process?.env,
+			...cleanEnv(),
 			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-claude-brain/1.0.0',
 		};
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
@@ -121,8 +137,25 @@ export class AgentService {
 	}
 
 	/**
-	 * Ensure the service is ready. For the Agent SDK this is lightweight —
-	 * the CLI is spawned per-query, so we just mark ourselves as connected.
+	 * Resolve the CLI binary path (using explicit settings override if set,
+	 * or walking the runtimeManager resolution chain).
+	 */
+	async resolveCliPath(): Promise<ResolvedCliPath> {
+		if (this.resolvedCli) {
+			return this.resolvedCli;
+		}
+		if (this.claudeLocation && this.claudeLocation.trim().length > 0) {
+			const path = this.claudeLocation.trim();
+			this.resolvedCli = {path, source: 'settings'};
+			return this.resolvedCli;
+		}
+		this.resolvedCli = await resolveDefaultCliPath();
+		return this.resolvedCli;
+	}
+
+	/**
+	 * Ensure the service is ready. For the Agent SDK this resolves the CLI binary
+	 * path, verifies it exists on disk, and kicks off an async version check.
 	 */
 	async ensureConnected(): Promise<void> {
 		if (this.state === 'connected') return;
@@ -132,6 +165,31 @@ export class AgentService {
 			if (this.auth.type === 'apiKey' && !this.auth.apiKey) {
 				throw new Error('Anthropic API key is required. Set it in Settings → Claude.');
 			}
+			const resolved = await this.resolveCliPath();
+
+			// Verify the binary exists before marking as connected. This ensures
+			// that the install-guidance Notice in main.ts fires when no CLI is found,
+			// rather than failing silently at first query time.
+			const fs = nodeRequire?.('node:fs/promises') as typeof import('node:fs/promises') ?? await import('node:fs/promises');
+			try {
+				await fs.access(resolved.path);
+			} catch {
+				throw new Error(`Claude CLI not found at "${resolved.path}". Install with npm install -g @anthropic-ai/claude-code and restart the plugin.`);
+			}
+
+			// Fire-and-forget version check to populate version info and trigger callback
+			void getCliVersion(resolved.path).then(v => {
+				resolved.version = v.version;
+				resolved.protocolVersion = v.protocolVersion;
+				if (this.onVersionInfo) {
+					this.onVersionInfo({
+						version: v.version,
+						protocolVersion: v.protocolVersion,
+						path: resolved.path,
+					});
+				}
+			}).catch(() => { /* ignore version check errors */ });
+
 			this.state = 'connected';
 		} catch (e) {
 			this.state = 'error';
@@ -142,6 +200,26 @@ export class AgentService {
 	/** Current connection state. */
 	getState(): ConnectionState {
 		return this.state;
+	}
+
+	/**
+	 * Resolve the CLI path and await its version info. Returns the resolved
+	 * path (with version/protocolVersion populated) after the version check
+	 * completes. Safe to call from the settings UI to get a stable, consistent
+	 * snapshot rather than relying on the fire-and-forget mutation in
+	 * ensureConnected().
+	 *
+	 * Returns undefined in remote-only mode (not used by this plugin currently).
+	 */
+	async getVersionInfo(): Promise<ResolvedCliPath> {
+		const resolved = await this.resolveCliPath();
+		// If already populated by a previous ensureConnected() version check, return it.
+		if (resolved.version) return resolved;
+		// Otherwise run the version check now and populate the shared object.
+		const v = await getCliVersion(resolved.path);
+		resolved.version = v.version;
+		resolved.protocolVersion = v.protocolVersion;
+		return resolved;
 	}
 
 	// ── Sessions ────────────────────────────────────────────────────
@@ -196,6 +274,7 @@ export class AgentService {
 					permissionMode: options.permissionMode ?? 'plan',
 					tools: options.tools ?? [],
 					env: this.buildEnv(),
+					pathToClaudeCodeExecutable: this.resolvedCli?.path,
 				},
 			});
 
@@ -252,6 +331,7 @@ export class AgentService {
 					...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
 					tools: options.tools,
 					env: this.buildEnv(),
+					pathToClaudeCodeExecutable: this.resolvedCli?.path,
 					...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
 					...(options.effort ? {effort: options.effort} : {}),
 					...(options.resume ? {resume: options.resume} : {}),
@@ -323,6 +403,7 @@ export class AgentService {
 					...this.buildEnv(),
 					...options.queryOptions.env,
 				},
+				pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
 			},
 		});
 	}
