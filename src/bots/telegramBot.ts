@@ -283,7 +283,7 @@ export class TelegramBotService {
 
 	private buildBotSessionConfig(): SessionConfig {
 		const basePath = this.getVaultBasePath();
-		const defaultAgentName = this.plugin.settings.telegramDefaultAgent;
+		const defaultAgentName = this.plugin.settings.featureAgents?.telegram || this.plugin.settings.telegramDefaultAgent || 'General';
 
 		// Resolve agent
 		const agent = defaultAgentName

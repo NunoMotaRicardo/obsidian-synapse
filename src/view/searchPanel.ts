@@ -389,7 +389,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		const {content} = await this.plugin.copilot!.inlineChat({
 			prompt: searchPrompt,
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			cwd: this.getSearchWorkingDirectory(),
 			permissionMode: 'plan',
 			tools: [],
@@ -429,7 +429,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 	proto.buildBasicSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		return {
-			model: this.plugin.settings.inlineModel || undefined,
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			permissionMode: 'plan',
 			cwd: this.getSearchWorkingDirectory(),
 			tools: [],

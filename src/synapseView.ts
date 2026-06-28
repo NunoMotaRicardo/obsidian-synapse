@@ -1015,7 +1015,7 @@ export class SynapseView extends ItemView {
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
-			...(opts.selectedAgentName ? {agent: opts.selectedAgentName} : {}),
+			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
 			systemPrompt: systemContent,
 		};
 

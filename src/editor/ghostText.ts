@@ -395,11 +395,11 @@ export function buildGhostTextExtension(plugin: SynapsePlugin): Extension {
 
 		try {
 			const prompt = buildPrompt(view.state);
-			const model = plugin.settings.inlineModel || undefined;
+			const agent = plugin.settings.featureAgents?.inline || 'General';
 
 			const result = await plugin.copilot!.chat({
 				prompt,
-				model,
+				agent,
 				systemMessage: SYSTEM_MESSAGE,
 			});
 

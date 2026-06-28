@@ -1,6 +1,7 @@
 import {MarkdownView, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
-import {AgentService} from "./copilot";
+import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, getAgentsFolder} from "./settings";
+import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
+import {loadAgents} from "./configLoader";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from "./synapseView";
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
@@ -214,6 +215,20 @@ export default class SynapsePlugin extends Plugin {
 			onVersionInfo: (info) => {
 				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
+			getVaultAgents: async () => {
+				const agents = await loadAgents(this.app, getAgentsFolder(this.settings));
+				const map: Record<string, CustomAgentConfig> = {};
+				for (const a of agents) {
+					map[a.name] = toCustomAgentConfig(a);
+				}
+				if (!map['General']) {
+					map['General'] = {description: 'General-purpose assistant', prompt: 'You are a helpful general assistant for Obsidian.', model: 'claude-3-7-sonnet'};
+				}
+				if (!map['Vision']) {
+					map['Vision'] = {description: 'Vision-capable assistant', prompt: 'You are an AI assistant specialized in analyzing visual content.', model: 'claude-3-7-sonnet'};
+				}
+				return map;
+			},
 		});
 		this.notifySidebarModelsChanged(this.copilot.getModels());
 	}
@@ -300,6 +315,7 @@ export default class SynapsePlugin extends Plugin {
 	async loadSettings() {
 		const raw = await this.loadData() as Partial<SynapseSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
+		this.settings.featureAgents = Object.assign({}, DEFAULT_SETTINGS.featureAgents, raw?.featureAgents);
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
 		let needsSave = false;
