@@ -145,8 +145,8 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 		// Sort
 		if (this.triggerHistorySort === 'date') {
 			items.sort((a, b) => {
-				const ta = a.modifiedTime instanceof Date ? a.modifiedTime.getTime() : new Date(a.modifiedTime).getTime();
-				const tb = b.modifiedTime instanceof Date ? b.modifiedTime.getTime() : new Date(b.modifiedTime).getTime();
+				const ta = a.lastModified;
+				const tb = b.lastModified;
 				return tb - ta;
 			});
 		} else {
@@ -417,9 +417,8 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 			if (!this.sessionList.some(s => s.sessionId === sessionId)) {
 				this.sessionList.unshift({
 					sessionId,
-					startTime: now,
-					modifiedTime: now,
-					isRemote: false,
+					summary: '',
+					lastModified: now.getTime(),
 				} as SessionMetadata);
 			}
 			this.renderSessionList();

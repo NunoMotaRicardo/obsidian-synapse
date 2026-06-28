@@ -1,11 +1,11 @@
 import type {Component} from 'obsidian';
-import type {CopilotSession} from '../copilot';
+import type {Session} from '../copilot';
 import type {ChatMessage} from '../types';
 
 /** State for a session that may be running in the background while the user views another session. */
 export interface BackgroundSession {
 	sessionId: string;
-	session: CopilotSession;
+	session: Session;
 	messages: ChatMessage[];
 	isStreaming: boolean;
 	streamingContent: string;

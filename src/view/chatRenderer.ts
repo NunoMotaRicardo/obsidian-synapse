@@ -547,7 +547,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (this.currentSessionId) {
 			const entry = this.sessionList.find(s => s.sessionId === this.currentSessionId);
 			if (entry) {
-				entry.modifiedTime = new Date();
+				entry.lastModified = Date.now();
 			}
 		}
 		this.renderSessionList();

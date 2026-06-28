@@ -1,320 +1,206 @@
-import {CopilotClient, CopilotSession, RuntimeConnection, approveAll} from '@github/copilot-sdk';
+/**
+ * AgentService — single entry-point for all Claude Agent SDK access.
+ *
+ * Wraps `query()` from `@anthropic-ai/claude-agent-sdk` and exposes
+ * high-level chat/inlineChat helpers that the rest of the plugin consumes.
+ * All SDK type re-exports come from this module so no other file imports
+ * the SDK directly (architecture rule from CLAUDE.md).
+ */
+
+import {query, listSessions, deleteSession, renameSession} from '@anthropic-ai/claude-agent-sdk';
 import type {
-	CustomAgentConfig,
-	ModelInfo,
-	SessionConfig,
-	SessionMetadata,
-	SessionListFilter,
-	GetAuthStatusResponse,
-	GetStatusResponse,
-	AssistantMessageEvent,
-	MCPServerConfig,
-	MCPHTTPServerConfig,
-	MCPStdioServerConfig,
-	SessionEvent,
-	SessionEventType,
-	MessageOptions,
-	PermissionRequest,
-	PermissionRequestResult,
-	PermissionHandler,
-	ElicitationHandler,
-	ElicitationContext,
+	Options,
+	Query,
+	SDKMessage,
+	SDKAssistantMessage,
+	SDKResultMessage,
+	SDKSessionInfo,
+	ListSessionsOptions,
+	McpServerConfig,
+	McpStdioServerConfig,
+	McpHttpServerConfig,
+	McpSSEServerConfig,
+	AgentDefinition,
+	CanUseTool,
+	PermissionResult,
+	PermissionUpdate,
+	OnElicitation,
+	ElicitationRequest,
 	ElicitationResult,
-	ElicitationSchema,
-	ElicitationSchemaField,
-	ElicitationFieldValue,
-} from '@github/copilot-sdk';
-import type {ProviderConfig, UserInputHandler, UserInputRequest, UserInputResponse, ReasoningEffort, ReasoningSummary, ContextTier, InfiniteSessionConfig} from '@github/copilot-sdk/dist/types';
-import {resolveDefaultCliPath, cleanEnv} from './runtimeManager';
-import type {CliPathSource, ResolvedCliPath} from './runtimeManager';
+	EffortLevel,
+} from '@anthropic-ai/claude-agent-sdk';
+
+// Re-export types that consumers need (architecture rule: all SDK types via this module)
+export type {
+	Options as SessionConfig,
+	Query,
+	SDKMessage,
+	SDKAssistantMessage,
+	SDKResultMessage,
+	SDKSessionInfo as SessionMetadata,
+	ListSessionsOptions as SessionListFilter,
+	McpServerConfig as MCPServerConfig,
+	McpStdioServerConfig as MCPStdioServerConfig,
+	McpHttpServerConfig as MCPHTTPServerConfig,
+	McpSSEServerConfig as MCPSSEServerConfig,
+	AgentDefinition as CustomAgentConfig,
+	CanUseTool as PermissionHandler,
+	PermissionResult,
+	PermissionUpdate,
+	OnElicitation as ElicitationHandler,
+	ElicitationRequest as ElicitationContext,
+	ElicitationResult,
+	EffortLevel as ReasoningEffort,
+};
+
+// Note: Session and SessionEvent are exported as classes/interfaces below.
+
+// Types that no longer have a direct Agent SDK equivalent but are referenced
+// by consumers — define compatibility aliases.
+
+/** Model info — Agent SDK does not have a model-listing API; this is a minimal shape. */
+export interface ModelInfo {
+	id: string;
+	name: string;
+	capabilities?: {
+		supports?: {vision?: boolean; reasoningEffort?: boolean};
+		limits?: {max_context_window_tokens?: number};
+		supportedReasoningEfforts?: string[];
+	};
+}
+
+/** Reasoning summary — kept as a string union for settings compatibility. */
+export type ReasoningSummary = 'none' | 'concise' | 'detailed';
+
+/** Context tier — kept for settings compatibility. */
+export type ContextTier = 'default' | 'long_context';
 
 /**
- * Connection state tracked by CopilotService.
- * SDK 1.x removed CopilotClient.getState(); the service tracks state itself
- * around start()/stop() so the rest of the plugin keeps the same contract.
+ * Connection state tracked by AgentService.
+ * The Agent SDK spawns the CLI per-query, so 'connected' means 'ready to query'.
  */
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-// Available at runtime in the esbuild CJS bundle.
-const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+/** Auth configuration for the service. */
+export interface AuthConfig {
+	type: 'subscription' | 'apiKey';
+	apiKey?: string;
+}
 
 /**
- * Manages the CopilotClient lifecycle and provides high-level methods
- * for interacting with the Copilot SDK from within Obsidian.
+ * Manages Claude Agent SDK interactions and provides high-level methods
+ * for chat and inline operations from within Obsidian.
  */
-export class CopilotService {
-	private client: CopilotClient | null = null;
-	private connectPromise: Promise<void> | null = null;
-	private readonly cliPath: string | undefined;
-	private readonly cliUrl: string | undefined;
-	private readonly githubToken: string | undefined;
-	private readonly useLoggedInUser: boolean | undefined;
-	private readonly onListModels: (() => Promise<ModelInfo[]> | ModelInfo[]) | undefined;
-	private readonly onVersionInfo: ((status: GetStatusResponse, resolvedPath: string) => void) | undefined;
+export class AgentService {
+	private state: ConnectionState = 'disconnected';
+	private readonly auth: AuthConfig;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
-	private readonly provider: ProviderConfig | undefined;
-	private readonly providerStreaming: boolean | undefined;
-	private readonly requestTimeout: number | undefined;
-	private resolvedCliPath: ResolvedCliPath | null = null;
-	private versionInfo: GetStatusResponse | null = null;
 
 	constructor(opts?: {
-		cliPath?: string;
-		cliUrl?: string;
-		githubToken?: string;
-		useLoggedInUser?: boolean;
-		onListModels?: () => Promise<ModelInfo[]> | ModelInfo[];
-		onVersionInfo?: (status: GetStatusResponse, resolvedPath: string) => void;
-		/** Callback for connection/network errors (e.g. Ollama not running). */
+		auth?: AuthConfig;
 		onConnectionError?: (error: Error) => void;
-		/** BYOK provider config injected into all sessions created by chat()/inlineChat(). */
-		provider?: ProviderConfig;
-		/** Explicit streaming override; when false, sessions use non-streaming mode. */
-		streaming?: boolean;
-		/** Request timeout in ms for sendAndWait calls. undefined = SDK default (60s). */
-		requestTimeout?: number;
 	}) {
-		this.cliPath = opts?.cliPath;
-		this.cliUrl = opts?.cliUrl;
-		this.githubToken = opts?.githubToken;
-		this.useLoggedInUser = opts?.useLoggedInUser;
-		this.onListModels = opts?.onListModels;
-		this.onVersionInfo = opts?.onVersionInfo;
+		this.auth = opts?.auth ?? {type: 'subscription'};
 		this.onConnectionError = opts?.onConnectionError;
-		this.provider = opts?.provider;
-		this.providerStreaming = opts?.streaming;
-		this.requestTimeout = opts?.requestTimeout;
-	}
-
-	/** Configured request timeout in ms, or undefined for SDK default (60s). */
-	get timeout(): number | undefined { return this.requestTimeout; }
-
-	private state: ConnectionState = 'disconnected';
-
-	private async createClient(): Promise<CopilotClient> {
-		if (this.cliUrl) {
-			// Remote mode — connect to existing server
-			return new CopilotClient({
-				connection: RuntimeConnection.forUri(this.cliUrl),
-				...(this.githubToken ? {gitHubToken: this.githubToken} : {}),
-				...(this.onListModels ? {onListModels: this.onListModels} : {}),
-			});
-		}
-		// Local mode — spawn CLI process. An explicit settings path
-		// short-circuits resolution; otherwise walk the runtime-manager chain.
-		let cliPath: string;
-		if (this.cliPath) {
-			cliPath = this.cliPath;
-			this.resolvedCliPath = {path: this.cliPath, source: 'settings'};
-		} else {
-			this.resolvedCliPath = await resolveDefaultCliPath();
-			cliPath = this.resolvedCliPath.path;
-		}
-		const os = nodeRequire?.('node:os') as typeof import('node:os') ?? await import('node:os');
-		return new CopilotClient({
-			connection: RuntimeConnection.forStdio({path: cliPath}),
-			workingDirectory: os.homedir(),
-			env: cleanEnv(),
-			...(this.githubToken ? {gitHubToken: this.githubToken} : {}),
-			...(this.useLoggedInUser !== undefined ? {useLoggedInUser: this.useLoggedInUser} : {}),
-			...(this.onListModels ? {onListModels: this.onListModels} : {}),
-		});
 	}
 
 	/**
-	 * Ensure the client is started and connected.
-	 * If the client is in a broken state, recreates it before starting.
+	 * Build the env block for query() calls.
+	 * For API key auth, sets ANTHROPIC_API_KEY in the environment.
+	 * For subscription auth, inherits process env (CLI handles OAuth).
+	 */
+	private buildEnv(): Record<string, string | undefined> | undefined {
+		const env: Record<string, string | undefined> = {
+			...globalThis.process?.env,
+			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-claude-brain/1.0.0',
+		};
+		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
+			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
+		}
+		return env;
+	}
+
+	/**
+	 * Ensure the service is ready. For the Agent SDK this is lightweight —
+	 * the CLI is spawned per-query, so we just mark ourselves as connected.
 	 */
 	async ensureConnected(): Promise<void> {
-		if (this.client && this.state === 'connected') {
-			return;
-		}
-
-		if (this.connectPromise) {
-			await this.connectPromise;
-			return;
-		}
-
-		const connectAttempt = (async () => {
-			if (!this.client || this.state === 'error') {
-				// No client yet, or the previous one is broken — tear down and recreate.
-				if (this.client) {
-					try { await this.client.forceStop(); } catch { /* ignore */ }
-				}
-				this.client = await this.createClient();
-			}
-			this.state = 'connecting';
-			try {
-				await this.client.start();
-				this.state = 'connected';
-				// Fire-and-forget: query CLI version info for logging/display.
-				// Must not block or break the connect path on failure.
-				this.client.getStatus().then((status) => {
-					this.versionInfo = status;
-					const resolvedTarget = this.resolvedCliPath?.path ?? this.cliPath ?? this.cliUrl ?? 'unknown';
-					this.onVersionInfo?.(status, resolvedTarget);
-				}).catch(() => { /* version info is best-effort */ });
-			} catch (e) {
-				this.state = 'error';
-				const detail = e instanceof Error ? e.message : String(e);
-				throw new Error(
-					`Could not connect to the Copilot CLI (${detail}). ` +
-					'Make sure the CLI is installed and up to date — run "copilot update" ' +
-					'(SDK 1.x requires a recent CLI).',
-				);
-			}
-		})();
-
-		this.connectPromise = connectAttempt;
+		if (this.state === 'connected') return;
+		this.state = 'connecting';
 		try {
-			await connectAttempt;
-		} finally {
-			if (this.connectPromise === connectAttempt) {
-				this.connectPromise = null;
+			// Validate auth: for API key mode, check that we have a key.
+			if (this.auth.type === 'apiKey' && !this.auth.apiKey) {
+				throw new Error('Anthropic API key is required. Set it in Settings → Claude.');
 			}
+			this.state = 'connected';
+		} catch (e) {
+			this.state = 'error';
+			throw e;
 		}
 	}
 
 	/** Current connection state. */
 	getState(): ConnectionState {
-		return this.client ? this.state : 'disconnected';
-	}
-
-	/** Cached CLI version info from `getStatus()`, or null if not yet retrieved. */
-	getVersionInfo(): GetStatusResponse | null {
-		return this.versionInfo;
-	}
-
-	/**
-	 * Resolve the CLI binary path that would be used for a local connection,
-	 * together with which step of the resolution chain it came from. Returns
-	 * `undefined` in remote mode. Safe to call without connecting; if a client
-	 * has already resolved a path, that cached result is returned.
-	 */
-	async resolveCliPath(): Promise<ResolvedCliPath | undefined> {
-		if (this.cliUrl) return undefined;
-		if (this.resolvedCliPath) return this.resolvedCliPath;
-		if (this.cliPath) {
-			this.resolvedCliPath = {path: this.cliPath, source: 'settings'};
-			return this.resolvedCliPath;
-		}
-		this.resolvedCliPath = await resolveDefaultCliPath();
-		return this.resolvedCliPath;
-	}
-
-	// ── Authentication ──────────────────────────────────────────────
-
-	/** Check the current authentication status against the Copilot backend. */
-	async getAuthStatus(): Promise<GetAuthStatusResponse> {
-		await this.ensureConnected();
-		return await this.client!.getAuthStatus();
-	}
-
-	// ── Models ──────────────────────────────────────────────────────
-
-	/** List available models with capabilities, policy and billing info. */
-	async listModels(): Promise<ModelInfo[]> {
-		await this.ensureConnected();
-		return await this.client!.listModels();
+		return this.state;
 	}
 
 	// ── Sessions ────────────────────────────────────────────────────
 
-	/**
-	 * Create a new conversation session.
-	 *
-	 * @param config - Session configuration (model, tools, system message, etc.)
-	 * @returns The newly created CopilotSession.
-	 */
-	async createSession(config: SessionConfig): Promise<CopilotSession> {
-		await this.ensureConnected();
-		return await this.client!.createSession({clientName: 'obsidian-claude-brain', ...config});
+	/** List persisted sessions. */
+	async listSessions(filter?: ListSessionsOptions): Promise<SDKSessionInfo[]> {
+		return await listSessions(filter);
 	}
 
-	/**
-	 * Resume an existing session by its ID.
-	 *
-	 * @param sessionId - ID of the session to resume.
-	 * @param config - Optional overrides (model, tools, etc.).
-	 */
-	async resumeSession(
-		sessionId: string,
-		config: Omit<SessionConfig, 'clientName'>,
-	): Promise<CopilotSession> {
-		await this.ensureConnected();
-		return await this.client!.resumeSession(sessionId, {
-			clientName: 'obsidian-claude-brain',
-			...config,
-		});
-	}
-
-	/** List all persisted sessions, optionally filtered. */
-	async listSessions(filter?: SessionListFilter): Promise<SessionMetadata[]> {
-		await this.ensureConnected();
-		return await this.client!.listSessions(filter);
-	}
-
-	/** Permanently delete a session and its data. */
+	/** Delete a session. */
 	async deleteSession(sessionId: string): Promise<void> {
-		await this.ensureConnected();
-		return await this.client!.deleteSession(sessionId);
+		return await deleteSession(sessionId);
 	}
 
-	/** Get the most recently updated session ID, if any. */
-	async getLastSessionId(): Promise<string | undefined> {
-		await this.ensureConnected();
-		return await this.client!.getLastSessionId();
+	/** Rename a session. */
+	async renameSession(sessionId: string, title: string): Promise<void> {
+		return await renameSession(sessionId, title);
 	}
 
 	// ── Convenience: one-shot chat ──────────────────────────────────
 
 	/**
-	 * Send a single prompt and wait for the assistant's response.
-	 * Creates a temporary session, sends the message, waits for idle,
-	 * then disconnect the session.
-	 *
-	 * @param prompt - The user prompt.
-	 * @param model  - Model to use (e.g. "gpt-5", "claude-sonnet-4.5").
-	 * @param systemMessage - Optional system message content to append.
-	 * @param customAgents - Optional custom agent configs.
-	 * @returns The assistant's final message content, or undefined.
+	 * Send a single prompt and collect the assistant's full response.
+	 * Creates a temporary query, streams to completion, and returns
+	 * the concatenated assistant text.
 	 */
 	async chat(options: {
 		prompt: string;
 		model?: string;
 		systemMessage?: string;
-		customAgents?: CustomAgentConfig[];
+		customAgents?: Record<string, AgentDefinition>;
 		agent?: string;
-		onPermissionRequest?: PermissionHandler;
-		onUserInputRequest?: UserInputHandler;
-		onElicitationRequest?: ElicitationHandler;
-		attachments?: MessageOptions['attachments'];
+		canUseTool?: CanUseTool;
+		onElicitation?: OnElicitation;
+		maxTurns?: number;
+		permissionMode?: Options['permissionMode'];
+		tools?: Options['tools'];
 	}): Promise<string | undefined> {
 		try {
-			const session = await this.createSession({
-				model: options.model,
-				agent: options.agent,
-				onPermissionRequest: options.onPermissionRequest ?? approveAll,
-				...(options.onUserInputRequest ? {onUserInputRequest: options.onUserInputRequest} : {}),
-				...(options.onElicitationRequest ? {onElicitationRequest: options.onElicitationRequest} : {}),
-				customAgents: options.customAgents,
-				...(options.agent ? {agent: options.agent} : {}),
-				...(options.systemMessage
-					? {systemMessage: {content: options.systemMessage}}
-					: {}),
-				...(this.provider ? {provider: this.provider} : {}),
-				...(this.providerStreaming !== undefined ? {streaming: this.providerStreaming} : {}),
+			await this.ensureConnected();
+
+			const stream = query({
+				prompt: options.prompt,
+				options: {
+					model: options.model,
+					systemPrompt: options.systemMessage,
+					agents: options.customAgents,
+					agent: options.agent,
+					canUseTool: options.canUseTool,
+					onElicitation: options.onElicitation,
+					maxTurns: options.maxTurns ?? 1,
+					permissionMode: options.permissionMode ?? 'plan',
+					tools: options.tools ?? [],
+					env: this.buildEnv(),
+				},
 			});
-			try {
-				const response: AssistantMessageEvent | undefined =
-					await session.sendAndWait({
-						prompt: options.prompt,
-						...(options.attachments && options.attachments.length > 0 ? {attachments: options.attachments} : {}),
-					}, this.requestTimeout);
-				return response?.data.content;
-			} finally {
-				await session.disconnect();
-			}
+
+			const text = await this.collectText(stream);
+			return text || undefined;
 		} catch (e) {
 			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
 				this.onConnectionError(e);
@@ -324,48 +210,95 @@ export class CopilotService {
 	}
 
 	/**
-	 * Send a single prompt, wait for the response, and keep the session alive.
-	 * Like chat() but the session is NOT disconnected, so it persists in the
-	 * session list and can be resumed later.
-	 *
-	 * @returns Object containing the assistant's response content and the sessionId.
+	 * Send a prompt and return the response text along with the session ID.
+	 * The session persists and can be resumed later.
 	 */
 	async inlineChat(options: {
 		prompt: string;
 		model?: string;
 		systemMessage?: string;
-		customAgents?: CustomAgentConfig[];
+		systemPrompt?: Options['systemPrompt'];
+		customAgents?: Record<string, AgentDefinition>;
+		agents?: Record<string, AgentDefinition>;
 		agent?: string;
 		skillDirectories?: string[];
-		disabledSkills?: string[];
-		onPermissionRequest?: PermissionHandler;
-		onUserInputRequest?: UserInputHandler;
-		onElicitationRequest?: ElicitationHandler;
-		attachments?: MessageOptions['attachments'];
+		canUseTool?: CanUseTool;
+		onElicitation?: OnElicitation;
+		maxTurns?: number;
+		permissionMode?: Options['permissionMode'];
+		allowDangerouslySkipPermissions?: boolean;
+		tools?: Options['tools'];
+		mcpServers?: Record<string, McpServerConfig>;
+		effort?: EffortLevel;
+		resume?: string;
+		cwd?: string;
+		attachments?: unknown[];
+		onEvent?: (msg: SDKMessage) => void;
 	}): Promise<{content: string | undefined; sessionId: string}> {
 		try {
-			const session = await this.createSession({
-				model: options.model,
-				agent: options.agent,
-				onPermissionRequest: options.onPermissionRequest ?? approveAll,
-				...(options.onUserInputRequest ? {onUserInputRequest: options.onUserInputRequest} : {}),
-				...(options.onElicitationRequest ? {onElicitationRequest: options.onElicitationRequest} : {}),
-				customAgents: options.customAgents,
-				...(options.agent ? {agent: options.agent} : {}),
-				...(options.skillDirectories && options.skillDirectories.length > 0 ? {skillDirectories: options.skillDirectories} : {}),
-				...(options.disabledSkills && options.disabledSkills.length > 0 ? {disabledSkills: options.disabledSkills} : {}),
-				...(options.systemMessage
-					? {systemMessage: {content: options.systemMessage}}
-					: {}),
-				...(this.provider ? {provider: this.provider} : {}),
-				...(this.providerStreaming !== undefined ? {streaming: this.providerStreaming} : {}),
+			await this.ensureConnected();
+
+			const stream = query({
+				prompt: options.prompt,
+				options: {
+					model: options.model,
+					systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
+					agents: options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined),
+					agent: options.agent,
+					canUseTool: options.canUseTool,
+					onElicitation: options.onElicitation,
+					maxTurns: options.maxTurns ?? 1,
+					permissionMode: options.permissionMode ?? 'default',
+					...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
+					tools: options.tools,
+					env: this.buildEnv(),
+					...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
+					...(options.effort ? {effort: options.effort} : {}),
+					...(options.resume ? {resume: options.resume} : {}),
+					...(options.cwd ? {cwd: options.cwd} : {}),
+				},
 			});
-			const response: AssistantMessageEvent | undefined =
-				await session.sendAndWait({
-					prompt: options.prompt,
-					...(options.attachments && options.attachments.length > 0 ? {attachments: options.attachments} : {}),
-				}, this.requestTimeout);
-			return {content: response?.data.content, sessionId: session.sessionId};
+
+			let sessionId = '';
+			const textParts: string[] = [];
+
+			for await (const msg of stream) {
+				const sdkMsg = msg as SDKMessage;
+
+				// Capture session ID from any message that has one
+				if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string') {
+					sessionId = sdkMsg.session_id;
+				}
+
+				// Forward events to caller
+				if (options.onEvent) {
+					options.onEvent(sdkMsg);
+				}
+
+				// Collect text from assistant messages
+				if (sdkMsg.type === 'assistant') {
+					const assistantMsg = sdkMsg as SDKAssistantMessage;
+					for (const block of assistantMsg.message.content) {
+						if (block.type === 'text') {
+							textParts.push(block.text);
+						}
+					}
+				}
+
+				// Also collect from result message
+				if (sdkMsg.type === 'result' && 'result' in sdkMsg) {
+					const resultMsg = sdkMsg as SDKResultMessage;
+					if ('result' in resultMsg && typeof resultMsg.result === 'string' && resultMsg.result) {
+						// Only use result text if we didn't get assistant text
+						if (textParts.length === 0) {
+							textParts.push(resultMsg.result);
+						}
+					}
+				}
+			}
+
+			const content = textParts.join('') || undefined;
+			return {content, sessionId};
 		} catch (e) {
 			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
 				this.onConnectionError(e);
@@ -374,98 +307,290 @@ export class CopilotService {
 		}
 	}
 
+	/**
+	 * Create a raw query stream for full control over message handling.
+	 * Used by the chat panel for streaming UI updates.
+	 */
+	createQuery(options: {
+		prompt: string;
+		queryOptions: Options;
+	}): Query {
+		return query({
+			prompt: options.prompt,
+			options: {
+				...options.queryOptions,
+				env: {
+					...this.buildEnv(),
+					...options.queryOptions.env,
+				},
+			},
+		});
+	}
+
 	// ── Error detection ────────────────────────────────────────────
 
-	/**
-	 * Detect connection/network errors (ECONNREFUSED, ENOTFOUND, fetch failures)
-	 * that indicate the provider is unreachable. Avoids bare 'connect' which
-	 * would false-positive on CLI spawn errors ("Could not connect to the
-	 * Copilot CLI (spawn ENOENT)") or SDK session messages.
-	 */
 	private isConnectionError(error: Error): boolean {
 		const msg = error.message.toLowerCase();
 		return /econnrefused|enotfound|etimedout|econnreset|ehostunreach|fetch failed|network|socket hang up/.test(msg);
 	}
 
-	// ── Health ───────────────────────────────────────────────────────
+	// ── Text extraction ────────────────────────────────────────────
 
-	/** Ping the Copilot CLI server to verify connectivity. */
-	async ping(): Promise<{message: string; timestamp: string; protocolVersion?: number}> {
+	private async collectText(stream: Query): Promise<string> {
+		const textParts: string[] = [];
+
+		for await (const msg of stream) {
+			const sdkMsg = msg as SDKMessage;
+			if (sdkMsg.type === 'assistant') {
+				const assistantMsg = sdkMsg as SDKAssistantMessage;
+				for (const block of assistantMsg.message.content) {
+					if (block.type === 'text') {
+						textParts.push(block.text);
+					}
+				}
+			}
+			// Fall back to result text
+			if (sdkMsg.type === 'result' && 'result' in sdkMsg) {
+				const resultMsg = sdkMsg as SDKResultMessage;
+				if ('result' in resultMsg && typeof resultMsg.result === 'string' && resultMsg.result && textParts.length === 0) {
+					textParts.push(resultMsg.result);
+				}
+			}
+		}
+
+		return textParts.join('');
+	}
+
+	// ── Session management ─────────────────────────────────────────
+
+	/**
+	 * Create a new session wrapper that provides send/on/disconnect methods
+	 * compatible with the chat panel's expectations. Each send() call creates
+	 * a new query() under the hood, using resume to continue the conversation.
+	 */
+	async createSession(config: Options, onEvent?: (event: SessionEvent) => void): Promise<Session> {
 		await this.ensureConnected();
-		return await this.client!.ping();
+		return new Session(this, config, onEvent);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────
 
 	/**
-	 * Gracefully stop the client. Falls back to forceStop on errors.
-	 * Call this from the plugin's `onunload()`.
+	 * Stop the service. For the Agent SDK, there is no persistent client
+	 * to tear down — queries manage their own subprocess lifecycle.
 	 */
 	async stop(): Promise<void> {
-		if (!this.client) {
-			this.state = 'disconnected';
-			this.connectPromise = null;
-			return;
-		}
-		try {
-			const errors = await this.client.stop();
-			if (errors.length > 0) {
-				console.error('Copilot service stop errors:', errors);
-				try {
-					await this.client.forceStop();
-				} catch (forceStopError) {
-					console.error('Copilot service forceStop failed:', forceStopError);
-				}
-			}
-		} catch (stopError) {
-			console.error('Copilot service stop failed:', stopError);
-			try {
-				await this.client.forceStop();
-			} catch (forceStopError) {
-				console.error('Copilot service forceStop failed:', forceStopError);
-			}
-		} finally {
-			this.state = 'disconnected';
-			this.connectPromise = null;
-		}
+		this.state = 'disconnected';
 	}
 }
 
-export {approveAll};
+// ── Session event types ─────────────────────────────────────────
 
-export type {
-	CopilotSession,
-	ModelInfo,
-	SessionMetadata,
-	GetAuthStatusResponse,
-	GetStatusResponse,
-	CustomAgentConfig,
-	AssistantMessageEvent,
-	SessionConfig,
-	MCPServerConfig,
-	MCPHTTPServerConfig,
-	MCPStdioServerConfig,
-	SessionEvent,
-	SessionEventType,
-	MessageOptions,
-	PermissionRequest,
-	PermissionRequestResult,
-	PermissionHandler,
-	UserInputHandler,
-	UserInputRequest,
-	UserInputResponse,
-	SessionListFilter,
-	ProviderConfig,
-	ReasoningEffort,
-	ReasoningSummary,
-	ContextTier,
-	ElicitationHandler,
-	ElicitationContext,
-	ElicitationResult,
-	ElicitationSchema,
-	ElicitationSchemaField,
-	ElicitationFieldValue,
-	InfiniteSessionConfig,
-};
+/** A simplified session event that bridges Agent SDK messages to the view's event system. */
+export interface SessionEvent {
+	type: string;
+	data: Record<string, unknown>;
+}
 
-export type {CliPathSource, ResolvedCliPath};
+// ── Session wrapper ─────────────────────────────────────────────
+
+type SessionEventHandler = (event: SessionEvent) => void;
+
+/**
+ * Session wraps the Agent SDK's query() to provide a stateful session API
+ * compatible with the chat panel. It:
+ * - Tracks a sessionId from the first query
+ * - Converts SDKMessage stream events into typed SessionEvent callbacks
+ * - Supports send() to continue the conversation (via resume)
+ * - Supports abort() via AbortController
+ * - Supports disconnect() to clean up
+ */
+export class Session {
+	private service: AgentService;
+	private config: Options;
+	private _sessionId = '';
+	private abortController: AbortController | null = null;
+	private handlers: Map<string, SessionEventHandler[]> = new Map();
+	private onEventCallback: ((event: SessionEvent) => void) | null = null;
+	/** Expose the RPC-like interface (stubbed — Agent SDK handles agent selection via options). */
+	readonly rpc = {
+		agent: {
+			select: async (_opts: {name: string}): Promise<void> => {
+				// Agent selection is handled via the `agent` option in query().
+				// This is a no-op compatibility stub.
+			},
+		},
+		workingDirectory: {
+			set: async (_dir: string): Promise<void> => {
+				// Working directory is set via the `cwd` option in query().
+			},
+		},
+	};
+
+	constructor(service: AgentService, config: Options, onEvent?: (event: SessionEvent) => void) {
+		this.service = service;
+		this.config = config;
+		this.onEventCallback = onEvent ?? null;
+	}
+
+	get sessionId(): string {
+		return this._sessionId;
+	}
+
+	/**
+	 * Register an event handler. Returns an unsubscribe function.
+	 */
+	on(eventType: string, handler: SessionEventHandler): () => void {
+		const list = this.handlers.get(eventType) ?? [];
+		list.push(handler);
+		this.handlers.set(eventType, list);
+		return () => {
+			const idx = list.indexOf(handler);
+			if (idx >= 0) list.splice(idx, 1);
+		};
+	}
+
+	/**
+	 * Send a message to the session. Creates a query() call, streaming
+	 * events to registered handlers. If a sessionId was captured from
+	 * a previous query, resumes that session.
+	 */
+	async send(options: {prompt: string; attachments?: unknown[]}): Promise<void> {
+		this.abortController = new AbortController();
+
+		const queryOpts: Options = {
+			...this.config,
+			abortController: this.abortController,
+			...(this._sessionId ? {resume: this._sessionId} : {}),
+		};
+
+		const stream = this.service.createQuery({
+			prompt: options.prompt,
+			queryOptions: queryOpts,
+		});
+
+		try {
+			for await (const msg of stream) {
+				const sdkMsg = msg as SDKMessage;
+
+				// Capture session ID
+				if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
+					this._sessionId = sdkMsg.session_id;
+				}
+
+				// Convert SDKMessage to SessionEvent and dispatch
+				const event = this.convertToSessionEvent(sdkMsg);
+				if (event) {
+					this.dispatch(event);
+				}
+			}
+
+			// Dispatch session.idle when the stream ends
+			this.dispatch({type: 'session.idle', data: {}});
+		} catch (e) {
+			if (e instanceof Error && e.name === 'AbortError') {
+				// User aborted — this is expected
+				return;
+			}
+			this.dispatch({type: 'session.error', data: {error: e instanceof Error ? e.message : String(e)}});
+			throw e;
+		} finally {
+			this.abortController = null;
+		}
+	}
+
+	/**
+	 * Abort the current query.
+	 */
+	async abort(): Promise<void> {
+		this.abortController?.abort();
+	}
+
+	/**
+	 * Disconnect the session (cleanup).
+	 */
+	async disconnect(): Promise<void> {
+		this.abortController?.abort();
+		this.handlers.clear();
+		this.onEventCallback = null;
+	}
+
+	private dispatch(event: SessionEvent): void {
+		// Fire onEvent callback (from buildSessionConfig)
+		if (this.onEventCallback) {
+			this.onEventCallback(event);
+		}
+		// Fire typed handlers
+		const handlers = this.handlers.get(event.type);
+		if (handlers) {
+			for (const h of handlers) h(event);
+		}
+	}
+
+	/**
+	 * Convert an SDKMessage into a SessionEvent compatible with the view's
+	 * event system. Returns null for messages that don't map to events.
+	 */
+	private convertToSessionEvent(msg: SDKMessage): SessionEvent | null {
+		switch (msg.type) {
+			case 'assistant': {
+				const assistantMsg = msg as SDKAssistantMessage;
+				// Emit turn_start
+				this.dispatch({type: 'assistant.turn_start', data: {}});
+				// Emit text content as message events
+				for (const block of assistantMsg.message.content) {
+					if (block.type === 'text') {
+						this.dispatch({
+							type: 'assistant.message_delta',
+							data: {content: block.text, deltaContent: block.text},
+						});
+					} else if (block.type === 'thinking') {
+						this.dispatch({
+							type: 'assistant.reasoning_delta',
+							data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
+						});
+					} else if (block.type === 'tool_use') {
+						const toolBlock = block as {id: string; name: string; input: unknown};
+						this.dispatch({
+							type: 'tool.execution_start',
+							data: {toolName: toolBlock.name, toolCallId: toolBlock.id, input: toolBlock.input},
+						});
+					}
+				}
+				// Emit usage if available
+				if (assistantMsg.message.usage) {
+					this.dispatch({
+						type: 'assistant.usage',
+						data: {
+							inputTokens: assistantMsg.message.usage.input_tokens,
+							outputTokens: assistantMsg.message.usage.output_tokens,
+							model: assistantMsg.message.model,
+						},
+					});
+				}
+				// Dispatch the full message event directly (not returned, to avoid double-dispatch)
+				this.dispatch({
+					type: 'assistant.message',
+					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
+				});
+				return null;
+			}
+			case 'result': {
+				const resultMsg = msg as SDKResultMessage;
+				if (resultMsg.is_error) {
+					return {type: 'session.error', data: {error: 'result' in resultMsg ? String((resultMsg as {result?: string}).result) : 'Unknown error'}};
+				}
+				return null; // session.idle is dispatched after the loop
+			}
+			case 'system': {
+				const subtype = (msg as {subtype?: string}).subtype;
+				if (subtype === 'compact_boundary') {
+					return {type: 'session.compaction_complete', data: {}};
+				}
+				return null;
+			}
+			default:
+				return null;
+		}
+	}
+}
