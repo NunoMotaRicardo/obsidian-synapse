@@ -134,24 +134,26 @@ Settings-side integration (`settings.ts`):
   zero models suggest "ollama pull", successful connection with no model selected prompts the
   user to pick one.
 
-## Centralized Request Cancellation and Adaptive Timeouts
+## Request Timeouts and Cancellation
 
-To prevent local provider resource leakage (especially for local LLM engines like Ollama) and optimize performance:
+Both `chat()` and `inlineChat()` accept an optional `timeout` (milliseconds). The private
+`withTimeout(ms)` helper creates an `AbortController` and a timer that aborts after the
+specified duration. `handleTimeoutError()` inspects the abort signal in catch blocks and
+throws a descriptive timeout error. The `AbortController` is passed to the SDK's `query()`
+via its `abortController` option.
 
-- **Active Cancellation Wrapper**:
-  - `CopilotService` exposes a helper or wrapper `sendAndWaitWithAbort(session, options, timeout)` which wraps `session.sendAndWait(options, timeout)`.
-  - Inside `sendAndWaitWithAbort`, if `sendAndWait` throws any error (such as a timeout error, connection error, or RPC failure), the wrapper catches the error, calls `await session.abort()`, and re-throws the error.
-  - The one-shot `chat()` and `inlineChat()` methods in `CopilotService` must wrap their requests using this logic.
-  - In `sidekickView.ts`, the `session.on('session.error')` event handler must call `try { await this.currentSession.abort(); } catch { ... }` upon receiving a session error.
-  - If a user cancels generation manually, `session.abort()` is invoked immediately.
+### Adaptive Indexing/Search Timeouts
 
-- **Adaptive Indexing/Search Timeouts**:
-  - A shared helper `getAdaptiveTimeout(app, scopePath, configuredTimeoutSec)` calculates the client-side timeout in milliseconds dynamically based on the number of files in scope.
-  - Formula: `Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200))` (Base 30s + 200ms per file, with a floor of 120s and cap of 10 minutes).
-  - The result is compared against the user's custom `providerRequestTimeout` settings, and the larger value is used: `Math.max(dynamicTimeout, configuredTimeout)`.
-  - Scope calculation:
-    - For the Telegram bot (`telegramBot.ts`), the scope is the entire vault (`scopePath` is undefined or root).
-    - For the search panel (`searchPanel.ts`), the scope is the folder path of the active search directory (`searchWorkingDir`).
+A shared helper `getAdaptiveTimeout(app, scopePath, configuredTimeoutSec)` calculates the
+client-side timeout in milliseconds dynamically based on the number of files in scope.
+
+- Formula: `Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200))` (base 30s +
+  200ms per file, floor 120s, cap 10 minutes).
+- The result is compared against the user's `providerRequestTimeout` setting (seconds,
+  converted to ms), and the larger value is used.
+- Scope calculation:
+  - Telegram bot (`telegramBot.ts`): entire vault (`scopePath` undefined).
+  - Search panel (`searchPanel.ts`): active search directory (`searchWorkingDir`).
 
 ## Public API surface
 

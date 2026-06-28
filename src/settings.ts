@@ -850,6 +850,24 @@ export class SynapseSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(capPanel)
+			.setName('Request timeout')
+			.setDesc('Custom request timeout in seconds. 0 uses an adaptive default based on vault size.')
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = '0';
+				text.inputEl.max = '600';
+				text.inputEl.style.width = '60px';
+				text.setValue(String(this.plugin.settings.providerRequestTimeout ?? 0))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num >= 0 && num <= 600) {
+							this.plugin.settings.providerRequestTimeout = num;
+							await this.plugin.saveSettings();
+						}
+					});
+			});
+
+		new Setting(capPanel)
 			.setName('Max note images')
 			.setDesc('Maximum number of note-embedded images to auto-attach per message.')
 			.addText(text => {

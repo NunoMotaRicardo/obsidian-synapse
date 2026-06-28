@@ -116,11 +116,6 @@ export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
 	};
 }
 
-/**
- * Calculates adaptive client-side timeout in milliseconds scaled by file count in scope.
- * Formula: Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200)).
- * The result is compared against configuredTimeoutSec (converted to ms), taking the larger value.
- */
 export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeoutSec?: number): number {
 	const allFiles = app.vault.getFiles();
 	let fileCount = 0;
@@ -443,6 +438,30 @@ export class AgentService {
 		return server;
 	}
 
+	// ── Timeout helper ─────────────────────────────────────────────
+
+	private withTimeout(timeoutMs?: number): {abortController: AbortController; dispose: () => void} {
+		const abortController = new AbortController();
+		let timer: NodeJS.Timeout | undefined;
+		if (timeoutMs && timeoutMs > 0) {
+			timer = setTimeout(() => abortController.abort(), timeoutMs);
+		}
+		return {
+			abortController,
+			dispose: () => { if (timer) clearTimeout(timer); },
+		};
+	}
+
+	private handleTimeoutError(e: unknown, abortController: AbortController, timeoutMs?: number): never {
+		if (abortController.signal.aborted && timeoutMs && timeoutMs > 0) {
+			throw new Error(`Request timed out after ${timeoutMs}ms`);
+		}
+		if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
+			this.onConnectionError(e);
+		}
+		throw e;
+	}
+
 	// ── Sessions ────────────────────────────────────────────────────
 
 	/** List persisted sessions. */
@@ -480,14 +499,7 @@ export class AgentService {
 		tools?: Options['tools'];
 		timeout?: number;
 	}): Promise<string | undefined> {
-		let timer: NodeJS.Timeout | undefined;
-		const abortController = new AbortController();
-		if (options.timeout && options.timeout > 0) {
-			timer = setTimeout(() => {
-				abortController.abort();
-			}, options.timeout);
-		}
-
+		const {abortController, dispose} = this.withTimeout(options.timeout);
 		try {
 			await this.ensureConnected();
 
@@ -514,15 +526,9 @@ export class AgentService {
 			const text = await this.collectText(stream);
 			return text || undefined;
 		} catch (e) {
-			if (abortController.signal.aborted && options.timeout && options.timeout > 0) {
-				throw new Error(`Request timed out after ${options.timeout}ms`);
-			}
-			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
-				this.onConnectionError(e);
-			}
-			throw e;
+			this.handleTimeoutError(e, abortController, options.timeout);
 		} finally {
-			if (timer) clearTimeout(timer);
+			dispose();
 		}
 	}
 
@@ -553,14 +559,7 @@ export class AgentService {
 		onEvent?: (msg: SDKMessage) => void;
 		timeout?: number;
 	}): Promise<{content: string | undefined; sessionId: string}> {
-		let timer: NodeJS.Timeout | undefined;
-		const abortController = new AbortController();
-		if (options.timeout && options.timeout > 0) {
-			timer = setTimeout(() => {
-				abortController.abort();
-			}, options.timeout);
-		}
-
+		const {abortController, dispose} = this.withTimeout(options.timeout);
 		try {
 			await this.ensureConnected();
 
@@ -595,17 +594,14 @@ export class AgentService {
 			for await (const msg of stream) {
 				const sdkMsg = msg as SDKMessage;
 
-				// Capture session ID from any message that has one
 				if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string') {
 					sessionId = sdkMsg.session_id;
 				}
 
-				// Forward events to caller
 				if (options.onEvent) {
 					options.onEvent(sdkMsg);
 				}
 
-				// Collect text from assistant messages
 				if (sdkMsg.type === 'assistant') {
 					const assistantMsg = sdkMsg as SDKAssistantMessage;
 					for (const block of assistantMsg.message.content) {
@@ -615,11 +611,9 @@ export class AgentService {
 					}
 				}
 
-				// Also collect from result message
 				if (sdkMsg.type === 'result' && 'result' in sdkMsg) {
 					const resultMsg = sdkMsg as SDKResultMessage;
 					if ('result' in resultMsg && typeof resultMsg.result === 'string' && resultMsg.result) {
-						// Only use result text if we didn't get assistant text
 						if (textParts.length === 0) {
 							textParts.push(resultMsg.result);
 						}
@@ -630,15 +624,9 @@ export class AgentService {
 			const content = textParts.join('') || undefined;
 			return {content, sessionId};
 		} catch (e) {
-			if (abortController.signal.aborted && options.timeout && options.timeout > 0) {
-				throw new Error(`Request timed out after ${options.timeout}ms`);
-			}
-			if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
-				this.onConnectionError(e);
-			}
-			throw e;
+			this.handleTimeoutError(e, abortController, options.timeout);
 		} finally {
-			if (timer) clearTimeout(timer);
+			dispose();
 		}
 	}
 
