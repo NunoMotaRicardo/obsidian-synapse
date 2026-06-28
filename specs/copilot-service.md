@@ -136,11 +136,15 @@ Settings-side integration (`settings.ts`):
 
 ## Request Timeouts and Cancellation
 
-Both `chat()` and `inlineChat()` accept an optional `timeout` (milliseconds). The private
-`withTimeout(ms)` helper creates an `AbortController` and a timer that aborts after the
-specified duration. `handleTimeoutError()` inspects the abort signal in catch blocks and
-throws a descriptive timeout error. The `AbortController` is passed to the SDK's `query()`
-via its `abortController` option.
+Both `chat()` and `inlineChat()` accept an optional `timeoutMs` (milliseconds) and
+`abortController` / `signal` for external cancellation.
+
+- **Active Cancellation Wrapper**:
+  - `src/copilot.ts` exports a helper wrapper `sendAndWaitWithAbort(fn, options)` which wraps query execution (`fn(controller)`).
+  - Inside `sendAndWaitWithAbort`, if execution throws any error (such as a timeout error, connection error, or CLI subprocess failure), the wrapper catches the error, calls `controller.abort()`, and re-throws the error. A dedicated `timedOut` flag distinguishes timeout aborts from user-initiated ones.
+  - The one-shot `chat()` and `inlineChat()` methods as well as stateful `Session.send()` in `AgentService` wrap their requests using this logic.
+  - In `synapseView.ts`, the `session.on('session.error')` event handler calls `try { void this.currentSession.abort(); } catch { ... }` upon receiving a session error to ensure in-flight work drops to idle immediately.
+  - If a user cancels generation manually in chat view, search panel, or Telegram bot, `abortController.abort()` or `session.abort()` is invoked immediately.
 
 ### Adaptive Indexing/Search Timeouts
 

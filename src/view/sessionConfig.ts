@@ -235,3 +235,21 @@ export function resolveNoteImageEmbeds(
 
 	return results;
 }
+
+/**
+ * Calculates adaptive timeout in milliseconds based on file count in scope.
+ */
+export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeoutSec?: number): number {
+	const allFiles = app.vault.getFiles();
+	let fileCount = allFiles.length;
+
+	if (scopePath && scopePath !== '/' && scopePath.trim().length > 0) {
+		const normScope = normalizePath(scopePath);
+		fileCount = allFiles.filter(f => f.path === normScope || f.path.startsWith(normScope + '/')).length;
+	}
+
+	const dynamicTimeout = Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200));
+	const configuredMs = (configuredTimeoutSec && configuredTimeoutSec > 0) ? configuredTimeoutSec * 1000 : 0;
+	return Math.max(dynamicTimeout, configuredMs);
+}
+

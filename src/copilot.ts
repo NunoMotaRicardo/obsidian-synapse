@@ -30,7 +30,6 @@ try {
 	// ignore polyfill errors
 }
 
-import type {App} from 'obsidian';
 import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
@@ -116,27 +115,6 @@ export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
 	};
 }
 
-export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeoutSec?: number): number {
-	const allFiles = app.vault.getFiles();
-	let fileCount = 0;
-	if (!scopePath || scopePath === '/' || scopePath.trim() === '') {
-		fileCount = allFiles.length;
-	} else {
-		const normalizedScope = scopePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-		if (normalizedScope === '') {
-			fileCount = allFiles.length;
-		} else {
-			fileCount = allFiles.filter(f => {
-				const filePath = f.path.replace(/\\/g, '/');
-				return filePath === normalizedScope || filePath.startsWith(normalizedScope + '/');
-			}).length;
-		}
-	}
-	const dynamicTimeout = Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200));
-	const configuredMs = (configuredTimeoutSec ?? 0) * 1000;
-	return Math.max(dynamicTimeout, configuredMs);
-}
-
 /** Standard Claude models supported by the Claude Agent SDK / CLI. */
 export const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
 	{
@@ -201,6 +179,55 @@ export interface AuthConfig {
 }
 
 export type VersionInfoCallback = (info: {version: string; protocolVersion?: string; path: string}) => void;
+
+/**
+ * Executes a query/stream operation with active cancellation and optional timeout.
+ * Wraps execution so that on timeout, error, or cancellation, abortController.abort() is invoked
+ * to drop in-flight work and resources immediately, and the error is re-thrown.
+ */
+export async function sendAndWaitWithAbort<T>(
+	fn: (controller: AbortController) => Promise<T>,
+	options?: {abortController?: AbortController; signal?: AbortSignal; timeoutMs?: number}
+): Promise<T> {
+	const controller = options?.abortController ?? new AbortController();
+
+	let onExternalAbort: (() => void) | undefined;
+	if (options?.signal) {
+		if (options.signal.aborted) {
+			controller.abort();
+		} else {
+			onExternalAbort = () => controller.abort();
+			options.signal.addEventListener('abort', onExternalAbort, {once: true});
+		}
+	}
+
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timedOut = false;
+	if (options?.timeoutMs && options.timeoutMs > 0) {
+		timer = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, options.timeoutMs);
+	}
+
+	try {
+		const result = await fn(controller);
+		return result;
+	} catch (e) {
+		controller.abort();
+		if (timedOut) {
+			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
+		}
+		throw e;
+	} finally {
+		if (timer) {
+			clearTimeout(timer);
+		}
+		if (options?.signal && onExternalAbort) {
+			options.signal.removeEventListener('abort', onExternalAbort);
+		}
+	}
+}
 
 /**
  * Manages Claude Agent SDK interactions and provides high-level methods
@@ -438,30 +465,6 @@ export class AgentService {
 		return server;
 	}
 
-	// ── Timeout helper ─────────────────────────────────────────────
-
-	private withTimeout(timeoutMs?: number): {abortController: AbortController; dispose: () => void} {
-		const abortController = new AbortController();
-		let timer: NodeJS.Timeout | undefined;
-		if (timeoutMs && timeoutMs > 0) {
-			timer = setTimeout(() => abortController.abort(), timeoutMs);
-		}
-		return {
-			abortController,
-			dispose: () => { if (timer) clearTimeout(timer); },
-		};
-	}
-
-	private handleTimeoutError(e: unknown, abortController: AbortController, timeoutMs?: number): never {
-		if (abortController.signal.aborted && timeoutMs && timeoutMs > 0) {
-			throw new Error(`Request timed out after ${timeoutMs}ms`);
-		}
-		if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
-			this.onConnectionError(e);
-		}
-		throw e;
-	}
-
 	// ── Sessions ────────────────────────────────────────────────────
 
 	/** List persisted sessions. */
@@ -497,39 +500,43 @@ export class AgentService {
 		maxTurns?: number;
 		permissionMode?: Options['permissionMode'];
 		tools?: Options['tools'];
-		timeout?: number;
+		abortController?: AbortController;
+		signal?: AbortSignal;
+		timeoutMs?: number;
 	}): Promise<string | undefined> {
-		const {abortController, dispose} = this.withTimeout(options.timeout);
-		try {
-			await this.ensureConnected();
+		return sendAndWaitWithAbort(async (controller) => {
+			try {
+				await this.ensureConnected();
 
-			const agents = options.customAgents ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
+				const agents = options.customAgents ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
 
-			const stream = query({
-				prompt: options.prompt,
-				options: this.routeQueryOptions({
-					model: options.model,
-					systemPrompt: options.systemMessage,
-					agents,
-					agent: options.agent,
-					canUseTool: options.canUseTool,
-					onElicitation: options.onElicitation,
-					maxTurns: options.maxTurns ?? 1,
-					permissionMode: options.permissionMode ?? 'plan',
-					tools: options.tools ?? [],
-					env: this.buildEnv(),
-					pathToClaudeCodeExecutable: this.resolvedCli?.path,
-					abortController,
-				}),
-			});
+				const stream = query({
+					prompt: options.prompt,
+					options: this.routeQueryOptions({
+						model: options.model,
+						systemPrompt: options.systemMessage,
+						agents,
+						agent: options.agent,
+						canUseTool: options.canUseTool,
+						onElicitation: options.onElicitation,
+						maxTurns: options.maxTurns ?? 1,
+						permissionMode: options.permissionMode ?? 'plan',
+						tools: options.tools ?? [],
+						env: this.buildEnv(),
+						pathToClaudeCodeExecutable: this.resolvedCli?.path,
+						abortController: controller,
+					}),
+				});
 
-			const text = await this.collectText(stream);
-			return text || undefined;
-		} catch (e) {
-			this.handleTimeoutError(e, abortController, options.timeout);
-		} finally {
-			dispose();
-		}
+				const text = await this.collectText(stream);
+				return text || undefined;
+			} catch (e) {
+				if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
+					this.onConnectionError(e);
+				}
+				throw e;
+			}
+		}, options);
 	}
 
 	/**
@@ -557,77 +564,86 @@ export class AgentService {
 		cwd?: string;
 		attachments?: unknown[];
 		onEvent?: (msg: SDKMessage) => void;
-		timeout?: number;
+		abortController?: AbortController;
+		signal?: AbortSignal;
+		timeoutMs?: number;
 	}): Promise<{content: string | undefined; sessionId: string}> {
-		const {abortController, dispose} = this.withTimeout(options.timeout);
-		try {
-			await this.ensureConnected();
+		return sendAndWaitWithAbort(async (controller) => {
+			try {
+				await this.ensureConnected();
 
-			const agentsMap = options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined) ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
+				const agentsMap = options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined) ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
 
-			const stream = query({
-				prompt: options.prompt,
-				options: this.routeQueryOptions({
-					model: options.model,
-					systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
-					agents: agentsMap,
-					agent: options.agent,
-					canUseTool: options.canUseTool,
-					onElicitation: options.onElicitation,
-					maxTurns: options.maxTurns ?? 1,
-					permissionMode: options.permissionMode ?? 'default',
-					...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
-					tools: options.tools,
-					env: this.buildEnv(),
-					pathToClaudeCodeExecutable: this.resolvedCli?.path,
-					...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
-					...(options.effort ? {effort: options.effort} : {}),
-					...(options.resume ? {resume: options.resume} : {}),
-					...(options.cwd ? {cwd: options.cwd} : {}),
-					abortController,
-				}),
-			});
+				const stream = query({
+					prompt: options.prompt,
+					options: this.routeQueryOptions({
+						model: options.model,
+						systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
+						agents: agentsMap,
+						agent: options.agent,
+						canUseTool: options.canUseTool,
+						onElicitation: options.onElicitation,
+						maxTurns: options.maxTurns ?? 1,
+						permissionMode: options.permissionMode ?? 'default',
+						...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
+						tools: options.tools,
+						env: this.buildEnv(),
+						pathToClaudeCodeExecutable: this.resolvedCli?.path,
+						...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
+						...(options.effort ? {effort: options.effort} : {}),
+						...(options.resume ? {resume: options.resume} : {}),
+						...(options.cwd ? {cwd: options.cwd} : {}),
+						abortController: controller,
+					}),
+				});
 
-			let sessionId = '';
-			const textParts: string[] = [];
+				let sessionId = '';
+				const textParts: string[] = [];
 
-			for await (const msg of stream) {
-				const sdkMsg = msg as SDKMessage;
+				for await (const msg of stream) {
+					const sdkMsg = msg as SDKMessage;
 
-				if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string') {
-					sessionId = sdkMsg.session_id;
-				}
+					// Capture session ID from any message that has one
+					if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string') {
+						sessionId = sdkMsg.session_id;
+					}
 
-				if (options.onEvent) {
-					options.onEvent(sdkMsg);
-				}
+					// Forward events to caller
+					if (options.onEvent) {
+						options.onEvent(sdkMsg);
+					}
 
-				if (sdkMsg.type === 'assistant') {
-					const assistantMsg = sdkMsg as SDKAssistantMessage;
-					for (const block of assistantMsg.message.content) {
-						if (block.type === 'text') {
-							textParts.push(block.text);
+					// Collect text from assistant messages
+					if (sdkMsg.type === 'assistant') {
+						const assistantMsg = sdkMsg as SDKAssistantMessage;
+						for (const block of assistantMsg.message.content) {
+							if (block.type === 'text') {
+								textParts.push(block.text);
+							}
+						}
+					}
+
+					// Also collect from result message
+					if (sdkMsg.type === 'result' && 'result' in sdkMsg) {
+						const resultMsg = sdkMsg as SDKResultMessage;
+						if ('result' in resultMsg && typeof resultMsg.result === 'string' && resultMsg.result) {
+							// Only use result text if we didn't get assistant text
+							if (textParts.length === 0) {
+								textParts.push(resultMsg.result);
+							}
 						}
 					}
 				}
 
-				if (sdkMsg.type === 'result' && 'result' in sdkMsg) {
-					const resultMsg = sdkMsg as SDKResultMessage;
-					if ('result' in resultMsg && typeof resultMsg.result === 'string' && resultMsg.result) {
-						if (textParts.length === 0) {
-							textParts.push(resultMsg.result);
-						}
-					}
+				const content = textParts.join('') || undefined;
+				return {content, sessionId};
+			} catch (e) {
+				if (this.onConnectionError && e instanceof Error && this.isConnectionError(e)) {
+					this.onConnectionError(e);
 				}
+				throw e;
 			}
-
-			const content = textParts.join('') || undefined;
-			return {content, sessionId};
-		} catch (e) {
-			this.handleTimeoutError(e, abortController, options.timeout);
-		} finally {
-			dispose();
-		}
+		}, options);
 	}
 
 	/**
@@ -802,38 +818,41 @@ export class Session {
 	 * events to registered handlers. If a sessionId was captured from
 	 * a previous query, resumes that session.
 	 */
-	async send(options: {prompt: string; attachments?: unknown[]}): Promise<void> {
+	async send(options: {prompt: string; attachments?: unknown[]; timeoutMs?: number}): Promise<void> {
 		this.abortController = new AbortController();
-
-		const queryOpts: Options = {
-			...this.config,
-			abortController: this.abortController,
-			...(this._sessionId ? {resume: this._sessionId} : {}),
-		};
-
-		const stream = this.service.createQuery({
-			prompt: options.prompt,
-			queryOptions: queryOpts,
-		});
+		const controller = this.abortController;
 
 		try {
-			for await (const msg of stream) {
-				const sdkMsg = msg as SDKMessage;
+			await sendAndWaitWithAbort(async (ctrl) => {
+				const queryOpts: Options = {
+					...this.config,
+					abortController: ctrl,
+					...(this._sessionId ? {resume: this._sessionId} : {}),
+				};
 
-				// Capture session ID
-				if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
-					this._sessionId = sdkMsg.session_id;
+				const stream = this.service.createQuery({
+					prompt: options.prompt,
+					queryOptions: queryOpts,
+				});
+
+				for await (const msg of stream) {
+					const sdkMsg = msg as SDKMessage;
+
+					// Capture session ID
+					if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
+						this._sessionId = sdkMsg.session_id;
+					}
+
+					// Convert SDKMessage to SessionEvent and dispatch
+					const event = this.convertToSessionEvent(sdkMsg);
+					if (event) {
+						this.dispatch(event);
+					}
 				}
 
-				// Convert SDKMessage to SessionEvent and dispatch
-				const event = this.convertToSessionEvent(sdkMsg);
-				if (event) {
-					this.dispatch(event);
-				}
-			}
-
-			// Dispatch session.idle when the stream ends
-			this.dispatch({type: 'session.idle', data: {}});
+				// Dispatch session.idle when the stream ends
+				this.dispatch({type: 'session.idle', data: {}});
+			}, {abortController: controller, timeoutMs: options.timeoutMs});
 		} catch (e) {
 			if (e instanceof Error && e.name === 'AbortError') {
 				// User aborted — this is expected
