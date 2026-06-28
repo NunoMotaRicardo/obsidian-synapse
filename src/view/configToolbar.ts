@@ -1,0 +1,466 @@
+import {Menu, setIcon} from 'obsidian';
+import type {SidekickView} from '../sidekickView';
+import type {ModelInfo, ReasoningEffort, ReasoningSummary, ContextTier} from '../copilot';
+import type {SidekickSettings} from '../settings';
+import type {AgentConfig} from '../types';
+import {FolderTreeModal} from '../modals';
+import {EditModal} from '../modals/editModal';
+import {setDebugEnabled} from '../debug';
+
+/** Selectable reasoning-summary modes (excludes '' = model default). */
+const REASONING_SUMMARY_MODES = ['none', 'concise', 'detailed'] as const;
+
+/** Human label for a reasoning-effort level. 'none' reads as "Off". */
+function effortLabel(level: string): string {
+	if (level === 'none') return 'Off';
+	return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+/** Human label for a reasoning-summary mode. */
+function summaryLabel(mode: string): string {
+	return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+/**
+ * Build the options for a mid-session `session.setModel()` call from settings.
+ *
+ * Reasoning effort/summary are gated on `supportsReasoning` and validated against
+ * the model's reported `supportedReasoningEfforts` (a persisted effort not in
+ * `supported` is dropped). Context tier is included whenever it's non-default —
+ * there is no per-model support signal in the SDK, so it's always passed and the
+ * SDK silently ignores it for models that don't support the long-context tier.
+ *
+ * The SDK narrows `reasoningEffort`/`reasoningSummary` to unions that lag the
+ * values models actually report, so the cast is localized here (see issue 7).
+ * Returns `undefined` when nothing applies, so model defaults take over.
+ */
+function buildSetModelOptions(settings: SidekickSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
+	const opts: {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} = {};
+	if (supportsReasoning) {
+		if (settings.reasoningEffort && (supported?.includes(settings.reasoningEffort) ?? false)) {
+			opts.reasoningEffort = settings.reasoningEffort as ReasoningEffort;
+		}
+		if (settings.reasoningSummary) opts.reasoningSummary = settings.reasoningSummary as ReasoningSummary;
+	}
+	if (settings.contextTier !== 'default') opts.contextTier = settings.contextTier;
+	return Object.keys(opts).length > 0 ? opts : undefined;
+}
+
+declare module '../sidekickView' {
+	interface SidekickView {
+		buildConfigToolbar(parent: HTMLElement): void;
+		populateModelSelect(): void;
+		getSelectedModelInfo(): ModelInfo | undefined;
+		openReasoningMenu(e: MouseEvent): void;
+		updateReasoningBadge(): void;
+		applyReasoningToSession(): void;
+		setReasoningSummary(mode: string): void;
+		openSkillsMenu(e: MouseEvent): void;
+		openToolsMenu(e: MouseEvent): void;
+		selectAgent(agentName: string): void;
+		applyAgentToolsAndSkills(agent?: AgentConfig): void;
+		updateSkillsBadge(): void;
+		updateToolsBadge(): void;
+		openCwdPicker(): void;
+		updateCwdButton(): void;
+		openEditFromChat(): void;
+		resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined;
+	}
+}
+
+export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
+	const proto = ViewClass.prototype as SidekickView;
+
+	proto.buildConfigToolbar = function(parent: HTMLElement): void {
+		const toolbar = parent.createDiv({cls: 'sidekick-toolbar'});
+
+		// New conversation button
+		const newChatBtn = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'New conversation'}});
+		setIcon(newChatBtn, 'plus');
+		newChatBtn.addEventListener('click', () => void this.newConversation());
+
+		// Agent dropdown
+		const agentGroup = toolbar.createDiv({cls: 'sidekick-toolbar-group'});
+		const agentIcon = agentGroup.createSpan({cls: 'sidekick-toolbar-icon'});
+		setIcon(agentIcon, 'bot');
+		this.agentSelect = agentGroup.createEl('select', {cls: 'sidekick-select'});
+		this.agentSelect.addEventListener('change', () => {
+			this.selectAgent(this.agentSelect.value);
+		});
+
+		// Model dropdown
+		const modelGroup = toolbar.createDiv({cls: 'sidekick-toolbar-group'});
+		this.modelIconEl = modelGroup.createSpan({cls: 'sidekick-toolbar-icon clickable-icon'});
+		setIcon(this.modelIconEl, 'cpu');
+		this.modelIconEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
+		this.modelSelect = modelGroup.createEl('select', {cls: 'sidekick-select sidekick-model-select'});
+		this.modelSelect.addEventListener('change', () => {
+			const newModel = this.modelSelect.value;
+			this.selectedModel = newModel;
+			// Reset any reasoning effort the new model doesn't support first, then
+			// carry the (now-valid) effort + summary into the mid-session switch.
+			this.updateReasoningBadge();
+			this.applyReasoningToSession();
+		});
+
+		// Skills button
+		this.skillsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Skills'}});
+		setIcon(this.skillsBtnEl, 'wand-2');
+		this.skillsBtnEl.addEventListener('click', (e) => this.openSkillsMenu(e));
+
+		// Tools button
+		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Tools'}});
+		setIcon(this.toolsBtnEl, 'plug');
+		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
+
+		// Working directory button
+		this.cwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon sidekick-icon-btn', attr: {title: 'Working directory'}});
+		setIcon(this.cwdBtnEl, 'hard-drive-download');
+		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
+		this.updateCwdButton();
+
+		// Spacer to push debug toggle to the right
+		toolbar.createDiv({cls: 'sidekick-toolbar-spacer'});
+
+		// Debug toggle
+		this.debugBtnEl = toolbar.createDiv({cls: 'sidekick-debug-toggle', attr: {title: 'Show tool & token details'}});
+		const debugIcon = this.debugBtnEl.createSpan({cls: 'sidekick-debug-icon'});
+		setIcon(debugIcon, 'bug');
+		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'sidekick-debug-checkbox'});
+		debugCheck.checked = this.showDebugInfo;
+		debugCheck.addEventListener('change', () => {
+			this.showDebugInfo = debugCheck.checked;
+			setDebugEnabled(this.showDebugInfo);
+			this.chatContainer.toggleClass('sidekick-hide-debug', !this.showDebugInfo);
+		});
+		this.debugBtnEl.addEventListener('click', (e) => {
+			if (e.target !== debugCheck) {
+				debugCheck.checked = !debugCheck.checked;
+				debugCheck.dispatchEvent(new Event('change'));
+			}
+		});
+	};
+
+	proto.populateModelSelect = function(): void {
+		this.modelSelect.empty();
+		for (const model of this.models) {
+			const opt = this.modelSelect.createEl('option', {text: model.name});
+			opt.value = model.id;
+		}
+	};
+
+	proto.getSelectedModelInfo = function(): ModelInfo | undefined {
+		return this.models.find(m => m.id === this.selectedModel);
+	};
+
+	proto.openReasoningMenu = function(e: MouseEvent): void {
+		const model = this.getSelectedModelInfo();
+		// The SDK narrows supportedReasoningEfforts to its ReasoningEffort union, but
+		// models report values beyond it (e.g. 'max', 'none'); treat them as strings.
+		const supported = model?.supportedReasoningEfforts as string[] | undefined;
+		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && !!supported && supported.length > 0;
+		const menu = new Menu();
+
+		if (supportsReasoning) {
+			const current = this.plugin.settings.reasoningEffort;
+			for (const level of supported!) {
+				menu.addItem(item => {
+					item.setTitle(effortLabel(level))
+						.setChecked(level === current)
+						.onClick(() => {
+							// Toggle back to model default if the active level is re-selected.
+							this.plugin.settings.reasoningEffort = level === current ? '' : level;
+							void this.plugin.saveSettings();
+							this.applyReasoningToSession();
+							this.updateReasoningBadge();
+						});
+				});
+			}
+
+			// Reasoning summary submenu (gated on the same reasoning capability).
+			menu.addSeparator();
+			const currentSummary = this.plugin.settings.reasoningSummary;
+			menu.addItem(item => {
+				item.setTitle('Reasoning summary');
+				const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
+				sub.addItem(si => si
+					.setTitle('Model default')
+					.setChecked(currentSummary === '')
+					.onClick(() => this.setReasoningSummary('')));
+				for (const mode of REASONING_SUMMARY_MODES) {
+					sub.addItem(si => si
+						.setTitle(summaryLabel(mode))
+						.setChecked(currentSummary === mode)
+						.onClick(() => this.setReasoningSummary(mode)));
+				}
+			});
+		} else {
+			menu.addItem(item => item.setTitle('Model does not support reasoning effort').setDisabled(true));
+		}
+
+		// Long-context toggle — always shown. There is no per-model support signal in
+		// the SDK, so it can't be gated; the SDK ignores it for unsupported models.
+		menu.addSeparator();
+		menu.addItem(item => {
+			item.setTitle('Long context')
+				.setChecked(this.plugin.settings.contextTier === 'long_context')
+				.onClick(() => {
+					this.plugin.settings.contextTier = this.plugin.settings.contextTier === 'long_context' ? 'default' : 'long_context';
+					void this.plugin.saveSettings();
+					this.applyReasoningToSession();
+					this.updateReasoningBadge();
+				});
+		});
+
+		// Infinite sessions toggle — controls automatic context compaction.
+		menu.addItem(item => {
+			item.setTitle('Infinite sessions')
+				.setChecked(this.plugin.settings.infiniteSessionsEnabled)
+				.onClick(() => {
+					this.plugin.settings.infiniteSessionsEnabled = !this.plugin.settings.infiniteSessionsEnabled;
+					void this.plugin.saveSettings();
+					this.configDirty = true;
+					this.updateReasoningBadge();
+				});
+		});
+
+		menu.showAtMouseEvent(e);
+	};
+
+	proto.applyReasoningToSession = function(): void {
+		if (this.currentSession && !this.configDirty) {
+			const model = this.getSelectedModelInfo();
+			const supported = model?.supportedReasoningEfforts as string[] | undefined;
+			const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
+			// Mid-session change — pass effort + summary + context tier together so none
+			// resets. Reasoning options are skipped for models that don't support them;
+			// the context tier is always included (the SDK ignores it when unsupported).
+			const opts = buildSetModelOptions(this.plugin.settings, supported, supportsReasoning);
+			void this.currentSession.setModel(this.selectedModel, opts);
+		} else {
+			this.configDirty = true;
+		}
+	};
+
+	proto.setReasoningSummary = function(mode: string): void {
+		this.plugin.settings.reasoningSummary = mode;
+		void this.plugin.saveSettings();
+		this.applyReasoningToSession();
+		this.updateReasoningBadge();
+	};
+
+	proto.updateReasoningBadge = function(): void {
+		const model = this.getSelectedModelInfo();
+		const supported = model?.supportedReasoningEfforts as string[] | undefined;
+		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
+		const level = this.plugin.settings.reasoningEffort;
+		// Reset if current level isn't supported by the new model
+		if (level !== '' && supportsReasoning && supported && !supported.includes(level)) {
+			this.plugin.settings.reasoningEffort = '';
+			void this.plugin.saveSettings();
+		}
+		const current = this.plugin.settings.reasoningEffort;
+		const summary = this.plugin.settings.reasoningSummary;
+		const longContext = this.plugin.settings.contextTier === 'long_context';
+		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
+		// The icon stays interactive even without reasoning support, because the menu
+		// always offers the long-context and infinite-sessions toggles.
+		const active = ((current !== '' || summary !== '') && supportsReasoning) || longContext || !infiniteSessions;
+		this.modelIconEl.toggleClass('is-active', active);
+		this.modelIconEl.toggleClass('is-non-interactive', false);
+		const parts: string[] = [];
+		if (supportsReasoning) {
+			if (current !== '') parts.push(`effort ${effortLabel(current).toLowerCase()}`);
+			if (summary !== '') parts.push(`summary ${summaryLabel(summary).toLowerCase()}`);
+		}
+		if (longContext) parts.push('long context');
+		if (!infiniteSessions) parts.push('infinite sessions off');
+		if (!supportsReasoning && !longContext && infiniteSessions) {
+			this.modelIconEl.setAttribute('title', 'Reasoning & context (model does not support reasoning effort)');
+		} else {
+			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
+		}
+	};
+
+	proto.openSkillsMenu = function(e: MouseEvent): void {
+		const menu = new Menu();
+		if (this.skills.length === 0) {
+			menu.addItem(item => item.setTitle('No skills configured').setDisabled(true));
+		} else {
+			for (const skill of this.skills) {
+				menu.addItem(item => {
+					item.setTitle(skill.name)
+						.setChecked(this.enabledSkills.has(skill.name))
+						.onClick(() => {
+							if (this.enabledSkills.has(skill.name)) {
+								this.enabledSkills.delete(skill.name);
+							} else {
+								this.enabledSkills.add(skill.name);
+							}
+							this.configDirty = true;
+							this.updateSkillsBadge();
+						});
+				});
+			}
+		}
+		menu.showAtMouseEvent(e);
+	};
+
+	proto.openToolsMenu = function(e: MouseEvent): void {
+		const menu = new Menu();
+		if (this.mcpServers.length === 0) {
+			menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
+		} else {
+			for (const server of this.mcpServers) {
+				menu.addItem(item => {
+					item.setTitle(server.name)
+						.setChecked(this.enabledMcpServers.has(server.name))
+						.onClick(() => {
+							if (this.enabledMcpServers.has(server.name)) {
+								this.enabledMcpServers.delete(server.name);
+							} else {
+								this.enabledMcpServers.add(server.name);
+							}
+							this.configDirty = true;
+							this.updateToolsBadge();
+						});
+				});
+			}
+		}
+		menu.addSeparator();
+		const currentApproval = this.plugin.settings.toolApproval;
+		menu.addItem(item => {
+			item.setTitle('Approval mode');
+			const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
+			sub.addItem(si => {
+				si.setTitle('Allow (auto-approve)')
+					.setChecked(currentApproval === 'allow')
+					.onClick(async () => {
+						this.plugin.settings.toolApproval = 'allow';
+						await this.plugin.saveSettings();
+					});
+			});
+			sub.addItem(si => {
+				si.setTitle('Ask (require approval)')
+					.setChecked(currentApproval === 'ask')
+					.onClick(async () => {
+						this.plugin.settings.toolApproval = 'ask';
+						await this.plugin.saveSettings();
+					});
+			});
+		});
+		menu.showAtMouseEvent(e);
+	};
+
+	proto.selectAgent = function(agentName: string): void {
+		// Handle deselecting (empty = "Auto" / no agent)
+		if (!agentName) {
+			this.selectedAgent = '';
+			this.agentSelect.value = '';
+			this.agentSelect.selectedIndex = 0;
+			this.agentSelect.title = '';
+			this.applyAgentToolsAndSkills(undefined);
+			this.configDirty = true;
+			return;
+		}
+		const agent = this.agents.find(a => a.name === agentName)
+			// Fallback: case-insensitive match
+			?? this.agents.find(a => a.name.toLowerCase() === agentName.toLowerCase());
+		if (!agent) return; // No matching agent found — leave dropdown unchanged
+		this.selectedAgent = agent.name;
+		// Update the dropdown — set both .value and .selectedIndex for reliability
+		this.agentSelect.value = agent.name;
+		const opts = this.agentSelect.options;
+		for (let i = 0; i < opts.length; i++) {
+			if (opts[i]!.value === agent.name) {
+				this.agentSelect.selectedIndex = i;
+				break;
+			}
+		}
+		this.agentSelect.title = agent.instructions;
+		// Auto-select agent's preferred model
+		const resolvedModel = this.resolveModelForAgent(agent, this.selectedModel || undefined);
+		if (resolvedModel && resolvedModel !== this.selectedModel) {
+			this.selectedModel = resolvedModel;
+			this.modelSelect.value = resolvedModel;
+		}
+		this.applyAgentToolsAndSkills(agent);
+		this.configDirty = true;
+	};
+
+	proto.applyAgentToolsAndSkills = function(agent?: AgentConfig): void {
+		// Tools: undefined = enable all, [] = disable all, [...] = enable listed
+		if (agent?.tools !== undefined) {
+			const allowed = new Set(agent.tools);
+			this.enabledMcpServers = new Set(
+				this.mcpServers.filter(s => allowed.has(s.name)).map(s => s.name)
+			);
+		} else {
+			this.enabledMcpServers = new Set(this.mcpServers.map(s => s.name));
+		}
+
+		// Skills: undefined = enable all, [] = disable all, [...] = enable listed
+		if (agent?.skills !== undefined) {
+			const allowed = new Set(agent.skills);
+			this.enabledSkills = new Set(
+				this.skills.filter(s => allowed.has(s.name)).map(s => s.name)
+			);
+		} else {
+			this.enabledSkills = new Set(this.skills.map(s => s.name));
+		}
+
+		this.updateSkillsBadge();
+		this.updateToolsBadge();
+	};
+
+	proto.updateSkillsBadge = function(): void {
+		const count = this.enabledSkills.size;
+		this.skillsBtnEl.toggleClass('is-active', count > 0);
+		this.skillsBtnEl.setAttribute('title', count > 0 ? `Skills (${count} active)` : 'Skills');
+	};
+
+	proto.updateToolsBadge = function(): void {
+		const count = this.enabledMcpServers.size;
+		this.toolsBtnEl.toggleClass('is-active', count > 0);
+		this.toolsBtnEl.setAttribute('title', count > 0 ? `Tools (${count} active)` : 'Tools');
+	};
+
+	proto.openCwdPicker = function(): void {
+		new FolderTreeModal(this.app, this.workingDir, (folder) => {
+			this.workingDir = folder.path;
+			this.updateCwdButton();
+			this.configDirty = true;
+		}).open();
+	};
+
+	proto.updateCwdButton = function(): void {
+		const vaultName = this.app.vault.getName();
+		const label = `Working directory: ${vaultName}/${this.workingDir}`;
+		this.cwdBtnEl.setAttribute('title', label);
+		this.cwdBtnEl.toggleClass('is-active', true);
+	};
+
+	proto.openEditFromChat = function(): void {
+		const text = this.inputEl.value.trim();
+		new EditModal(this.plugin, text, (result) => {
+			this.inputEl.value = result;
+			this.inputEl.setCssProps({'--input-height': 'auto'});
+			this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
+			this.inputEl.focus();
+		}).open();
+	};
+
+	proto.resolveModelForAgent = function(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {
+		if (!agent?.model) return fallback;
+		const target = agent.model.toLowerCase();
+		let match = this.models.find(
+			m => m.name.toLowerCase() === target || m.id.toLowerCase() === target
+		);
+		if (!match) {
+			match = this.models.find(
+				m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target)
+			);
+		}
+		return match ? match.id : fallback;
+	};
+}
