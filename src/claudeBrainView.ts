@@ -962,7 +962,6 @@ export class ClaudeBrainView extends ItemView {
 			agents[a.name] = toCustomAgentConfig(a);
 		}
 
-		// Permission handler
 		// Permission handler — canUseTool for Agent SDK
 		const permissionHandler: import('./copilot').PermissionHandler = async (toolName, input, options) => {
 			if (this.plugin.settings.toolApproval === 'allow') {
@@ -1005,8 +1004,6 @@ export class ClaudeBrainView extends ItemView {
 		const systemContent = opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
 			: wsInfo;
-
-
 
 		const config: SessionConfig = {
 			model: opts.model,
