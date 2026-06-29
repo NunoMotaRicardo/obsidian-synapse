@@ -138,7 +138,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	providerBaseUrl: 'http://localhost:11434',
 	providerApiKey: '',
 	providerBearerToken: '',
-	synapseFolder: 'synapse',
+	synapseFolder: SYNAPSE_FOLDER,
 	toolApproval: 'ask',
 	inlineModel: '',
 	featureAgents: {
