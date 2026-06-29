@@ -19,12 +19,6 @@ export interface SkillInfo {
 	folderPath: string;
 }
 
-/** A single MCP server entry parsed from mcp.json. */
-export interface McpServerEntry {
-	name: string;
-	config: Record<string, unknown>;
-}
-
 /** A message in the Synapse chat conversation. */
 export interface ChatMessage {
 	id: string;

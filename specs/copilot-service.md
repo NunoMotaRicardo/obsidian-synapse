@@ -46,9 +46,9 @@ behavior), and omitted otherwise (SDK default is streaming).
 
 ## Named Agent Model Binding & Routing (#5)
 
-Named agents parsed from `*.agent.md` carry an optional `model` binding (Claude model ID or local backend reference). `toCustomAgentConfig()` converts vault `AgentConfig` objects into SDK `AgentDefinition` (`CustomAgentConfig`) objects with their `model`, `description`, `prompt`, `tools`, and `skills` intact.
+Named agents parsed from `_synapse/agents/*.md` carry an optional `model` binding (Claude model ID or local backend reference).
 
-`AgentService` includes a internal routing layer (`routeQueryOptions`) that intercepts queries. When a named agent is specified (`agent`) and its matching `AgentDefinition` carries a model binding (`model`), `AgentService` routes the request's effective model to the bound model backend. Tool delegation to subagents via the Agent tool similarly resolves each subagent's bound model.
+`AgentService` includes an internal routing layer (`routeQueryOptions`) that intercepts queries. When a named agent is specified (`agent`) and its matching `AgentDefinition` carries a model binding (`model`), `AgentService` routes the request's effective model to the bound model backend. Tool delegation to subagents via the Agent tool similarly resolves each subagent's bound model.
 
 ## Dynamic Delegation via MCP Tool (#8)
 
@@ -68,9 +68,8 @@ Tier-1 Claude sessions can dynamically delegate sub-work to a cheap/local-backed
 | `contextTier` | planned — issue 0004 |
 | `infiniteSessions` | settings `infiniteSessionsEnabled` (issue #5) — `{ enabled }` config; omitted when `true` (SDK default), passed as `{ enabled: false }` when disabled |
 | `systemMessage` | agent body / built-in prompts |
-| `customAgents`, `agent` | config-loader agents (bound models converted via `toCustomAgentConfig`) |
-| `mcpServers` | config-loader `tools/mcp.json` |
-| `skillDirectories`, `disabledSkills` | config-loader skills |
+| `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: '...'}`) |
+| `skills` | active/enabled skill names array passed to SDK |
 | `onPermissionRequest` | tool-approval modal or `approveAll` |
 | `onUserInputRequest`, `onElicitationRequest` | modals |
 | `provider` | BYOK settings — injected by both `buildSessionConfig` (chat) and `chat()`/`inlineChat()` (inline) |
