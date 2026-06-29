@@ -1,7 +1,7 @@
 # obsidian-copilot (Sidekick fork)
 
 Personal fork of obsidian-sidekick: an Obsidian desktop plugin embedding GitHub Copilot as an
-assistant (chat panel, editor actions, ghost text, triggers, Telegram bot). Upstream is
+assistant (chat panel, editor actions, triggers, Telegram bot). Upstream is
 unmaintained; this fork tracks the GA Copilot SDK.
 
 ## Stack & build

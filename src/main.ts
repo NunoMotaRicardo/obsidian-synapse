@@ -3,9 +3,8 @@ import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loa
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
 import {loadAgents} from "./configLoader";
-import {SynapseView, SYNAPSE_VIEW_TYPE} from "./synapseView";
+import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
-import {buildGhostTextExtension, triggerComplete} from './editor/ghostText';
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
@@ -28,8 +27,6 @@ export default class SynapsePlugin extends Plugin {
 
 		await this.loadSettings();
 
-
-		this.applyInlineIconClass();
 		this.addSettingTab(new SynapseSettingTab(this.app, this));
 
 		// Register the Synapse chat view
@@ -142,35 +139,11 @@ export default class SynapsePlugin extends Plugin {
 			});
 		}
 
-		// Command: Toggle autocomplete
-		this.addCommand({
-			id: 'toggle-autocomplete',
-			name: 'Toggle autocomplete',
-			callback: async () => {
-				this.settings.autocompleteEnabled = !this.settings.autocompleteEnabled;
-				await this.saveSettings();
-				new Notice(`Synapse: autocomplete ${this.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
-			},
-		});
-
-		// Command: Trigger autocomplete
-		this.addCommand({
-			id: 'trigger-autocomplete',
-			name: 'Trigger autocomplete',
-			editorCallback: (_editor, view) => {
-				const cmView = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
-				if (cmView) cmView.dispatch({effects: triggerComplete.of(null)});
-			},
-		});
-
 		// Editor context menu (Synapse submenu for selected text)
 		registerEditorMenu(this);
 
 		// Vault tree context menu (Synapse submenu for note files)
 		registerFileMenu(this);
-
-		// Ghost-text autocomplete (inline suggestions)
-		this.registerEditorExtension(buildGhostTextExtension(this));
 
 		try {
 			await this.initCopilot();
@@ -293,7 +266,6 @@ export default class SynapsePlugin extends Plugin {
 	}
 
 	onunload() {
-		document.body.removeClass('synapse-no-inline-icon');
 		if (this.copilot) {
 			void this.copilot.stop();
 		}
@@ -383,10 +355,6 @@ export default class SynapsePlugin extends Plugin {
 		}
 	}
 
-	applyInlineIconClass() {
-		document.body.toggleClass('synapse-no-inline-icon', !this.settings.inlineIconEnabled);
-	}
-
 	async saveSettings() {
 		// Clone settings and strip secure fields before writing to data.json
 		const dataToSave = {...this.settings};
@@ -394,6 +362,5 @@ export default class SynapsePlugin extends Plugin {
 			(dataToSave as Record<string, unknown>)[key] = '';
 		}
 		await this.saveData(dataToSave);
-		this.applyInlineIconClass();
 	}
 }
