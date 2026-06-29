@@ -7,6 +7,7 @@ import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
+import {ensureImproveSynapseSkill} from './configWriter';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -25,6 +26,13 @@ export default class SynapsePlugin extends Plugin {
 		this.migrateLocalStorageKeys();
 
 		await this.loadSettings();
+
+		// Seed improve-synapse skill on first run if missing
+		try {
+			await ensureImproveSynapseSkill(this.app);
+		} catch (e) {
+			console.error('Synapse: failed to seed improve-synapse skill', e);
+		}
 
 		this.addSettingTab(new SynapseSettingTab(this.app, this));
 

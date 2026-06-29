@@ -1,7 +1,7 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
-import {scanAgents} from "./configWriter";
+import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
 /** Hardcoded vault folder for Synapse customization artifacts. */
@@ -281,164 +281,6 @@ export async function updateAgentModelFile(app: App, filePath: string, newModel:
 }
 
 
-const SAMPLE_SELF_IMPROVE_SKILL = `---
-name: self-improve
-description: Comprehensive reference for creating and managing Synapse vault-local customization artifacts
----
-
-# Self-improve skill
-
-Use this skill when the user asks to create, modify, or delete Synapse customization
-artifacts (agents, prompts, skills, or MCP tool configurations).
-
-## Vault folder structure
-
-\`\`\`
-synapse/
-  agents/*.agent.md
-  prompts/*.prompt.md
-  skills/<name>/SKILL.md
-  tools/mcp.json
-\`\`\`
-
-## Naming conventions
-
-- Filenames are **kebab-case** derived from the artifact name.
-  - Example: "Academic Research" becomes \`academic-research.agent.md\`
-- Skills live in a subfolder named after the skill: \`skills/my-skill/SKILL.md\`
-
-## Permission model
-
-- **Always ask the user for permission** before creating, modifying, or deleting any file.
-- For **deletion**, ask for extra confirmation.
-
-## MCP tools restriction
-
-- You may **read** \`tools/mcp.json\` to understand available MCP servers.
-- You must **never write** to \`mcp.json\`. Only suggest changes and let the user apply them manually.
-
-## Modes of operation
-
-- **Targeted**: create or modify a single artifact based on the user's request.
-- **Bootstrap**: scan the vault's synapse folder structure, identify gaps, and propose a batch of artifacts.
-
-## configWriter functions
-
-When tool access is available, use these functions from the configWriter module:
-
-| Function | Purpose |
-|---|---|
-| \`writeAgent(app, folder, config)\` | Create a new agent file |
-| \`writePrompt(app, folder, config)\` | Create a new prompt file |
-| \`writeSkill(app, folder, config)\` | Create a new skill (subfolder + SKILL.md) |
-| \`modifyArtifact(app, filePath, updates)\` | Patch frontmatter or body of an existing artifact |
-| \`deleteArtifact(app, filePath)\` | Move an artifact to Obsidian trash |
-
----
-
-## Artifact types
-
-### Agents
-
-File pattern: \`agents/<kebab-name>.agent.md\`
-
-Frontmatter fields:
-- \`name\` (required) — display name
-- \`description\` (required) — short purpose summary
-- \`model\` (optional) — Claude model ID or local model reference
-- \`tools\` (optional) — list of allowed tool names; omit for all, empty list for none
-- \`skills\` (optional) — list of allowed skill names; omit for all, empty list for none
-
-Body: system instructions for the agent persona.
-
-Template:
-\`\`\`markdown
----
-name: My Agent
-description: Short description of what this agent does
-model: claude-sonnet-4-6
-tools:
-  - Read
-  - Write
-skills:
-  - my-skill
----
-
-# My Agent Instructions
-
-You are an assistant that specializes in [domain]. Help the user with [tasks].
-\`\`\`
-
-### Prompts
-
-File pattern: \`prompts/<kebab-name>.prompt.md\`
-
-Frontmatter fields:
-- \`agent\` (optional) — name of the agent to use; omit for session default
-- \`description\` (optional) — short description shown in prompt picker
-
-Body: content prepended to the user's message.
-
-Template:
-\`\`\`markdown
----
-agent: General
-description: Summarize the current note into bullet points
----
-Summarize the key points of the current note into concise bullet points.
-\`\`\`
-
-### Skills
-
-File pattern: \`skills/<kebab-name>/SKILL.md\`
-
-Frontmatter fields:
-- \`name\` (required) — skill identifier
-- \`description\` (required) — short purpose summary
-
-Body: procedures, instructions, and reference material the agent follows.
-
-Template:
-\`\`\`markdown
----
-name: my-skill
-description: What this skill teaches the agent to do
----
-
-# My Skill
-
-Instructions and procedures for the agent to follow.
-
-## When to use
-
-Describe the situations where this skill applies.
-
-## Steps
-
-1. First step
-2. Second step
-\`\`\`
-
-### MCP tools
-
-File: \`tools/mcp.json\`
-
-Accepts a \`servers\` or \`mcpServers\` top-level key. Each entry is an MCP server configuration.
-
-**Important**: never write to this file. Only suggest configuration changes to the user.
-
-Example structure:
-\`\`\`json
-{
-  "servers": {
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/"
-    }
-  }
-}
-\`\`\`
-`;
 
 
 export class SynapseSettingTab extends PluginSettingTab {
@@ -853,7 +695,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					try {
 						const base = normalizePath(SYNAPSE_FOLDER);
 
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/self-improve']) {
+						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse']) {
 							const dir = normalizePath(`${base}${sub}`);
 							if (!this.app.vault.getAbstractFileByPath(dir)) {
 								await this.app.vault.createFolder(dir);
@@ -879,11 +721,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 							await this.app.vault.create(skillPath, SAMPLE_SKILL_CONTENT);
 						}
 
-
-						const selfImproveSkillPath = normalizePath(`${base}/skills/self-improve/SKILL.md`);
-						if (!this.app.vault.getAbstractFileByPath(selfImproveSkillPath)) {
-							await this.app.vault.create(selfImproveSkillPath, SAMPLE_SELF_IMPROVE_SKILL);
-						}
+						await ensureImproveSynapseSkill(this.app, base);
 
 						new Notice('Synapse folder initialized with sample agents and skills.');
 					} catch (e) {
