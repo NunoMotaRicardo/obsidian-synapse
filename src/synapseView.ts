@@ -20,7 +20,7 @@ import {Session, toCustomAgentConfig} from './copilot';
 import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, ChatMessage, ChatAttachment} from './types';
 import {loadAgents, loadSkills, loadMcpServers, loadPrompts} from './configLoader';
 import type {InputResolver} from './configLoader';
-import {getAgentsFolder, getSkillsFolder, getToolsFolder, getPromptsFolder, getMcpInputValue, setMcpInputValue, McpInputPromptModal} from './settings';
+import {SYNAPSE_FOLDER, getMcpInputValue, setMcpInputValue, McpInputPromptModal} from './settings';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
@@ -334,10 +334,10 @@ export class SynapseView extends ItemView {
 
 			// Parallel-load all config files (independent I/O)
 			const [agents, skills, mcpServers, prompts] = await Promise.all([
-				loadAgents(this.app, getAgentsFolder(this.plugin.settings)),
-				loadSkills(this.app, getSkillsFolder(this.plugin.settings)),
-				loadMcpServers(this.app, getToolsFolder(this.plugin.settings), inputResolver),
-				loadPrompts(this.app, getPromptsFolder(this.plugin.settings)),
+				loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
+				loadSkills(this.app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
+				loadMcpServers(this.app, normalizePath(`${SYNAPSE_FOLDER}/tools`), inputResolver),
+				loadPrompts(this.app, normalizePath(`${SYNAPSE_FOLDER}/prompts`)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
@@ -388,7 +388,7 @@ export class SynapseView extends ItemView {
 		const DEBOUNCE_MS = 500;
 
 		const scheduleRefresh = (filePath: string) => {
-			const base = normalizePath(this.plugin.settings.synapseFolder);
+			const base = normalizePath(SYNAPSE_FOLDER);
 			if (!filePath.startsWith(base + '/')) return;
 			if (this.configLoading || (Date.now() - this.configLoadedAt < 2_000)) return;
 			debugTrace(`Synapse: config file changed: ${filePath}`);
@@ -932,7 +932,7 @@ export class SynapseView extends ItemView {
 		const basePath = this.getVaultBasePath();
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
-			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
+			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
 		}
 		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
 		const agents: Record<string, CustomAgentConfig> = {};
@@ -979,7 +979,7 @@ export class SynapseView extends ItemView {
 		}
 		parts.push(`Working directory: ${workDir}`);
 		const wsInfo = parts.join('\n');
-		const vaultContext = buildVaultContextBlock(this.app, this.plugin.settings.synapseFolder);
+		const vaultContext = buildVaultContextBlock(this.app);
 		let systemContent = (opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
 			: wsInfo) + vaultContext;
@@ -1015,7 +1015,7 @@ export class SynapseView extends ItemView {
 		// Skills
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
-			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
+			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
 		}
 		const _disabledSkills = this.skills
 			.filter(s => !this.enabledSkills.has(s.name))

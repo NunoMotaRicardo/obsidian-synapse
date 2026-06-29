@@ -3,7 +3,7 @@ import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 // Agent SDK types imported transitively via AgentService
 import {loadSkills} from '../configLoader';
-import {getSkillsFolder} from '../settings';
+import {SYNAPSE_FOLDER} from '../settings';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
@@ -681,7 +681,7 @@ async function getInlineSkillOptions(
 	plugin: SynapsePlugin,
 	enabledSkillNames: string[],
 ): Promise<{skillDirectories?: string[]; disabledSkills?: string[]}> {
-	const skillsFolder = getSkillsFolder(plugin.settings);
+	const skillsFolder = normalizePath(`${SYNAPSE_FOLDER}/skills`);
 	const availableSkills = await loadSkills(plugin.app, skillsFolder);
 	if (availableSkills.length === 0) return {};
 

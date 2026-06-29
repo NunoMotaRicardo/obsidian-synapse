@@ -1,6 +1,7 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, PromptConfig} from './types';
 import {parseFrontmatter} from './configLoader';
+import {SYNAPSE_FOLDER} from './settings';
 
 /** Configuration for writing a skill artifact (SKILL.md inside a named subfolder). */
 export interface SkillWriteConfig {
@@ -220,11 +221,9 @@ export async function deleteArtifact(app: App, filePath: string): Promise<void> 
  */
 export function scanVaultStructure(
 	app: App,
-	synapseFolder: string,
 ): {name: string; fileCount: number}[] {
 	const root = app.vault.getRoot();
-	const normalized = normalizePath(synapseFolder);
-	const excluded = new Set([normalized, '.obsidian', '.trash']);
+	const excluded = new Set([normalizePath(SYNAPSE_FOLDER), '.obsidian', '.trash']);
 
 	return root.children
 		.filter((child): child is TFolder =>
