@@ -1,54 +1,82 @@
-# config-loader
+# config-writer (was: config-loader)
 
-Source: `src/configLoader.ts`. Reads the vault-side config folder (default `sidekick/`,
-this user's vault uses `_sidekick/`) and turns files into runtime config.
+Source: `src/configWriter.ts`. Write-side utilities for the self-improve feature and first-run
+seeding. The read/load side (`configLoader.ts`) has been deleted — the Claude Agent SDK discovers
+agents, skills, and MCP servers natively from the `_synapse/` plugin directory.
 
-## Inputs
+## Plugin registration
 
-```
-<folder>/
-  agents/    *.agent.md     → CustomAgentConfig-ish {name, description, model, tools, skills} + body = system prompt
-  skills/    <name>/SKILL.md → skillDirectories entries; toggleable per session
-  tools/     mcp.json        → Record<string, MCPServerConfig> (+ "inputs" for ${input:id} secrets)
-  prompts/   *.prompt.md     → slash-command templates {agent?, description?} + body
-  triggers/  *.trigger.md    → {name?, agent?, cron?, glob?, enabled?} + body = prompt
+The `_synapse/` vault folder is registered as an SDK local plugin on every query/session:
+
+```typescript
+plugins: [{ type: 'local', path: '<vaultBasePath>/_synapse/' }]
 ```
 
-## Rules
+The SDK discovers:
+- `_synapse/agents/*.md` → SDK `AgentDefinition` subagents
+- `_synapse/skills/*/SKILL.md` → SDK skills (invocable via `/name`)
+- `_synapse/.mcp.json` → SDK MCP server configs
 
-- Agent `tools`/`skills` frontmatter: omitted = all enabled; present-but-empty = all disabled;
-  list = only those.
-- Agent `model` frontmatter binds the agent definition to a specific Claude model ID or local backend reference. `toCustomAgentConfig` maps this field to SDK `AgentDefinition.model`.
-- `mcp.json` accepts `servers` or `mcpServers` top-level key; `${input:id}` placeholders are
-  resolved from stored MCP input values, prompting for missing ones at load time.
-- Reload button in the toolbar re-parses everything; malformed files log and are skipped,
-  never crash the panel.
-- SDK 1.0 type note: server entries map to `MCPStdioServerConfig` (`command`/`args`/`env`) or
-  `MCPHTTPServerConfig` (`type: "http" | "sse"`, `url`, `headers`).
+No `skipMcpDiscovery` — MCP goes fully native. No custom parsing, no `configLoader.ts`.
+The CLI spawns fresh per query, re-discovers artifacts each time — no explicit reload needed.
 
-## Config writer (`src/configWriter.ts`) — implemented
+## Folder layout
 
-Write counterparts for the loader functions above. Used by the self-improve feature to
-programmatically create, modify, and delete vault-local customization artifacts.
+```
+_synapse/                   (hardcoded — not a setting)
+  agents/    *.md            SDK-discovered agents (AgentDefinition fields only)
+  skills/    */SKILL.md      SDK-discovered skills (includes merged prompts)
+  .mcp.json                  SDK-discovered MCP servers
+```
+
+No `prompts/`, `triggers/`, or `tools/` folders. Prompts merged into skills; triggers deferred
+to issue #14 (loop features); MCP config is `.mcp.json` at plugin root.
+
+## Toolbar population (display-only scan)
+
+A lightweight scan of `_synapse/agents/` and `_synapse/skills/` reads folder/file names and
+frontmatter descriptions for toolbar dropdown display. This is display-only — the SDK owns
+discovery and execution. Implemented as simple directory listing + frontmatter parse, not a
+full config load.
+
+## Config writer (`src/configWriter.ts`)
+
+Write operations for the self-improve feature. All output is SDK-native format.
 
 ### Functions
 
 | Function | Creates | File pattern |
 |---|---|---|
-| `writeAgent(app, folder, config)` | `*.agent.md` | `<folder>/<kebab-name>.agent.md` |
-| `writePrompt(app, folder, config)` | `*.prompt.md` | `<folder>/<kebab-name>.prompt.md` |
-| `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `<folder>/<kebab-name>/SKILL.md` |
-| `writeTrigger(app, folder, config)` | `*.trigger.md` | `<folder>/<kebab-name>.trigger.md` |
+| `writeAgent(app, folder, config)` | `*.md` | `_synapse/agents/<kebab-name>.md` |
+| `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `_synapse/skills/<kebab-name>/SKILL.md` |
 | `modifyArtifact(app, filePath, updates)` | — | Patches frontmatter/body in-place |
 | `deleteArtifact(app, filePath)` | — | Moves to Obsidian trash |
 | `ensureFolder(app, path)` | Folder | Creates intermediates |
 
+Removed: `writePrompt`, `writeTrigger` (artifact types no longer exist).
+
 ### Rules
 
-- Filenames are kebab-case derived from the artifact name.
-- Frontmatter serialization round-trips through `parseFrontmatter` (exported from configLoader).
-- Strings containing colons, quotes, or newlines are double-quoted with `\"` escaping.
-- `modifyArtifact` reuses `parseFrontmatter` from configLoader (no duplication).
-- Never writes to `mcp.json` — no function for MCP config mutation.
-- Types: reuses `AgentConfig`, `PromptConfig`, `TriggerConfig` from `src/types.ts`;
-  adds `SkillWriteConfig` for skill creation.
+- Agent files use `.md` extension (not `.agent.md`) — SDK convention.
+- Agent frontmatter: SDK `AgentDefinition` fields only (`description`, `model`, `tools`,
+  `skills`, `disallowedTools`, `mcpServers`). No custom fields.
+- `parseFrontmatter()` and `FM_RE` live in this module (moved from deleted `configLoader.ts`).
+- `modifyArtifact` uses `parseFrontmatter` for in-place patching.
+- No MCP config mutation — `.mcp.json` is user-edited.
+
+## Vault structure scanner
+
+`scanVaultStructure(app, synapseFolder)` scans top-level vault folders (name + child count),
+excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by
+`buildVaultContextBlock()` in `sessionConfig.ts` for the system prompt.
+
+## Self-improve hint
+
+`buildSelfImproveHint(agentName)` in `sessionConfig.ts` teaches agents to recognize
+customization intent. Mentions only "agent" and "skill" as artifact types (no "prompt" or
+"trigger"). Skipped when the user is already using the `improve-synapse` skill.
+
+## First-run seeding
+
+On plugin startup, if `_synapse/skills/improve-synapse/SKILL.md` does not exist, the plugin
+seeds it as a starter skill demonstrating the format.
