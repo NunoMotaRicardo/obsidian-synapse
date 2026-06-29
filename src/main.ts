@@ -149,6 +149,9 @@ export default class SynapsePlugin extends Plugin {
 			// Eagerly connect so auth errors surface at startup.
 			if (this.copilot) {
 				await this.copilot.ensureConnected();
+				this.copilot.fetchModels()
+					.then(models => this.notifySidebarModelsChanged(models))
+					.catch(() => {});
 			}
 		} catch (e) {
 			console.error('Synapse: failed to initialize agent service', e);

@@ -51,6 +51,7 @@ import type {
 	ElicitationRequest,
 	ElicitationResult,
 	EffortLevel,
+	ModelInfo as SDKModelInfo,
 } from '@anthropic-ai/claude-agent-sdk';
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
@@ -114,45 +115,35 @@ export interface ModelInfo {
 	supportsTools?: boolean;
 }
 
-/** Standard Claude models supported by the Claude Agent SDK / CLI. */
-export const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
+/** Map SDK ModelInfo to the plugin's ModelInfo shape. */
+function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
+	const efforts = sdk.supportedEffortLevels ?? [];
+	return {
+		id: sdk.value,
+		name: sdk.displayName,
+		capabilities: {
+			supports: {
+				vision: true,
+				reasoningEffort: sdk.supportsEffort ?? efforts.length > 0,
+				tools: true,
+			},
+			limits: {max_context_window_tokens: 200000},
+			...(efforts.length > 0 ? {supportedReasoningEfforts: efforts} : {}),
+		},
+		isVision: true,
+		supportsTools: true,
+	};
+}
+
+/** Fallback model shown before the SDK model list is fetched. */
+export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 	{
-		id: 'claude-3-7-sonnet',
-		name: 'Claude 3.7 Sonnet',
+		id: 'claude-sonnet-4-6',
+		name: 'Claude Sonnet 4.6',
 		capabilities: {
 			supports: {vision: true, reasoningEffort: true, tools: true},
 			limits: {max_context_window_tokens: 200000},
-			supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
-		},
-		isVision: true,
-		supportsTools: true,
-	},
-	{
-		id: 'claude-3-5-sonnet',
-		name: 'Claude 3.5 Sonnet',
-		capabilities: {
-			supports: {vision: true, reasoningEffort: false, tools: true},
-			limits: {max_context_window_tokens: 200000},
-		},
-		isVision: true,
-		supportsTools: true,
-	},
-	{
-		id: 'claude-3-5-haiku',
-		name: 'Claude 3.5 Haiku',
-		capabilities: {
-			supports: {vision: false, reasoningEffort: false, tools: true},
-			limits: {max_context_window_tokens: 200000},
-		},
-		isVision: false,
-		supportsTools: true,
-	},
-	{
-		id: 'claude-3-opus',
-		name: 'Claude 3 Opus',
-		capabilities: {
-			supports: {vision: true, reasoningEffort: false, tools: true},
-			limits: {max_context_window_tokens: 200000},
+			supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 		},
 		isVision: true,
 		supportsTools: true,
@@ -241,6 +232,7 @@ export class AgentService {
 	private readonly onVersionInfo?: VersionInfoCallback;
 	private resolvedCli: ResolvedCliPath | null = null;
 	private customModels: ModelInfo[] = [];
+	private sdkModels: ModelInfo[] = [];
 	private cachedDelegationServer: McpServerConfig | null = null;
 
 	constructor(opts?: {
@@ -382,10 +374,33 @@ export class AgentService {
 
 	/** Get available Claude models. */
 	getModels(): ModelInfo[] {
+		const base = this.sdkModels.length > 0 ? this.sdkModels : FALLBACK_CLAUDE_MODELS;
 		if (this.customModels.length > 0) {
-			return [...this.customModels, ...DEFAULT_CLAUDE_MODELS];
+			return [...this.customModels, ...base];
 		}
-		return DEFAULT_CLAUDE_MODELS;
+		return base;
+	}
+
+	/** Fetch available models from the CLI via the Agent SDK. */
+	async fetchModels(): Promise<ModelInfo[]> {
+		await this.ensureConnected();
+		const stream = query({
+			prompt: '',
+			options: {
+				maxTurns: 0,
+				permissionMode: 'plan',
+				tools: [],
+				env: this.buildEnv(),
+				pathToClaudeCodeExecutable: this.resolvedCli?.path,
+			},
+		});
+		try {
+			const sdkModels = await stream.supportedModels();
+			this.sdkModels = sdkModels.map(mapSdkModel);
+		} finally {
+			stream.close();
+		}
+		return this.getModels();
 	}
 
 	/** Check if local backend is configured and available for dynamic delegation. */

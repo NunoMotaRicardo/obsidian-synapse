@@ -195,7 +195,7 @@ When a user requests ASCII art for any word or phrase, generate the block-style 
 const SAMPLE_GENERAL_AGENT = `---
 name: General
 description: General-purpose assistant for chat, editor operations, search, and bot tasks.
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 ---
 
 # General Assistant Instructions
@@ -206,7 +206,7 @@ You are a helpful general assistant for Obsidian. Help the user draft notes, ans
 const SAMPLE_VISION_AGENT = `---
 name: Vision
 description: Vision-capable agent for analyzing note images, diagrams, and attachments.
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 ---
 
 # Vision Assistant Instructions
@@ -217,7 +217,7 @@ You are an AI assistant specialized in analyzing visual content, diagrams, image
 const SAMPLE_ZETTELKASTEN_AGENT = `---
 name: Zettelkasten
 description: Methodology agent tuned for atomic notes, dense interlinking, and slip-box workflows.
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 ---
 
 # Zettelkasten Assistant Instructions
@@ -228,7 +228,7 @@ You are a Zettelkasten methodology assistant. Focus on creating atomic, single-c
 const SAMPLE_PARA_AGENT = `---
 name: PARA
 description: Methodology agent tuned for Projects, Areas, Resources, and Archives organization.
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 ---
 
 # PARA Assistant Instructions
@@ -239,7 +239,7 @@ You are a PARA methodology assistant. Help organize information into Projects (g
 const SAMPLE_LYT_AGENT = `---
 name: LYT
 description: Methodology agent tuned for Linking Your Thinking and Maps of Content (MOCs).
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 ---
 
 # LYT Assistant Instructions
@@ -356,7 +356,7 @@ Template:
 ---
 name: My Agent
 description: Short description of what this agent does
-model: claude-3-7-sonnet
+model: claude-sonnet-4-6
 tools:
   - Read
   - Write
@@ -549,14 +549,9 @@ export class SynapseSettingTab extends PluginSettingTab {
 						if (!this.plugin.copilot) {
 							throw new Error('Claude service is not available');
 						}
-						await this.plugin.copilot.ensureConnected();
-						const result = await this.plugin.copilot.chat({
-							prompt: 'Reply with exactly: "Connected" — nothing else.',
-							maxTurns: 1,
-							permissionMode: 'plan',
-							tools: [],
-						});
-						new Notice(result ? `Claude: ${result}` : 'Claude: connected (no response text)');
+						const models = await this.plugin.copilot.fetchModels();
+						this.plugin.notifySidebarModelsChanged(models);
+						new Notice(`Connected — found ${models.length} model(s).`);
 					} catch (e) {
 						new Notice(`Test failed: ${String(e)}`);
 					} finally {
@@ -834,7 +829,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 						.setName(`Agent: ${agent.name}`)
 						.setDesc(`${agent.description || 'Custom vault agent'} (${agent.filePath})`)
 						.addText(text => text
-							.setPlaceholder('e.g. claude-3-7-sonnet')
+							.setPlaceholder('e.g. claude-sonnet-4-6')
 							.setValue(agent.model || '')
 							.onChange(async (val) => {
 								await updateAgentModelFile(this.app, agent.filePath, val);
