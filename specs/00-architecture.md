@@ -35,6 +35,7 @@ CLI process per query.
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots-triggers.md](bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
+| triggers | [bots-triggers.md](bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
 
 ## Vault customization (`_synapse/`)
 
