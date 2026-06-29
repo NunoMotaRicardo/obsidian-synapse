@@ -19,7 +19,7 @@ declare module '../synapseView' {
 			onContextMenu: (e: MouseEvent) => void;
 		}): void;
 		getSessionDisplayName(session: SessionMetadata): string;
-		getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'trigger' | 'search' | 'other';
+		getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other';
 		openSessionFilterMenu(e: MouseEvent): void;
 		updateFilterBadge(): void;
 		openSessionSortMenu(e: MouseEvent): void;
@@ -221,8 +221,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			});
 		}
 
-		// Keep trigger history in sync with session list
-		this.renderTriggerHistory();
 	};
 
 	proto.renderSessionItem = function (container: HTMLElement, session: SessionMetadata, opts: {
@@ -236,7 +234,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		if (isActive) item.addClass('is-active');
 
 		const sessionType = this.getSessionType(session);
-		const iconName = sessionType === 'chat' ? 'message-square' : sessionType === 'trigger' ? 'zap' : sessionType === 'inline' ? 'file-text' : sessionType === 'search' ? 'search' : 'code';
+		const iconName = sessionType === 'chat' ? 'message-square' : sessionType === 'inline' ? 'file-text' : sessionType === 'search' ? 'search' : 'code';
 		const iconEl = item.createSpan({cls: 'synapse-session-icon'});
 		setIcon(iconEl, iconName);
 
@@ -269,21 +267,19 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		return raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
 	};
 
-	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'trigger' | 'search' | 'other' {
+	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
 		const name = this.sessionNames[session.sessionId] || '';
 		debugTrace(`Synapse: getSessionType id=${session.sessionId.slice(0, 8)} name="${name.slice(0, 40)}"`);
 		if (name.startsWith('[chat]')) return 'chat';
 		if (name.startsWith('[inline]')) return 'inline';
-		if (name.startsWith('[trigger]')) return 'trigger';
 		if (name.startsWith('[search]')) return 'search';
 		return 'other';
 	};
 
 	proto.openSessionFilterMenu = function (e: MouseEvent): void {
 		const menu = new Menu();
-		const types: Array<{value: 'chat' | 'inline' | 'trigger' | 'search' | 'other'; label: string}> = [
+		const types: Array<{value: 'chat' | 'inline' | 'search' | 'other'; label: string}> = [
 			{value: 'chat', label: 'Chat'},
-			{value: 'trigger', label: 'Triggers'},
 			{value: 'search', label: 'Search'},
 			{value: 'inline', label: 'Inline'},
 			{value: 'other', label: 'Other'},

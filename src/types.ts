@@ -100,20 +100,3 @@ export function isImageAttachment(att: Pick<ChatAttachment, 'type' | 'name' | 'm
 	}
 	return false;
 }
-
-/** Parsed trigger configuration from *.trigger.md. */
-export interface TriggerConfig {
-	name: string;
-	description?: string;
-	agent?: string;
-	/** Whether the trigger is active. Defaults to true when not set. */
-	enabled: boolean;
-	/** Cron expression for scheduled triggers (5-field: min hour dom month dow). */
-	cron?: string;
-	/** Glob pattern for file-change triggers. */
-	glob?: string;
-	/** Prompt content to send when the trigger fires. */
-	content: string;
-	/** Vault-relative path to the trigger file. */
-	filePath: string;
-}

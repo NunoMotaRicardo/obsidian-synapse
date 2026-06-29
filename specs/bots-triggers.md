@@ -14,8 +14,9 @@
 
 ## Triggers (deferred)
 
-The trigger system (cron/glob scheduled background AI tasks: `triggerScheduler.ts`, `tasks.ts`,
-`triggersPanel.ts`, `*.trigger.md` files) has been removed. SDK hooks do not map to this use
+The trigger system (cron/glob scheduled background AI tasks) has been removed. All trigger
+source files (`triggerScheduler.ts`, `triggersPanel.ts`), the `TriggerConfig` type, and
+related loader/writer/settings code have been deleted. SDK hooks do not map to this use
 case — they fire during active agent sessions for agent-initiated events, not for vault-wide
 cron/file-change automation. Triggers will be revisited as part of the loop features design
 (issue #14). See `wiki/decisions/2026-06-29-native-sdk-customization-model.md`.

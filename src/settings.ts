@@ -48,8 +48,6 @@ export interface SynapseSettings {
 	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
-	/** Last-fired timestamps for trigger deduplication, keyed by trigger name. */
-	triggerLastFired?: Record<string, number>;
 	/** Stored values for non-password MCP input variables, keyed by input id. */
 	mcpInputValues?: Record<string, string>;
 	/**
@@ -182,6 +180,7 @@ export function saveSecureField(app: App, key: string, value: string): void {
 }
 
 
+
 const SAMPLE_SKILL_CONTENT = `---
 name: ascii-art
 description: Generates stylized ASCII art text using block characters
@@ -293,7 +292,7 @@ description: Comprehensive reference for creating and managing Synapse vault-loc
 # Self-improve skill
 
 Use this skill when the user asks to create, modify, or delete Synapse customization
-artifacts (agents, prompts, skills, triggers, or MCP tool configurations).
+artifacts (agents, prompts, skills, or MCP tool configurations).
 
 ## Vault folder structure
 
@@ -302,7 +301,6 @@ synapse/
   agents/*.agent.md
   prompts/*.prompt.md
   skills/<name>/SKILL.md
-  triggers/*.trigger.md
   tools/mcp.json
 \`\`\`
 
@@ -315,8 +313,6 @@ synapse/
 ## Permission model
 
 - **Always ask the user for permission** before creating, modifying, or deleting any file.
-- For **cron triggers**, state the schedule in plain language in the permission request
-  (e.g. "This trigger will run every weekday at 9 AM").
 - For **deletion**, ask for extra confirmation.
 
 ## MCP tools restriction
@@ -338,7 +334,6 @@ When tool access is available, use these functions from the configWriter module:
 | \`writeAgent(app, folder, config)\` | Create a new agent file |
 | \`writePrompt(app, folder, config)\` | Create a new prompt file |
 | \`writeSkill(app, folder, config)\` | Create a new skill (subfolder + SKILL.md) |
-| \`writeTrigger(app, folder, config)\` | Create a new trigger file |
 | \`modifyArtifact(app, filePath, updates)\` | Patch frontmatter or body of an existing artifact |
 | \`deleteArtifact(app, filePath)\` | Move an artifact to Obsidian trash |
 
@@ -427,33 +422,6 @@ Describe the situations where this skill applies.
 2. Second step
 \`\`\`
 
-### Triggers
-
-File pattern: \`triggers/<kebab-name>.trigger.md\`
-
-Frontmatter fields:
-- \`name\` (required) — trigger identifier
-- \`description\` (optional) — short purpose summary
-- \`agent\` (optional) — name of the agent to handle the trigger
-- \`cron\` (optional) — 5-field cron expression (minute hour day month weekday)
-- \`glob\` (optional) — file glob pattern to match
-- \`enabled\` (required) — boolean; set to \`false\` to disable without deleting
-
-Body: the prompt sent to the agent when the trigger fires.
-
-Template:
-\`\`\`markdown
----
-name: weekly-review
-description: Generates a weekly review summary every Sunday evening
-agent: General
-cron: "0 18 * * 0"
-glob: "**/*.md"
-enabled: true
----
-Review all notes modified this week and generate a summary of key themes, open tasks, and suggested follow-ups.
-\`\`\`
-
 ### MCP tools
 
 File: \`tools/mcp.json\`
@@ -474,6 +442,7 @@ Example structure:
 }
 \`\`\`
 `;
+
 
 export class SynapseSettingTab extends PluginSettingTab {
 	plugin: SynapsePlugin;
@@ -917,6 +886,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 						if (!this.app.vault.getAbstractFileByPath(skillPath)) {
 							await this.app.vault.create(skillPath, SAMPLE_SKILL_CONTENT);
 						}
+
 
 						const selfImproveSkillPath = normalizePath(`${base}/skills/self-improve/SKILL.md`);
 						if (!this.app.vault.getAbstractFileByPath(selfImproveSkillPath)) {

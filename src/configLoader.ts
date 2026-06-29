@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
-import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, TriggerConfig} from './types';
+import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig} from './types';
 
 /** Module-level compiled regex for frontmatter detection. */
 export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -266,44 +266,4 @@ export async function loadMcpServers(
 		console.error('Synapse: failed to parse mcp.json', e);
 	}
 	return entries;
-}
-
-/**
- * Load all trigger configurations from *.trigger.md files in the given vault folder.
- */
-export async function loadTriggers(app: App, triggersFolder: string): Promise<TriggerConfig[]> {
-	const folder = normalizePath(triggersFolder);
-	const triggers: TriggerConfig[] = [];
-	const abstract = app.vault.getAbstractFileByPath(folder);
-	if (!(abstract instanceof TFolder)) return triggers;
-
-	const triggerFiles = abstract.children.filter(
-		(child): child is TFile => child instanceof TFile && child.extension === 'md' && child.name.endsWith('.trigger.md')
-	);
-	const contents = await Promise.all(triggerFiles.map(f => app.vault.read(f)));
-
-	for (let i = 0; i < triggerFiles.length; i++) {
-		const child = triggerFiles[i]!;
-		const content = contents[i]!;
-		const fmMatch = content.match(FM_RE);
-		if (!fmMatch) continue;
-		const rawFm = fmMatch[1] ?? '';
-		const body = (fmMatch[2] ?? '').trim();
-		// Parse frontmatter by wrapping in --- delimiters so parseFrontmatter can process it
-		const {meta} = parseFrontmatter(`---\n${rawFm}\n---\n`);
-
-		const id = child.basename.replace('.trigger', '');
-
-		triggers.push({
-			name: (typeof meta['name'] === 'string' && meta['name']) || id,
-			description: (typeof meta['description'] === 'string' && meta['description']) || undefined,
-			agent: (typeof meta['agent'] === 'string' && meta['agent']) || undefined,
-			enabled: String(meta['enabled']).toLowerCase() !== 'false',
-			cron: (typeof meta['cron'] === 'string' && meta['cron']) || undefined,
-			glob: (typeof meta['glob'] === 'string' && meta['glob']) || undefined,
-			content: body,
-			filePath: child.path,
-		});
-	}
-	return triggers;
 }

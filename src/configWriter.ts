@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
-import type {AgentConfig, PromptConfig, TriggerConfig} from './types';
+import type {AgentConfig, PromptConfig} from './types';
 import {parseFrontmatter} from './configLoader';
 import {SYNAPSE_FOLDER} from './settings';
 
@@ -147,32 +147,6 @@ export async function writeSkill(
 	const fields: [string, string | string[] | boolean | undefined][] = [
 		['name', config.name],
 		['description', config.description],
-	];
-	const content = buildMarkdown(fields, config.content);
-	await app.vault.create(filePath, content);
-	return filePath;
-}
-
-/**
- * Write a trigger configuration as `<kebab-name>.trigger.md`.
- * Returns the vault-relative path of the created file.
- */
-export async function writeTrigger(
-	app: App,
-	folder: string,
-	config: Omit<TriggerConfig, 'filePath'>,
-): Promise<string> {
-	await ensureFolder(app, folder);
-	const slug = toKebab(config.name);
-	const filePath = normalizePath(`${folder}/${slug}.trigger.md`);
-
-	const fields: [string, string | string[] | boolean | undefined][] = [
-		['name', config.name],
-		['description', config.description],
-		['agent', config.agent],
-		['cron', config.cron],
-		['glob', config.glob],
-		['enabled', config.enabled],
 	];
 	const content = buildMarkdown(fields, config.content);
 	await app.vault.create(filePath, content);

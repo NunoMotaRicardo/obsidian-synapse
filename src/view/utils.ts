@@ -16,49 +16,6 @@ export function formatTimeAgo(d: Date): string {
 	return d.toLocaleDateString();
 }
 
-export function describeCron(cron: string): string {
-	const parts = cron.trim().split(/\s+/);
-	if (parts.length !== 5) return `Cron: ${cron}`;
-	const [min, hour, dom, mon, dow] = parts;
-
-	// */N minute patterns
-	const everyMin = min!.match(/^\*\/(\d+)$/);
-	if (everyMin && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
-		return `Every ${everyMin[1]} minute(s)`;
-	}
-	// Daily at HH:MM
-	if (/^\d+$/.test(min!) && /^\d+$/.test(hour!) && dom === '*' && mon === '*' && dow === '*') {
-		return `Daily at ${hour!.padStart(2, '0')}:${min!.padStart(2, '0')}`;
-	}
-	// Weekly (specific dow)
-	if (/^\d+$/.test(min!) && /^\d+$/.test(hour!) && dom === '*' && mon === '*' && /^\d+$/.test(dow!)) {
-		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-		const day = days[parseInt(dow!, 10)] ?? dow;
-		return `Weekly on ${day} at ${hour!.padStart(2, '0')}:${min!.padStart(2, '0')}`;
-	}
-	// Hourly at :MM
-	if (/^\d+$/.test(min!) && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
-		return `Hourly at :${min!.padStart(2, '0')}`;
-	}
-	return `Cron: ${cron}`;
-}
-
-export function describeGlob(glob: string): string {
-	// **/*.ext — all .ext files recursively
-	const recursiveExt = glob.match(/^\*\*\/\*\.([\w]+)$/);
-	if (recursiveExt) return `All .${recursiveExt[1]} files (recursive)`;
-	// *.ext — .ext files in root
-	const rootExt = glob.match(/^\*\.([\w]+)$/);
-	if (rootExt) return `.${rootExt[1]} files in root`;
-	// folder/**/*.ext
-	const folderExt = glob.match(/^(.+)\/\*\*\/\*\.([\w]+)$/);
-	if (folderExt) return `All .${folderExt[2]} files in ${folderExt[1]}/`;
-	// folder/** — everything under folder
-	const folderAll = glob.match(/^(.+)\/\*\*$/);
-	if (folderAll) return `All files in ${folderAll[1]}/`;
-	return `Glob: ${glob}`;
-}
-
 export async function renderMarkdownSafe(app: App, content: string, container: HTMLElement, component: Component): Promise<void> {
 	try {
 		// Strip obsidian:// protocol URIs that could trigger vault actions

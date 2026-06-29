@@ -9,7 +9,6 @@ Source: `src/sidekickView.ts` (panel shell, session orchestration) plus `src/vie
 | `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details |
 | `sessionSidebar.ts` | Session list, restore (cold resume via `getEvents()`), rename/delete, background sessions |
 | `searchPanel.ts` | AI vault search tab (basic/advanced) |
-| `triggersPanel.ts` | Triggers tab (status, history) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
 
 Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user), edit modal,
