@@ -4,7 +4,7 @@ import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 // Agent SDK types imported transitively via AgentService
 import {loadSkills} from '../configLoader';
 import {getSkillsFolder} from '../settings';
-import {setFetching, triggerComplete} from './ghostText';
+
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
@@ -114,25 +114,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 						}),
 				);
 
-				submenu.addSeparator();
 
-				submenu.addItem((si) => {
-					si.setTitle('Autocomplete')
-						.setIcon('sparkles')
-						.setChecked(plugin.settings.autocompleteEnabled);
-					const acSub: Menu = (si as unknown as {setSubmenu: () => Menu}).setSubmenu();
-
-					const autoEnabled = plugin.settings.autocompleteEnabled;
-					acSub.addItem((ai) =>
-						ai.setTitle(autoEnabled ? 'Disable' : 'Enable')
-							.setIcon(autoEnabled ? 'toggle-right' : 'toggle-left')
-							.onClick(async () => {
-								plugin.settings.autocompleteEnabled = !autoEnabled;
-								await plugin.saveData(plugin.settings);
-								new Notice(`Synapse: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
-							}),
-					);
-				});
 			});
 		}),
 	);
@@ -476,7 +458,6 @@ export async function runSelectionAction(
 	}
 
 	const notice = new Notice(`Synapse: ${action.label}…`, 0);
-	try { view.dispatch({effects: setFetching.of(true)}); } catch { /* ignore */ }
 
 	try {
 		const result = await runActionPrompt(plugin, action, selectedText);
@@ -498,8 +479,6 @@ export async function runSelectionAction(
 		notice.hide();
 		console.error('Synapse: editor action error', e);
 		new Notice(formatErrorForNotice(e));
-	} finally {
-		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}
 }
 
@@ -954,7 +933,6 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 	const doc = view.state.doc.toString();
 	const notice = new Notice('Synapse: editing note…', 0);
-	view.dispatch({effects: setFetching.of(true)});
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt:
@@ -973,8 +951,6 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e));
-	} finally {
-		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}
 }
 
@@ -1013,7 +989,6 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 	const doc = view.state.doc.toString();
 	const notice = new Notice('Synapse: structuring note…', 0);
-	view.dispatch({effects: setFetching.of(true)});
 
 	const templateClause = templateType
 		? `Structure the note as a "${templateType}" template. `
@@ -1038,8 +1013,6 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 	} catch (e) {
 		notice.hide();
 		new Notice(formatErrorForNotice(e));
-	} finally {
-		try { view.dispatch({effects: setFetching.of(false)}); } catch { /* view destroyed */ }
 	}
 }
 
@@ -1186,30 +1159,5 @@ export function buildSynapseMenu(menu: Menu, plugin: SynapsePlugin, view: Editor
 			}),
 	);
 
-	// ── Autocomplete submenu ──
-	menu.addSeparator();
-	menu.addItem((item) => {
-		item.setTitle('Autocomplete')
-			.setIcon('sparkles')
-			.setChecked(plugin.settings.autocompleteEnabled);
-		const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
 
-		const autoEnabled = plugin.settings.autocompleteEnabled;
-		sub.addItem((si) =>
-			si.setTitle(autoEnabled ? 'Disable' : 'Enable')
-				.setIcon(autoEnabled ? 'toggle-right' : 'toggle-left')
-				.onClick(async () => {
-					plugin.settings.autocompleteEnabled = !autoEnabled;
-					await plugin.saveData(plugin.settings);
-					new Notice(`Synapse: autocomplete ${plugin.settings.autocompleteEnabled ? 'enabled' : 'disabled'}.`);
-				}),
-		);
-		sub.addItem((si) =>
-			si.setTitle('Start')
-				.setIcon('play')
-				.onClick(() => {
-					view.dispatch({effects: triggerComplete.of(null)});
-				}),
-		);
-	});
 }
