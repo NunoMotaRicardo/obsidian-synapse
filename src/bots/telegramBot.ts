@@ -11,7 +11,7 @@ import type {SessionConfig, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
-import {getSkillsFolder, getMcpInputValue} from '../settings';
+import {SYNAPSE_FOLDER, getMcpInputValue} from '../settings';
 import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
 import type {InputResolver} from '../configLoader';
 import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
@@ -321,7 +321,7 @@ export class TelegramBotService {
 		// Skills
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
-			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
+			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
 		}
 		if (agent?.skills !== undefined) {
 			// Skills filtering will be applied via agent definition
@@ -475,7 +475,7 @@ export class TelegramBotService {
 				const data = await this.api.downloadFile(fileInfo.file_path);
 
 				// Save to temp location in vault
-				const tempDir = normalizePath(`${this.plugin.settings.synapseFolder}/bot-attachments`);
+				const tempDir = normalizePath(`${SYNAPSE_FOLDER}/bot-attachments`);
 				const adapter = this.plugin.app.vault.adapter;
 				if (!await adapter.exists(tempDir)) {
 					await adapter.mkdir(tempDir);
@@ -518,7 +518,6 @@ export class TelegramBotService {
 	async reloadConfigs(): Promise<void> {
 		try {
 			const app = this.plugin.app;
-			const s = this.plugin.settings;
 
 			// Resolve stored input values (no UI prompts — bot runs headless)
 			const inputResolver: InputResolver = (input) => {
@@ -527,9 +526,9 @@ export class TelegramBotService {
 			};
 
 			const [agents, skills, mcpServers] = await Promise.all([
-				loadAgents(app, normalizePath(`${s.synapseFolder}/agents`)),
-				loadSkills(app, normalizePath(`${s.synapseFolder}/skills`)),
-				loadMcpServers(app, normalizePath(`${s.synapseFolder}/tools`), inputResolver),
+				loadAgents(app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
+				loadSkills(app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
+				loadMcpServers(app, normalizePath(`${SYNAPSE_FOLDER}/tools`), inputResolver),
 			]);
 			this.agents = agents;
 			this.skills = skills;

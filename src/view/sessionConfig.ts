@@ -260,9 +260,8 @@ export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeo
  */
 export function buildVaultContextBlock(
 	app: App,
-	synapseFolder: string,
 ): string {
-	const folders = scanVaultStructure(app, synapseFolder);
+	const folders = scanVaultStructure(app);
 	if (folders.length === 0) return '';
 	const list = folders.map(f => `${f.name} (${f.fileCount} items)`).join(', ');
 	return `\n\n[Vault Structure] Top-level folders: ${list}`;

@@ -5,6 +5,9 @@ import type {McpInputVariable} from "./types";
 import {loadMcpInputs, loadAgents} from "./configLoader";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
+/** Hardcoded vault folder for Synapse customization artifacts. */
+export const SYNAPSE_FOLDER = '_synapse';
+
 /** Helper to update a secure field in both runtime settings and local storage. */
 function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {
 	(plugin.settings as unknown as Record<string, unknown>)[key] = value;
@@ -135,7 +138,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	providerBaseUrl: 'http://localhost:11434',
 	providerApiKey: '',
 	providerBearerToken: '',
-	synapseFolder: 'synapse',
+	synapseFolder: SYNAPSE_FOLDER,
 	toolApproval: 'ask',
 	inlineModel: '',
 	featureAgents: {
@@ -178,30 +181,6 @@ export function saveSecureField(app: App, key: string, value: string): void {
 	app.saveLocalStorage(SECURE_PREFIX + key, value || null);
 }
 
-/** Derive the agents subfolder from the base Synapse folder. */
-export function getAgentsFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/agents`);
-}
-
-/** Derive the skills subfolder from the base Synapse folder. */
-export function getSkillsFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/skills`);
-}
-
-/** Derive the tools subfolder from the base Synapse folder. */
-export function getToolsFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/tools`);
-}
-
-/** Derive the prompts subfolder from the base Synapse folder. */
-export function getPromptsFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/prompts`);
-}
-
-/** Derive the triggers subfolder from the base Synapse folder. */
-export function getTriggersFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/triggers`);
-}
 
 const SAMPLE_SKILL_CONTENT = `---
 name: ascii-art
@@ -272,11 +251,6 @@ model: claude-3-7-sonnet
 You are a Linking Your Thinking (LYT) methodology assistant. Help synthesize notes into Maps of Content (MOCs), facilitating fluid knowledge navigation.
 `;
 
-const SAMPLE_PROMPT_CONTENT = `---
-agent: General
----
-Summarize the key points of the current note into bullet points.
-`;
 
 /** Helper to update frontmatter model property in markdown file content. */
 export function updateAgentModelInContent(content: string, newModel: string): string {
@@ -310,16 +284,6 @@ export async function updateAgentModelFile(app: App, filePath: string, newModel:
 	}
 }
 
-const SAMPLE_TRIGGER_CONTENT = `---
-name: Daily planner
-description: Prepares a plan for the day every morning at 8am
-agent: Planner
-cron: "0 8 * * *"
-glob: "**/*.md"
-enabled: true
----
-Help me prepare my day, including asks on me, recommendations for clear actions to prepare, and suggestions on which items to prioritize over others.
-`;
 
 const SAMPLE_SELF_IMPROVE_SKILL = `---
 name: self-improve
@@ -511,14 +475,6 @@ Example structure:
 \`\`\`
 `;
 
-const SAMPLE_IMPROVE_PROMPT = `---
-description: Customize Synapse behavior — create or modify agents, prompts, skills, and triggers
----
-You are helping the user customize Synapse. Load and follow the self-improve skill to understand available artifact types. Create or modify agents, prompts, skills, and triggers based on the user's request. Always ask permission before writing files.
-
-Start by asking what behavior they'd like to add or change.
-`;
-
 export class SynapseSettingTab extends PluginSettingTab {
 	plugin: SynapsePlugin;
 
@@ -563,11 +519,11 @@ export class SynapseSettingTab extends PluginSettingTab {
 		}
 
 		// ── Panels ───────────────────────────────────────────────
-		const toolsFolder = normalizePath(`${this.plugin.settings.synapseFolder}/tools`);
-		if (!this.app.vault.getAbstractFileByPath(toolsFolder)) {
+		const agentsFolder = normalizePath(`${SYNAPSE_FOLDER}/agents`);
+		if (!this.app.vault.getAbstractFileByPath(agentsFolder)) {
 			const warning = containerEl.createDiv({cls: 'synapse-settings-warning'});
 			warning.createEl('p', {
-				text: 'Synapse folder is not initialized. Go to the capabilities tab to configure and initialize it.',
+				text: 'Synapse folder is not initialized. Use the capabilities tab to set it up.',
 			});
 		}
 
@@ -859,7 +815,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				dynamicContainer = agentsPanel.createDiv({attr: {id: dynamicContainerId}});
 			}
 
-			const vaultAgents = await loadAgents(this.app, getAgentsFolder(this.plugin.settings));
+			const vaultAgents = await loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
 			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
 			const agentOptions: Record<string, string> = {};
 			for (const name of agentNamesSet) {
@@ -929,26 +885,14 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(capPanel)
 			.setName('Synapse folder')
-			.setDesc('Vault folder for agents, skills, tools and triggers.')
-			.addText(text => text
-				.setPlaceholder('Ex: synapse')
-				.setValue(this.plugin.settings.synapseFolder)
-				.onChange(async (value) => {
-					const sanitized = value.trim().replace(/\.\./g, '');
-					if (!sanitized || /[;|&`$(){}]/.test(sanitized)) {
-						new Notice('Synapse folder name is invalid.');
-						return;
-					}
-					this.plugin.settings.synapseFolder = sanitized;
-					await this.plugin.saveSettings();
-				}))
+			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/`)
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const base = normalizePath(this.plugin.settings.synapseFolder);
+						const base = normalizePath(SYNAPSE_FOLDER);
 
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/self-improve', '/tools', '/prompts', '/triggers']) {
+						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/self-improve']) {
 							const dir = normalizePath(`${base}${sub}`);
 							if (!this.app.vault.getAbstractFileByPath(dir)) {
 								await this.app.vault.createFolder(dir);
@@ -974,40 +918,12 @@ export class SynapseSettingTab extends PluginSettingTab {
 							await this.app.vault.create(skillPath, SAMPLE_SKILL_CONTENT);
 						}
 
-						const mcpPath = normalizePath(`${base}/tools/mcp.json`);
-						if (!this.app.vault.getAbstractFileByPath(mcpPath)) {
-							const mcpContent = JSON.stringify({
-								servers: {
-									github: {
-										type: 'http',
-										url: 'https://api.githubcopilot.com/mcp/'
-									}
-								}
-							}, null, '\t');
-							await this.app.vault.create(mcpPath, mcpContent);
-						}
-
-						const promptPath = normalizePath(`${base}/prompts/en-to-pt.prompt.md`);
-						if (!this.app.vault.getAbstractFileByPath(promptPath)) {
-							await this.app.vault.create(promptPath, SAMPLE_PROMPT_CONTENT);
-						}
-
-						const triggerPath = normalizePath(`${base}/triggers/daily-planner.trigger.md`);
-						if (!this.app.vault.getAbstractFileByPath(triggerPath)) {
-							await this.app.vault.create(triggerPath, SAMPLE_TRIGGER_CONTENT);
-						}
-
 						const selfImproveSkillPath = normalizePath(`${base}/skills/self-improve/SKILL.md`);
 						if (!this.app.vault.getAbstractFileByPath(selfImproveSkillPath)) {
 							await this.app.vault.create(selfImproveSkillPath, SAMPLE_SELF_IMPROVE_SKILL);
 						}
 
-						const improvePromptPath = normalizePath(`${base}/prompts/improve-synapse.prompt.md`);
-						if (!this.app.vault.getAbstractFileByPath(improvePromptPath)) {
-							await this.app.vault.create(improvePromptPath, SAMPLE_IMPROVE_PROMPT);
-						}
-
-						new Notice('Synapse folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
+						new Notice('Synapse folder initialized with sample agents and skills.');
 					} catch (e) {
 						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}
@@ -1100,7 +1016,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 			let inputs: McpInputVariable[] = [];
 			try {
-				inputs = await loadMcpInputs(this.app, getToolsFolder(this.plugin.settings));
+				inputs = await loadMcpInputs(this.app, normalizePath(`${SYNAPSE_FOLDER}/tools`));
 			} catch {
 				// mcp.json may not exist yet
 			}
@@ -1263,7 +1179,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 		agentSetting.addDropdown(dropdown => {
 			dropdown.addOption('', 'Auto');
 			// Load agents asynchronously and populate
-			void loadAgents(this.app, getAgentsFolder(this.plugin.settings)).then(agents => {
+			void loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)).then(agents => {
 				for (const agent of agents) {
 					dropdown.addOption(agent.name, agent.name);
 				}
