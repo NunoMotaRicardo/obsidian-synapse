@@ -77,6 +77,13 @@ vault scope, folder tree.
   the synapse folder, and any dot-prefixed folder). This gives agents awareness of the vault's
   organization without reading note contents. The scan is performed by `scanVaultStructure()`
   in `configWriter.ts`; the formatter `buildVaultContextBlock()` lives in `sessionConfig.ts`.
+  A compact `[Self-Improve]` detection block is appended to every session's system prompt
+  (chat, search, and Telegram bot) via `buildSelfImproveHint()` in `sessionConfig.ts`.
+  It teaches the active agent to recognize when the user expresses a customization preference
+  and propose creating or modifying a Synapse artifact (agent, prompt, skill, or trigger),
+  always asking permission before writing. The block includes the current agent name for
+  context. It is skipped when the user is already using the `improve-synapse` prompt
+  (no double-activation).
   When `settings.autoIncludeNoteImages` is enabled (default),
   `handleSend()` reads the active note content, scans for image embeds (`![[image.png]]` and
   `![alt](path.png)` syntaxes), resolves them to vault files via `resolveNoteImageEmbeds()`
