@@ -330,11 +330,11 @@ export function scanVaultStructure(
 // ---------------------------------------------------------------------------
 
 export const IMPROVE_SYNAPSE_SKILL_NAME = 'improve-synapse';
-export const IMPROVE_SYNAPSE_SKILL_DESC = 'Comprehensive reference and guide for creating and modifying Synapse vault-local customization artifacts (agents and skills) in _synapse/';
+export const IMPROVE_SYNAPSE_SKILL_DESC = 'Comprehensive reference and guide for creating and modifying Synapse vault-local customization artifacts (agents, skills, and triggers) in _synapse/';
 
 export const IMPROVE_SYNAPSE_SKILL_BODY = `# Improve Synapse Skill
 
-Use this skill when the user asks to create, modify, or manage Synapse customization artifacts (agents and skills) in your Obsidian vault.
+Use this skill when the user asks to create, modify, or manage Synapse customization artifacts (agents, skills, and triggers) in your Obsidian vault.
 
 ## Vault Folder Structure
 
@@ -342,6 +342,7 @@ Use this skill when the user asks to create, modify, or manage Synapse customiza
 _synapse/
   agents/*.md
   skills/<name>/SKILL.md
+  triggers/*.md
   .mcp.json
 \`\`\`
 
@@ -405,7 +406,62 @@ description: Teaches the agent to format references according to APA 7th edition
 When this skill is active or invoked, format all references and in-text citations following APA 7th edition standard rules.
 \`\`\`
 
-### 3. MCP Servers Configuration
+### 3. Triggers
+File location: \`_synapse/triggers/<kebab-name>.md\`
+
+Triggers run automatically — either in response to vault events or on a schedule. Each trigger specifies when to fire, what scope to operate on, and which model to use.
+
+Frontmatter fields:
+- \`name\` (required) — trigger identifier
+- \`description\` (required) — short summary of what this trigger does
+- \`event\` (required for event triggers) — one of: \`file-created\`, \`file-modified\`, \`file-deleted\`, \`file-renamed\`
+- \`schedule\` (required for scheduled triggers) — cron expression (e.g. \`0 9 * * *\` for daily at 9am)
+- \`path\` (optional) — glob pattern to scope which files the trigger applies to (e.g. \`inbox/**\`, \`projects/*.md\`)
+- \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Local models run as cheap one-shot calls; Claude models run as full agentic loops with tool access.
+- \`agent\` (optional) — name of an agent to use for this trigger
+- \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
+
+Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` to reference the triggering file path (for event triggers) or \`{{files}}\` for the list of matched files (for scheduled triggers).
+
+Example — event trigger (auto-tag new notes in inbox):
+\`\`\`markdown
+---
+name: auto-tag-inbox
+description: Automatically tag new notes dropped into the inbox folder
+event: file-created
+path: inbox/**
+model: qwen3:8b
+---
+
+Read the content of {{file}} and add relevant topic tags to its frontmatter \`tags:\` property. Use existing tags from the vault when possible.
+\`\`\`
+
+Example — scheduled trigger (daily vault lint):
+\`\`\`markdown
+---
+name: daily-vault-lint
+description: Find orphan notes and dead links every morning
+schedule: 0 9 * * *
+model: qwen3:8b
+---
+
+Scan the vault for orphan notes (no inbound links) and dead links (references to non-existent notes). Write a summary to \`_synapse/reports/vault-lint.md\`.
+\`\`\`
+
+Example — Claude-powered research trigger:
+\`\`\`markdown
+---
+name: research-digest
+description: Weekly research digest on tracked topics
+schedule: 0 8 * * 1
+model: sonnet
+agent: General
+---
+
+Review the notes in \`research/topics/\` for tracked research topics. Search for recent developments, summarize findings, and append updates to each topic note.
+\`\`\`
+
+### 4. MCP Servers Configuration
 File location: \`_synapse/.mcp.json\`
 
 Contains standard Model Context Protocol (MCP) server configurations.
@@ -418,6 +474,7 @@ Contains standard Model Context Protocol (MCP) server configurations.
 2. **Select Artifact Type**:
    - Create an **Agent** if defining a full persistent persona with specific instruction sets or tool restrictions.
    - Create a **Skill** if adding specific procedures, domain knowledge, workflows, or slash commands.
+   - Create a **Trigger** if the user wants something to happen automatically — either when files change (event trigger) or on a schedule (cron trigger). Choose a local model for cheap operations and Claude for complex agentic tasks.
 3. **Propose Changes**: Show the proposed frontmatter and content to the user.
 4. **Write Artifact**: Once approved, write the file to the corresponding location under \`_synapse/\`.
 `;

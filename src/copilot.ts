@@ -767,7 +767,7 @@ export class AgentService {
 	private routeQueryOptions(options: Options): Options {
 		const opts = {...options};
 		if (opts.model) {
-			opts.model = this.resolveValidModel(opts.model);
+			opts.model = this.isLocalModel(opts.model) ? undefined : this.resolveValidModel(opts.model);
 		}
 		if (this.isLocalBackendAvailable()) {
 			const delegationServer = this.getDelegationMcpServer();
