@@ -266,16 +266,14 @@ Responsibilities:
 - Add Synapse actions to editor and file context menus.
 - Trigger focused rewrite / transform actions against selected text.
 
-### Automation and bots
+### Bots
 
-- `src/triggerScheduler.ts`
 - `src/bots/telegramBot.ts`
 - `src/bots/telegramApi.ts`
 - Primary packages: `@github/copilot-sdk` via the local wrapper, `obsidian`
 
 Responsibilities:
 
-- Trigger background AI actions based on cron or file-glob events.
 - Expose Sidekick conversations through Telegram.
 - Reuse the same agent/tool/session model outside the main sidebar UI.
 

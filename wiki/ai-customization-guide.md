@@ -56,9 +56,8 @@ The main customization-relevant areas of this plugin are:
 
 - `src/copilot.ts`: wraps `@github/copilot-sdk`, manages connections, sessions, models, auth, one-shot chat, and persistent sessions.
 - `src/settings.ts`: stores Sidekick settings, including the base `sidekickFolder`, provider settings, model settings, and helper folder derivation.
-- `src/configLoader.ts`: parses `*.agent.md`, `*.prompt.md`, `SKILL.md`, `mcp.json`, and `*.trigger.md` from the vault.
+- `src/configLoader.ts`: parses `*.agent.md`, `*.prompt.md`, `SKILL.md`, and `mcp.json` from the vault.
 - `src/view/sessionConfig.ts`: maps agent, skill, MCP server, attachment, and prompt state into the SDK session configuration.
-- `src/triggerScheduler.ts`: runs cron triggers and file-glob triggers.
 - `src/bots/telegramBot.ts`: reuses agents, skills, and MCP server configs for Telegram conversations.
 
 This architecture matters because it makes Sidekick more like a local Copilot runtime inside Obsidian than a simple prompt box.

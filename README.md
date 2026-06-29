@@ -2,9 +2,9 @@
 
 ![Obsidian Sidekick](./docs/images/banner.png)
 
-Your AI-powered second brain inside Obsidian. Chat with agents, run tools, fire triggers, search your vault with AI, and transform text — all without leaving your notes.
+Your AI-powered second brain inside Obsidian. Chat with agents, run tools, search your vault with AI, and transform text — all without leaving your notes.
 
-Claude Brain connects to Claude or your own AI provider and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, prompt templates, triggers, and an AI-powered editor.
+Claude Brain connects to Claude or your own AI provider and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, prompt templates, and an AI-powered editor.
 
 ---
 
@@ -14,7 +14,7 @@ The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent
 
 ![Obsidian Sidekick Screenshot](./docs/images/screenshot.png)
 
-**What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions, triggers, and search all work from the same panel.
+**What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions and search all work from the same panel.
 
 > [!CAUTION]
 > **With great power comes great responsibility.** This plugin can execute tools, run CLI commands, and modify your files on your behalf. This software is provided as open-source without any warranty or support. Use at your own risk.
@@ -37,7 +37,6 @@ The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent
      skills/    ← subfolder per skill with SKILL.md
      tools/     ← mcp.json server config
      prompts/   ← *.prompt.md slash commands
-     triggers/  ← *.trigger.md automated tasks
    ```
 4. **Open Sidekick** — Click the **brain** icon in the ribbon, or run **Open Sidekick** from the command palette.
 
@@ -56,7 +55,6 @@ You're ready. Start chatting, or read on to unlock every feature.
 - [Browser use](#browser-use)
 - [CLI Tools](#cli-tools)
 - [Prompt templates](#prompt-templates)
-- [Triggers](#triggers)
 - [Bots](#bots)
 - [Inline edits](#inline-edits)
 - [Settings reference](#settings-reference)
@@ -100,7 +98,7 @@ Click **Test**.
 
 ## The Sidekick panel
 
-The panel lives in the right sidebar and has three tabs: **Chat**, **Triggers**, and **Search**.
+The panel lives in the right sidebar and has two tabs: **Chat** and **Search**.
 
 ### Chat tab
 
@@ -134,10 +132,6 @@ The **active note** is automatically included as context. The working directory 
 
 AI-powered semantic search across your vault. Toggle between **basic** mode (quick answers, minimal config) and **advanced** mode (pick an agent, model, skills, and tools for the search).
 
-### Triggers tab
-
-View and manage all configured triggers. See which are enabled, their schedules, and recent firing history.
-
 ### Session sidebar
 
 The right edge of the panel lists your conversation sessions.
@@ -146,7 +140,7 @@ The right edge of the panel lists your conversation sessions.
 - **Right-click** to rename or delete.
 - **Filter** sessions with the search box.
 - A **green dot** means a session is actively streaming.
-- Trigger and search sessions run in the background and are tagged accordingly.
+- Search sessions run in the background and are tagged accordingly.
 
 Sessions are auto-named as `<Agent>: <first message>`.
 
@@ -478,36 +472,6 @@ Translate the provided text from English to Portuguese.
 
 ---
 
-## Triggers
-
-Triggers run tasks automatically in the background. Define them as `*.trigger.md` files in `sidekick/triggers/`.
-
-### Example: `daily-planner.trigger.md`
-
-```yaml
----
-name: Daily planner
-description: Prepares a daily plan each morning
-agent: Planner
-cron: "0 8 * * *"
-enabled: true
----
-Help me prepare my day — surface asks, recommend actions, and prioritize.
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | No | Display name (defaults to filename) |
-| `description` | No | Short purpose description |
-| `agent` | No | Agent to use (its model and system prompt apply) |
-| `cron` | No | Cron expression (min, hour, dom, month, dow). Checked every 60 s. |
-| `glob` | No | Glob pattern matching vault paths — fires on file create/modify/rename |
-| `enabled` | No | Active by default (`true`) |
-
-A `cron` and/or `glob` must be configured. Trigger sessions appear in the sidebar tagged with `[trigger]`. File-change triggers include the changed file path as context.
-
----
-
 ## Bots
 
 Connect external messaging platforms to Sidekick so you can chat with your agents from anywhere — not just inside Obsidian. Each bot type runs as a background service, forwarding messages to the AI and sending replies back.
@@ -661,7 +625,7 @@ Limit what the AI can see. Click the **folder** icon in the chat input bar to op
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Inline operations model** | Default | Model for context-menu actions |
-| **Sidekick folder** | `sidekick` | Root folder for agents, skills, tools, prompts, triggers |
+| **Sidekick folder** | `sidekick` | Root folder for agents, skills, tools, and prompts |
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
@@ -693,8 +657,6 @@ Limit what the AI can see. Click the **folder** icon in the chat input bar to op
       mcp.json
     prompts/
       en-to-pt.prompt.md
-    triggers/
-      daily-planner.trigger.md
 ```
 
 ---

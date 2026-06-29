@@ -218,7 +218,7 @@ Future-compatible but not required now:
 
 ### 9.1 Loader changes
 
-- Add a `loadDomains` function alongside `loadAgents`, `loadSkills`, `loadPrompts`, and `loadTriggers`.
+- Add a `loadDomains` function alongside `loadAgents`, `loadSkills`, and `loadPrompts`.
 - Extend the frontmatter parser or add a safe parser path for nested metadata because domain matching will need structured fields.
 - Extend `AgentConfig` with optional `delegates`.
 
