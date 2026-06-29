@@ -13,9 +13,8 @@ import type {
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
-	CustomAgentConfig,
 } from './copilot';
-import {Session, toCustomAgentConfig} from './copilot';
+import {Session} from './copilot';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
@@ -862,18 +861,6 @@ export class SynapseView extends ItemView {
 		systemContent?: string;
 		selectedAgentName?: string;
 	}): SessionConfig {
-		// Skills
-		const basePath = this.getVaultBasePath();
-		const skillDirs: string[] = [];
-		if (this.skills.length > 0) {
-			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
-		}
-		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
-		const agents: Record<string, CustomAgentConfig> = {};
-		for (const a of this.agents) {
-			agents[a.name] = toCustomAgentConfig(a);
-		}
-
 		// Permission handler — canUseTool for Agent SDK
 		const permissionHandler: import('./copilot').PermissionHandler = async (toolName, input, options) => {
 			if (this.plugin.settings.toolApproval === 'allow') {
@@ -928,36 +915,14 @@ export class SynapseView extends ItemView {
 			canUseTool: permissionHandler,
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),
-			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
-			...(Object.keys(agents).length > 0 ? {agents} : {}),
+			plugins: [{type: 'local', path: `${vaultRoot}/_synapse/`}],
+			skills: Array.from(this.enabledSkills),
 			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
 			systemPrompt: systemContent,
+			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 		};
 
 		return config;
-	}
-
-	getSessionExtras(): {
-		skillDirectories?: string[];
-		disabledSkills?: string[];
-		workingDirectory?: string;
-	} {
-		const basePath = this.getVaultBasePath();
-
-		// Skills
-		const skillDirs: string[] = [];
-		if (this.skills.length > 0) {
-			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
-		}
-		const _disabledSkills = this.skills
-			.filter(s => !this.enabledSkills.has(s.name))
-			.map(s => s.name);
-
-		return {
-			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
-			...(_disabledSkills.length > 0 ? {disabledSkills: _disabledSkills} : {}),
-			workingDirectory: this.getWorkingDirectory(),
-		};
 	}
 
 	// ── Utilities ────────────────────────────────────────────────
