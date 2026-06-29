@@ -459,6 +459,7 @@ export class EditModal extends Modal {
 		const {content: result, sessionId} = await this.plugin.copilot!.inlineChat({
 			prompt,
 			agent: this.plugin.settings.featureAgents?.inline || 'General',
+			plugins: [{type: 'local', path: `${(this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath.replace(/\\/g, '/')}/_synapse/`}],
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
 			tools: [],

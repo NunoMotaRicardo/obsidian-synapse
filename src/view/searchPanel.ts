@@ -2,7 +2,6 @@ import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {SessionConfig, SessionMetadata} from '../copilot';
 import type {AgentConfig} from '../types';
-import {SYNAPSE_FOLDER} from '../settings';
 import {FolderTreeModal} from '../modals';
 import {buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 

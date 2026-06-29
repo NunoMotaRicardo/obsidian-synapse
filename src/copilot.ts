@@ -55,7 +55,6 @@ import type {
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
-import type {AgentConfig} from './types';
 import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel} from './providerModels';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).

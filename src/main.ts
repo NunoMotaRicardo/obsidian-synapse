@@ -1,8 +1,7 @@
-import {MarkdownView, Notice, Plugin, addIcon, normalizePath} from 'obsidian';
-import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, SYNAPSE_FOLDER} from "./settings";
+import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
+import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {AgentService} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
-import {scanAgents} from "./configWriter";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
