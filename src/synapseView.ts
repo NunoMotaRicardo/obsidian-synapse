@@ -910,8 +910,9 @@ export class SynapseView extends ItemView {
 			systemContent += buildSelfImproveHint(opts.selectedAgentName || 'Auto');
 		}
 
+		const cliModel = opts.model && !this.plugin.copilot?.isLocalModel(opts.model) ? opts.model : undefined;
 		const config: SessionConfig = {
-			model: opts.model,
+			model: cliModel,
 			canUseTool: permissionHandler,
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),

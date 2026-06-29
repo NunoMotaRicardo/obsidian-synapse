@@ -374,7 +374,6 @@ Example:
 \`\`\`markdown
 ---
 description: Specialty agent for academic citation and research drafting.
-model: claude-3-7-sonnet
 tools:
   - Read
   - Write

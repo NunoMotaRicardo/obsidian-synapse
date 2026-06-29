@@ -589,7 +589,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				bg.messages.push({
 					id: `i-${Date.now()}`,
 					role: 'info',
-					content: `Error: ${event.data.message}`,
+					content: `Error: ${(event.data as {message?: string; error?: string}).message || (event.data as {message?: string; error?: string}).error || 'Unknown error'}`,
 					timestamp: Date.now(),
 				});
 				bg.isStreaming = false;

@@ -666,7 +666,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 						.setName(`Agent: ${agent.name}`)
 						.setDesc(`${agent.description || 'Custom vault agent'} (${agent.filePath})`)
 						.addText(text => text
-							.setPlaceholder('e.g. claude-sonnet-4-6')
+							.setPlaceholder('e.g. sonnet')
 							.setValue(agent.model || '')
 							.onChange(async (val) => {
 								await updateAgentModelFile(this.app, agent.filePath, val);
