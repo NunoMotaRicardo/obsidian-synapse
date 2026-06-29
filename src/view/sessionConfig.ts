@@ -13,7 +13,9 @@ import {IMAGE_EXTS} from '../types';
 
 /**
  * Resolve a model ID from an agent's preferred model name / partial match.
- * Returns the matching model ID, or `agent.model` if specified, or `fallback`.
+ * Returns the matching model ID, or falls back to `fallback` when the
+ * agent's model doesn't match any available model (avoids passing unknown
+ * model IDs to the SDK).
  */
 export function resolveModelForAgent(agent: AgentConfig | undefined, models: ModelInfo[], fallback: string | undefined): string | undefined {
 	if (!agent?.model) return fallback;
@@ -26,7 +28,7 @@ export function resolveModelForAgent(agent: AgentConfig | undefined, models: Mod
 			m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target)
 		);
 	}
-	return match ? match.id : agent.model;
+	return match ? match.id : fallback;
 }
 
 /**

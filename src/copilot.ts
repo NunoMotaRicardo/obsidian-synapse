@@ -30,7 +30,7 @@ try {
 	// ignore polyfill errors
 }
 
-import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer} from '@anthropic-ai/claude-agent-sdk';
+import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
 	Query,
@@ -135,15 +135,15 @@ function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	};
 }
 
-/** Fallback model shown before the SDK model list is fetched. */
+/** Placeholder entry shown before the SDK model list is fetched.
+ *  Empty id means "let the CLI pick its default". */
 export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 	{
-		id: 'claude-sonnet-4-6',
-		name: 'Claude Sonnet 4.6',
+		id: '',
+		name: 'Default',
 		capabilities: {
 			supports: {vision: true, reasoningEffort: true, tools: true},
 			limits: {max_context_window_tokens: 200000},
-			supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 		},
 		isVision: true,
 		supportsTools: true,
@@ -384,8 +384,7 @@ export class AgentService {
 	/** Fetch available models from the CLI via the Agent SDK. */
 	async fetchModels(): Promise<ModelInfo[]> {
 		await this.ensureConnected();
-		const stream = query({
-			prompt: '',
+		const warm = await startup({
 			options: {
 				maxTurns: 0,
 				permissionMode: 'plan',
@@ -395,10 +394,15 @@ export class AgentService {
 			},
 		});
 		try {
-			const sdkModels = await stream.supportedModels();
-			this.sdkModels = sdkModels.map(mapSdkModel);
-		} finally {
-			stream.close();
+			const q = warm.query('');
+			try {
+				const initResult = await q.initializationResult();
+				this.sdkModels = initResult.models.map(mapSdkModel);
+			} finally {
+				q.close();
+			}
+		} catch {
+			warm.close();
 		}
 		return this.getModels();
 	}

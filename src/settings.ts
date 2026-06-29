@@ -195,7 +195,6 @@ When a user requests ASCII art for any word or phrase, generate the block-style 
 const SAMPLE_GENERAL_AGENT = `---
 name: General
 description: General-purpose assistant for chat, editor operations, search, and bot tasks.
-model: claude-sonnet-4-6
 ---
 
 # General Assistant Instructions
@@ -206,7 +205,6 @@ You are a helpful general assistant for Obsidian. Help the user draft notes, ans
 const SAMPLE_VISION_AGENT = `---
 name: Vision
 description: Vision-capable agent for analyzing note images, diagrams, and attachments.
-model: claude-sonnet-4-6
 ---
 
 # Vision Assistant Instructions
@@ -217,7 +215,6 @@ You are an AI assistant specialized in analyzing visual content, diagrams, image
 const SAMPLE_ZETTELKASTEN_AGENT = `---
 name: Zettelkasten
 description: Methodology agent tuned for atomic notes, dense interlinking, and slip-box workflows.
-model: claude-sonnet-4-6
 ---
 
 # Zettelkasten Assistant Instructions
@@ -228,7 +225,6 @@ You are a Zettelkasten methodology assistant. Focus on creating atomic, single-c
 const SAMPLE_PARA_AGENT = `---
 name: PARA
 description: Methodology agent tuned for Projects, Areas, Resources, and Archives organization.
-model: claude-sonnet-4-6
 ---
 
 # PARA Assistant Instructions
@@ -239,7 +235,6 @@ You are a PARA methodology assistant. Help organize information into Projects (g
 const SAMPLE_LYT_AGENT = `---
 name: LYT
 description: Methodology agent tuned for Linking Your Thinking and Maps of Content (MOCs).
-model: claude-sonnet-4-6
 ---
 
 # LYT Assistant Instructions
