@@ -10,11 +10,10 @@ import {SYNAPSE_VIEW_TYPE} from '../synapseView';
 import type {SessionConfig, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
-import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
-import {SYNAPSE_FOLDER, getMcpInputValue} from '../settings';
-import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
-import type {InputResolver} from '../configLoader';
-import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
+import type {AgentConfig, SkillInfo} from '../types';
+import {SYNAPSE_FOLDER} from '../settings';
+import {scanAgents, scanSkills} from '../configWriter';
+import {buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError} from './telegramApi';
@@ -54,10 +53,9 @@ export class TelegramBotService {
 	/** Active copilot sessions keyed by chat:thread. */
 	private sessions = new Map<string, ActiveBotSession>();
 
-	/** Cached agent/skill/tool configs (reloaded on connect). */
+	/** Cached agent/skill configs (reloaded on connect). */
 	private agents: AgentConfig[] = [];
 	private skills: SkillInfo[] = [];
-	private mcpServers: McpServerEntry[] = [];
 
 	/** Status change callbacks. */
 	private statusListeners: Array<(status: BotConnectionStatus) => void> = [];
@@ -308,16 +306,6 @@ export class TelegramBotService {
 			? this.agents.find(a => a.name === defaultAgentName)
 			: undefined;
 
-		// Tools — agent may restrict to specific tool servers
-		let enabledServers: Set<string>;
-		if (agent?.tools !== undefined) {
-			const allowed = new Set(agent.tools);
-			enabledServers = new Set(this.mcpServers.filter(s => allowed.has(s.name)).map(s => s.name));
-		} else {
-			enabledServers = new Set(this.mcpServers.map(s => s.name));
-		}
-		const mcpServers = mapMcpServers(this.mcpServers, enabledServers);
-
 		// Skills
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
@@ -353,7 +341,6 @@ export class TelegramBotService {
 			allowDangerouslySkipPermissions: true,
 			cwd: basePath,
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../copilot').ReasoningEffort} : {}),
-			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
 			systemPrompt: systemContent,
@@ -518,21 +505,12 @@ export class TelegramBotService {
 	async reloadConfigs(): Promise<void> {
 		try {
 			const app = this.plugin.app;
-
-			// Resolve stored input values (no UI prompts — bot runs headless)
-			const inputResolver: InputResolver = (input) => {
-				const isPassword = input.password === true;
-				return Promise.resolve(getMcpInputValue(app, this.plugin, input.id, isPassword));
-			};
-
-			const [agents, skills, mcpServers] = await Promise.all([
-				loadAgents(app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
-				loadSkills(app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
-				loadMcpServers(app, normalizePath(`${SYNAPSE_FOLDER}/tools`), inputResolver),
+			const [agents, skills] = await Promise.all([
+				scanAgents(app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
+				scanSkills(app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
-			this.mcpServers = mcpServers;
 		} catch (e) {
 			console.error('Synapse Telegram: failed to reload configs', e);
 		}

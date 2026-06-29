@@ -10,17 +10,15 @@ import {
 import SynapsePlugin, {SYNAPSE_ICON_ID} from './main';
 import type {
 	SessionConfig,
-	MCPServerConfig,
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
 	CustomAgentConfig,
 } from './copilot';
 import {Session, toCustomAgentConfig} from './copilot';
-import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, ChatMessage, ChatAttachment} from './types';
-import {loadAgents, loadSkills, loadMcpServers, loadPrompts} from './configLoader';
-import type {InputResolver} from './configLoader';
-import {SYNAPSE_FOLDER, getMcpInputValue, setMcpInputValue, McpInputPromptModal} from './settings';
+import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
+import {scanAgents, scanSkills} from './configWriter';
+import {SYNAPSE_FOLDER} from './settings';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
@@ -29,7 +27,7 @@ import type {BackgroundSession} from './view/types';
 
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
-import {buildPrompt, buildSdkAttachments, buildSelfImproveHint, buildVaultContextBlock, mapMcpServers, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, buildSdkAttachments, buildSelfImproveHint, buildVaultContextBlock, resolveNoteImageEmbeds} from './view/sessionConfig';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 
@@ -45,14 +43,10 @@ export class SynapseView extends ItemView {
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
 	skills: SkillInfo[] = [];
-	mcpServers: McpServerEntry[] = [];
-	prompts: PromptConfig[] = [];
-	activePrompt: PromptConfig | null = null;
 
 	selectedAgent = '';
 	selectedModel = '';
 	enabledSkills: Set<string> = new Set();
-	enabledMcpServers: Set<string> = new Set();
 	attachments: ChatAttachment[] = [];
 	activeNotePath: string | null = null;
 	activeSelection: {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null = null;
@@ -102,7 +96,6 @@ export class SynapseView extends ItemView {
 	searchModel = '';
 	searchWorkingDir = '';
 	searchEnabledSkills: Set<string> = new Set();
-	searchEnabledMcpServers: Set<string> = new Set();
 	searchAgentSelect!: HTMLSelectElement;
 	searchModelSelect!: HTMLSelectElement;
 	searchSkillsBtnEl!: HTMLButtonElement;
@@ -144,10 +137,6 @@ export class SynapseView extends ItemView {
 	configRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 	configLoading = false;
 	configLoadedAt = 0;
-
-	// ── Prompt dropdown DOM refs ─────────────────────────────────
-	promptDropdown: HTMLElement | null = null;
-	promptDropdownIndex = -1;
 
 	// ── Session sidebar DOM refs ─────────────────────────────────
 	sidebarEl!: HTMLElement;
@@ -313,40 +302,16 @@ export class SynapseView extends ItemView {
 		if (this.configLoading) return;
 		this.configLoading = true;
 		try {
-			// Build input resolver that reads stored values or prompts for missing ones
-			const inputResolver: InputResolver = async (input: McpInputVariable) => {
-				const isPassword = input.password === true;
-				let value = getMcpInputValue(this.app, this.plugin, input.id, isPassword);
-				if (value === undefined) {
-					// Prompt user for the missing value
-					value = await new Promise<string | undefined>(resolve => {
-						const modal = new McpInputPromptModal(this.app, input, (v) => {
-							if (v !== undefined) {
-								void setMcpInputValue(this.app, this.plugin, input.id, v, isPassword);
-							}
-							resolve(v);
-						});
-						modal.open();
-					});
-				}
-				return value;
-			};
-
-			// Parallel-load all config files (independent I/O)
-			const [agents, skills, mcpServers, prompts] = await Promise.all([
-				loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
-				loadSkills(this.app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
-				loadMcpServers(this.app, normalizePath(`${SYNAPSE_FOLDER}/tools`), inputResolver),
-				loadPrompts(this.app, normalizePath(`${SYNAPSE_FOLDER}/prompts`)),
+			// Lightweight scan for UI display
+			const [agents, skills] = await Promise.all([
+				scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
+				scanSkills(this.app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
-			this.mcpServers = mcpServers;
-			this.prompts = prompts;
 
-			// Enable all skills and tools by default (agent filter applied in updateConfigUI)
+			// Enable all skills by default
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
-			this.enabledMcpServers = new Set(this.mcpServers.map(s => s.name));
 
 			// Populate available models from AgentService
 			if (this.plugin.copilot) {
@@ -362,7 +327,7 @@ export class SynapseView extends ItemView {
 		this.updateConfigUI();
 		this.configDirty = true;
 		if (!options?.silent) {
-			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s), ${this.mcpServers.length} tool server(s), ${this.prompts.length} prompt(s).`);
+			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s).`);
 		}
 	}
 
@@ -474,26 +439,7 @@ export class SynapseView extends ItemView {
 			return;
 		}
 
-		// Close prompt dropdown if open
-		this.closePromptDropdown();
-
-		// Resolve prompt command: strip /prompt-name prefix, extract user text
-		let prompt = rawInput;
-		let usedPrompt: PromptConfig | null = this.activePrompt;
-
-		if (rawInput.startsWith('/')) {
-			const spaceIdx = rawInput.indexOf(' ');
-			if (spaceIdx > 0) {
-				const cmdName = rawInput.slice(1, spaceIdx);
-				const found = this.prompts.find(p => p.name === cmdName);
-				if (found) {
-					usedPrompt = found;
-					prompt = rawInput.slice(spaceIdx + 1).trim();
-				}
-			}
-		}
-
-		// Display prompt (show original input to user)
+		const prompt = rawInput;
 		const displayPrompt = rawInput;
 
 		// Snapshot attachments and scope
@@ -563,15 +509,7 @@ export class SynapseView extends ItemView {
 
 		const currentScopePaths = [...this.scopePaths];
 
-		// Auto-select agent from prompt if specified
-		if (usedPrompt?.agent) {
-			this.selectAgent(usedPrompt.agent);
-		}
-
-		// Prepend prompt template content if active
-		const sendPrompt = usedPrompt ? `${usedPrompt.content}\n\n${prompt}` : prompt;
-		this.activePrompt = null;
-		this.inputEl.removeAttribute('title');
+		const sendPrompt = prompt;
 
 		// Update UI
 		this.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
@@ -908,8 +846,6 @@ export class SynapseView extends ItemView {
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];
-		this.activePrompt = null;
-		this.inputEl.removeAttribute('title');
 		this.chatContainer.empty();
 		this.renderWelcome();
 		this.renderAttachments();
@@ -926,8 +862,6 @@ export class SynapseView extends ItemView {
 		systemContent?: string;
 		selectedAgentName?: string;
 	}): SessionConfig {
-		const mcpServers = mapMcpServers(this.mcpServers, this.enabledMcpServers);
-
 		// Skills
 		const basePath = this.getVaultBasePath();
 		const skillDirs: string[] = [];
@@ -984,8 +918,8 @@ export class SynapseView extends ItemView {
 			? opts.systemContent + '\n\n' + wsInfo
 			: wsInfo) + vaultContext;
 
-		// Inject self-improve detection hint unless the user is already using the improve-synapse prompt
-		if (this.activePrompt?.name !== 'improve-synapse') {
+		// Inject self-improve detection hint unless the user is already using the improve-synapse agent
+		if (opts.selectedAgentName !== 'improve-synapse') {
 			systemContent += buildSelfImproveHint(opts.selectedAgentName || 'Auto');
 		}
 
@@ -995,7 +929,6 @@ export class SynapseView extends ItemView {
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
-			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
 			systemPrompt: systemContent,
@@ -1007,7 +940,6 @@ export class SynapseView extends ItemView {
 	getSessionExtras(): {
 		skillDirectories?: string[];
 		disabledSkills?: string[];
-		mcpServers?: Record<string, MCPServerConfig>;
 		workingDirectory?: string;
 	} {
 		const basePath = this.getVaultBasePath();
@@ -1021,13 +953,9 @@ export class SynapseView extends ItemView {
 			.filter(s => !this.enabledSkills.has(s.name))
 			.map(s => s.name);
 
-		// MCP servers
-		const mcpServers = mapMcpServers(this.mcpServers, this.enabledMcpServers);
-
 		return {
 			...(skillDirs.length > 0 ? {skillDirectories: skillDirs} : {}),
 			...(_disabledSkills.length > 0 ? {disabledSkills: _disabledSkills} : {}),
-			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			workingDirectory: this.getWorkingDirectory(),
 		};
 	}

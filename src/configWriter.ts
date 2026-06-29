@@ -1,7 +1,118 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
-import type {AgentConfig, PromptConfig} from './types';
-import {parseFrontmatter} from './configLoader';
+import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
+
+/** Module-level compiled regex for frontmatter detection. */
+export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+
+/**
+ * Parse YAML-like frontmatter from markdown content.
+ * Returns parsed key-value pairs and the body after the frontmatter block.
+ */
+export function parseFrontmatter(content: string): {meta: Record<string, string | string[]>; body: string} {
+	const match = content.match(FM_RE);
+	if (!match) return {meta: {}, body: content};
+	const meta: Record<string, string | string[]> = {};
+	const lines = (match[1] ?? '').split('\n');
+	let currentKey = '';
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i]!;
+		const idx = line.indexOf(':');
+		if (idx > 0 && !line.match(/^\s+-/)) {
+			const key = line.slice(0, idx).trim();
+			let val = line.slice(idx + 1).trim();
+			// Strip surrounding quotes (single or double)
+			if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+				val = val.slice(1, -1);
+			}
+			if (key) {
+				currentKey = key;
+				meta[key] = val;
+			}
+		} else if (currentKey) {
+			// Check for YAML list item (  - value)
+			const listMatch = line.match(/^\s+-\s+(.+)/);
+			if (listMatch) {
+				const prev = meta[currentKey];
+				if (Array.isArray(prev)) {
+					prev.push(listMatch[1]!.trim());
+				} else {
+					// Convert from scalar (empty or value) to array
+					const arr: string[] = prev && typeof prev === 'string' && prev.length > 0 ? [prev] : [];
+					arr.push(listMatch[1]!.trim());
+					meta[currentKey] = arr;
+				}
+			}
+		}
+	}
+	return {meta, body: match[2] ?? ''};
+}
+
+/**
+ * Lightweight scan for agent configurations in the given vault folder.
+ * Reads file names and frontmatter metadata for UI display.
+ */
+export async function scanAgents(app: App, agentsFolder: string): Promise<AgentConfig[]> {
+	const folder = normalizePath(agentsFolder);
+	const agents: AgentConfig[] = [];
+	const abstract = app.vault.getAbstractFileByPath(folder);
+	if (!(abstract instanceof TFolder)) return agents;
+
+	const agentFiles = abstract.children.filter(
+		(child): child is TFile => child instanceof TFile && child.extension === 'md'
+	);
+	const contents = await Promise.all(agentFiles.map(f => app.vault.read(f)));
+
+	for (let i = 0; i < agentFiles.length; i++) {
+		const child = agentFiles[i]!;
+		const content = contents[i]!;
+		const {meta, body} = parseFrontmatter(content);
+		const rawTools = meta['tools'];
+		const rawSkills = meta['skills'];
+		const nameFromFile = child.basename.endsWith('.agent') ? child.basename.replace('.agent', '') : child.basename;
+		agents.push({
+			name: (typeof meta['name'] === 'string' && meta['name']) ? meta['name'] : nameFromFile,
+			description: (typeof meta['description'] === 'string' ? meta['description'] : '') || '',
+			model: (typeof meta['model'] === 'string' && meta['model']) || undefined,
+			tools: Array.isArray(rawTools) ? rawTools : (typeof rawTools === 'string' && rawTools ? rawTools.split(',').map(t => t.trim()).filter(Boolean) : ('tools' in meta ? [] : undefined)),
+			skills: Array.isArray(rawSkills) ? rawSkills : (typeof rawSkills === 'string' && rawSkills ? rawSkills.split(',').map(s => s.trim()).filter(Boolean) : ('skills' in meta ? [] : undefined)),
+			instructions: body.trim(),
+			filePath: child.path,
+		});
+	}
+	return agents;
+}
+
+/**
+ * Lightweight scan for skill definitions in the given vault folder.
+ * Reads folder names and SKILL.md frontmatter descriptions for UI display.
+ */
+export async function scanSkills(app: App, skillsFolder: string): Promise<SkillInfo[]> {
+	const folder = normalizePath(skillsFolder);
+	const skills: SkillInfo[] = [];
+	const abstract = app.vault.getAbstractFileByPath(folder);
+	if (!(abstract instanceof TFolder)) return skills;
+
+	const skillFolders = abstract.children.filter((child): child is TFolder => child instanceof TFolder);
+	const skillFiles = skillFolders.map(child => {
+		const f = app.vault.getAbstractFileByPath(normalizePath(`${child.path}/SKILL.md`));
+		return f instanceof TFile ? {folder: child, file: f} : null;
+	}).filter((x): x is {folder: TFolder; file: TFile} => x !== null);
+
+	const contents = await Promise.all(skillFiles.map(s => app.vault.read(s.file)));
+
+	for (let i = 0; i < skillFiles.length; i++) {
+		const {folder: child} = skillFiles[i]!;
+		const content = contents[i]!;
+		const {meta} = parseFrontmatter(content);
+		skills.push({
+			name: (typeof meta['name'] === 'string' ? meta['name'] : '') || child.name,
+			description: (typeof meta['description'] === 'string' ? meta['description'] : '') || '',
+			folderPath: child.path,
+		});
+	}
+	return skills;
+}
 
 /** Configuration for writing a skill artifact (SKILL.md inside a named subfolder). */
 export interface SkillWriteConfig {
@@ -83,7 +194,7 @@ export async function ensureFolder(app: App, path: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Write an agent configuration as `<kebab-name>.agent.md`.
+ * Write an agent configuration as `<kebab-name>.md`.
  * Returns the vault-relative path of the created file.
  */
 export async function writeAgent(
@@ -93,38 +204,15 @@ export async function writeAgent(
 ): Promise<string> {
 	await ensureFolder(app, folder);
 	const slug = toKebab(config.name);
-	const filePath = normalizePath(`${folder}/${slug}.agent.md`);
+	const filePath = normalizePath(`${folder}/${slug}.md`);
 
 	const fields: [string, string | string[] | boolean | undefined][] = [
-		['name', config.name],
 		['description', config.description],
 		['model', config.model],
 		['tools', config.tools],
 		['skills', config.skills],
 	];
 	const content = buildMarkdown(fields, config.instructions);
-	await app.vault.create(filePath, content);
-	return filePath;
-}
-
-/**
- * Write a prompt configuration as `<kebab-name>.prompt.md`.
- * Returns the vault-relative path of the created file.
- */
-export async function writePrompt(
-	app: App,
-	folder: string,
-	config: PromptConfig,
-): Promise<string> {
-	await ensureFolder(app, folder);
-	const slug = toKebab(config.name);
-	const filePath = normalizePath(`${folder}/${slug}.prompt.md`);
-
-	const fields: [string, string | string[] | boolean | undefined][] = [
-		['agent', config.agent],
-		['description', config.description],
-	];
-	const content = buildMarkdown(fields, config.content);
 	await app.vault.create(filePath, content);
 	return filePath;
 }

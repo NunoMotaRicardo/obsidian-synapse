@@ -240,23 +240,9 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	/**
-	 * Render user message content, highlighting `/prompt-name` with a tooltip if it matches a known prompt.
+	 * Render user message content.
 	 */
 	proto.renderUserMessageContent = function (content: string, body: HTMLElement): void {
-		if (content.startsWith('/')) {
-			const spaceIdx = content.indexOf(' ');
-			const cmdName = spaceIdx > 0 ? content.slice(1, spaceIdx) : content.slice(1);
-			const matchedPrompt = this.prompts.find(p => p.name === cmdName);
-			if (matchedPrompt) {
-				const p = body.createEl('p');
-				const promptSpan = p.createSpan({cls: 'synapse-prompt-tag', text: `/${cmdName}`});
-				promptSpan.setAttribute('title', matchedPrompt.content);
-				if (spaceIdx > 0) {
-					p.appendText(content.slice(spaceIdx));
-				}
-				return;
-			}
-		}
 		body.createEl('p', {text: content});
 	};
 

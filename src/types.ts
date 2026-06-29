@@ -25,14 +25,6 @@ export interface McpServerEntry {
 	config: Record<string, unknown>;
 }
 
-/** An input variable definition from the mcp.json "inputs" array. */
-export interface McpInputVariable {
-	type: string;
-	id: string;
-	description: string;
-	password?: boolean;
-}
-
 /** A message in the Synapse chat conversation. */
 export interface ChatMessage {
 	id: string;
@@ -41,17 +33,6 @@ export interface ChatMessage {
 	reasoning?: string;
 	timestamp: number;
 	attachments?: ChatAttachment[];
-}
-
-/** Parsed prompt template from *.prompt.md. */
-export interface PromptConfig {
-	name: string;
-	/** Agent to auto-select when this prompt is used. */
-	agent?: string;
-	/** Short description shown in the prompt picker dropdown. */
-	description?: string;
-	/** Content to prepend to the user's message. */
-	content: string;
 }
 
 /** An attachment added to a chat message. */

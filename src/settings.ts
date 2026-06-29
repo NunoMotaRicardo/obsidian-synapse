@@ -1,8 +1,7 @@
-import {App, Modal, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
+import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
-import type {McpInputVariable} from "./types";
-import {loadMcpInputs, loadAgents} from "./configLoader";
+import {scanAgents} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
 /** Hardcoded vault folder for Synapse customization artifacts. */
@@ -48,8 +47,6 @@ export interface SynapseSettings {
 	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
-	/** Stored values for non-password MCP input variables, keyed by input id. */
-	mcpInputValues?: Record<string, string>;
 	/**
 	 * Reasoning effort level for model inference. '' = model default.
 	 * Stored as a free string because models report values beyond the SDK's
@@ -784,7 +781,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				dynamicContainer = agentsPanel.createDiv({attr: {id: dynamicContainerId}});
 			}
 
-			const vaultAgents = await loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
+			const vaultAgents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
 			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
 			const agentOptions: Record<string, string> = {};
 			for (const name of agentNamesSet) {
@@ -973,59 +970,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		// ── MCP input variables (always visible) ─────────────────
-		new Setting(toolsPanel)
-			.setName('Input variables')
-			.setHeading();
 
-		const mcpInputsEl = toolsPanel.createDiv();
-		const renderMcpInputs = async () => {
-			mcpInputsEl.empty();
-			new Setting(mcpInputsEl)
-				.setDesc('Manage values for input variables defined in mcp.json. Password inputs are stored securely.');
-
-			let inputs: McpInputVariable[] = [];
-			try {
-				inputs = await loadMcpInputs(this.app, normalizePath(`${SYNAPSE_FOLDER}/tools`));
-			} catch {
-				// mcp.json may not exist yet
-			}
-
-			if (inputs.length === 0) {
-				mcpInputsEl.createEl('p', {
-					text: 'No input variables defined in mcp.json.',
-					cls: 'setting-item-description',
-				});
-			} else {
-				for (const input of inputs) {
-					const isPassword = input.password === true;
-					const currentValue = getMcpInputValue(this.app, this.plugin, input.id, isPassword);
-					new Setting(mcpInputsEl)
-						.setName(input.id)
-						.setDesc(input.description + (isPassword ? ' (password — stored securely)' : ''))
-						.addText(text => {
-							if (isPassword) {
-								text.inputEl.type = 'password';
-								text.inputEl.autocomplete = 'off';
-							}
-							text.setPlaceholder('Enter value…')
-								.setValue(currentValue ?? '')
-								.onChange(async (value) => {
-									await setMcpInputValue(this.app, this.plugin, input.id, value, isPassword);
-								});
-						})
-						.addExtraButton(button => button
-							.setIcon('trash')
-							.setTooltip('Delete stored value')
-							.onClick(async () => {
-								await deleteMcpInputValue(this.app, this.plugin, input.id, isPassword);
-								await renderMcpInputs();
-								new Notice(`Deleted value for input "${input.id}".`);
-							}));
-				}
-			}
-		};
-		void renderMcpInputs();
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 5: Bots
@@ -1149,7 +1094,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 		agentSetting.addDropdown(dropdown => {
 			dropdown.addOption('', 'Auto');
 			// Load agents asynchronously and populate
-			void loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)).then(agents => {
+			void scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)).then(agents => {
 				for (const agent of agents) {
 					dropdown.addOption(agent.name, agent.name);
 				}
@@ -1165,92 +1110,5 @@ export class SynapseSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 			});
 		});
-	}
-}
-
-// ── MCP Input value helpers ─────────────────────────────────
-
-const MCP_SECRET_PREFIX = 'synapse-mcp-input-';
-
-/** Retrieve the stored value for an MCP input variable. */
-export function getMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): string | undefined {
-	if (isPassword) {
-		const stored = app.loadLocalStorage(MCP_SECRET_PREFIX + id);
-		return stored != null ? String(stored) : undefined;
-	}
-	return plugin.settings.mcpInputValues?.[id];
-}
-
-/** Store a value for an MCP input variable. */
-export async function setMcpInputValue(app: App, plugin: SynapsePlugin, id: string, value: string, isPassword: boolean): Promise<void> {
-	if (isPassword) {
-		app.saveLocalStorage(MCP_SECRET_PREFIX + id, value);
-	} else {
-		if (!plugin.settings.mcpInputValues) plugin.settings.mcpInputValues = {};
-		plugin.settings.mcpInputValues[id] = value;
-		await plugin.saveSettings();
-	}
-}
-
-/** Delete the stored value for an MCP input variable. */
-export async function deleteMcpInputValue(app: App, plugin: SynapsePlugin, id: string, isPassword: boolean): Promise<void> {
-	if (isPassword) {
-		app.saveLocalStorage(MCP_SECRET_PREFIX + id, null);
-	} else {
-		if (plugin.settings.mcpInputValues) {
-			delete plugin.settings.mcpInputValues[id];
-			await plugin.saveSettings();
-		}
-	}
-}
-
-/**
- * Modal that prompts the user to provide a value for a missing MCP input variable.
- */
-export class McpInputPromptModal extends Modal {
-	private readonly input: McpInputVariable;
-	private readonly onSubmit: (value: string | undefined) => void;
-
-	constructor(app: App, input: McpInputVariable, onSubmit: (value: string | undefined) => void) {
-		super(app);
-		this.input = input;
-		this.onSubmit = onSubmit;
-	}
-
-	onOpen(): void {
-		const {contentEl} = this;
-		contentEl.createEl('h3', {text: 'Input required'});
-		contentEl.createEl('p', {text: this.input.description});
-		contentEl.createEl('p', {text: `Variable: ${this.input.id}`, cls: 'setting-item-description'});
-
-		let inputValue = '';
-		new Setting(contentEl)
-			.setName('Value')
-			.addText(text => {
-				if (this.input.password) {
-					text.inputEl.type = 'password';
-					text.inputEl.autocomplete = 'off';
-				}
-				text.setPlaceholder('Enter value…')
-					.onChange(v => { inputValue = v; });
-				// Focus input after render
-				setTimeout(() => text.inputEl.focus(), 50);
-			});
-
-		const btnRow = contentEl.createDiv({cls: 'modal-button-container'});
-		const saveBtn = btnRow.createEl('button', {text: 'Save', cls: 'mod-cta'});
-		saveBtn.addEventListener('click', () => {
-			this.close();
-			this.onSubmit(inputValue || undefined);
-		});
-		const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-		cancelBtn.addEventListener('click', () => {
-			this.close();
-			this.onSubmit(undefined);
-		});
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
 	}
 }
