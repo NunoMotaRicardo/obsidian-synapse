@@ -235,3 +235,31 @@ export async function deleteArtifact(app: App, filePath: string): Promise<void> 
 	}
 	await app.vault.trash(file, false);
 }
+
+// ---------------------------------------------------------------------------
+// Vault structure scanning
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan top-level vault folders (name + child count), excluding system and
+ * plugin folders.  Does NOT read note contents -- only folder names and counts.
+ */
+export function scanVaultStructure(
+	app: App,
+	synapseFolder: string,
+): {name: string; fileCount: number}[] {
+	const root = app.vault.getRoot();
+	const normalized = normalizePath(synapseFolder);
+	const excluded = new Set([normalized, '.obsidian', '.trash']);
+
+	return root.children
+		.filter((child): child is TFolder =>
+			child instanceof TFolder &&
+			!excluded.has(child.name) &&
+			!child.name.startsWith('.'))
+		.map(folder => ({
+			name: folder.name,
+			fileCount: folder.children.length,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}

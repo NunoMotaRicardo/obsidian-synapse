@@ -17,4 +17,6 @@
 - Attachments (photo/document/audio/video) are downloaded and passed as SDK attachments.
 - Uses the default agent from settings, all configured MCP tools/skills, and the persisted
   `reasoningEffort`/`reasoningSummary` (same rules as chat-view).
+- The `[Self-Improve]` detection block is appended to the bot's system prompt via
+  `buildSelfImproveHint()`, using the bot's default agent name.
 - Runs only while Obsidian is open and connected.

@@ -5,7 +5,7 @@ import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
 import {getSkillsFolder} from '../settings';
 import {FolderTreeModal} from '../modals';
-import {mapMcpServers, getAdaptiveTimeout} from './sessionConfig';
+import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from './sessionConfig';
 
 declare module '../synapseView' {
 	interface SynapseView {
@@ -329,6 +329,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			agents[a.name] = toCustomAgentConfig(a);
 		}
 
+		// Self-improve detection hint for search sessions
+		const selfImproveBlock = buildSelfImproveHint(this.searchAgent || 'Auto');
+
 		return {
 			model: this.searchModel || undefined,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
@@ -336,6 +339,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			cwd: this.getSearchWorkingDirectory(),
 			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
+			systemPrompt: selfImproveBlock.trim(),
 		};
 	};
 

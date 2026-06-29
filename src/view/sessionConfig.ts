@@ -1,6 +1,7 @@
 import {normalizePath, TFile, TFolder} from 'obsidian';
 import type {App} from 'obsidian';
 import type {MCPServerConfig, ModelInfo} from '../copilot';
+import {scanVaultStructure} from '../configWriter';
 
 /** Minimal MessageOptions shape for SDK attachments. */
 interface MessageOptions {
@@ -253,3 +254,28 @@ export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeo
 	return Math.max(dynamicTimeout, configuredMs);
 }
 
+/**
+ * Build a compact vault-structure context block listing top-level folders.
+ * Returns an empty string when the vault has no scannable folders.
+ */
+export function buildVaultContextBlock(
+	app: App,
+	synapseFolder: string,
+): string {
+	const folders = scanVaultStructure(app, synapseFolder);
+	if (folders.length === 0) return '';
+	const list = folders.map(f => `${f.name} (${f.fileCount} items)`).join(', ');
+	return `\n\n[Vault Structure] Top-level folders: ${list}`;
+}
+
+/**
+ * Build a compact self-improve detection hint for the system prompt.
+ * Teaches the agent to recognize customization intent and propose artifact changes.
+ */
+export function buildSelfImproveHint(agentName: string): string {
+	return '\n\n[Self-Improve] If the user expresses a preference about how Synapse should behave' +
+		' (e.g. "always use APA citations", "add a trigger for...", "make the assistant more concise"),' +
+		' propose creating or modifying a Synapse customization artifact (agent, prompt, skill, or trigger).' +
+		' State what you would create (type and summary), then ask permission before writing.' +
+		` Current agent: ${agentName}.`;
+}

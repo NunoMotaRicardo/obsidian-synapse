@@ -30,7 +30,7 @@ import type {BackgroundSession} from './view/types';
 
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
-import {buildPrompt, buildSdkAttachments, mapMcpServers, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, buildSdkAttachments, buildSelfImproveHint, buildVaultContextBlock, mapMcpServers, resolveNoteImageEmbeds} from './view/sessionConfig';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 
@@ -1006,9 +1006,15 @@ export class SynapseView extends ItemView {
 		}
 		parts.push(`Working directory: ${workDir}`);
 		const wsInfo = parts.join('\n');
-		const systemContent = opts.systemContent
+		const vaultContext = buildVaultContextBlock(this.app, this.plugin.settings.synapseFolder);
+		let systemContent = (opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
-			: wsInfo;
+			: wsInfo) + vaultContext;
+
+		// Inject self-improve detection hint unless the user is already using the improve-synapse prompt
+		if (this.activePrompt?.name !== 'improve-synapse') {
+			systemContent += buildSelfImproveHint(opts.selectedAgentName || 'Auto');
+		}
 
 		const config: SessionConfig = {
 			model: opts.model,
