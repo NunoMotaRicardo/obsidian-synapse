@@ -675,8 +675,6 @@ function getAbsolutePath(plugin: SynapsePlugin, file: TFile): string {
 	return basePath + '/' + file.path;
 }
 
-
-
 /** Extract content from an image by sending it to the LLM. */
 async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<string | null> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return null; }

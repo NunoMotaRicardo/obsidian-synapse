@@ -528,8 +528,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		}).open();
 	};
 
-
-
 	// ── Public API ───────────────────────────────────────────────
 
 	/** Set the vault scope programmatically and refresh the scope bar. */

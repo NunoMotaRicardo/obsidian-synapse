@@ -46,7 +46,6 @@ export class SynapseView extends ItemView {
 	skills: SkillInfo[] = [];
 	mcpServers: McpServerEntry[] = [];
 
-
 	selectedAgent = '';
 	selectedModel = '';
 	enabledSkills: Set<string> = new Set();
@@ -142,8 +141,6 @@ export class SynapseView extends ItemView {
 	configRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 	configLoading = false;
 	configLoadedAt = 0;
-
-
 
 	// ── Session sidebar DOM refs ─────────────────────────────────
 	sidebarEl!: HTMLElement;

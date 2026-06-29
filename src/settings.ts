@@ -47,8 +47,6 @@ export interface SynapseSettings {
 	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
-	/** Stored values for non-password MCP input variables, keyed by input id. */
-	mcpInputValues?: Record<string, string>;
 	/**
 	 * Reasoning effort level for model inference. '' = model default.
 	 * Stored as a free string because models report values beyond the SDK's
