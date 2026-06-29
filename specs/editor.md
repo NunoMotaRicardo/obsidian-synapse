@@ -17,11 +17,7 @@ so there is no duplication. The image embed is detected via regex matching for c
 extensions in both wikilink and standard markdown syntaxes, then resolved through
 `app.metadataCache.getFirstLinkpathDest()` (and validated against `IMAGE_EXTENSIONS`).
 
-- Quick actions replace text in place using the **inline operations model** via
-  `CopilotService.chat()` (ephemeral session, `approveAll`). When a BYOK provider is active,
-  `chat()` and `inlineChat()` auto-inject the `provider` config (type, baseUrl, apiKey,
-  bearerToken, wireApi) and `streaming` flag, so inline actions work with non-GitHub providers
-  (Ollama, Foundry Local, OpenAI, Azure, Anthropic, etc.) without any additional wiring (#25).
+- Quick actions route through handler agents via `AgentService.inlineChat()` (ephemeral session, `maxTurns: 1`). Text actions bind to the utility agent (`featureAgents.inline`, defaulting to 'General'), while image actions (extract text, convert to mermaid, ask about image) bind to the vision-capable agent (`featureAgents.vision`, defaulting to 'Vision'). There is no hard dependency on any specific local model (Claude default). When a BYOK provider is active, `inlineChat()` auto-injects provider configuration so inline and vision actions work seamlessly across providers (#25).
 - The Edit modal offers task/tone/format/length/choices controls and N alternatives.
 
 ## Constraints
