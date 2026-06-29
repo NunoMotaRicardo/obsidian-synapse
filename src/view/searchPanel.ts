@@ -1,7 +1,6 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
-import {toCustomAgentConfig} from '../copilot';
+import type {SessionConfig, SessionMetadata} from '../copilot';
 import type {AgentConfig} from '../types';
 import {SYNAPSE_FOLDER} from '../settings';
 import {FolderTreeModal} from '../modals';
@@ -280,24 +279,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		const basePath = this.getVaultBasePath();
-
-		// Skills
-		const skillDirs: string[] = [];
-		if (this.skills.length > 0) {
-			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
-		}
-		const _disabledSkills = this.skills
-			.filter(s => !this.searchEnabledSkills.has(s.name))
-			.map(s => s.name);
-
-		// Custom agents — only the selected search agent, or all if none selected
-		const agentPool = this.searchAgent
-			? this.agents.filter(a => a.name === this.searchAgent)
-			: this.agents;
-		const agents: Record<string, CustomAgentConfig> = {};
-		for (const a of agentPool) {
-			agents[a.name] = toCustomAgentConfig(a);
-		}
+		const pluginPath = `${basePath.replace(/\\/g, '/')}/_synapse/`;
 
 		// Self-improve detection hint for search sessions
 		const selfImproveBlock = buildSelfImproveHint(this.searchAgent || 'Auto');
@@ -307,7 +289,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
 			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
-			...(Object.keys(agents).length > 0 ? {agents} : {}),
+			plugins: [{type: 'local', path: pluginPath}],
+			skills: Array.from(this.searchEnabledSkills),
 			systemPrompt: selfImproveBlock.trim(),
 		};
 	};
@@ -416,10 +399,12 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.buildBasicSearchSessionConfig = function (this: SynapseView): SessionConfig {
+		const pluginPath = `${this.getVaultBasePath().replace(/\\/g, '/')}/_synapse/`;
 		return {
 			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			permissionMode: 'plan',
 			cwd: this.getSearchWorkingDirectory(),
+			plugins: [{type: 'local', path: pluginPath}],
 			tools: [],
 		};
 	};

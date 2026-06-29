@@ -7,8 +7,7 @@ import {normalizePath, Notice} from 'obsidian';
 import type SynapsePlugin from '../main';
 import type {SynapseView} from '../synapseView';
 import {SYNAPSE_VIEW_TYPE} from '../synapseView';
-import type {SessionConfig, CustomAgentConfig} from '../copilot';
-import {toCustomAgentConfig} from '../copilot';
+import type {SessionConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo} from '../types';
 import {SYNAPSE_FOLDER} from '../settings';
@@ -306,22 +305,6 @@ export class TelegramBotService {
 			? this.agents.find(a => a.name === defaultAgentName)
 			: undefined;
 
-		// Skills
-		const skillDirs: string[] = [];
-		if (this.skills.length > 0) {
-			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
-		}
-		if (agent?.skills !== undefined) {
-			// Skills filtering will be applied via agent definition
-		}
-
-		// Custom agents — Agent SDK uses Record<string, AgentDefinition>
-		const agentPool = agent ? [agent] : this.agents;
-		const agents: Record<string, CustomAgentConfig> = {};
-		for (const a of agentPool) {
-			agents[a.name] = toCustomAgentConfig(a);
-		}
-
 		// Model
 		const models = this.getAvailableModels();
 		const model = resolveModelForAgent(agent, models, undefined);
@@ -340,8 +323,8 @@ export class TelegramBotService {
 			permissionMode: 'bypassPermissions' as const,
 			allowDangerouslySkipPermissions: true,
 			cwd: basePath,
+			plugins: [{type: 'local', path: `${normalizedBasePath}/_synapse/`}],
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../copilot').ReasoningEffort} : {}),
-			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
 			systemPrompt: systemContent,
 		};

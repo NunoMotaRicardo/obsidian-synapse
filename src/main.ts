@@ -1,6 +1,6 @@
 import {MarkdownView, Notice, Plugin, addIcon, normalizePath} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, SYNAPSE_FOLDER} from "./settings";
-import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
+import {AgentService} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
 import {scanAgents} from "./configWriter";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
@@ -192,20 +192,6 @@ export default class SynapsePlugin extends Plugin {
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
 				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
-			},
-			getVaultAgents: async () => {
-				const agents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
-				const map: Record<string, CustomAgentConfig> = {};
-				for (const a of agents) {
-					map[a.name] = toCustomAgentConfig(a);
-				}
-				if (!map['General']) {
-					map['General'] = {description: 'General-purpose assistant', prompt: 'You are a helpful general assistant for Obsidian.', model: 'claude-3-7-sonnet'};
-				}
-				if (!map['Vision']) {
-					map['Vision'] = {description: 'Vision-capable assistant', prompt: 'You are an AI assistant specialized in analyzing visual content.', model: 'claude-3-7-sonnet'};
-				}
-				return map;
 			},
 		});
 		if (s.providerBaseUrl) {
