@@ -4,7 +4,7 @@
 
 Your AI-powered second brain inside Obsidian. Chat with agents, run tools, fire triggers, search your vault with AI, and transform text — all without leaving your notes.
 
-Claude Brain connects to Claude or your own AI provider and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, prompt templates, triggers, and an AI-powered editor.
+Sidekick connects to GitHub Copilot or your own AI provider and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, prompt templates, triggers, ghost-text autocomplete, and an AI-powered editor.
 
 ---
 
@@ -14,7 +14,7 @@ The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent
 
 ![Obsidian Sidekick Screenshot](./docs/images/screenshot.png)
 
-**What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions, triggers, and search all work from the same panel.
+**What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions, ghost-text autocomplete, triggers, and search all work from the same panel.
 
 > [!CAUTION]
 > **With great power comes great responsibility.** This plugin can execute tools, run CLI commands, and modify your files on your behalf. This software is provided as open-source without any warranty or support. Use at your own risk.
@@ -583,6 +583,7 @@ If you prefer not to see the inline Sidekick icon beside the active line, disabl
 | **Expand** | Adds detail and depth |
 | **Summarize** | Creates a concise summary |
 | **Chat with sidekick** | Opens chat with the selection as context |
+| **Autocomplete** | Toggle ghost-text autocomplete |
 
 Quick actions **replace the selected text** in-place using the **Inline operations model**.
 
@@ -593,6 +594,7 @@ Quick actions **replace the selected text** in-place using the **Inline operatio
 | **Edit the note** | Opens the Edit modal for the whole note |
 | **Structure and refine** | Restructures and improves the entire note |
 | **Chat with sidekick** | Opens the chat panel |
+| **Autocomplete** | Toggle ghost-text autocomplete |
 
 ---
 
@@ -600,7 +602,7 @@ Quick actions **replace the selected text** in-place using the **Inline operatio
 
 Right-click a file or folder in the vault explorer → **Sidekick**.
 
-**Markdown files:** Edit the note, Structure and refine, Chat with sidekick.
+**Markdown files:** Edit the note, Structure and refine, Chat with sidekick, Autocomplete.
 
 **Folders:** New note (AI-generated), New summary note (summarizes all notes in the folder), Chat with sidekick.
 
@@ -622,6 +624,18 @@ A dedicated modal for fine-grained text transformation. Open it via **Edit** in 
 | **Edit prompt** | Free-text instruction to guide the transformation |
 
 Each control can be toggled on/off individually. Preview alternatives and pick the one you want.
+
+---
+
+### Ghost-text autocomplete
+
+Get inline AI suggestions as you type — like GitHub Copilot, but for your notes.
+
+1. Enable in **Settings → Sidekick → Enable ghost-text autocomplete**.
+2. Start typing in any note. Suggestions appear as dimmed text ahead of your cursor.
+3. **Tab** to accept, **Escape** to dismiss, **double-click** to accept.
+
+Uses the **Inline operations model**. Works with all providers.
 
 ---
 
@@ -660,9 +674,10 @@ Limit what the AI can see. Click the **folder** icon in the chat input bar to op
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Inline operations model** | Default | Model for context-menu actions |
+| **Inline operations model** | Default | Model for context-menu actions and autocomplete |
 | **Sidekick folder** | `sidekick` | Root folder for agents, skills, tools, prompts, triggers |
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
+| **Ghost-text autocomplete** | Off | Inline AI suggestions in the editor |
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
 | **Search agent** | *(empty)* | Default agent for the Search tab |

@@ -14,7 +14,7 @@ through `@github/copilot-sdk` over JSON-RPC.
 │  │           copilot CLI process (spawned, stdio)            │
 │  │                                                           │
 │  ├─► SidekickView (chat/search/triggers panel)               │
-│  ├─► Editor integration (context menu)                        │
+│  ├─► Editor integration (context menu, ghost text)           │
 │  ├─► TriggerScheduler (cron/glob background tasks)           │
 │  └─► Bots (Telegram long-polling)                            │
 └──────────────────────────────────────────────────────────────┘
@@ -32,7 +32,7 @@ through `@github/copilot-sdk` over JSON-RPC.
 | config-loader | [config-loader.md](config-loader.md) | `src/configLoader.ts` | Vault `sidekick/` folder: agents, skills, tools, prompts, triggers |
 | chat-view | [chat-view.md](chat-view.md) | `src/sidekickView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search, triggers tab |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
-| editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
+| editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions, ghost-text autocomplete |
 | bots | [bots-triggers.md](bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
 | scheduler | [bots-triggers.md](bots-triggers.md) | `src/triggerScheduler.ts`, `src/tasks.ts` | Cron/glob trigger execution |
 

@@ -8,7 +8,7 @@ Source: `src/copilot.ts` — class `CopilotService`. The single place the plugin
 - Own one `CopilotClient` and its lifecycle (`ensureConnected`, `stop`).
 - Create / resume / list / delete sessions with plugin-wide defaults (`clientName: 'obsidian-sidekick'`).
 - One-shot helpers: `chat()` (ephemeral session) and `inlineChat()` (persisted session) used by
-  editor actions, search, triggers, and bots.
+  editor actions, ghost text, search, triggers, and bots.
 - Re-export all SDK types consumed elsewhere so the SDK import surface stays in one file.
 
 ## SDK 1.0 contract (post-migration)
@@ -34,7 +34,7 @@ When a non-GitHub provider preset is active, `CopilotService` receives `provider
 `ProviderConfig`) and optionally `streaming` at construction time (set in
 `main.ts` from settings via `buildProviderConfig()`). Both `chat()` and `inlineChat()` auto-
 inject `provider` and `streaming` into their `createSession()` calls so that **all** inline/
-editor operations (rewrite, edit, structure, image extraction, etc.) route through
+editor operations (rewrite, edit, structure, image extraction, ghost text, etc.) route through
 the BYOK endpoint — not just the chat panel.
 
 `buildProviderConfig()` is a shared method on `SidekickPlugin` (`main.ts`) used by both the

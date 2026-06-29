@@ -971,6 +971,72 @@
 	margin: 0 0 4px;
 }
 
+/* ── Ghost-text autocomplete ──────────────────────────────────── */
+
+.synapse-ghost-text {
+	opacity: 0.4;
+	font-style: italic;
+	pointer-events: none;
+	user-select: none;
+	white-space: pre-wrap;
+}
+
+/* ── Claude Brain gutter ──────────────────────────────────────────── */
+
+.cm-editor .synapse-gutter {
+	width: 26px;
+	cursor: default;
+}
+
+.synapse-no-inline-icon .cm-editor .synapse-gutter {
+	width: 0;
+	overflow: hidden;
+}
+
+/* Indicator button inside the gutter */
+.synapse-autocomplete-indicator {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 100%;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	opacity: 0.5;
+	transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.synapse-autocomplete-indicator .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.synapse-autocomplete-indicator:hover {
+	opacity: 1;
+	color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+
+.synapse-autocomplete-indicator:active {
+	background: var(--background-modifier-active-hover);
+}
+
+/* Animated pulse when fetching a completion */
+.synapse-autocomplete-indicator.is-loading {
+	opacity: 1;
+	color: var(--interactive-accent);
+	animation: synapse-indicator-pulse 1s ease-in-out infinite;
+}
+
+@keyframes synapse-indicator-pulse {
+	0%, 100% { opacity: 0.5; transform: scale(1); }
+	50%      { opacity: 1;   transform: scale(1.15); }
+}
+
 /* ── Bottom panel ─────────────────────────────────────────────── */
 
 .synapse-bottom {

@@ -40,7 +40,10 @@ export interface SynapseSettings {
 	inlineModel: string;
 	/** Feature to Agent mapping for plugin features. */
 	featureAgents: FeatureAgentMap;
-
+	/** Enable ghost-text autocomplete in the editor. */
+	autocompleteEnabled: boolean;
+	/** Show the inline Synapse icon on the active editor line. */
+	inlineIconEnabled: boolean;
 	/** Persisted form defaults for the Edit modal. */
 	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
@@ -145,7 +148,8 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 		telegram: 'General',
 		vision: 'Vision',
 	},
-
+	autocompleteEnabled: false,
+	inlineIconEnabled: false,
 	reasoningEffort: '',
 	reasoningSummary: '',
 	contextTier: 'default',
@@ -805,7 +809,25 @@ export class SynapseSettingTab extends PluginSettingTab {
 					}
 				}));
 
+		new Setting(capPanel)
+			.setName('Enable ghost-text autocomplete')
+			.setDesc('Show inline suggestions as you type (uses the inline operations model).')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autocompleteEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.autocompleteEnabled = value;
+					await this.plugin.saveSettings();
+				}));
 
+		new Setting(capPanel)
+			.setName('Show inline icon')
+			.setDesc('Show the plugin icon in the editor gutter next to the active line.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.inlineIconEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.inlineIconEnabled = value;
+					await this.plugin.saveSettings();
+				}));
 
 		new Setting(capPanel)
 			.setName('Auto-update working directory')

@@ -68,16 +68,22 @@ These packages are required by features in the editor, but they are not bundled 
 
 ### `@codemirror/state`
 
-Used in `src/editor/editorMenu.ts` to inspect and manipulate editor selections and transactions.
+Used in `src/editor/ghostText.ts` to define editor state fields, effects, and transactions for inline suggestion behavior.
+
+What it does here:
+
+- Tracks ghost-text suggestion state.
+- Updates editor extension state as suggestions are requested, shown, accepted, or cleared.
 
 ### `@codemirror/view`
 
-Used in `src/editor/editorMenu.ts`.
+Used in `src/editor/ghostText.ts` and typed in `src/editor/editorMenu.ts`.
 
 What it does here:
 
 - Implements the editor view plugin layer.
-- Connects Synapse actions to the active CodeMirror editor instance.
+- Renders ghost-text decorations in the editor.
+- Connects Sidekick actions to the active CodeMirror editor instance.
 
 Why these are peer dependencies instead of normal dependencies:
 
@@ -258,12 +264,14 @@ Responsibilities:
 
 ### Editor augmentation
 
+- `src/editor/ghostText.ts`
 - `src/editor/editorMenu.ts`
 - Primary packages: `@codemirror/state`, `@codemirror/view`, `obsidian`
 
 Responsibilities:
 
-- Add Synapse actions to editor and file context menus.
+- Add inline ghost-text completions.
+- Add Sidekick actions to editor and file context menus.
 - Trigger focused rewrite / transform actions against selected text.
 
 ### Automation and bots
