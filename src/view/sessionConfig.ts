@@ -244,7 +244,8 @@ export function buildVaultContextBlock(
 export function buildSelfImproveHint(agentName: string): string {
 	return '\n\n[Self-Improve] If the user expresses a preference about how Synapse should behave' +
 		' (e.g. "always use APA citations", "make the assistant more concise"),' +
-		' propose creating or modifying a Synapse customization artifact (agent, prompt, or skill).' +
+		' propose creating or modifying a Synapse customization artifact (agent or skill).' +
+		' Artifacts live in the _synapse/ folder (.md files for agents in _synapse/agents/, SKILL.md files for skills in _synapse/skills/<name>/SKILL.md).' +
 		' State what you would create (type and summary), then ask permission before writing.' +
 		` Current agent: ${agentName}.`;
 }
