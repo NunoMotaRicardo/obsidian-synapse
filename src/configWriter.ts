@@ -1,169 +1,191 @@
-import {App, normalizePath, TFile} from 'obsidian';
+import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, PromptConfig, TriggerConfig} from './types';
+import {parseFrontmatter} from './configLoader';
 
-/** Configuration for writing a skill artifact. */
+/** Configuration for writing a skill artifact (SKILL.md inside a named subfolder). */
 export interface SkillWriteConfig {
 	name: string;
 	description: string;
-	body: string;
+	/** Markdown body for SKILL.md (instructions, examples, etc.). */
+	content: string;
 }
 
-/**
- * Convert a name to a kebab-case filename slug.
- * Lowercases, replaces non-alphanumeric runs with hyphens, trims hyphens.
- */
-export function toKebabCase(name: string): string {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Convert an artifact name to a kebab-case filename slug. */
+function toKebab(name: string): string {
 	return name
+		.trim()
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '');
+		.replace(/^-|-$/g, '');
 }
 
 /**
- * Serialize a key-value pair as frontmatter-compatible line(s).
- * Scalars: `key: value`; arrays: one `    - item` line per element.
- * Strings containing colons are quoted.
+ * Serialize a single frontmatter value.
+ * Strings containing colons, quotes, or leading/trailing whitespace are quoted.
+ * Double quotes inside values are escaped.
  */
-function serializeFmField(key: string, value: string | string[] | boolean | undefined): string {
-	if (value === undefined) return '';
-	if (typeof value === 'boolean') return `${key}: ${value}`;
+function serializeFmField(key: string, value: string | string[] | boolean): string {
 	if (Array.isArray(value)) {
 		if (value.length === 0) return `${key}:`;
-		return `${key}:\n` + value.map(v => `    - ${v}`).join('\n');
+		const items = value.map(v => `  - ${v}`).join('\n');
+		return `${key}:\n${items}`;
 	}
-	// Scalar string — quote if it contains a colon
-	const quoted = value.includes(':') ? `"${value}"` : value;
-	return `${key}: ${quoted}`;
+	const str = String(value);
+	if (str === '') return `${key}:`;
+	const needsQuotes = /[:"\n]/.test(str) || str !== str.trim();
+	if (needsQuotes) {
+		const escaped = str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+		return `${key}: "${escaped}"`;
+	}
+	return `${key}: ${str}`;
 }
 
-/**
- * Build a complete frontmatter + body markdown string.
- */
-function buildMarkdown(fields: Array<[string, string | string[] | boolean | undefined]>, body: string): string {
+/** Build a complete frontmatter + body markdown string. */
+function buildMarkdown(fields: [string, string | string[] | boolean | undefined][], body: string): string {
 	const fmLines = fields
-		.map(([k, v]) => serializeFmField(k, v))
-		.filter(line => line.length > 0);
+		.filter((pair): pair is [string, string | string[] | boolean] => pair[1] !== undefined)
+		.map(([k, v]) => serializeFmField(k, v));
 	const fm = fmLines.length > 0 ? `---\n${fmLines.join('\n')}\n---\n` : '';
 	return fm + (body ? `\n${body}\n` : '');
 }
 
+// ---------------------------------------------------------------------------
+// Folder creation
+// ---------------------------------------------------------------------------
+
 /**
- * Ensure all intermediate folders exist for the given vault path.
+ * Ensure a vault folder exists, creating intermediate directories as needed.
  */
 export async function ensureFolder(app: App, path: string): Promise<void> {
 	const normalized = normalizePath(path);
+	const existing = app.vault.getAbstractFileByPath(normalized);
+	if (existing instanceof TFolder) return;
+
+	// Walk segments and create missing folders
 	const parts = normalized.split('/');
 	let current = '';
 	for (const part of parts) {
 		current = current ? `${current}/${part}` : part;
-		if (!app.vault.getAbstractFileByPath(current)) {
+		const abs = app.vault.getAbstractFileByPath(current);
+		if (!abs) {
 			await app.vault.createFolder(current);
 		}
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Write functions
+// ---------------------------------------------------------------------------
+
 /**
- * Write an agent artifact (*.agent.md) into the agents folder.
+ * Write an agent configuration as `<kebab-name>.agent.md`.
+ * Returns the vault-relative path of the created file.
  */
 export async function writeAgent(
 	app: App,
 	folder: string,
 	config: Omit<AgentConfig, 'filePath'>,
 ): Promise<string> {
-	const slug = toKebabCase(config.name);
-	const fileName = `${slug}.agent.md`;
-	const filePath = normalizePath(`${folder}/${fileName}`);
+	await ensureFolder(app, folder);
+	const slug = toKebab(config.name);
+	const filePath = normalizePath(`${folder}/${slug}.agent.md`);
 
-	const fields: Array<[string, string | string[] | boolean | undefined]> = [
+	const fields: [string, string | string[] | boolean | undefined][] = [
 		['name', config.name],
 		['description', config.description],
+		['model', config.model],
+		['tools', config.tools],
+		['skills', config.skills],
 	];
-	if (config.model) fields.push(['model', config.model]);
-	if (config.tools !== undefined) fields.push(['tools', config.tools]);
-	if (config.skills !== undefined) fields.push(['skills', config.skills]);
-
 	const content = buildMarkdown(fields, config.instructions);
-	await ensureFolder(app, folder);
 	await app.vault.create(filePath, content);
 	return filePath;
 }
 
 /**
- * Write a prompt artifact (*.prompt.md) into the prompts folder.
+ * Write a prompt configuration as `<kebab-name>.prompt.md`.
+ * Returns the vault-relative path of the created file.
  */
 export async function writePrompt(
 	app: App,
 	folder: string,
-	config: Omit<PromptConfig, 'name'> & {name: string},
+	config: PromptConfig,
 ): Promise<string> {
-	const slug = toKebabCase(config.name);
-	const fileName = `${slug}.prompt.md`;
-	const filePath = normalizePath(`${folder}/${fileName}`);
-
-	const fields: Array<[string, string | string[] | boolean | undefined]> = [];
-	if (config.agent) fields.push(['agent', config.agent]);
-	if (config.description) fields.push(['description', config.description]);
-
-	const content = buildMarkdown(fields, config.content);
 	await ensureFolder(app, folder);
+	const slug = toKebab(config.name);
+	const filePath = normalizePath(`${folder}/${slug}.prompt.md`);
+
+	const fields: [string, string | string[] | boolean | undefined][] = [
+		['agent', config.agent],
+		['description', config.description],
+	];
+	const content = buildMarkdown(fields, config.content);
 	await app.vault.create(filePath, content);
 	return filePath;
 }
 
 /**
- * Write a skill artifact (<name>/SKILL.md) inside the skills folder.
- * Creates the subdirectory if needed.
+ * Write a skill as `<skills-folder>/<kebab-name>/SKILL.md`.
+ * Creates the skill subdirectory if it does not exist.
+ * Returns the vault-relative path of the created SKILL.md.
  */
 export async function writeSkill(
 	app: App,
 	folder: string,
 	config: SkillWriteConfig,
 ): Promise<string> {
-	const slug = toKebabCase(config.name);
+	const slug = toKebab(config.name);
 	const skillDir = normalizePath(`${folder}/${slug}`);
+	await ensureFolder(app, skillDir);
 	const filePath = normalizePath(`${skillDir}/SKILL.md`);
 
-	const fields: Array<[string, string | string[] | boolean | undefined]> = [
+	const fields: [string, string | string[] | boolean | undefined][] = [
 		['name', config.name],
 		['description', config.description],
 	];
-
-	const content = buildMarkdown(fields, config.body);
-	await ensureFolder(app, skillDir);
+	const content = buildMarkdown(fields, config.content);
 	await app.vault.create(filePath, content);
 	return filePath;
 }
 
 /**
- * Write a trigger artifact (*.trigger.md) into the triggers folder.
+ * Write a trigger configuration as `<kebab-name>.trigger.md`.
+ * Returns the vault-relative path of the created file.
  */
 export async function writeTrigger(
 	app: App,
 	folder: string,
 	config: Omit<TriggerConfig, 'filePath'>,
 ): Promise<string> {
-	const slug = toKebabCase(config.name);
-	const fileName = `${slug}.trigger.md`;
-	const filePath = normalizePath(`${folder}/${fileName}`);
-
-	const fields: Array<[string, string | string[] | boolean | undefined]> = [
-		['name', config.name],
-	];
-	if (config.description) fields.push(['description', config.description]);
-	if (config.agent) fields.push(['agent', config.agent]);
-	if (config.cron) fields.push(['cron', config.cron]);
-	if (config.glob) fields.push(['glob', config.glob]);
-	fields.push(['enabled', config.enabled]);
-
-	const content = buildMarkdown(fields, config.content);
 	await ensureFolder(app, folder);
+	const slug = toKebab(config.name);
+	const filePath = normalizePath(`${folder}/${slug}.trigger.md`);
+
+	const fields: [string, string | string[] | boolean | undefined][] = [
+		['name', config.name],
+		['description', config.description],
+		['agent', config.agent],
+		['cron', config.cron],
+		['glob', config.glob],
+		['enabled', config.enabled],
+	];
+	const content = buildMarkdown(fields, config.content);
 	await app.vault.create(filePath, content);
 	return filePath;
 }
 
+// ---------------------------------------------------------------------------
+// Modify / Delete
+// ---------------------------------------------------------------------------
+
 /**
  * Modify an existing artifact file by patching frontmatter fields and/or body.
- * Only provided keys are updated; omitted keys are preserved.
+ * Only the keys present in `updates` are changed; others are preserved.
+ * Pass `body` in updates to replace the markdown body.
  */
 export async function modifyArtifact(
 	app: App,
@@ -177,64 +199,27 @@ export async function modifyArtifact(
 	}
 
 	const raw = await app.vault.read(file);
-	const fmRe = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-	const match = raw.match(fmRe);
+	const {meta, body} = parseFrontmatter(raw);
 
-	const existingFields: Array<[string, string | string[] | boolean]> = [];
-	let existingBody = raw;
-
-	if (match) {
-		existingBody = match[2] ?? '';
-		// Parse existing frontmatter preserving order
-		const lines = (match[1] ?? '').split('\n');
-		let currentKey = '';
-		for (const line of lines) {
-			const idx = line.indexOf(':');
-			if (idx > 0 && !line.match(/^\s+-/)) {
-				const key = line.slice(0, idx).trim();
-				let val = line.slice(idx + 1).trim();
-				if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-					val = val.slice(1, -1);
-				}
-				if (key) {
-					currentKey = key;
-					existingFields.push([key, val]);
-				}
-			} else if (currentKey) {
-				const listMatch = line.match(/^\s+-\s+(.+)/);
-				if (listMatch) {
-					const last = existingFields[existingFields.length - 1];
-					if (last && last[0] === currentKey) {
-						const prev = last[1];
-						if (Array.isArray(prev)) {
-							prev.push(listMatch[1]!.trim());
-						} else {
-							last[1] = prev && typeof prev === 'string' && prev.length > 0
-								? [prev, listMatch[1]!.trim()]
-								: [listMatch[1]!.trim()];
-						}
-					}
-				}
-			}
-		}
+	// Merge frontmatter updates
+	const merged: Record<string, string | string[] | boolean> = {};
+	for (const [k, v] of Object.entries(meta)) {
+		merged[k] = v;
 	}
-
-	// Apply updates to fields
-	const {body: newBody, ...fieldUpdates} = updates;
-	for (const [key, value] of Object.entries(fieldUpdates)) {
-		if (value === undefined) continue;
-		const idx = existingFields.findIndex(([k]) => k === key);
-		if (idx >= 0) {
-			existingFields[idx] = [key, value as string | string[] | boolean];
+	for (const [k, v] of Object.entries(updates)) {
+		if (k === 'body') continue;
+		if (v === undefined) {
+			delete merged[k];
 		} else {
-			existingFields.push([key, value as string | string[] | boolean]);
+			merged[k] = v;
 		}
 	}
 
-	const body = newBody !== undefined ? newBody : existingBody;
+	const newBody = updates.body !== undefined ? updates.body : body.trim();
+	const fields: [string, string | string[] | boolean][] = Object.entries(merged);
 	const content = buildMarkdown(
-		existingFields.map(([k, v]) => [k, v] as [string, string | string[] | boolean | undefined]),
-		typeof body === 'string' ? body.trim() : '',
+		fields.map(([k, v]) => [k, v] as [string, string | string[] | boolean | undefined]),
+		newBody,
 	);
 	await app.vault.modify(file, content);
 }

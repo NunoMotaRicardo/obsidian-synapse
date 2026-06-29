@@ -26,26 +26,29 @@ this user's vault uses `_sidekick/`) and turns files into runtime config.
 - SDK 1.0 type note: server entries map to `MCPStdioServerConfig` (`command`/`args`/`env`) or
   `MCPHTTPServerConfig` (`type: "http" | "sse"`, `url`, `headers`).
 
-## Config writer (implemented)
+## Config writer (`src/configWriter.ts`) — implemented
 
-Source: `src/configWriter.ts`. Write counterparts to the reader functions above.
+Write counterparts for the loader functions above. Used by the self-improve feature to
+programmatically create, modify, and delete vault-local customization artifacts.
 
 ### Functions
 
-- `writeAgent(app, folder, config)` — creates `<kebab-name>.agent.md` with frontmatter + body
-- `writePrompt(app, folder, config)` — creates `<kebab-name>.prompt.md`
-- `writeSkill(app, folder, config)` — creates `<kebab-name>/SKILL.md`, creating subdirectory
-- `writeTrigger(app, folder, config)` — creates `<kebab-name>.trigger.md`
-- `modifyArtifact(app, filePath, updates)` — patches frontmatter/body of an existing artifact
-- `deleteArtifact(app, filePath)` — deletes via `vault.trash` (Obsidian-safe)
-- `ensureFolder(app, path)` — creates missing intermediate directories
-- `toKebabCase(name)` — derives kebab-case filename slug from artifact name
+| Function | Creates | File pattern |
+|---|---|---|
+| `writeAgent(app, folder, config)` | `*.agent.md` | `<folder>/<kebab-name>.agent.md` |
+| `writePrompt(app, folder, config)` | `*.prompt.md` | `<folder>/<kebab-name>.prompt.md` |
+| `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `<folder>/<kebab-name>/SKILL.md` |
+| `writeTrigger(app, folder, config)` | `*.trigger.md` | `<folder>/<kebab-name>.trigger.md` |
+| `modifyArtifact(app, filePath, updates)` | — | Patches frontmatter/body in-place |
+| `deleteArtifact(app, filePath)` | — | Moves to Obsidian trash |
+| `ensureFolder(app, path)` | Folder | Creates intermediates |
 
 ### Rules
 
-- Frontmatter serialization is compatible with `configLoader.parseFrontmatter` (simple
-  line-by-line format, not full YAML).
-- Scalar values: `key: value`; lists: `    - item` (4-space indent); strings with colons are quoted.
-- Never writes to `mcp.json`.
+- Filenames are kebab-case derived from the artifact name.
+- Frontmatter serialization round-trips through `parseFrontmatter` (exported from configLoader).
+- Strings containing colons, quotes, or newlines are double-quoted with `\"` escaping.
+- `modifyArtifact` reuses `parseFrontmatter` from configLoader (no duplication).
+- Never writes to `mcp.json` — no function for MCP config mutation.
 - Types: reuses `AgentConfig`, `PromptConfig`, `TriggerConfig` from `src/types.ts`;
   adds `SkillWriteConfig` for skill creation.
