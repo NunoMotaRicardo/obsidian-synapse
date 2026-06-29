@@ -1,9 +1,7 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
-// Agent SDK types imported transitively via AgentService
-import {loadSkills} from '../configLoader';
-import {SYNAPSE_FOLDER} from '../settings';
+
 
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
@@ -677,28 +675,7 @@ function getAbsolutePath(plugin: SynapsePlugin, file: TFile): string {
 	return basePath + '/' + file.path;
 }
 
-async function getInlineSkillOptions(
-	plugin: SynapsePlugin,
-	enabledSkillNames: string[],
-): Promise<{skillDirectories?: string[]; disabledSkills?: string[]}> {
-	const skillsFolder = normalizePath(`${SYNAPSE_FOLDER}/skills`);
-	const availableSkills = await loadSkills(plugin.app, skillsFolder);
-	if (availableSkills.length === 0) return {};
 
-	const enabled = new Set(enabledSkillNames.map(name => name.toLowerCase()));
-	const matchingSkills = availableSkills.filter(skill => enabled.has(skill.name.toLowerCase()));
-	if (matchingSkills.length === 0) return {};
-
-	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
-	const disabledSkills = availableSkills
-		.filter(skill => !enabled.has(skill.name.toLowerCase()))
-		.map(skill => skill.name);
-
-	return {
-		skillDirectories: [basePath + '/' + skillsFolder],
-		...(disabledSkills.length > 0 ? {disabledSkills} : {}),
-	};
-}
 
 /** Extract content from an image by sending it to the LLM. */
 async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<string | null> {
@@ -846,7 +823,6 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	const absPath = getAbsolutePath(plugin, file);
-	const mermaidSkillOptions = await getInlineSkillOptions(plugin, ['mermaid']);
 	const notice = new Notice('Synapse: converting image to Mermaid diagram…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
@@ -862,7 +838,6 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
 				'Analyze the provided image and return a single Mermaid code block (wrapped in ```mermaid ... ```) ' +
 				'that faithfully represents the structure shown. Do not include any introductory text or explanation.',
-			...mermaidSkillOptions,
 			attachments: [{type: 'file', path: absPath, displayName: file.name}],
 		});
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);

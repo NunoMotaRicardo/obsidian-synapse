@@ -2,7 +2,7 @@ import {MarkdownView, Notice, Plugin, addIcon, normalizePath} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, SYNAPSE_FOLDER} from "./settings";
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
-import {loadAgents} from "./configLoader";
+import {scanAgents} from "./configWriter";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
@@ -194,7 +194,7 @@ export default class SynapsePlugin extends Plugin {
 				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
 			getVaultAgents: async () => {
-				const agents = await loadAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
+				const agents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
 				const map: Record<string, CustomAgentConfig> = {};
 				for (const a of agents) {
 					map[a.name] = toCustomAgentConfig(a);

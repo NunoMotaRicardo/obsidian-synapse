@@ -11,9 +11,8 @@ import type {SessionConfig, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
-import {SYNAPSE_FOLDER, getMcpInputValue} from '../settings';
-import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
-import type {InputResolver} from '../configLoader';
+import {SYNAPSE_FOLDER} from '../settings';
+import {scanAgents, scanSkills} from '../configWriter';
 import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
@@ -518,21 +517,13 @@ export class TelegramBotService {
 	async reloadConfigs(): Promise<void> {
 		try {
 			const app = this.plugin.app;
-
-			// Resolve stored input values (no UI prompts — bot runs headless)
-			const inputResolver: InputResolver = (input) => {
-				const isPassword = input.password === true;
-				return Promise.resolve(getMcpInputValue(app, this.plugin, input.id, isPassword));
-			};
-
-			const [agents, skills, mcpServers] = await Promise.all([
-				loadAgents(app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
-				loadSkills(app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
-				loadMcpServers(app, normalizePath(`${SYNAPSE_FOLDER}/tools`), inputResolver),
+			const [agents, skills] = await Promise.all([
+				scanAgents(app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
+				scanSkills(app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
-			this.mcpServers = mcpServers;
+			this.mcpServers = [];
 		} catch (e) {
 			console.error('Synapse Telegram: failed to reload configs', e);
 		}

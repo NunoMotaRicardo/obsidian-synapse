@@ -1,6 +1,6 @@
 import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import {IMAGE_EXTS, isImageAttachment, type PromptConfig, type SelectionInfo} from '../types';
+import {IMAGE_EXTS, isImageAttachment, type SelectionInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
 
 declare module '../synapseView' {
@@ -18,12 +18,6 @@ declare module '../synapseView' {
 		startSelectionPolling(): void;
 		pollSelection(): void;
 		openScopeModal(): void;
-		handlePromptTrigger(): void;
-		showPromptDropdown(prompts: PromptConfig[]): void;
-		closePromptDropdown(): void;
-		navigatePromptDropdown(direction: number): void;
-		updatePromptDropdownSelection(): void;
-		selectPromptFromDropdown(): void;
 		setScope(paths: string[]): void;
 		openSearchWithScope(folderPath: string): void;
 		setWorkingDir(folderPath: string): void;
@@ -70,41 +64,12 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.inputEl.addEventListener('input', () => {
 			this.inputEl.setCssProps({'--input-height': 'auto'});
 			this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
-			this.handlePromptTrigger();
 		});
 
 		// Ctrl+Enter or Enter (without Shift) to send
 		// Register on window in capture phase — earliest interception before Obsidian's hotkey system
 		const keyHandler = (e: KeyboardEvent) => {
 			if (document.activeElement !== this.inputEl) return;
-
-			// Handle prompt dropdown navigation
-			if (this.promptDropdown) {
-				if (e.key === 'ArrowDown') {
-					e.preventDefault();
-					e.stopPropagation();
-					this.navigatePromptDropdown(1);
-					return;
-				}
-				if (e.key === 'ArrowUp') {
-					e.preventDefault();
-					e.stopPropagation();
-					this.navigatePromptDropdown(-1);
-					return;
-				}
-				if (e.key === 'Enter' || e.key === 'Tab') {
-					e.preventDefault();
-					e.stopPropagation();
-					e.stopImmediatePropagation();
-					this.selectPromptFromDropdown();
-					return;
-				}
-				if (e.key === 'Escape') {
-					e.preventDefault();
-					this.closePromptDropdown();
-					return;
-				}
-			}
 
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
@@ -563,116 +528,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		}).open();
 	};
 
-	// ── Prompt slash-command dropdown ─────────────────────────────
 
-	proto.handlePromptTrigger = function (): void {
-		const value = this.inputEl.value;
-		// Trigger only when text starts with "/" (no space before the slash)
-		if (!value.startsWith('/') || value.includes(' ')) {
-			this.closePromptDropdown();
-			// Clear tooltip if input no longer matches the active prompt
-			if (this.activePrompt && !value.startsWith(`/${this.activePrompt.name}`)) {
-				this.activePrompt = null;
-				this.inputEl.removeAttribute('title');
-			}
-			return;
-		}
-		const query = value.slice(1).toLowerCase();
-		const filtered = this.prompts.filter(p => p.name.toLowerCase().includes(query));
-		if (filtered.length === 0) {
-			this.closePromptDropdown();
-			return;
-		}
-		this.showPromptDropdown(filtered);
-	};
-
-	proto.showPromptDropdown = function (prompts: PromptConfig[]): void {
-		this.closePromptDropdown();
-		this.promptDropdown = document.createElement('div');
-		this.promptDropdown.addClass('synapse-prompt-dropdown');
-		this.promptDropdownIndex = 0;
-
-		for (let i = 0; i < prompts.length; i++) {
-			const p = prompts[i];
-			if (!p) continue;
-			const item = this.promptDropdown.createDiv({cls: 'synapse-prompt-item'});
-			if (i === 0) item.addClass('is-selected');
-			item.setAttribute('title', p.content);
-
-			item.createSpan({cls: 'synapse-prompt-item-name', text: `/${p.name}`});
-			const descText = p.description || (p.content.length > 60 ? p.content.slice(0, 60) + '…' : p.content);
-			item.createSpan({cls: 'synapse-prompt-item-desc', text: descText});
-			if (p.agent) {
-				item.createSpan({cls: 'synapse-prompt-item-agent', text: p.agent});
-			}
-
-			item.addEventListener('click', () => {
-				this.promptDropdownIndex = i;
-				this.selectPromptFromDropdown();
-			});
-			item.addEventListener('mouseenter', () => {
-				this.promptDropdownIndex = i;
-				this.updatePromptDropdownSelection();
-			});
-		}
-
-		// Position above the input area
-		const inputArea = this.inputEl.closest('.synapse-input-area');
-		if (inputArea) {
-			inputArea.appendChild(this.promptDropdown);
-		}
-	};
-
-	proto.closePromptDropdown = function (): void {
-		if (this.promptDropdown) {
-			this.promptDropdown.remove();
-			this.promptDropdown = null;
-			this.promptDropdownIndex = -1;
-		}
-	};
-
-	proto.navigatePromptDropdown = function (direction: number): void {
-		if (!this.promptDropdown) return;
-		const items = this.promptDropdown.querySelectorAll('.synapse-prompt-item');
-		if (items.length === 0) return;
-		this.promptDropdownIndex = (this.promptDropdownIndex + direction + items.length) % items.length;
-		this.updatePromptDropdownSelection();
-	};
-
-	proto.updatePromptDropdownSelection = function (): void {
-		if (!this.promptDropdown) return;
-		const items = this.promptDropdown.querySelectorAll('.synapse-prompt-item');
-		items.forEach((el, i) => {
-			el.toggleClass('is-selected', i === this.promptDropdownIndex);
-		});
-	};
-
-	proto.selectPromptFromDropdown = function (): void {
-		if (!this.promptDropdown) return;
-		const value = this.inputEl.value;
-		const query = value.startsWith('/') ? value.slice(1).toLowerCase() : '';
-		const filtered = this.prompts.filter(p => p.name.toLowerCase().includes(query));
-		const selected = filtered[this.promptDropdownIndex];
-		if (!selected) {
-			this.closePromptDropdown();
-			return;
-		}
-
-		this.activePrompt = selected;
-
-		// Auto-select the prompt's agent
-		if (selected.agent) {
-			this.selectAgent(selected.agent);
-		}
-
-		// Replace input with /prompt-name + space
-		this.inputEl.value = `/${selected.name} `;
-		this.inputEl.setAttribute('title', selected.content);
-		this.inputEl.setCssProps({'--input-height': 'auto'});
-		this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
-		this.inputEl.focus();
-		this.closePromptDropdown();
-	};
 
 	// ── Public API ───────────────────────────────────────────────
 
