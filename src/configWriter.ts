@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
-import type {AgentConfig, SkillInfo} from './types';
+import type {AgentConfig, SkillInfo, TriggerConfig, TriggerEvent} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 
 /** Module-level compiled regex for frontmatter detection. */
@@ -114,6 +114,74 @@ export async function scanSkills(app: App, skillsFolder: string): Promise<SkillI
 	return skills;
 }
 
+/** Valid event values for trigger frontmatter. */
+const VALID_TRIGGER_EVENTS: ReadonlySet<string> = new Set<TriggerEvent>([
+	'file-created', 'file-modified', 'file-deleted', 'file-renamed',
+]);
+
+/**
+ * Lightweight scan for trigger configurations in the given vault folder.
+ * Reads file names and frontmatter metadata for UI display.
+ * Validates that `event` and `schedule` are mutually exclusive — skips invalid triggers.
+ */
+export async function scanTriggers(app: App, triggersFolder: string): Promise<TriggerConfig[]> {
+	const folder = normalizePath(triggersFolder);
+	const triggers: TriggerConfig[] = [];
+	const abstract = app.vault.getAbstractFileByPath(folder);
+	if (!(abstract instanceof TFolder)) return triggers;
+
+	const triggerFiles = abstract.children.filter(
+		(child): child is TFile => child instanceof TFile && child.extension === 'md'
+	);
+	const contents = await Promise.all(triggerFiles.map(f => app.vault.read(f)));
+
+	for (let i = 0; i < triggerFiles.length; i++) {
+		const child = triggerFiles[i]!;
+		const content = contents[i]!;
+		const {meta, body} = parseFrontmatter(content);
+
+		const rawEvent = typeof meta['event'] === 'string' ? meta['event'] : undefined;
+		const rawSchedule = typeof meta['schedule'] === 'string' ? meta['schedule'] : undefined;
+
+		// Validate mutual exclusivity: event and schedule cannot both be present
+		if (rawEvent && rawSchedule) {
+			console.warn(`Synapse: trigger "${child.basename}" has both event and schedule — skipping`);
+			continue;
+		}
+
+		// Validate event value if present
+		if (rawEvent && !VALID_TRIGGER_EVENTS.has(rawEvent)) {
+			console.warn(`Synapse: trigger "${child.basename}" has invalid event "${rawEvent}" — skipping`);
+			continue;
+		}
+
+		// Parse write field: boolean or 'frontmatter'
+		const rawWrite = typeof meta['write'] === 'string' ? meta['write'] : undefined;
+		let write: boolean | 'frontmatter' = false;
+		if (rawWrite === 'true') write = true;
+		else if (rawWrite === 'frontmatter') write = 'frontmatter';
+
+		// Parse enabled field: defaults to true when omitted
+		const rawEnabled = typeof meta['enabled'] === 'string' ? meta['enabled'] : undefined;
+		const enabled = rawEnabled === 'false' ? false : true;
+
+		triggers.push({
+			name: (typeof meta['name'] === 'string' && meta['name']) ? meta['name'] : child.basename,
+			description: (typeof meta['description'] === 'string' ? meta['description'] : '') || '',
+			event: rawEvent as TriggerEvent | undefined,
+			schedule: rawSchedule || undefined,
+			path: (typeof meta['path'] === 'string' && meta['path']) || undefined,
+			model: (typeof meta['model'] === 'string' && meta['model']) || undefined,
+			agent: (typeof meta['agent'] === 'string' && meta['agent']) || undefined,
+			write,
+			enabled,
+			body: body.trim(),
+			filePath: child.path,
+		});
+	}
+	return triggers;
+}
+
 /** Configuration for writing a skill artifact (SKILL.md inside a named subfolder). */
 export interface SkillWriteConfig {
 	name: string;
@@ -213,6 +281,35 @@ export async function writeAgent(
 		['skills', config.skills],
 	];
 	const content = buildMarkdown(fields, config.instructions);
+	await app.vault.create(filePath, content);
+	return filePath;
+}
+
+/**
+ * Write a trigger configuration as `<kebab-name>.md`.
+ * Returns the vault-relative path of the created file.
+ */
+export async function writeTrigger(
+	app: App,
+	folder: string,
+	config: Omit<TriggerConfig, 'filePath'>,
+): Promise<string> {
+	await ensureFolder(app, folder);
+	const slug = toKebab(config.name);
+	const filePath = normalizePath(`${folder}/${slug}.md`);
+
+	const fields: [string, string | string[] | boolean | undefined][] = [
+		['name', config.name],
+		['description', config.description],
+		['event', config.event],
+		['schedule', config.schedule],
+		['path', config.path],
+		['model', config.model],
+		['agent', config.agent],
+		['write', config.write === 'frontmatter' ? 'frontmatter' : config.write === true ? 'true' : undefined],
+		['enabled', config.enabled === false ? 'false' : undefined],
+	];
+	const content = buildMarkdown(fields, config.body);
 	await app.vault.create(filePath, content);
 	return filePath;
 }
@@ -419,6 +516,7 @@ Frontmatter fields:
 - \`path\` (optional) — glob pattern to scope which files the trigger applies to (e.g. \`inbox/**\`, \`projects/*.md\`)
 - \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Local models run as cheap one-shot calls; Claude models run as full agentic loops with tool access.
 - \`agent\` (optional) — name of an agent to use for this trigger
+- \`write\` (optional) — \`false\` (default), \`true\`, or \`'frontmatter'\` to allow writing back
 - \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
 
 Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` to reference the triggering file path (for event triggers) or \`{{files}}\` for the list of matched files (for scheduled triggers).
