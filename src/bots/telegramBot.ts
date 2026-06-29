@@ -14,7 +14,7 @@ import type {AgentConfig, SkillInfo, McpServerEntry} from '../types';
 import {getSkillsFolder, getMcpInputValue} from '../settings';
 import {loadAgents, loadSkills, loadMcpServers} from '../configLoader';
 import type {InputResolver} from '../configLoader';
-import {mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
+import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError} from './telegramApi';
@@ -344,7 +344,7 @@ export class TelegramBotService {
 			'[Workspace Path Information]',
 			`Vault root: ${normalizedBasePath}`,
 			`Working directory: ${normalizedBasePath}`,
-		].join('\n');
+		].join('\n') + buildSelfImproveHint(defaultAgentName);
 
 		return {
 			model,
