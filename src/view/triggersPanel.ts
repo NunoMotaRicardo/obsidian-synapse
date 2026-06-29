@@ -2,6 +2,7 @@ import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {SessionMetadata} from '../copilot';
 import type {TriggerConfig} from '../types';
+import {SYNAPSE_FOLDER} from '../settings';
 import {TriggerScheduler} from '../triggerScheduler';
 import type {TriggerFireContext} from '../triggerScheduler';
 import {debugTrace} from '../debug';
@@ -303,7 +304,7 @@ export function installTriggersPanel(ViewClass: {prototype: unknown}): void {
 
 		// File change events for onFileChange triggers
 		// Debounce: collect changed file paths, then check triggers once after 1s of quiet
-		const synapseFolder = normalizePath(this.plugin.settings.synapseFolder);
+		const synapseFolder = normalizePath(SYNAPSE_FOLDER);
 		const pendingFilePaths = new Set<string>();
 		let fileChangeTimer: ReturnType<typeof setTimeout> | null = null;
 		const FILE_CHANGE_DEBOUNCE = 1_000;

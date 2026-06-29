@@ -3,7 +3,7 @@ import type {SynapseView} from '../synapseView';
 import type {SessionConfig, SessionMetadata, CustomAgentConfig} from '../copilot';
 import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
-import {getSkillsFolder} from '../settings';
+import {SYNAPSE_FOLDER} from '../settings';
 import {FolderTreeModal} from '../modals';
 import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from './sessionConfig';
 
@@ -314,7 +314,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		// Skills
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
-			skillDirs.push([basePath, getSkillsFolder(this.plugin.settings)].join('/'));
+			skillDirs.push([basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/'));
 		}
 		const _disabledSkills = this.skills
 			.filter(s => !this.searchEnabledSkills.has(s.name))

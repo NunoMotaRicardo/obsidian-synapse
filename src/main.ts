@@ -1,5 +1,5 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
-import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, getAgentsFolder} from "./settings";
+import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField, SYNAPSE_FOLDER} from "./settings";
 import {AgentService, toCustomAgentConfig, CustomAgentConfig} from "./copilot";
 import {fetchProviderModels} from "./providerModels";
 import {loadAgents} from "./configLoader";
@@ -194,7 +194,7 @@ export default class SynapsePlugin extends Plugin {
 				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
 			},
 			getVaultAgents: async () => {
-				const agents = await loadAgents(this.app, getAgentsFolder(this.settings));
+				const agents = await loadAgents(this.app, `${SYNAPSE_FOLDER}/agents`);
 				const map: Record<string, CustomAgentConfig> = {};
 				for (const a of agents) {
 					map[a.name] = toCustomAgentConfig(a);
@@ -322,17 +322,8 @@ export default class SynapsePlugin extends Plugin {
 		const raw = await this.loadData() as (Partial<SynapseSettings> & Record<string, unknown>) | null;
 		let needsSave = false;
 
-		if (raw && typeof raw['claudeBrainFolder'] === 'string') {
-			if (!raw['synapseFolder']) {
-				raw['synapseFolder'] = raw['claudeBrainFolder'];
-			}
-			delete raw['claudeBrainFolder'];
-			needsSave = true;
-		}
-
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		this.settings.featureAgents = Object.assign({}, DEFAULT_SETTINGS.featureAgents, raw?.featureAgents);
-		delete (this.settings as unknown as Record<string, unknown>)['claudeBrainFolder'];
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
 		for (const key of SECURE_FIELDS) {
