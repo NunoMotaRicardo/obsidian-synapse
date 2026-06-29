@@ -1,7 +1,7 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import type {ContextTier} from "./copilot";
-import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
+import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
 /** Hardcoded vault folder for Synapse customization artifacts. */
@@ -96,6 +96,8 @@ export interface SynapseSettings {
 	telegramDefaultAgent: string;
 	/** Custom request timeout in seconds (0 = use adaptive default). */
 	providerRequestTimeout?: number;
+	/** Timestamps (epoch ms) of the last time each trigger fired, keyed by trigger name. */
+	triggerLastFired: Record<string, number>;
 }
 
 /** Persisted preferences for the Edit modal form. */
@@ -158,6 +160,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	telegramAllowedUsers: '',
 	telegramDefaultAgent: '',
 	providerRequestTimeout: 0,
+	triggerLastFired: {},
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
@@ -296,13 +299,14 @@ export class SynapseSettingTab extends PluginSettingTab {
 		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
-		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots'] as const;
+		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots', 'triggers'] as const;
 		const tabLabels: Record<string, string> = {
 			claude: 'Claude',
 			agents: 'Feature Map & Agents',
 			capabilities: 'Capabilities',
 			tools: 'Tools',
 			bots: 'Bots',
+			triggers: 'Triggers',
 		};
 
 		const switchSettingsTab = (id: string) => {
@@ -690,7 +694,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					try {
 						const base = normalizePath(SYNAPSE_FOLDER);
 
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse']) {
+						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse', '/triggers']) {
 							const dir = normalizePath(`${base}${sub}`);
 							if (!this.app.vault.getAbstractFileByPath(dir)) {
 								await this.app.vault.createFolder(dir);
@@ -805,6 +809,12 @@ export class SynapseSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════════════════════════
 		const botsPanel = panels['bots']!;
 		this.renderBotsPanel(botsPanel);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 6: Triggers
+		// ══════════════════════════════════════════════════════════
+		const triggersPanel = panels['triggers']!;
+		void this.renderTriggersPanel(triggersPanel);
 	}
 
 	/** Render the Bots settings tab (Telegram section). */
@@ -939,4 +949,103 @@ export class SynapseSettingTab extends PluginSettingTab {
 			});
 		});
 	}
+
+	/** Render the Triggers settings tab. */
+	private async renderTriggersPanel(panel: HTMLElement): Promise<void> {
+		const triggersFolder = normalizePath(`${SYNAPSE_FOLDER}/triggers`);
+
+		new Setting(panel)
+			.setName('Triggers')
+			.setHeading()
+			.addButton(button => button
+				.setButtonText('Open triggers folder')
+				.onClick(() => {
+					const folder = this.app.vault.getAbstractFileByPath(triggersFolder);
+					if (folder) {
+						const leaves = this.app.workspace.getLeavesOfType('file-explorer');
+						const leaf = leaves[0];
+						if (leaf) {
+							void this.app.workspace.revealLeaf(leaf);
+							(leaf.view as unknown as {revealInFolder?: (f: unknown) => void}).revealInFolder?.(folder);
+						}
+					} else {
+						new Notice('Triggers folder not found. Initialize the Synapse folder first using the capabilities tab.');
+					}
+				}));
+
+		panel.createEl('p', {
+			text: 'Triggers fire automatically in response to vault events or on a schedule. Each trigger is a markdown file in _synapse/triggers/.',
+			cls: 'setting-item-description',
+		});
+
+		const listContainer = panel.createDiv({cls: 'synapse-triggers-list'});
+
+		const renderList = async () => {
+			listContainer.empty();
+
+			const triggers = await scanTriggers(this.app, triggersFolder);
+
+			if (triggers.length === 0) {
+				listContainer.createEl('p', {
+					text: 'No triggers found. Create .md files in _synapse/triggers/.',
+					cls: 'setting-item-description',
+				});
+				return;
+			}
+
+			for (const trigger of triggers) {
+				// Build type badge
+				let typeBadge = '';
+				if (trigger.event) {
+					typeBadge = `event: ${trigger.event}`;
+				} else if (trigger.schedule) {
+					typeBadge = `schedule: ${trigger.schedule}`;
+				}
+
+				// Build description parts
+				const descParts: string[] = [];
+				if (trigger.description) descParts.push(trigger.description);
+				if (typeBadge) descParts.push(typeBadge);
+				if (trigger.model) descParts.push(`model: ${trigger.model}`);
+
+				const lastFiredMs = this.plugin.settings.triggerLastFired[trigger.name];
+				const lastFiredText = lastFiredMs ? formatRelativeTime(lastFiredMs) : 'Never';
+				descParts.push(`Last fired: ${lastFiredText}`);
+
+				new Setting(listContainer)
+					.setName(trigger.name)
+					.setDesc(descParts.join(' · '))
+					.addToggle(toggle => toggle
+						.setValue(trigger.enabled ?? true)
+						.setTooltip(trigger.enabled ?? true ? 'Enabled' : 'Disabled')
+						.onChange(async (value) => {
+							await modifyArtifact(this.app, trigger.filePath, {enabled: value});
+							await this.plugin.saveSettings();
+						}));
+			}
+		};
+
+		await renderList();
+	}
+}
+
+/** Format a Unix epoch timestamp (ms) as a human-readable relative time string. */
+function formatRelativeTime(timestamp: number): string {
+	const diffMs = Date.now() - timestamp;
+	if (diffMs < 0) return 'Just now';
+
+	const seconds = Math.floor(diffMs / 1000);
+	if (seconds < 60) return 'Just now';
+
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+
+	const days = Math.floor(hours / 24);
+	if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+
+	const months = Math.floor(days / 30);
+	return `${months} month${months === 1 ? '' : 's'} ago`;
 }

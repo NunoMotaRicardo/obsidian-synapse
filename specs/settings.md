@@ -6,9 +6,10 @@ Source: `src/settings.ts` — settings interface, defaults, and the settings tab
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
 - **Feature Map & Agents** (replaces legacy Models tab) — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
-- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/` and `_synapse/skills/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images). The `synapseFolder` field remains in `SynapseSettings` for data compatibility but its value is ignored — all code uses the constant.
+- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/`, `_synapse/skills/`, and `_synapse/triggers/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images). The `synapseFolder` field remains in `SynapseSettings` for data compatibility but its value is ignored — all code uses the constant.
 - **Tools** — tools approval mode (`ask` or `allow`), and MCP input variable management (with secure storage for password inputs).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
+- **Triggers** — list of all triggers found in `_synapse/triggers/`, with enable/disable toggle (writes `enabled` frontmatter field via `modifyArtifact`) and last-fired timestamp (from `triggerLastFired` in settings). Includes an **Open triggers folder** button that reveals the folder in the file explorer. Empty state shows a hint to create `.md` files in `_synapse/triggers/`.
 
 ## Feature Map & Agents (Issue #6)
 
