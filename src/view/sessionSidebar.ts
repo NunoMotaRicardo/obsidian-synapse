@@ -264,7 +264,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			|| session.summary
 			|| `Session ${session.sessionId.slice(0, 8)}`;
 		// Strip session type prefix for display
-		return raw.replace(/^\[(chat|inline|search)\]\s*/, '');
+		return raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
 	};
 
 	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
@@ -621,7 +621,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.restoreAgentFromSessionName = function (sessionId: string): void {
 		let sessionName = this.sessionNames[sessionId] || '';
 		// Strip session type prefix
-		sessionName = sessionName.replace(/^\[(chat|inline|search)\]\s*/, '');
+		sessionName = sessionName.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
 		const colonIdx = sessionName.indexOf(':');
 		if (colonIdx > 0) {
 			const agentName = sessionName.substring(0, colonIdx).trim();
@@ -779,7 +779,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.renameSession = function (sessionId: string): void {
 		const rawName = this.sessionNames[sessionId] || '';
 		// Extract prefix and display name
-		const prefixMatch = rawName.match(/^(\[(chat|inline)\]\s*)/);
+		const prefixMatch = rawName.match(/^(\[(chat|inline|trigger)\]\s*)/);
 		const prefix = prefixMatch ? prefixMatch[1] : '';
 		const displayName = prefix ? rawName.slice(prefix.length) : rawName;
 
