@@ -115,11 +115,23 @@ export interface ModelInfo {
 	supportsTools?: boolean;
 }
 
+/**
+ * Derive the CLI-compatible model alias from SDK ModelInfo.
+ * The CLI accepts aliases ('haiku', 'sonnet', 'opus') — NOT the full
+ * dated API IDs ('claude-haiku-4-5-20251001') that sdk.value contains.
+ */
+function sdkModelAlias(sdk: SDKModelInfo): string {
+	const base = sdk.displayName.split('(')[0]!.trim().toLowerCase();
+	if (base === 'default') return '';
+	if (/1m/i.test(sdk.displayName)) return base + '-1m';
+	return base;
+}
+
 /** Map SDK ModelInfo to the plugin's ModelInfo shape. */
 function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	const efforts = sdk.supportedEffortLevels ?? [];
 	return {
-		id: sdk.value,
+		id: sdkModelAlias(sdk),
 		name: sdk.displayName,
 		capabilities: {
 			supports: {
@@ -254,7 +266,7 @@ export class AgentService {
 	 * For API key auth, sets ANTHROPIC_API_KEY in the environment.
 	 * For subscription auth, inherits process env (CLI handles OAuth).
 	 */
-	private buildEnv(): Record<string, string | undefined> | undefined {
+	private buildEnv(forLocalModel = false): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
 			...cleanEnv(),
 			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-synapse/1.0.0',
@@ -262,7 +274,7 @@ export class AgentService {
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
 		}
-		if (this.providerConfig && this.providerConfig.baseUrl) {
+		if (forLocalModel && this.providerConfig && this.providerConfig.baseUrl) {
 			const preset = (this.providerConfig.preset || '').toLowerCase();
 			let baseUrl = this.providerConfig.baseUrl.trim();
 			if (preset === 'ollama') {
@@ -412,6 +424,43 @@ export class AgentService {
 		return isLocalBackendConfigured(this.providerConfig);
 	}
 
+	getProviderConfig(): import('./providerModels').ProviderConfigOptions | undefined {
+		return this.providerConfig;
+	}
+
+	/** Check if a model ID is handled by the local provider backend. */
+	isLocalModel(modelId?: string): boolean {
+		if (!modelId) return false;
+		if (this.customModels.some(m => m.id === modelId)) return true;
+		if (this.isLocalBackendAvailable() && !this.sdkModels.some(m => m.id === modelId)) {
+			if (!/^claude-/i.test(modelId)) return true;
+		}
+		return false;
+	}
+
+	/** Resolve a model ID to a valid model known to the plugin/SDK. */
+	resolveValidModel(modelId?: string): string | undefined {
+		if (!modelId) return undefined;
+		if (this.isLocalModel(modelId)) return modelId;
+		const allModels = this.getModels();
+		if (allModels.length === 0) return modelId;
+
+		const target = modelId.toLowerCase();
+		let match = allModels.find(m => m.id.toLowerCase() === target || m.name.toLowerCase() === target);
+		if (!match) {
+			match = allModels.find(m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase()));
+		}
+		if (!match) {
+			for (const key of ['haiku', 'sonnet', 'opus', 'flash', 'pro']) {
+				if (target.includes(key)) {
+					match = allModels.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
+					if (match) break;
+				}
+			}
+		}
+		return match ? match.id : undefined;
+	}
+
 	/** Invalidate the cached delegation server (call when provider config changes). */
 	clearDelegationCache(): void {
 		this.cachedDelegationServer = null;
@@ -524,6 +573,16 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
+				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
+					const res = await executeLocalProviderQuery(this.providerConfig, {
+						prompt: options.prompt,
+						systemPrompt: options.systemMessage,
+						model: options.model,
+					});
+					if (!res.ok) throw new Error(res.error);
+					return res.content || undefined;
+				}
+
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
@@ -585,6 +644,28 @@ export class AgentService {
 		return sendAndWaitWithAbort(async (controller) => {
 			try {
 				await this.ensureConnected();
+
+				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
+					const sysPrompt = options.systemMessage ?? (options.systemPrompt as string | undefined);
+					const res = await executeLocalProviderQuery(this.providerConfig, {
+						prompt: options.prompt,
+						systemPrompt: sysPrompt,
+						model: options.model,
+					});
+					if (!res.ok) throw new Error(res.error);
+					const localSessionId = `local-${Date.now()}`;
+					if (options.onEvent && res.content) {
+						options.onEvent({
+							type: 'assistant',
+							session_id: localSessionId,
+							message: {
+								role: 'assistant',
+								content: [{type: 'text', text: res.content}],
+							},
+						} as unknown as SDKMessage);
+					}
+					return {content: res.content || undefined, sessionId: localSessionId};
+				}
 
 				const stream = query({
 					prompt: options.prompt,
@@ -685,6 +766,9 @@ export class AgentService {
 	 */
 	private routeQueryOptions(options: Options): Options {
 		const opts = {...options};
+		if (opts.model) {
+			opts.model = this.resolveValidModel(opts.model);
+		}
 		if (this.isLocalBackendAvailable()) {
 			const delegationServer = this.getDelegationMcpServer();
 			if (delegationServer) {
@@ -836,6 +920,32 @@ export class Session {
 					abortController: ctrl,
 					...(this._sessionId ? {resume: this._sessionId} : {}),
 				};
+
+				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig()) {
+					this.dispatch({type: 'assistant.turn_start', data: {}});
+					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
+					const res = await executeLocalProviderQuery(this.service.getProviderConfig()!, {
+						prompt: options.prompt,
+						systemPrompt: sysPrompt,
+						model: queryOpts.model,
+					});
+					if (ctrl.signal.aborted) return;
+					if (res.ok) {
+						this.dispatch({
+							type: 'assistant.message_delta',
+							data: {content: res.content, deltaContent: res.content},
+						});
+						this.dispatch({
+							type: 'assistant.message',
+							data: {content: res.content},
+						});
+						this.dispatch({type: 'session.idle', data: {}});
+					} else {
+						this.dispatch({type: 'session.error', data: {error: res.error}});
+						throw new Error(res.error);
+					}
+					return;
+				}
 
 				const stream = this.service.createQuery({
 					prompt: options.prompt,

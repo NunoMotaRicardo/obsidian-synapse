@@ -25,8 +25,16 @@ export function resolveModelForAgent(agent: AgentConfig | undefined, models: Mod
 	);
 	if (!match) {
 		match = models.find(
-			m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target)
+			m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase())
 		);
+	}
+	if (!match) {
+		for (const key of ['haiku', 'sonnet', 'opus', 'flash', 'pro']) {
+			if (target.includes(key)) {
+				match = models.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
+				if (match) break;
+			}
+		}
 	}
 	return match ? match.id : fallback;
 }
