@@ -61,9 +61,15 @@ import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultM
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
 
+/** Local SDK plugin configuration for discovery. */
+export interface SdkPluginConfig {
+	type: 'local';
+	path: string;
+	skipMcpDiscovery?: boolean;
+}
+
 // Re-export types that consumers need (architecture rule: all SDK types via this module)
 export type {
-	Options as SessionConfig,
 	Query,
 	SDKMessage,
 	SDKAssistantMessage,
@@ -86,6 +92,11 @@ export type {
 	CliPathSource,
 };
 
+export type SessionConfig = Options & {
+	plugins?: SdkPluginConfig[];
+	skills?: string[];
+};
+
 // Note: Session and SessionEvent are exported as classes/interfaces below.
 
 // Types that no longer have a direct Agent SDK equivalent but are referenced
@@ -102,17 +113,6 @@ export interface ModelInfo {
 	};
 	isVision?: boolean;
 	supportsTools?: boolean;
-}
-
-/** Map parsed AgentConfig from vault frontmatter to SDK AgentDefinition (CustomAgentConfig). */
-export function toCustomAgentConfig(agent: AgentConfig): AgentDefinition {
-	return {
-		description: agent.description || '',
-		prompt: agent.instructions,
-		...(agent.model ? {model: agent.model} : {}),
-		...(agent.tools ? {tools: agent.tools} : {}),
-		...(agent.skills ? {skills: agent.skills} : {}),
-	};
 }
 
 /** Standard Claude models supported by the Claude Agent SDK / CLI. */
@@ -240,7 +240,6 @@ export class AgentService {
 	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
 	private readonly onVersionInfo?: VersionInfoCallback;
-	private readonly getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	private resolvedCli: ResolvedCliPath | null = null;
 	private customModels: ModelInfo[] = [];
 	private cachedDelegationServer: McpServerConfig | null = null;
@@ -251,14 +250,12 @@ export class AgentService {
 		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
 		onVersionInfo?: VersionInfoCallback;
-		getVaultAgents?: () => Promise<Record<string, AgentDefinition>>;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
 		this.providerConfig = opts?.providerConfig;
 		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
 		this.onVersionInfo = opts?.onVersionInfo;
-		this.getVaultAgents = opts?.getVaultAgents;
 	}
 
 	/**
@@ -493,7 +490,8 @@ export class AgentService {
 		prompt: string;
 		model?: string;
 		systemMessage?: string;
-		customAgents?: Record<string, AgentDefinition>;
+		plugins?: SdkPluginConfig[];
+		skills?: string[];
 		agent?: string;
 		canUseTool?: CanUseTool;
 		onElicitation?: OnElicitation;
@@ -508,14 +506,13 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
-				const agents = options.customAgents ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
-
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
 						model: options.model,
 						systemPrompt: options.systemMessage,
-						agents,
+						...(options.plugins ? {plugins: options.plugins} : {}),
+						...(options.skills ? {skills: options.skills} : {}),
 						agent: options.agent,
 						canUseTool: options.canUseTool,
 						onElicitation: options.onElicitation,
@@ -525,7 +522,7 @@ export class AgentService {
 						env: this.buildEnv(),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						abortController: controller,
-					}),
+					} as Options),
 				});
 
 				const text = await this.collectText(stream);
@@ -548,10 +545,9 @@ export class AgentService {
 		model?: string;
 		systemMessage?: string;
 		systemPrompt?: Options['systemPrompt'];
-		customAgents?: Record<string, AgentDefinition>;
-		agents?: Record<string, AgentDefinition>;
+		plugins?: SdkPluginConfig[];
+		skills?: string[];
 		agent?: string;
-		skillDirectories?: string[];
 		canUseTool?: CanUseTool;
 		onElicitation?: OnElicitation;
 		maxTurns?: number;
@@ -572,14 +568,13 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
-				const agentsMap = options.customAgents ?? (options.agents as Record<string, AgentDefinition> | undefined) ?? (options.agent && this.getVaultAgents ? await this.getVaultAgents() : undefined);
-
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
 						model: options.model,
 						systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
-						agents: agentsMap,
+						...(options.plugins ? {plugins: options.plugins} : {}),
+						...(options.skills ? {skills: options.skills} : {}),
 						agent: options.agent,
 						canUseTool: options.canUseTool,
 						onElicitation: options.onElicitation,
@@ -594,7 +589,7 @@ export class AgentService {
 						...(options.resume ? {resume: options.resume} : {}),
 						...(options.cwd ? {cwd: options.cwd} : {}),
 						abortController: controller,
-					}),
+					} as Options),
 				});
 
 				let sessionId = '';
@@ -672,12 +667,6 @@ export class AgentService {
 	 */
 	private routeQueryOptions(options: Options): Options {
 		const opts = {...options};
-		if (opts.agent && opts.agents) {
-			const agentDef = opts.agents[opts.agent];
-			if (agentDef?.model) {
-				opts.model = agentDef.model;
-			}
-		}
 		if (this.isLocalBackendAvailable()) {
 			const delegationServer = this.getDelegationMcpServer();
 			if (delegationServer) {
