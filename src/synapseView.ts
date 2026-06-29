@@ -17,11 +17,10 @@ import type {
 	CustomAgentConfig,
 } from './copilot';
 import {Session, toCustomAgentConfig} from './copilot';
-import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, TriggerConfig, ChatMessage, ChatAttachment} from './types';
-import {loadAgents, loadSkills, loadMcpServers, loadPrompts, loadTriggers} from './configLoader';
+import type {AgentConfig, SkillInfo, McpServerEntry, McpInputVariable, PromptConfig, ChatMessage, ChatAttachment} from './types';
+import {loadAgents, loadSkills, loadMcpServers, loadPrompts} from './configLoader';
 import type {InputResolver} from './configLoader';
-import {getAgentsFolder, getSkillsFolder, getToolsFolder, getPromptsFolder, getTriggersFolder, getMcpInputValue, setMcpInputValue, McpInputPromptModal} from './settings';
-import {TriggerScheduler} from './triggerScheduler';
+import {getAgentsFolder, getSkillsFolder, getToolsFolder, getPromptsFolder, getMcpInputValue, setMcpInputValue, McpInputPromptModal} from './settings';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
@@ -48,8 +47,6 @@ export class SynapseView extends ItemView {
 	skills: SkillInfo[] = [];
 	mcpServers: McpServerEntry[] = [];
 	prompts: PromptConfig[] = [];
-	triggers: TriggerConfig[] = [];
-	triggerScheduler: TriggerScheduler | null = null;
 	activePrompt: PromptConfig | null = null;
 
 	selectedAgent = '';
@@ -94,17 +91,11 @@ export class SynapseView extends ItemView {
 	currentSessionId: string | null = null;
 	sidebarWidth = 40;
 	sessionFilter = '';
-	sessionTypeFilter = new Set<'chat' | 'inline' | 'trigger' | 'search' | 'other'>(['chat', 'trigger']);
+	sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
 	sessionSort: 'modified' | 'created' | 'name' = 'modified';
 
 	// ── Tab state ────────────────────────────────────────────────
-	activeTab: 'chat' | 'triggers' | 'search' = 'chat';
-
-	// ── Triggers panel state ─────────────────────────────────────
-	triggerHistoryFilter = '';
-	triggerHistoryAgentFilter = '';
-	triggerHistorySort: 'date' | 'name' = 'date';
-	triggerConfigSort: 'name' | 'modified' = 'name';
+	activeTab: 'chat' | 'search' = 'chat';
 
 	// ── Search panel state ───────────────────────────────────────
 	searchAgent = '';
@@ -130,10 +121,7 @@ export class SynapseView extends ItemView {
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
 	chatPanelEl!: HTMLElement;
-	triggersPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
-	triggerHistoryListEl!: HTMLElement;
-	triggerConfigListEl!: HTMLElement;
 	chatContainer!: HTMLElement;
 	streamingBodyEl: HTMLElement | null = null;
 	toolCallsContainer: HTMLElement | null = null;
@@ -226,9 +214,6 @@ export class SynapseView extends ItemView {
 		await this.loadAllConfigs();
 		void this.loadSessions();
 
-		// Initialize trigger scheduler
-		this.initTriggerScheduler();
-
 		// Watch synapse folder for config changes and auto-refresh
 		this.registerConfigFileWatcher();
 
@@ -243,7 +228,6 @@ export class SynapseView extends ItemView {
 	async onClose(): Promise<void> {
 		if (this.selectionPollTimer) { clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
 		if (this.configRefreshTimer) clearTimeout(this.configRefreshTimer);
-		this.triggerScheduler?.stop();
 		if (this.basicSearchSession) {
 			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
 			this.basicSearchSession = null;
@@ -288,10 +272,6 @@ export class SynapseView extends ItemView {
 		this.initSplitter();
 		this.buildSessionSidebar(this.chatPanelEl);
 
-		// ── Triggers panel ────────────────────────────────────
-		this.triggersPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-triggers is-hidden'});
-		this.buildTriggersPanel(this.triggersPanelEl);
-
 		// ── Search panel ─────────────────────────────────────
 		this.searchPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-search is-hidden'});
 		this.buildSearchPanel(this.searchPanelEl);
@@ -299,9 +279,8 @@ export class SynapseView extends ItemView {
 
 	buildTabBar(parent: HTMLElement): void {
 		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar'});
-		const tabs: {id: 'chat' | 'triggers' | 'search'; icon: string; label: string}[] = [
+		const tabs: {id: 'chat' | 'search'; icon: string; label: string}[] = [
 			{id: 'chat', icon: 'message-square', label: 'Chat'},
-			{id: 'triggers', icon: 'zap', label: 'Triggers'},
 			{id: 'search', icon: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
@@ -314,7 +293,7 @@ export class SynapseView extends ItemView {
 		}
 	}
 
-	switchTab(tab: 'chat' | 'triggers' | 'search'): void {
+	switchTab(tab: 'chat' | 'search'): void {
 		if (tab === this.activeTab) return;
 		this.activeTab = tab;
 
@@ -325,7 +304,6 @@ export class SynapseView extends ItemView {
 
 		// Show/hide panels
 		this.chatPanelEl.toggleClass('is-hidden', tab !== 'chat');
-		this.triggersPanelEl.toggleClass('is-hidden', tab !== 'triggers');
 		this.searchPanelEl.toggleClass('is-hidden', tab !== 'search');
 	}
 
@@ -355,21 +333,16 @@ export class SynapseView extends ItemView {
 			};
 
 			// Parallel-load all config files (independent I/O)
-			const [agents, skills, mcpServers, prompts, triggers] = await Promise.all([
+			const [agents, skills, mcpServers, prompts] = await Promise.all([
 				loadAgents(this.app, getAgentsFolder(this.plugin.settings)),
 				loadSkills(this.app, getSkillsFolder(this.plugin.settings)),
 				loadMcpServers(this.app, getToolsFolder(this.plugin.settings), inputResolver),
 				loadPrompts(this.app, getPromptsFolder(this.plugin.settings)),
-				loadTriggers(this.app, getTriggersFolder(this.plugin.settings)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
 			this.mcpServers = mcpServers;
 			this.prompts = prompts;
-			this.triggers = triggers;
-			this.triggerScheduler?.setTriggers(this.triggers);
-			this.renderTriggerConfigList();
-			this.renderTriggerHistory();
 
 			// Enable all skills and tools by default (agent filter applied in updateConfigUI)
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
@@ -389,7 +362,7 @@ export class SynapseView extends ItemView {
 		this.updateConfigUI();
 		this.configDirty = true;
 		if (!options?.silent) {
-			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s), ${this.mcpServers.length} tool server(s), ${this.prompts.length} prompt(s), ${this.triggers.length} trigger(s).`);
+			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s), ${this.mcpServers.length} tool server(s), ${this.prompts.length} prompt(s).`);
 		}
 	}
 
@@ -1108,14 +1081,12 @@ export class SynapseView extends ItemView {
 // These extend SynapseView.prototype with methods organized by feature area.
 import {installChatRenderer} from './view/chatRenderer';
 import {installSearchPanel} from './view/searchPanel';
-import {installTriggersPanel} from './view/triggersPanel';
 import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
 import {installConfigToolbar} from './view/configToolbar';
 
 installChatRenderer(SynapseView);
 installSearchPanel(SynapseView);
-installTriggersPanel(SynapseView);
 installSessionSidebar(SynapseView);
 installInputArea(SynapseView);
 installConfigToolbar(SynapseView);

@@ -45,8 +45,6 @@ export interface SynapseSettings {
 	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
-	/** Last-fired timestamps for trigger deduplication, keyed by trigger name. */
-	triggerLastFired?: Record<string, number>;
 	/** Stored values for non-password MCP input variables, keyed by input id. */
 	mcpInputValues?: Record<string, string>;
 	/**
@@ -198,11 +196,6 @@ export function getPromptsFolder(settings: SynapseSettings): string {
 	return normalizePath(`${settings.synapseFolder}/prompts`);
 }
 
-/** Derive the triggers subfolder from the base Synapse folder. */
-export function getTriggersFolder(settings: SynapseSettings): string {
-	return normalizePath(`${settings.synapseFolder}/triggers`);
-}
-
 const SAMPLE_SKILL_CONTENT = `---
 name: ascii-art
 description: Generates stylized ASCII art text using block characters
@@ -310,17 +303,6 @@ export async function updateAgentModelFile(app: App, filePath: string, newModel:
 	}
 }
 
-const SAMPLE_TRIGGER_CONTENT = `---
-name: Daily planner
-description: Prepares a plan for the day every morning at 8am
-agent: Planner
-cron: "0 8 * * *"
-glob: "**/*.md"
-enabled: true
----
-Help me prepare my day, including asks on me, recommendations for clear actions to prepare, and suggestions on which items to prioritize over others.
-`;
-
 const SAMPLE_SELF_IMPROVE_SKILL = `---
 name: self-improve
 description: Comprehensive reference for creating and managing Synapse vault-local customization artifacts
@@ -329,7 +311,7 @@ description: Comprehensive reference for creating and managing Synapse vault-loc
 # Self-improve skill
 
 Use this skill when the user asks to create, modify, or delete Synapse customization
-artifacts (agents, prompts, skills, triggers, or MCP tool configurations).
+artifacts (agents, prompts, skills, or MCP tool configurations).
 
 ## Vault folder structure
 
@@ -338,7 +320,6 @@ synapse/
   agents/*.agent.md
   prompts/*.prompt.md
   skills/<name>/SKILL.md
-  triggers/*.trigger.md
   tools/mcp.json
 \`\`\`
 
@@ -351,8 +332,6 @@ synapse/
 ## Permission model
 
 - **Always ask the user for permission** before creating, modifying, or deleting any file.
-- For **cron triggers**, state the schedule in plain language in the permission request
-  (e.g. "This trigger will run every weekday at 9 AM").
 - For **deletion**, ask for extra confirmation.
 
 ## MCP tools restriction
@@ -374,7 +353,6 @@ When tool access is available, use these functions from the configWriter module:
 | \`writeAgent(app, folder, config)\` | Create a new agent file |
 | \`writePrompt(app, folder, config)\` | Create a new prompt file |
 | \`writeSkill(app, folder, config)\` | Create a new skill (subfolder + SKILL.md) |
-| \`writeTrigger(app, folder, config)\` | Create a new trigger file |
 | \`modifyArtifact(app, filePath, updates)\` | Patch frontmatter or body of an existing artifact |
 | \`deleteArtifact(app, filePath)\` | Move an artifact to Obsidian trash |
 
@@ -463,33 +441,6 @@ Describe the situations where this skill applies.
 2. Second step
 \`\`\`
 
-### Triggers
-
-File pattern: \`triggers/<kebab-name>.trigger.md\`
-
-Frontmatter fields:
-- \`name\` (required) — trigger identifier
-- \`description\` (optional) — short purpose summary
-- \`agent\` (optional) — name of the agent to handle the trigger
-- \`cron\` (optional) — 5-field cron expression (minute hour day month weekday)
-- \`glob\` (optional) — file glob pattern to match
-- \`enabled\` (required) — boolean; set to \`false\` to disable without deleting
-
-Body: the prompt sent to the agent when the trigger fires.
-
-Template:
-\`\`\`markdown
----
-name: weekly-review
-description: Generates a weekly review summary every Sunday evening
-agent: General
-cron: "0 18 * * 0"
-glob: "**/*.md"
-enabled: true
----
-Review all notes modified this week and generate a summary of key themes, open tasks, and suggested follow-ups.
-\`\`\`
-
 ### MCP tools
 
 File: \`tools/mcp.json\`
@@ -512,9 +463,9 @@ Example structure:
 `;
 
 const SAMPLE_IMPROVE_PROMPT = `---
-description: Customize Synapse behavior — create or modify agents, prompts, skills, and triggers
+description: Customize Synapse behavior — create or modify agents, prompts, and skills
 ---
-You are helping the user customize Synapse. Load and follow the self-improve skill to understand available artifact types. Create or modify agents, prompts, skills, and triggers based on the user's request. Always ask permission before writing files.
+You are helping the user customize Synapse. Load and follow the self-improve skill to understand available artifact types. Create or modify agents, prompts, and skills based on the user's request. Always ask permission before writing files.
 
 Start by asking what behavior they'd like to add or change.
 `;
@@ -929,7 +880,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(capPanel)
 			.setName('Synapse folder')
-			.setDesc('Vault folder for agents, skills, tools and triggers.')
+			.setDesc('Vault folder for agents, skills, and tools.')
 			.addText(text => text
 				.setPlaceholder('Ex: synapse')
 				.setValue(this.plugin.settings.synapseFolder)
@@ -948,7 +899,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					try {
 						const base = normalizePath(this.plugin.settings.synapseFolder);
 
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/self-improve', '/tools', '/prompts', '/triggers']) {
+						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/self-improve', '/tools', '/prompts']) {
 							const dir = normalizePath(`${base}${sub}`);
 							if (!this.app.vault.getAbstractFileByPath(dir)) {
 								await this.app.vault.createFolder(dir);
@@ -992,11 +943,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 							await this.app.vault.create(promptPath, SAMPLE_PROMPT_CONTENT);
 						}
 
-						const triggerPath = normalizePath(`${base}/triggers/daily-planner.trigger.md`);
-						if (!this.app.vault.getAbstractFileByPath(triggerPath)) {
-							await this.app.vault.create(triggerPath, SAMPLE_TRIGGER_CONTENT);
-						}
-
 						const selfImproveSkillPath = normalizePath(`${base}/skills/self-improve/SKILL.md`);
 						if (!this.app.vault.getAbstractFileByPath(selfImproveSkillPath)) {
 							await this.app.vault.create(selfImproveSkillPath, SAMPLE_SELF_IMPROVE_SKILL);
@@ -1007,7 +953,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 							await this.app.vault.create(improvePromptPath, SAMPLE_IMPROVE_PROMPT);
 						}
 
-						new Notice('Synapse folder initialized with sample agent, skill, prompt, trigger, and mcp.json.');
+						new Notice('Synapse folder initialized with sample agent, skill, prompt, and mcp.json.');
 					} catch (e) {
 						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}

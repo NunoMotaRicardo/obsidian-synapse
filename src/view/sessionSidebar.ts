@@ -19,7 +19,7 @@ declare module '../synapseView' {
 			onContextMenu: (e: MouseEvent) => void;
 		}): void;
 		getSessionDisplayName(session: SessionMetadata): string;
-		getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'trigger' | 'search' | 'other';
+		getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other';
 		openSessionFilterMenu(e: MouseEvent): void;
 		updateFilterBadge(): void;
 		openSessionSortMenu(e: MouseEvent): void;
@@ -221,8 +221,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			});
 		}
 
-		// Keep trigger history in sync with session list
-		this.renderTriggerHistory();
 	};
 
 	proto.renderSessionItem = function (container: HTMLElement, session: SessionMetadata, opts: {
@@ -236,7 +234,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		if (isActive) item.addClass('is-active');
 
 		const sessionType = this.getSessionType(session);
-		const iconName = sessionType === 'chat' ? 'message-square' : sessionType === 'trigger' ? 'zap' : sessionType === 'inline' ? 'file-text' : sessionType === 'search' ? 'search' : 'code';
+		const iconName = sessionType === 'chat' ? 'message-square' : sessionType === 'inline' ? 'file-text' : sessionType === 'search' ? 'search' : 'code';
 		const iconEl = item.createSpan({cls: 'synapse-session-icon'});
 		setIcon(iconEl, iconName);
 
@@ -266,24 +264,22 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			|| session.summary
 			|| `Session ${session.sessionId.slice(0, 8)}`;
 		// Strip session type prefix for display
-		return raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
+		return raw.replace(/^\[(chat|inline|search)\]\s*/, '');
 	};
 
-	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'trigger' | 'search' | 'other' {
+	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
 		const name = this.sessionNames[session.sessionId] || '';
 		debugTrace(`Synapse: getSessionType id=${session.sessionId.slice(0, 8)} name="${name.slice(0, 40)}"`);
 		if (name.startsWith('[chat]')) return 'chat';
 		if (name.startsWith('[inline]')) return 'inline';
-		if (name.startsWith('[trigger]')) return 'trigger';
 		if (name.startsWith('[search]')) return 'search';
 		return 'other';
 	};
 
 	proto.openSessionFilterMenu = function (e: MouseEvent): void {
 		const menu = new Menu();
-		const types: Array<{value: 'chat' | 'inline' | 'trigger' | 'search' | 'other'; label: string}> = [
+		const types: Array<{value: 'chat' | 'inline' | 'search' | 'other'; label: string}> = [
 			{value: 'chat', label: 'Chat'},
-			{value: 'trigger', label: 'Triggers'},
 			{value: 'search', label: 'Search'},
 			{value: 'inline', label: 'Inline'},
 			{value: 'other', label: 'Other'},
@@ -625,7 +621,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.restoreAgentFromSessionName = function (sessionId: string): void {
 		let sessionName = this.sessionNames[sessionId] || '';
 		// Strip session type prefix
-		sessionName = sessionName.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
+		sessionName = sessionName.replace(/^\[(chat|inline|search)\]\s*/, '');
 		const colonIdx = sessionName.indexOf(':');
 		if (colonIdx > 0) {
 			const agentName = sessionName.substring(0, colonIdx).trim();
@@ -783,7 +779,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.renameSession = function (sessionId: string): void {
 		const rawName = this.sessionNames[sessionId] || '';
 		// Extract prefix and display name
-		const prefixMatch = rawName.match(/^(\[(chat|inline|trigger)\]\s*)/);
+		const prefixMatch = rawName.match(/^(\[(chat|inline)\]\s*)/);
 		const prefix = prefixMatch ? prefixMatch[1] : '';
 		const displayName = prefix ? rawName.slice(prefix.length) : rawName;
 
