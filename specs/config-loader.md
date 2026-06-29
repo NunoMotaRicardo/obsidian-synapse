@@ -26,18 +26,19 @@ The CLI spawns fresh per query, re-discovers artifacts each time — no explicit
 _synapse/                   (hardcoded — not a setting)
   agents/    *.md            SDK-discovered agents (AgentDefinition fields only)
   skills/    */SKILL.md      SDK-discovered skills (includes merged prompts)
+  triggers/  *.md            Trigger definitions (event- or schedule-based)
   .mcp.json                  SDK-discovered MCP servers
 ```
 
-No `prompts/`, `triggers/`, or `tools/` folders. Prompts merged into skills; triggers deferred
-to issue #14 (loop features); MCP config is `.mcp.json` at plugin root.
+No `prompts/` or `tools/` folders. Prompts merged into skills; MCP config is `.mcp.json` at
+plugin root.
 
 ## Toolbar population (display-only scan)
 
-A lightweight scan of `_synapse/agents/` and `_synapse/skills/` reads folder/file names and
-frontmatter descriptions for toolbar dropdown display. This is display-only — the SDK owns
-discovery and execution. Implemented as simple directory listing + frontmatter parse, not a
-full config load.
+A lightweight scan of `_synapse/agents/`, `_synapse/skills/`, and `_synapse/triggers/` reads
+folder/file names and frontmatter descriptions for toolbar dropdown display. This is
+display-only — the SDK owns discovery and execution. Implemented as simple directory listing +
+frontmatter parse, not a full config load.
 
 ## Config writer (`src/configWriter.ts`)
 
@@ -47,13 +48,15 @@ Write operations for the self-improve feature. All output is SDK-native format.
 
 | Function | Creates | File pattern |
 |---|---|---|
+| `scanAgents(app, folder)` | — | Reads `_synapse/agents/*.md` → `AgentConfig[]` |
+| `scanSkills(app, folder)` | — | Reads `_synapse/skills/*/SKILL.md` → `SkillInfo[]` |
+| `scanTriggers(app, folder)` | — | Reads `_synapse/triggers/*.md` → `TriggerConfig[]` |
 | `writeAgent(app, folder, config)` | `*.md` | `_synapse/agents/<kebab-name>.md` |
 | `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `_synapse/skills/<kebab-name>/SKILL.md` |
+| `writeTrigger(app, folder, config)` | `*.md` | `_synapse/triggers/<kebab-name>.md` |
 | `modifyArtifact(app, filePath, updates)` | — | Patches frontmatter/body in-place |
 | `deleteArtifact(app, filePath)` | — | Moves to Obsidian trash |
 | `ensureFolder(app, path)` | Folder | Creates intermediates |
-
-Removed: `writePrompt`, `writeTrigger` (artifact types no longer exist).
 
 ### Rules
 
@@ -73,8 +76,8 @@ excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by
 ## Self-improve hint
 
 `buildSelfImproveHint(agentName)` in `sessionConfig.ts` teaches agents to recognize
-customization intent. Mentions only "agent" and "skill" as artifact types (no "prompt" or
-"trigger"). Skipped when the user is already using the `improve-synapse` skill.
+customization intent. Mentions "agent", "skill", and "trigger" as artifact types.
+Skipped when the user is already using the `improve-synapse` skill.
 
 ## First-run seeding
 
