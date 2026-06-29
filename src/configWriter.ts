@@ -516,6 +516,7 @@ Frontmatter fields:
 - \`path\` (optional) — glob pattern to scope which files the trigger applies to (e.g. \`inbox/**\`, \`projects/*.md\`)
 - \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Local models run as cheap one-shot calls; Claude models run as full agentic loops with tool access.
 - \`agent\` (optional) — name of an agent to use for this trigger
+- \`write\` (optional) — \`false\` (default), \`true\`, or \`'frontmatter'\` to allow writing back
 - \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
 
 Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` to reference the triggering file path (for event triggers) or \`{{files}}\` for the list of matched files (for scheduled triggers).
