@@ -5,7 +5,7 @@ import {toCustomAgentConfig} from '../copilot';
 import type {AgentConfig} from '../types';
 import {SYNAPSE_FOLDER} from '../settings';
 import {FolderTreeModal} from '../modals';
-import {buildSelfImproveHint, mapMcpServers, getAdaptiveTimeout} from './sessionConfig';
+import {buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 
 declare module '../synapseView' {
 	interface SynapseView {
@@ -201,16 +201,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applySearchAgentToolsAndSkills = function (this: SynapseView, agent?: AgentConfig): void {
-		// Tools: undefined = enable all, [] = disable all, [...] = enable listed
-		if (agent?.tools !== undefined) {
-			const allowed = new Set(agent.tools);
-			this.searchEnabledMcpServers = new Set(
-				this.mcpServers.filter(s => allowed.has(s.name)).map(s => s.name)
-			);
-		} else {
-			this.searchEnabledMcpServers = new Set(this.mcpServers.map(s => s.name));
-		}
-
 		// Skills: undefined = enable all, [] = disable all, [...] = enable listed
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
@@ -250,24 +240,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 	proto.openSearchToolsMenu = function (this: SynapseView, e: MouseEvent): void {
 		const menu = new Menu();
-		if (this.mcpServers.length === 0) {
-			menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
-		} else {
-			for (const server of this.mcpServers) {
-				menu.addItem(item => {
-					item.setTitle(server.name)
-						.setChecked(this.searchEnabledMcpServers.has(server.name))
-						.onClick(() => {
-							if (this.searchEnabledMcpServers.has(server.name)) {
-								this.searchEnabledMcpServers.delete(server.name);
-							} else {
-								this.searchEnabledMcpServers.add(server.name);
-							}
-							this.updateSearchToolsBadge();
-						});
-				});
-			}
-		}
+		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
 		menu.showAtMouseEvent(e);
 	};
 
@@ -278,9 +251,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateSearchToolsBadge = function (this: SynapseView): void {
-		const count = this.searchEnabledMcpServers.size;
-		this.searchToolsBtnEl.toggleClass('is-active', count > 0);
-		this.searchToolsBtnEl.setAttribute('title', count > 0 ? `Tools (${count} active)` : 'Tools');
+		// MCP is now SDK-native; badge always shows inactive
+		this.searchToolsBtnEl.toggleClass('is-active', false);
+		this.searchToolsBtnEl.setAttribute('title', 'Tools');
 	};
 
 	proto.openSearchScopePicker = function (this: SynapseView): void {
@@ -308,9 +281,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		const basePath = this.getVaultBasePath();
 
-		// MCP servers (search-specific selection)
-		const mcpServers = mapMcpServers(this.mcpServers, this.searchEnabledMcpServers);
-
 		// Skills
 		const skillDirs: string[] = [];
 		if (this.skills.length > 0) {
@@ -337,7 +307,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
 			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
-			...(Object.keys(mcpServers).length > 0 ? {mcpServers} : {}),
 			...(Object.keys(agents).length > 0 ? {agents} : {}),
 			systemPrompt: selfImproveBlock.trim(),
 		};

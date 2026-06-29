@@ -1,7 +1,7 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
-
+import {SYNAPSE_FOLDER} from '../settings';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
@@ -238,6 +238,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 				`---\n` +
 				`<note content in Markdown>`,
 			agent: plugin.settings.featureAgents?.inline || 'General',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are a note creation assistant. When asked to create a note, return a title line ' +
 				'followed by the separator --- and then the note body in Markdown. ' +
@@ -325,6 +326,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 				`---\n` +
 				`<valid Obsidian canvas JSON>`,
 			agent: plugin.settings.featureAgents?.inline || 'General',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are a canvas creation assistant for Obsidian. When asked to create a canvas, return a title line ' +
 				'followed by the separator --- and then valid Obsidian .canvas JSON.\n\n' +
@@ -417,6 +419,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 				`Produce a single cohesive summary note in Markdown that captures the key topics, ` +
 				`themes, and important details across all notes.\n\n${combined}`,
 			agent: plugin.settings.featureAgents?.inline || 'General',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are a note summarisation assistant. Return ONLY the summary note in Markdown. ' +
 				'Do not include markdown code fences, introductory text, or explanations.',
@@ -619,6 +622,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt: userPrompt,
 			agent: plugin.settings.featureAgents?.vision || 'Vision',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are an image analysis assistant. Answer the user’s question about the provided image. ' +
 				'Return your answer as clean Markdown. Do not include markdown code fences or introductory text.',
@@ -675,6 +679,12 @@ function getAbsolutePath(plugin: SynapsePlugin, file: TFile): string {
 	return basePath + '/' + file.path;
 }
 
+/** Get the skill directories to pass to inlineChat so the SDK can discover vault skills. */
+function getSkillDirectories(plugin: SynapsePlugin): string[] {
+	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+	return [[basePath, normalizePath(`${SYNAPSE_FOLDER}/skills`)].join('/')];
+}
+
 /** Extract content from an image by sending it to the LLM. */
 async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<string | null> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return null; }
@@ -687,6 +697,7 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
 			`If the image contains a diagram or chart, describe it in detail.`,
 		agent: plugin.settings.featureAgents?.vision || 'Vision',
+		skillDirectories: getSkillDirectories(plugin),
 		systemMessage:
 			'You are an image content extraction assistant. Extract all visible content from the provided image ' +
 			'and return it as clean Markdown. Do not include markdown code fences, introductory text, or explanations. ' +
@@ -831,6 +842,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				`that best represents the content of the image. ` +
 				`Return only the Mermaid code block, with no additional explanation.`,
 			agent: plugin.settings.featureAgents?.vision || 'Vision',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. Use <br> to break lines instead of \\n for obsidian compatibility. ' +
 				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
@@ -912,6 +924,7 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
 				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
 			agent: plugin.settings.featureAgents?.inline || 'General',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are a note editor. When given a note and an edit instruction, return ONLY the updated note content. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
@@ -974,6 +987,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 				`Organise the content with headings, lists, and emphasis where appropriate. ` +
 				`Improve clarity and readability while preserving all original information.\n\nNOTE:\n${doc}`,
 			agent: plugin.settings.featureAgents?.inline || 'General',
+			skillDirectories: getSkillDirectories(plugin),
 			systemMessage:
 				'You are a note structuring assistant. Return ONLY the restructured note in Markdown. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',

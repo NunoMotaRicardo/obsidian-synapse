@@ -302,25 +302,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 
 	proto.openToolsMenu = function(e: MouseEvent): void {
 		const menu = new Menu();
-		if (this.mcpServers.length === 0) {
-			menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
-		} else {
-			for (const server of this.mcpServers) {
-				menu.addItem(item => {
-					item.setTitle(server.name)
-						.setChecked(this.enabledMcpServers.has(server.name))
-						.onClick(() => {
-							if (this.enabledMcpServers.has(server.name)) {
-								this.enabledMcpServers.delete(server.name);
-							} else {
-								this.enabledMcpServers.add(server.name);
-							}
-							this.configDirty = true;
-							this.updateToolsBadge();
-						});
-				});
-			}
-		}
+		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
 		menu.addSeparator();
 		const currentApproval = this.plugin.settings.toolApproval;
 		menu.addItem(item => {
@@ -383,16 +365,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applyAgentToolsAndSkills = function(agent?: AgentConfig): void {
-		// Tools: undefined = enable all, [] = disable all, [...] = enable listed
-		if (agent?.tools !== undefined) {
-			const allowed = new Set(agent.tools);
-			this.enabledMcpServers = new Set(
-				this.mcpServers.filter(s => allowed.has(s.name)).map(s => s.name)
-			);
-		} else {
-			this.enabledMcpServers = new Set(this.mcpServers.map(s => s.name));
-		}
-
 		// Skills: undefined = enable all, [] = disable all, [...] = enable listed
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
@@ -414,9 +386,9 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateToolsBadge = function(): void {
-		const count = this.enabledMcpServers.size;
-		this.toolsBtnEl.toggleClass('is-active', count > 0);
-		this.toolsBtnEl.setAttribute('title', count > 0 ? `Tools (${count} active)` : 'Tools');
+		// MCP is now SDK-native; badge always shows inactive
+		this.toolsBtnEl.toggleClass('is-active', false);
+		this.toolsBtnEl.setAttribute('title', 'Tools');
 	};
 
 	proto.openCwdPicker = function(): void {
