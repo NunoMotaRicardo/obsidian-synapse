@@ -76,7 +76,44 @@ Example: `0 9 * * *` = daily at 9:00 AM, `0 8 * * 1` = every Monday at 8:00 AM.
 - `writeTrigger(app, folder, config)` creates a trigger `.md` file with frontmatter + body.
 - Both follow the same patterns as `scanAgents`/`writeAgent`.
 
+### Event watcher (`src/triggers.ts`)
+
+`TriggerWatcher` registers Obsidian vault event listeners (create/modify/delete/rename)
+and matches them against enabled event-based triggers loaded via `scanTriggers()`.
+
+**Lifecycle:**
+
+- Created in `main.ts` `onload()` after copilot initialization.
+- `start()` loads trigger configs and registers vault listeners via `plugin.registerEvent()`.
+- `stop()` clears debounce timers. Vault listeners are cleaned up by Obsidian on unload.
+
+**Matching logic:**
+
+1. Exclude files inside `_synapse/` to avoid feedback loops.
+2. Debounce: 500ms per-file, collapsing rapid successive events on the same file.
+3. For each enabled trigger with a matching `event` type:
+   - If `path` glob is set, match against file path using `matchGlob()`.
+   - If no `path`, the trigger matches all files.
+4. On match: `console.log('[synapse] Trigger "<name>" fired for <file>')`.
+   Actual execution is wired in a later issue (#51).
+
+**Glob matching (`matchGlob`):**
+
+Lightweight glob matcher for vault-relative paths:
+
+- `*` matches any characters except `/` (single segment).
+- `**` matches any path segments including nested.
+- Literal path prefixes ending with `/` match any file under that directory.
+- Combination patterns supported (e.g. `inbox/*.md`, `projects/**/notes/*.md`).
+
+**Config auto-reload:**
+
+Watches `_synapse/triggers/` for changes (create/modify/delete/rename of trigger files)
+and reloads trigger configs with a 1-second debounce.
+
 ### Current status
 
-Type definitions and parser/writer are implemented (issue #48). Trigger execution (the
-scheduler/event listener that actually fires triggers) is tracked in issue #14.
+Type definitions and parser/writer are implemented (issue #48). Event watcher is
+implemented (issue #49) — detects vault events and matches triggers. Trigger execution
+(the agent/model invocation that runs the matched trigger's prompt) is tracked in
+issue #51.
