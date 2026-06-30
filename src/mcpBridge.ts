@@ -139,7 +139,14 @@ export class McpBridgeSession {
 			...(cfg.env ?? {}),
 		};
 
-		const proc = spawn(cfg.command, cfg.args ?? [], {
+		let command = cfg.command;
+		if (process.platform === 'win32') {
+			if (command === 'npx' || command === 'npm' || command === 'pnpm' || command === 'yarn') {
+				command = `${command}.cmd`;
+			}
+		}
+
+		const proc = spawn(command, cfg.args ?? [], {
 			env,
 			stdio: ['pipe', 'pipe', 'pipe'],
 			shell: false,
@@ -195,6 +202,13 @@ export class McpBridgeSession {
 			clientInfo: {name: 'synapse', version: '1.0'},
 		});
 
+		// initialized notification (strict protocol compliance)
+		try {
+			await this._sendNotification(handle, 'notifications/initialized', {});
+		} catch (e) {
+			console.warn(`[synapse] MCP server "${name}" failed to send initialized notification:`, e);
+		}
+
 		// tools/list
 		const listRes = await this._sendRequest(handle, 'tools/list', {});
 		const tools: McpTool[] = (listRes.result as {tools?: McpTool[]})?.tools ?? [];
@@ -204,17 +218,50 @@ export class McpBridgeSession {
 	}
 
 	/** Send a JSON-RPC request and return a promise that resolves with the response. */
-	private _sendRequest(handle: ServerHandle, method: string, params: unknown): Promise<JsonRpcResponse> {
+	private _sendRequest(handle: ServerHandle, method: string, params: unknown, timeoutMs = 15000): Promise<JsonRpcResponse> {
 		return new Promise((resolve, reject) => {
 			const id = this.nextId++;
 			const req: JsonRpcRequest = {jsonrpc: '2.0', id, method, params};
-			handle.pending.set(id, {resolve, reject});
+
+			const timeout = setTimeout(() => {
+				if (handle.pending.has(id)) {
+					handle.pending.delete(id);
+					reject(new Error(`MCP request "${method}" (id: ${id}) timed out after ${timeoutMs}ms`));
+				}
+			}, timeoutMs);
+
+			handle.pending.set(id, {
+				resolve: (r) => {
+					clearTimeout(timeout);
+					resolve(r);
+				},
+				reject: (e) => {
+					clearTimeout(timeout);
+					reject(e);
+				},
+			});
 
 			const line = JSON.stringify(req) + '\n';
 			handle.process.stdin.write(line, (err) => {
 				if (err) {
+					clearTimeout(timeout);
 					handle.pending.delete(id);
 					reject(err);
+				}
+			});
+		});
+	}
+
+	/** Send a JSON-RPC notification (no id, no expected response). */
+	private _sendNotification(handle: ServerHandle, method: string, params: unknown): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const req = {jsonrpc: '2.0', method, params};
+			const line = JSON.stringify(req) + '\n';
+			handle.process.stdin.write(line, (err) => {
+				if (err) {
+					reject(err);
+				} else {
+					resolve();
 				}
 			});
 		});

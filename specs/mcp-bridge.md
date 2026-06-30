@@ -47,15 +47,17 @@ Each MCP server is a long-running process communicating over **stdin/stdout** wi
 JSON-RPC 2.0 messages. The bridge:
 
 - Uses a monotonically incrementing integer `id` for each request.
-- Sends one line per request (terminated with `\n`).
+- Sends one line per request/notification (terminated with `\n`).
 - Reads lines from stdout and dispatches responses to matching pending requests by `id`.
 - Logs stderr to `console.warn` (prefixed `[synapse] MCP server "<name>" stderr:`).
+- Limits request wait times with a default 15-second timeout to prevent locking up the loop.
 
 ### Handshake sequence
 
 ```
 → {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"synapse","version":"1.0"}}}
 ← {"jsonrpc":"2.0","id":1,"result":{...}}
+→ {"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
 → {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
 ← {"jsonrpc":"2.0","id":2,"result":{"tools":[...]}}
 ```
@@ -85,7 +87,8 @@ The `app` parameter is unused — MCP tools handle their own I/O.
 ## Error handling
 
 - **Config absent/unreadable** — `start()` catches the read/parse error and returns `[]`.
-- **Server spawn failure** — logged to `console.error`; other servers continue.
+- **Server spawn failure** — logged to `console.error`; other servers continue. On Windows, command aliases like `npx`, `npm`, `pnpm`, and `yarn` are automatically resolved to their corresponding `.cmd` extension to prevent spawn errors.
+- **Request Timeout** — if a server does not respond to a JSON-RPC request within 15 seconds, the request promise is rejected, preventing hung servers from freezing execution.
 - **JSON-RPC error response** — `execute()` catches it and returns an error string (never throws).
 - **Process exit during loop** — pending promises are rejected; `execute()` catches and returns error string.
 - Errors never propagate to crash the trigger executor.
