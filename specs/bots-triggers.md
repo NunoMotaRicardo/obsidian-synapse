@@ -111,6 +111,49 @@ Lightweight glob matcher for vault-relative paths:
 Watches `_synapse/triggers/` for changes (create/modify/delete/rename of trigger files)
 and reloads trigger configs with a 1-second debounce.
 
+### Trigger executor (`src/triggerExecutor.ts`)
+
+Receives a matched `TriggerConfig` and the triggering file path, runs the model, applies write
+modes, and records execution.
+
+**Entry point:**
+```ts
+executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string): Promise<void>
+```
+
+**Template substitution** — applied to `trigger.body` before the model call:
+- `{{file}}` → vault-relative file path of the triggering file
+- `{{files}}` → same (for scheduled triggers this would be a list; event triggers have one file)
+
+**Model routing:**
+- `trigger.model` absent or resolves to a Claude model → `AgentService.inlineChat()` with
+  `model`, `agent`, `systemMessage` from trigger, `cwd` set to vault root (absolute basePath),
+  `plugins` set to the `_synapse/` local plugin path (same pattern as bots and editor actions).
+- `trigger.model` resolves to a local model → `executeLocalProviderQuery()` with file content
+  prepended to the prompt as context.
+
+**Write modes** (applied to the model response):
+
+| `trigger.write` | Behavior |
+|---|---|
+| `false` (default) | Append result to `_synapse/reports/<name>-YYYY-MM-DD.md` (create if absent, append if same day) |
+| `true` | Replace the triggering file's entire content with the model response |
+| `'frontmatter'` | Parse response as YAML, merge keys into existing file frontmatter (body unchanged) |
+
+**Report format** (write mode `false`):
+```
+# <trigger-name> — YYYY-MM-DD
+
+<result>
+```
+The `_synapse/reports/` folder is created automatically if missing.
+
+**Error handling:** errors are logged to console (`console.error`) and appended to the report
+file under an `## Error` heading (so failures are visible in the vault).
+
+**After execution:** `plugin.settings.triggerLastFired[trigger.name] = Date.now()` is set and
+`plugin.saveSettings()` is called to persist the timestamp.
+
 ### Current status
 
 Type definitions and parser/writer are implemented (issue #48). Event watcher is
@@ -123,5 +166,10 @@ day-of-week) with wildcards (`*`), exact values, ranges (`N-M`), steps (`*/N`, `
 comma-separated lists. `lastFired` is persisted in `settings.triggerLastFired` (keyed by
 trigger name) so triggers don't re-fire within the same minute even across plugin reloads.
 
-Trigger execution (the agent/model invocation that runs the matched trigger's prompt) is
-tracked in issue #51.
+Trigger executor is implemented (issue #51) — `src/triggerExecutor.ts` runs matched triggers
+against the configured model (local provider or Claude via `AgentService.inlineChat()`),
+applies write modes, and appends results to `_synapse/reports/`. **Known gap:**
+`TriggerScheduler.tick()` currently only logs and stamps `triggerLastFired` for matched
+scheduled triggers — it does not yet call `executeTrigger()`, so scheduled (cron) triggers
+do not actually run the model. Wiring the scheduler to the executor is tracked as a
+follow-up.

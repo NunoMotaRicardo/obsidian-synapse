@@ -3,6 +3,7 @@ import type SynapsePlugin from './main';
 import type {TriggerConfig, TriggerEvent} from './types';
 import {scanTriggers} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
+import {executeTrigger} from './triggerExecutor';
 
 // ---------------------------------------------------------------------------
 // Glob matching
@@ -363,8 +364,8 @@ export class TriggerWatcher {
 			// Path glob match (no path pattern = match all files)
 			if (trigger.path && !matchGlob(trigger.path, filePath)) continue;
 
-			// Match found — log it (executor comes in issue #51)
-			console.log(`[synapse] Trigger "${trigger.name}" fired for ${filePath}`);
+			// Match found — fire the executor (fire-and-forget; errors caught inside)
+			void executeTrigger(this.plugin, trigger, filePath);
 		}
 	}
 }
