@@ -120,13 +120,36 @@ export class McpBridgeSession {
 	 */
 	async stop(): Promise<void> {
 		for (const handle of this.servers) {
-			try {
-				handle.process.kill();
-			} catch {
-				// Already dead — ignore
-			}
+			this._killTree(handle);
 		}
 		this.servers = [];
+	}
+
+	/**
+	 * Kill a server process, including any child processes it spawned.
+	 *
+	 * On win32, commands like `npx`/`npm`/`pnpm`/`yarn` run as `.cmd`, so the
+	 * spawned process is actually `cmd.exe` with the real server as a grandchild.
+	 * `ChildProcess#kill()` only signals the immediate child and leaves the
+	 * grandchild running — use `taskkill /t` to kill the whole process tree instead.
+	 */
+	private _killTree(handle: ServerHandle): void {
+		const pid = handle.process.pid;
+		if (pid === undefined) return;
+
+		if (process.platform === 'win32') {
+			try {
+				spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {stdio: 'ignore', shell: false});
+			} catch {
+				// Fall through to a direct kill below
+			}
+		}
+
+		try {
+			handle.process.kill();
+		} catch {
+			// Already dead — ignore
+		}
 	}
 
 	// -------------------------------------------------------------------------

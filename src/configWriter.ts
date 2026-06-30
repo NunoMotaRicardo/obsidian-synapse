@@ -514,7 +514,7 @@ Frontmatter fields:
 - \`event\` (required for event triggers) — one of: \`file-created\`, \`file-modified\`, \`file-deleted\`, \`file-renamed\`
 - \`schedule\` (required for scheduled triggers) — cron expression (e.g. \`0 9 * * *\` for daily at 9am)
 - \`path\` (optional) — glob pattern to scope which files the trigger applies to (e.g. \`inbox/**\`, \`projects/*.md\`)
-- \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Local models run as cheap one-shot calls; Claude models run as full agentic loops with tool access.
+- \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Claude models run as full agentic loops with tool access. Local models that support tool calling run a ReAct loop equipped with the built-in vault tools (\`read_note\`, \`list_notes\`, \`search_notes\`) plus any MCP-bridged tools configured in \`_synapse/.mcp.json\`; local models without tool-calling support run as cheap one-shot calls.
 - \`agent\` (optional) — name of an agent to use for this trigger
 - \`write\` (optional) — \`false\` (default), \`true\`, or \`'frontmatter'\` to allow writing back
 - \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
