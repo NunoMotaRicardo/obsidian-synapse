@@ -168,8 +168,18 @@ trigger name) so triggers don't re-fire within the same minute even across plugi
 
 Trigger executor is implemented (issue #51) — `src/triggerExecutor.ts` runs matched triggers
 against the configured model (local provider or Claude via `AgentService.inlineChat()`),
-applies write modes, and appends results to `_synapse/reports/`. **Known gap:**
-`TriggerScheduler.tick()` currently only logs and stamps `triggerLastFired` for matched
-scheduled triggers — it does not yet call `executeTrigger()`, so scheduled (cron) triggers
-do not actually run the model. Wiring the scheduler to the executor is tracked as a
-follow-up.
+applies write modes, and appends results to `_synapse/reports/`.
+
+`TriggerScheduler.tick()` calls `executeTrigger()` for matched scheduled triggers:
+
+- If `trigger.path` is set, it's resolved against the whole vault via `resolveGlobFiles()`
+  (matches `matchGlob()` against every `app.vault.getFiles()` path) and `executeTrigger()` runs
+  once per matching file. No matches logs a `console.warn` and skips firing.
+- If `trigger.path` is absent, there's no target file — `executeTrigger()` runs once with an
+  empty file path, and the write mode is forced to `false` (report-only) regardless of the
+  trigger's configured `write` setting, since there's no file to write back to.
+
+`triggerLastFired` is stamped synchronously in `tick()` at match time (before the async
+execution completes) to prevent double-dispatch across overlapping ticks — e.g. the immediate
+startup tick racing the first interval tick. `executeTrigger()` also stamps it again on
+completion.

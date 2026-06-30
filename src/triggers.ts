@@ -1,4 +1,4 @@
-import {normalizePath, TFile, TAbstractFile} from 'obsidian';
+import {App, normalizePath, TFile, TAbstractFile} from 'obsidian';
 import type SynapsePlugin from './main';
 import type {TriggerConfig, TriggerEvent} from './types';
 import {scanTriggers} from './configWriter';
@@ -34,6 +34,19 @@ export function matchGlob(pattern: string, path: string): boolean {
 	// Convert glob to regex
 	const regexStr = globToRegex(p);
 	return new RegExp('^' + regexStr + '$').test(f);
+}
+
+/**
+ * Resolve a glob pattern to the vault-relative paths of all files it matches.
+ *
+ * Used by `TriggerScheduler` to expand a scheduled trigger's `path` glob —
+ * unlike event triggers, scheduled triggers have no single triggering file,
+ * so the glob must be matched against the whole vault instead of one path.
+ */
+export function resolveGlobFiles(app: App, pattern: string): string[] {
+	return app.vault.getFiles()
+		.map(file => file.path)
+		.filter(path => matchGlob(pattern, path));
 }
 
 /**
@@ -432,15 +445,45 @@ export class TriggerScheduler {
 				}
 			}
 
-			// Fire!
-			console.log(`[synapse] Scheduled trigger "${trigger.name}" firing`);
+			// Fire! Stamp lastFired synchronously (before the async execution
+			// completes) to prevent double-dispatch across overlapping ticks,
+			// e.g. the immediate startup tick racing the first interval tick.
+			// executeTrigger() also stamps it again on completion.
 			this.plugin.settings.triggerLastFired[trigger.name] = now.getTime();
 			didFire = true;
+			this.fire(trigger);
 		}
 
 		if (didFire) {
 			void this.plugin.saveSettings();
 		}
+	}
+
+	/**
+	 * Fire a matched scheduled trigger.
+	 *
+	 * If `trigger.path` is set, resolve it to matching vault files and execute
+	 * the trigger once per file. If absent, there is no target file — execute
+	 * once with no file, forcing report-only output regardless of the
+	 * configured write mode (there's nothing to write back to).
+	 */
+	private fire(trigger: TriggerConfig): void {
+		if (trigger.path) {
+			const files = resolveGlobFiles(this.plugin.app, trigger.path);
+			if (files.length === 0) {
+				console.warn(`[synapse] Scheduled trigger "${trigger.name}": no files matched path "${trigger.path}"`);
+				return;
+			}
+			for (const filePath of files) {
+				void executeTrigger(this.plugin, trigger, filePath);
+			}
+			return;
+		}
+
+		// No path scoping — file-less execution. Force report-only since
+		// there's no target file to write to.
+		const filelessTrigger = trigger.write !== false ? {...trigger, write: false as const} : trigger;
+		void executeTrigger(this.plugin, filelessTrigger, '');
 	}
 
 	/** Load scheduled triggers from `_synapse/triggers/`, keeping only those with a `schedule`. */
