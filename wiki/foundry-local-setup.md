@@ -1,19 +1,19 @@
-# Using Sidekick with Microsoft Foundry Local
+# Using Synapse with Microsoft Foundry Local
 
-[Microsoft Foundry Local](https://github.com/microsoft/Foundry-Local) runs AI models entirely on your device and exposes an OpenAI-compatible API. Sidekick can connect to it with no API key required.
+[Microsoft Foundry Local](https://github.com/microsoft/Foundry-Local) runs AI models entirely on your device and exposes an OpenAI-compatible API. Synapse can connect to it with no API key required.
 
 ## Prerequisites
 
 - Windows (Foundry Local is Windows-only as of this writing)
 - A supported GPU/CPU; CUDA GPU recommended for Phi-4
 - Foundry Local CLI installed: follow the [official install guide](https://github.com/microsoft/Foundry-Local)
-- Sidekick plugin installed and configured
+- Synapse plugin installed and configured
 
 ---
 
 ## Step 1 — Start the Foundry Local service
 
-The Foundry Local background service must be running before Sidekick can connect.
+The Foundry Local background service must be running before Synapse can connect.
 
 ```powershell
 foundry service start
@@ -69,9 +69,9 @@ A loaded model will appear in the output instead of "No models are currently loa
 
 ---
 
-## Step 3 — Configure Sidekick
+## Step 3 — Configure Synapse
 
-Open Obsidian **Settings → Sidekick → Models** and set:
+Open Obsidian **Settings → Synapse → Models** and set:
 
 | Setting | Value |
 |---------|-------|
@@ -94,7 +94,7 @@ Click **Test** to verify. You should see a "Provider session created successfull
 
 ## Step 4 — Start chatting
 
-After a successful test, select the model from the Sidekick chat dropdown and start a session. Inference runs entirely on your device.
+After a successful test, select the model from the Synapse chat dropdown and start a session. Inference runs entirely on your device.
 
 ---
 
@@ -129,7 +129,7 @@ foundry model unload Phi-4-cuda-gpu:1
 ### Wrong model name
 
 - Use the exact **Model ID** from `foundry model list` (e.g. `Phi-4-cuda-gpu:1`), **not** the alias (`phi-4`).
-- Sidekick passes the model name as-is to the API, so it must exactly match what the Foundry Local `/v1/models` endpoint exposes.
+- Synapse passes the model name as-is to the API, so it must exactly match what the Foundry Local `/v1/models` endpoint exposes.
 
 ### Model fails to load (out of memory)
 

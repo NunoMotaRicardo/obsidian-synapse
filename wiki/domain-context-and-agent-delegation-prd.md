@@ -2,17 +2,17 @@
 
 ## 1. Summary
 
-Sidekick already supports agents, prompts, skills, triggers, and MCP tools through vault-local configuration.
+Synapse already supports agents, prompts, skills, triggers, and MCP tools through vault-local configuration.
 
 That is enough to approximate two requested capabilities:
 
-- a memory agent for maintaining Sidekick customization
+- a memory agent for maintaining Synapse customization
 - domain-aware behavior for role agents such as researcher, article producer, and summarizer
 
 But two important gaps remain:
 
-- Sidekick cannot automatically activate domain context based on the current note, folder, or vault scope.
-- Sidekick cannot let one agent invoke another agent as a native delegate or handoff.
+- Synapse cannot automatically activate domain context based on the current note, folder, or vault scope.
+- Synapse cannot let one agent invoke another agent as a native delegate or handoff.
 
 This PRD proposes first-class support for both capabilities while preserving the current config model.
 
@@ -27,9 +27,9 @@ They want role agents to adapt to the active domain without maintaining a combin
 - Summarizer for domain A
 - Article Producer for domain B
 
-They also want a stable Sidekick customization expert that knows the plugin's configuration model and can be consulted by other agents when new prompts, skills, triggers, or tool integrations are needed.
+They also want a stable Synapse customization expert that knows the plugin's configuration model and can be consulted by other agents when new prompts, skills, triggers, or tool integrations are needed.
 
-Current Sidekick configuration can approximate this by combining:
+Current Synapse configuration can approximate this by combining:
 
 - role agents
 - reusable skills
@@ -46,9 +46,10 @@ As the number of domains grows, manual assembly becomes error-prone and inconsis
 
 ## 3. Goals
 
-1. Let Sidekick infer and activate domain-specific context automatically.
-2. Let Sidekick role agents delegate to a specialized memory agent when configuration expertise is required.
-3. Preserve compatibility with the existing `sidekick/agents`, `sidekick/prompts`, `sidekick/skills`, `sidekick/tools`, and `sidekick/triggers` layout.
+1. Let Synapse infer and activate domain-specific context automatically.
+2. Let Synapse role agents delegate to a specialized memory agent when configuration expertise is required.
+3. Preserve compatibility with the existing `_synapse/agents/`, `_synapse/skills/`,
+   `_synapse/triggers/`, and `_synapse/.mcp.json` layout.
 4. Keep the feature understandable for non-programmer vault owners.
 5. Avoid forcing users to duplicate content across many domain-specific agents.
 
@@ -69,7 +70,7 @@ As the number of domains grows, manual assembly becomes error-prone and inconsis
 
 ### 5.2 Memory agent
 
-- As a Sidekick power user, I want a dedicated configuration-maintainer agent that knows Sidekick's file formats and limitations.
+- As a Synapse power user, I want a dedicated configuration-maintainer agent that knows Synapse's file formats and limitations.
 - As another agent, I want to hand off configuration design tasks to that specialist and receive a structured answer back.
 - As a user, I want the memory agent to recommend config-only changes first and propose product changes only when config is insufficient.
 
@@ -82,7 +83,7 @@ The feature has two parts.
 Introduce a new optional folder:
 
 ```text
-sidekick/domains/
+_synapse/domains/
     <domain-name>/
         DOMAIN.md
         ...optional templates/resources...
@@ -122,10 +123,10 @@ priority: 100
 
 Behavior:
 
-- When the user selects a vault scope, opens a note, or starts a session with attachments, Sidekick resolves matching domains.
+- When the user selects a vault scope, opens a note, or starts a session with attachments, Synapse resolves matching domains.
 - The selected domain instructions are added to the session context.
 - The domain's default skills are auto-enabled unless the user explicitly disables them.
-- If more than one domain matches, Sidekick resolves ties by priority and then prompts the user when ambiguity remains.
+- If more than one domain matches, Synapse resolves ties by priority and then prompts the user when ambiguity remains.
 
 ### 6.2 Agent delegation
 
@@ -146,7 +147,7 @@ delegates:
 
 Behavior:
 
-- An agent may ask Sidekick to invoke a named delegate agent.
+- An agent may ask Synapse to invoke a named delegate agent.
 - The delegate runs with its own instructions, skills, tools, and model preference.
 - The delegate returns either:
   - a short answer to merge into the current response
@@ -163,7 +164,7 @@ Behavior:
 
 ### 7.2 Chat behavior
 
-- When a role agent delegates, show a compact status row such as `Researcher consulted Sidekick Customization Maintainer`.
+- When a role agent delegates, show a compact status row such as `Researcher consulted Synapse Customization Maintainer`.
 - Let users expand the delegate reasoning or keep it collapsed.
 - Let users disable delegation per session.
 
@@ -183,7 +184,7 @@ Add settings for:
 New loader target:
 
 ```text
-sidekick/domains/<name>/DOMAIN.md
+_synapse/domains/<name>/DOMAIN.md
 ```
 
 Required metadata:
@@ -216,11 +217,11 @@ Future-compatible but not required now:
 
 ## 9. Implementation Notes
 
-### 9.1 Loader changes
+### 9.1 Writer changes
 
-- Add a `loadDomains` function alongside `loadAgents`, `loadSkills`, and `loadPrompts`.
+- Add a `writeDomain` / `scanDomains` function to `src/configWriter.ts` alongside `writeAgent`, `writeSkill`, etc.
 - Extend the frontmatter parser or add a safe parser path for nested metadata because domain matching will need structured fields.
-- Extend `AgentConfig` with optional `delegates`.
+- Extend `AgentDefinition` (in `_synapse/agents/*.md` frontmatter) with optional `delegates`.
 
 ### 9.2 Session composition
 
@@ -276,7 +277,8 @@ Matching algorithm:
 3. A user can override or disable the inferred domain for the current session.
 4. An agent can reference an allowed delegate agent in its frontmatter.
 5. Delegate execution is visible in the UI and cannot recurse indefinitely.
-6. Existing agents, prompts, skills, triggers, and MCP config continue to work without modification.
+6. Existing agents, skills, triggers, and MCP config in `_synapse/` continue to work without
+   modification.
 
 ## 13. Rollout Plan
 
@@ -301,10 +303,12 @@ Matching algorithm:
 
 Until this feature exists, the recommended configuration pattern is:
 
-1. Create one shared `sidekick-config-memory` skill.
-2. Optionally create one `Sidekick Customization Maintainer` agent that uses that skill.
+1. Create one shared `synapse-config-memory` skill in `_synapse/skills/`.
+2. Optionally create one `Synapse Customization Maintainer` agent in `_synapse/agents/`
+   that uses that skill.
 3. Keep role agents separate from domains.
 4. Model each knowledge domain as a reusable skill.
 5. Combine role agent + domain skill + vault scope manually.
 
-That gives users most of the desired behavior now, while this PRD covers the gaps that require plugin changes.
+That gives users most of the desired behavior now, while this PRD covers the gaps that require
+plugin changes.

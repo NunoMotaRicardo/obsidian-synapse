@@ -15,7 +15,7 @@ Source: `src/settings.ts` — settings interface, defaults, and the settings tab
 
 The **Feature Map & Agents** tab replaces the former Models tab:
 - **Feature -> Agent map**: Allows mapping each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent persona loaded from vault or shipped defaults. Lightweight features default to `General` (or a Claude model backend) out of the box with zero required local setup. Vision-dependent features map to `Vision`.
-- **Shipped Default & Methodology Agents**: Folder initialization creates five distinct agent files in `claude-brain/agents/`:
+- **Shipped Default & Methodology Agents**: Folder initialization creates five distinct agent files in `_synapse/agents/`:
   - `general.agent.md`: General-purpose assistant for general chat, editing, and search.
   - `vision.agent.md`: Vision-capable assistant for image and diagram analysis.
   - `zettelkasten.agent.md`: Methodology assistant for atomic notes and dense linking.
@@ -59,8 +59,9 @@ For the `ollama` preset specifically:
 - The **Provider** setting description dynamically updates to show Ollama setup instructions
   when the `ollama` preset is selected.
 
-The `github` preset's Copilot-tab "Client type" Test button is unchanged: it still calls
-`copilot.ping()` (connectivity check), independent of this behavior.
+The `github` BYOK preset was removed as part of the Claude Agent SDK migration (see
+`wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`). Only local/OpenAI-compatible
+presets remain; all use the `fetchProviderModels()` path described above.
 
 `fetchProviderModels()` is also the basis for `buildOnListModels()`'s `onListModels` callback
 (used by `CopilotService` for the inline-operations model dropdown today; the sidebar BYOK

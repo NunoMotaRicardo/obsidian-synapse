@@ -1,6 +1,6 @@
 # chat-view
 
-Source: `src/sidekickView.ts` (panel shell, session orchestration) plus `src/view/*`:
+Source: `src/synapseView.ts` (panel shell, session orchestration) plus `src/view/*`:
 
 | File | Role |
 |---|---|
@@ -30,7 +30,7 @@ vault scope, folder tree.
     `none` suppresses reasoning output, so no reasoning block is rendered (the block is only
     ever created from reasoning events).
   - Both values are passed together on every mid-session `session.setModel()` call so neither
-    resets, and flow into new sessions via `sessionConfig` in `sidekickView.ts` and
+    resets, and flow into new sessions via `sessionConfig` in `synapseView.ts` and
     `bots/telegramBot.ts`. The SDK-boundary cast to `ReasoningEffort`/`ReasoningSummary` is
     localized (the unions lag the values models actually report).
   - A **Long context** toggle in the same menu pins the session to the SDK's
@@ -57,7 +57,7 @@ vault scope, folder tree.
     the user explicitly disables it. Planned: issue #5.
 - **Compaction events in debug view** (issue #5): when the debug toggle is on,
   `session.compaction_start` and `session.compaction_complete` events render inline debug
-  blocks in the chat (same visibility gating as tool calls via `.sidekick-hide-debug`).
+  blocks in the chat (same visibility gating as tool calls via `.synapse-hide-debug`).
   `compaction_start` shows the pre-compaction token breakdown (conversation / system / tool
   definition tokens). `compaction_complete` shows success/failure, tokens removed, messages
   removed, and the summary content. These are handled in `handleSessionEvent()` alongside

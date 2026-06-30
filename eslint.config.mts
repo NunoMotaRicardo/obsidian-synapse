@@ -57,7 +57,7 @@ export default tseslint.config(
 	{
 		files: ['src/**/*.ts'],
 		plugins: {
-			'sidekick-custom': {
+			'synapse-custom': {
 				rules: {
 					'ui-sentence-case': {
 						meta: {
@@ -158,7 +158,7 @@ export default tseslint.config(
 			},
 		},
 		rules: {
-			'sidekick-custom/ui-sentence-case': 'error',
+			'synapse-custom/ui-sentence-case': 'error',
 			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
 		},
 		languageOptions: {

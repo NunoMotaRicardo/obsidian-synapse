@@ -1,20 +1,47 @@
-# Sidekick Technical Implementation Guide
+# Synapse Technical Implementation Guide
 
-This document explains the technical implementation of Sidekick with a focus on the package stack: which packages are in use, what responsibility each one has, and how they fit into the plugin architecture.
+This document explains the technical implementation of the **Synapse** Obsidian plugin —
+which packages are in use, what responsibility each one has, and how they fit into the plugin
+architecture. It reflects the **Claude Agent SDK** codebase as of 2026-06-30.
+
+> Previous versions of this guide described the upstream `@github/copilot-sdk` (Sidekick)
+> codebase. That SDK was fully replaced in the migration documented at
+> [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md).
+
+---
 
 ## 1. High-level architecture
 
-At runtime, Sidekick is an Obsidian plugin with a thin host layer and a thicker application layer:
+At runtime, Synapse is an Obsidian desktop plugin with a thin lifecycle layer and a thicker
+application layer:
 
-1. `src/main.ts` boots the plugin, loads settings, registers the sidebar view, editor integrations, and initializes the Copilot client bridge.
-2. `src/sidekickView.ts` is the main application controller for the sidebar UI. It coordinates chat state, model selection, agents, skills, tools, triggers, and sessions.
-3. `src/configLoader.ts` reads the user-defined markdown and JSON configuration from the vault: agents, skills, prompts, triggers, and MCP server definitions.
-4. `src/view/sessionConfig.ts` maps Obsidian context into SDK-ready attachments, prompts, working directory, and MCP server configuration.
-5. `src/copilot.ts` wraps `@github/copilot-sdk` and is the boundary between the Obsidian plugin and Copilot CLI / provider-backed model execution.
+1. `src/main.ts` boots the plugin, loads settings, registers the sidebar view, editor
+   integrations, Telegram bot, trigger watcher/scheduler, and the improve-synapse seed skill.
+2. `src/synapseView.ts` is the main application controller for the sidebar UI. It coordinates
+   chat state, model/agent/skill selection, session persistence, and search.
+3. `src/copilot.ts` (`AgentService`) wraps `@anthropic-ai/claude-agent-sdk` and is the
+   **sole** boundary between the plugin and Claude CLI / local model execution.
+4. `src/view/sessionConfig.ts` maps Obsidian context (active note, vault scope, attachments,
+   agent config) into SDK-ready query options.
+5. `src/configWriter.ts` provides write-side utilities for the self-improve feature and
+   first-run seeding of `_synapse/` artifacts.
 
 In practical terms, the flow is:
 
-`Obsidian UI -> SidekickView -> SessionConfig/ConfigLoader -> CopilotService -> @github/copilot-sdk -> Copilot CLI or provider endpoint`
+```
+Obsidian UI → SynapseView → sessionConfig → AgentService → @anthropic-ai/claude-agent-sdk → claude CLI
+                                  ↑
+                       configWriter (self-improve / seeding)
+```
+
+For local model paths (triggers, dynamic delegation):
+
+```
+TriggerExecutor → executeLocalProviderQuery (providerModels.ts) → OpenAI-compatible endpoint
+                → McpBridgeSession (mcpBridge.ts) → stdio MCP servers
+```
+
+---
 
 ## 2. Runtime dependencies
 
@@ -22,284 +49,241 @@ The runtime dependency set is intentionally small.
 
 ### `obsidian`
 
-This is the host API for the plugin. Almost every user-facing behavior depends on it.
+The host API for the plugin. Almost every user-facing behavior depends on it.
 
-What it is used for:
+Used for:
 
 - Plugin lifecycle via `Plugin` in `src/main.ts`.
-- Rendering views, modals, menus, settings, notices, and markdown UI across `src/sidekickView.ts`, `src/settings.ts`, and `src/modals/*`.
-- Vault access and file abstractions such as `TFile`, `TFolder`, and `normalizePath` in `src/configLoader.ts`, `src/view/sessionConfig.ts`, and the editor/search features.
-- Secure-ish vault-local storage for secrets through `app.loadLocalStorage` and `app.saveLocalStorage` in `src/settings.ts`.
-- HTTP requests for the Telegram integration through `requestUrl` in `src/bots/telegramApi.ts`.
+- Rendering views, modals, menus, settings, notices, and markdown UI across `src/synapseView.ts`,
+  `src/settings.ts`, and `src/modals/*`.
+- Vault access and file abstractions (`TFile`, `TFolder`, `normalizePath`) in
+  `src/configWriter.ts`, `src/view/sessionConfig.ts`, and the editor/search features.
+- Secure-ish vault-local storage for secrets via `app.loadLocalStorage` / `app.saveLocalStorage`
+  in `src/settings.ts`.
+- HTTP requests for Telegram integration via `requestUrl` in `src/bots/telegramApi.ts`.
 
-Why it matters:
+### `@anthropic-ai/claude-agent-sdk`
 
-`obsidian` is the plugin host platform. Without it, the rest of the code has nowhere to render UI, no vault to read from, and no plugin lifecycle.
+The core AI integration library. `src/copilot.ts` is the only file in the plugin that imports
+it directly (architecture rule from `AGENTS.md`).
 
-### `@github/copilot-sdk`
+Used for:
 
-This is the core AI integration library. Sidekick does not speak to Copilot CLI directly in most places; it goes through this SDK wrapper in `src/copilot.ts`.
-
-What it is used for:
-
-- Creating and managing a `CopilotClient`.
-- Starting local CLI-backed sessions or connecting to a remote CLI server.
-- Creating, resuming, listing, and deleting sessions.
-- Sending prompts and receiving streamed assistant responses.
-- Managing model metadata, permissions, MCP server configuration, and user-input callbacks.
-- Supporting both GitHub-backed and BYOK provider flows through SDK provider configuration types.
+- `query()` — sends a prompt and streams SDK messages from the `claude` CLI subprocess.
+- `listSessions()`, `deleteSession()`, `renameSession()` — session management.
+- `tool()`, `createSdkMcpServer()` — for the dynamic delegation MCP tool (in-process).
+- `startup()` — optional warm pre-spawn for faster first-query latency.
+- Type re-exports: `Options`, `SDKMessage`, `AgentDefinition`, `CanUseTool`, `OnElicitation`, etc.
 
 Important implementation detail:
 
-`src/copilot.ts` is not just a thin export file. It adds Sidekick-specific behavior on top of the SDK:
+`src/copilot.ts` (`AgentService`) adds Synapse-specific behavior on top of the SDK:
 
-- Resolves the local Copilot CLI executable automatically.
-- Builds a sanitized environment before spawning the CLI.
-- Handles reconnect and broken-client recovery.
-- Exposes a higher-level `CopilotService` API that the rest of the plugin uses.
+- Resolves the `claude` CLI binary (via `runtimeManager.ts`).
+- Builds a sanitised subprocess environment (`cleanEnv()`).
+- Implements `routeQueryOptions()` for agent-model binding and delegation server injection.
+- Exposes high-level `chat()` / `inlineChat()` methods used by all plugin subsystems.
 
-Why it matters:
+### `zod`
 
-This package is the actual conversation engine. Sidekick's chat UI, search mode, triggers, inline edits, and Telegram bot all depend on it.
+Used by `src/copilot.ts` to define the dynamic delegation MCP tool schemas
+(`cheap_generate`, `bulk_summarize`). Bundled as a transitive SDK dependency.
+
+---
 
 ## 3. Peer dependencies
 
-These packages are required by features in the editor, but they are not bundled into the plugin because Obsidian already provides the editor runtime.
+These packages are required by the editor integration but not bundled — Obsidian provides
+the editor runtime.
 
-### `@codemirror/state`
+### `@codemirror/state` and `@codemirror/view`
 
 Used in `src/editor/editorMenu.ts` to inspect and manipulate editor selections and transactions.
+Marked as external in the esbuild config so the plugin reuses Obsidian's hosted versions.
 
-### `@codemirror/view`
-
-Used in `src/editor/editorMenu.ts`.
-
-What it does here:
-
-- Implements the editor view plugin layer.
-- Connects Synapse actions to the active CodeMirror editor instance.
-
-Why these are peer dependencies instead of normal dependencies:
-
-Obsidian already ships the editor environment. The build marks CodeMirror packages as external so the plugin reuses the host-provided versions instead of bundling its own copies.
+---
 
 ## 4. Build and tooling dependencies
 
-These packages are primarily for development, bundling, linting, and type-checking.
-
 ### `esbuild`
 
-Configured in `esbuild.config.mjs`.
-
-What it does:
-
-- Bundles `src/main.ts` and the rest of the TypeScript source into a single `main.js` plugin file.
-- Leaves `obsidian`, CodeMirror packages, Electron, and Node built-ins as externals.
-- Produces a faster dev loop with watch mode.
-- Minifies production builds.
-
-Why it matters:
-
-Obsidian loads a bundled plugin entrypoint. `esbuild` is the packaging step that turns the modular source tree into that deployable output.
+Configured in `esbuild.config.mjs`. Bundles `src/main.ts` and the TypeScript source tree into
+a single `main.js` plugin file. Leaves `obsidian`, CodeMirror packages, Electron, and Node
+built-ins as externals. Produces a watch mode for fast dev iteration.
 
 ### `typescript`
 
-Used by the `build` script via `tsc -noEmit`.
+Used by the `build` script via `tsc -noEmit`. Type-checks the codebase in strict mode. Validates
+interfaces between the Obsidian layer, the Agent SDK layer, and the config-driven features.
 
-What it does:
+### `tsx`, `jiti`, `tslib`
 
-- Type-checks the codebase in strict mode.
-- Validates interfaces between the Obsidian layer, the Copilot SDK layer, and the config-driven features.
+Tooling dependencies for TypeScript execution and compilation support. Not part of the shipped
+plugin runtime.
 
-Why it matters:
-
-The plugin is heavily configuration-driven and event-driven. TypeScript is doing real safety work here, not just editor niceties.
-
-### `tsx`
-
-This package is present as a dev dependency for TypeScript execution in Node-based tooling workflows.
-
-In this repository:
-
-- It is not part of the shipped plugin runtime.
-- It is useful for running TS-based tooling or scripts without a separate compile step.
-
-### `jiti`
-
-This is another tool-oriented dependency used in ecosystems that need to load TypeScript or ESM modules dynamically.
-
-In this repository:
-
-- It is not referenced by application code under `src/`.
-- It supports the tooling/config environment rather than the Obsidian runtime.
-
-### `tslib`
-
-Provides helper functions that TypeScript can emit for compiled output depending on compiler settings and the build chain.
-
-In this repository:
-
-- It is a support dependency for the TS toolchain.
-- It is not a primary architectural dependency of the plugin logic itself.
+---
 
 ## 5. Linting dependencies
 
-### `eslint`
+### `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-obsidianmd`
 
-The package is used through the `lint` script in `package.json`.
+The lint stack runs via `npm run lint`. `eslint-plugin-obsidianmd` enforces Obsidian plugin
+conventions. `@types/node` provides typings for Node.js APIs used in build scripts and the
+desktop-only spawn/fs paths in `src/runtimeManager.ts` and `src/mcpBridge.ts`.
 
-What it does:
-
-- Runs static analysis across the repository.
-- Catches style and correctness issues that are not fully covered by TypeScript.
-
-### `@eslint/js`
-
-Provides the base ESLint rule sets for JavaScript projects.
-
-### `typescript-eslint`
-
-Adds TypeScript-aware linting.
-
-What it does here:
-
-- Parses TypeScript files.
-- Enables TypeScript-specific rules and diagnostics.
-
-### `eslint-plugin-obsidianmd`
-
-An Obsidian-focused linting plugin.
-
-What it does here:
-
-- Helps align the codebase with Obsidian plugin conventions and patterns.
-
-### `globals`
-
-Provides curated global variable definitions for lint configuration.
-
-### `@types/node`
-
-Adds TypeScript typings for Node.js APIs used in build scripts and runtime bridge code.
-
-Why it matters:
-
-Sidekick uses Node built-ins in places such as `src/copilot.ts` and `esbuild.config.mjs`, especially for process spawning, filesystem checks, OS paths, and runtime environment access.
+---
 
 ## 6. Why the dependency list is small
 
-A notable design choice in this repository is that most of the application logic is handwritten instead of delegated to many framework libraries.
+Most application logic is handwritten instead of delegated to framework libraries:
 
-Examples:
+- The sidebar UI is built directly with Obsidian DOM helpers, not React or another UI framework.
+- The vault customization model (`_synapse/`) is managed by simple frontmatter parsing and
+  directory listing, not a configuration framework.
+- The Claude Agent SDK is the sole AI runtime package; there is no legacy BYOK provider matrix.
 
-- The sidebar UI is built directly with Obsidian DOM helpers instead of React or another UI framework.
-- Markdown-based config loading is implemented inside the repo rather than outsourced to a larger configuration framework.
-- The Copilot integration is isolated behind one main external runtime package: `@github/copilot-sdk`.
+This keeps the plugin easy to ship inside Obsidian, where bundle size, compatibility, and low
+operational complexity matter.
 
-This keeps the plugin easier to ship inside Obsidian, where bundle size, compatibility, and low operational complexity matter.
+---
 
-## 7. Internal modules and how they relate to packages
+## 7. Internal modules
 
-The package list makes more sense when mapped onto the internal module boundaries.
-
-### Bootstrapping and host integration
-
-- `src/main.ts`
-- Primary package: `obsidian`
-
-Responsibilities:
+### Bootstrapping and host integration — `src/main.ts`
 
 - Load and save plugin settings.
 - Register the view, commands, ribbon icon, editor extensions, and context menus.
-- Initialize the AI bridge service.
+- Initialise `AgentService`, `TelegramBotService`, `TriggerWatcher`, `TriggerScheduler`.
+- Seed `_synapse/skills/improve-synapse/SKILL.md` on first run.
 
-### AI transport and provider bridge
+### AI transport — `src/copilot.ts` (`AgentService`)
 
-- `src/copilot.ts`
-- Primary packages: `@github/copilot-sdk`, Node built-ins
+- Primary packages: `@anthropic-ai/claude-agent-sdk`, Node built-ins (via `runtimeManager.ts`)
+- Resolve the `claude` CLI binary. Build clean subprocess env. Manage abort/timeout.
+- Expose `chat()` for stateful sessions and `inlineChat()` for ephemeral one-shot queries.
+- Implement the dynamic delegation MCP server (`cheap_generate`, `bulk_summarize`).
+- Re-export all SDK types so no other module imports the SDK directly.
 
-Responsibilities:
+### CLI resolution — `src/runtimeManager.ts`
 
-- Start or connect to the Copilot backend.
-- Manage session lifecycle.
-- Wrap permissions, models, authentication, and message exchange.
-- Isolate CLI spawning details from the UI layer.
+- Pure Node.js (no SDK import). Resolves the `claude` binary in priority order: settings
+  override → global npm → OS links (WinGet, `~/.claude/bin/`) → SDK fallback.
+- `getCliVersion()` — spawn `claude --version` and extract semver.
+- `cleanEnv()` — allowlisted subprocess environment (no Electron env leakage).
 
-### Main application controller
+### Main application controller — `src/synapseView.ts`
 
-- `src/sidekickView.ts`
-- Primary packages: `obsidian`, local application modules, Copilot types
-
-Responsibilities:
-
+- Primary package: `obsidian`, local application modules
 - Maintain current chat session state.
-- Keep selected agent/model/skills/tools in sync with the UI.
-- Orchestrate chat, search, trigger execution, and session persistence.
+- Coordinate agent/model/skill/tools selection and toolbar sync.
+- Orchestrate chat send, search, session persistence (list, restore, rename, delete).
 
-### Config-driven capabilities
+### Session preparation — `src/view/sessionConfig.ts`
 
-- `src/configLoader.ts`
-- Primary package: `obsidian`
+- Turn active note, selected files, vault scope, and attachments into SDK-ready query options.
+- Build the vault structure block and self-improve hint for the system prompt.
+- Convert `ChatAttachment` items to SDK attachment format (on-disk files vs. clipboard blobs).
 
-Responsibilities:
+### Vault customization config — `src/configWriter.ts`
 
-- Read `.agent.md`, `.prompt.md`, `.trigger.md`, skills, and MCP config files from the vault.
-- Parse frontmatter-like metadata and convert it into typed runtime config.
+- Write-side utilities for the self-improve feature.
+- `writeAgent`, `writeSkill`, `writeTrigger`, `modifyArtifact`, `deleteArtifact` — all produce
+  SDK-native formats for `_synapse/` artifacts.
+- `scanAgents`, `scanSkills`, `scanTriggers` — display-only scans for toolbar dropdowns.
+- `scanVaultStructure` — top-level folder scan for system prompt context.
+- `ensureImproveSynapseSkill` — seeds the starter skill on first run.
 
-### Session preparation
+No `configLoader.ts` — it was deleted as part of the Agent SDK migration. The Claude CLI
+discovers agents, skills, and MCP servers natively from `_synapse/` on every query.
 
-- `src/view/sessionConfig.ts`
-- Primary package: `obsidian`
+### Provider models — `src/providerModels.ts`
 
-Responsibilities:
+- `fetchProviderModels()` — direct HTTP fetch to BYOK / local provider endpoints (`/v1/models`
+  for OpenAI-compatible, `/api/tags` for Ollama). Used by the Settings Test button and
+  `buildOnListModels()`.
+- `executeLocalProviderQuery()` — one-shot OpenAI-compatible chat completion for local models
+  (triggers, dynamic delegation). Includes a ReAct tool-calling loop.
+- `isLocalBackendConfigured()`, `clearCachedDefaultModel()` — helpers for the delegation path.
 
-- Turn active note, selected files, vault scopes, and attachments into SDK-ready inputs.
-- Map MCP server definitions into the structures expected by the Copilot SDK.
+### Triggers — `src/triggers.ts`, `src/triggerExecutor.ts`
 
-### Editor augmentation
+- `TriggerWatcher` — vault event listeners (create/modify/delete/rename) matched against
+  `_synapse/triggers/*.md` definitions, with 500ms per-file debounce.
+- `TriggerScheduler` — 60-second interval cron tick, evaluates scheduled triggers.
+- `TriggerExecutor.executeTrigger()` — runs matched trigger against the configured model
+  (Claude via `inlineChat()` or local via `executeLocalProviderQuery()`), applies write modes
+  (report-only / full-replace / frontmatter-merge).
 
-- `src/editor/editorMenu.ts`
-- Primary packages: `@codemirror/state`, `@codemirror/view`, `obsidian`
+### MCP bridge — `src/mcpBridge.ts`
 
-Responsibilities:
+- `McpBridgeSession` — spawns stdio MCP server processes, negotiates JSON-RPC 2.0 handshake,
+  returns a flat `LocalTool[]` list for use in local-model ReAct loops.
+- Used by `TriggerExecutor` when a trigger runs against a local model and MCP tools are needed.
 
-- Add Synapse actions to editor and file context menus.
-- Trigger focused rewrite / transform actions against selected text.
+### Editor augmentation — `src/editor/editorMenu.ts`
 
-### Bots
+- Add Synapse actions to editor and file context menus (rewrite, proofread, structure, image
+  extraction, chat with Synapse, etc.).
+- Routes text actions through the `inline` feature agent, image actions through the `vision`
+  feature agent, both via `AgentService.inlineChat()`.
 
-- `src/bots/telegramBot.ts`
-- `src/bots/telegramApi.ts`
-- Primary packages: `@github/copilot-sdk` via the local wrapper, `obsidian`
+### Bots — `src/bots/telegramBot.ts`, `src/bots/telegramApi.ts`
 
-Responsibilities:
+- Expose Synapse conversations through Telegram long-polling.
+- Reuse the same agent/session model as the chat panel.
+- Allowlist of numeric user IDs; one session per chat/topic; `/new` resets.
 
-- Expose Sidekick conversations through Telegram.
-- Reuse the same agent/tool/session model outside the main sidebar UI.
+### Settings — `src/settings.ts`
 
-## 8. External systems Sidekick depends on beyond npm packages
+- Settings interface (`SynapseSettings`), defaults, secure field helpers, and the settings tab UI.
+- Groups: **Claude** (auth + CLI), **Feature Map & Agents** (feature→agent map, model bindings),
+  **Capabilities** (Initialize button, editor toggles), **Tools** (approval mode, MCP inputs),
+  **Bots** (Telegram), **Triggers** (list, enable/disable, last-fired).
 
-Some of the most important moving parts are not npm packages in `package.json`, but runtime systems the plugin expects to exist.
+---
 
-### Copilot CLI
+## 8. External systems Synapse depends on
 
-Sidekick can launch a local Copilot CLI binary or connect to a remote CLI server. The SDK is the library layer; the CLI is the execution backend. How Sidekick finds that binary — and how it can download a plugin-managed fallback when none is present — is covered by the runtime manager: see [`wiki/decisions/2026-06-14-copilot-cli-runtime-manager.md`](decisions/2026-06-14-copilot-cli-runtime-manager.md) for the *why* and [`specs/runtime-manager.md`](../specs/runtime-manager.md) for the *how*.
+### Claude CLI (`claude`)
+
+Synapse spawns the `claude` CLI as a subprocess on every query, managed by the Agent SDK. The
+CLI must be installed on the system (via `npm install -g @anthropic-ai/claude-code`, WinGet, or
+the Claude desktop app). Runtime-manager (`src/runtimeManager.ts`) resolves the binary; if none
+is found, a platform-specific installation Notice is shown.
+
+See [`decisions/2026-06-14-copilot-cli-runtime-manager.md`](decisions/2026-06-14-copilot-cli-runtime-manager.md)
+for the history of the resolution approach, and [`../specs/runtime-manager.md`](../specs/runtime-manager.md)
+for the current spec.
+
+### Local models (Ollama, Foundry Local, or any OpenAI-compatible endpoint)
+
+Configured in Settings under the local provider preset. Used by the trigger executor and the
+dynamic delegation MCP tool via `executeLocalProviderQuery()`. The MCP bridge adds tool-calling
+capability to local models via stdio MCP servers configured in `_synapse/.mcp.json`.
 
 ### MCP servers
 
-These are configured by the user in `sidekick/tools/mcp.json` and then mapped into SDK configuration. They extend the assistant with tools such as GitHub access or local commands.
+Configured by the user in `_synapse/.mcp.json`. The Claude Agent SDK discovers them natively for
+Claude sessions. The MCP bridge spawns them directly for local-model trigger sessions.
 
-### Vault-defined agents, skills, prompts, and triggers
+### Vault-defined agents, skills, and triggers (`_synapse/`)
 
-These are not code dependencies, but they are first-class runtime inputs. Much of Sidekick's behavior is intentionally data-driven from files inside the vault.
+These are not code dependencies, but first-class runtime inputs. The `_synapse/` folder is
+registered as an SDK local plugin on every session (`plugins: [{type: 'local', path: ...}]`),
+so the CLI discovers agents, skills, and `.mcp.json` natively. Triggers are parsed and executed
+by the plugin's own trigger system.
+
+---
 
 ## 9. Practical summary
 
-If you need the shortest accurate explanation of the package stack, it is this:
+If you need the shortest accurate explanation of the package stack:
 
-- `obsidian` gives Sidekick its host environment, UI primitives, vault access, and plugin lifecycle.
-- `@github/copilot-sdk` gives Sidekick its AI conversation, model, session, permission, and MCP integration layer.
-- `@codemirror/state` and `@codemirror/view` power the editor-specific ghost-text and inline editing features.
-- `esbuild`, `typescript`, and the ESLint packages are the development toolchain that builds and validates the plugin.
+- `obsidian` gives Synapse its host environment, UI primitives, vault access, and plugin lifecycle.
+- `@anthropic-ai/claude-agent-sdk` gives Synapse its Claude AI conversation, session, and MCP
+  integration layer. The SDK spawns the `claude` CLI per query.
+- `@codemirror/state` and `@codemirror/view` power the editor-specific inline editing features.
+- `esbuild`, `typescript`, and the ESLint packages are the development toolchain.
 
-Everything else in the repository is application code that composes those building blocks into a configurable AI assistant for Obsidian.
+Everything else in the repository is application code that composes those building blocks into
+a configurable, automating AI assistant for Obsidian.

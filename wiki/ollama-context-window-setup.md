@@ -1,14 +1,10 @@
-# Configuring Ollama context window for Sidekick
+# Configuring Ollama context window for Synapse
 
 ## The problem
 
-The GitHub Copilot CLI sends a system prompt and ~59 built-in tool definitions with every request, consuming approximately **4,000 tokens** before your message is even included. Ollama defaults to a 4,096-token context window (`num_ctx`), which leaves almost no room for actual conversation.
+The Claude CLI (spawned by `@anthropic-ai/claude-agent-sdk` under Synapse) sends a system prompt and built-in tool definitions with every request, consuming approximately **4,000 tokens** before your message is even included. Ollama defaults to a 4,096-token context window (`num_ctx`), which leaves almost no room for actual conversation.
 
-When the context is exhausted, Ollama returns an empty response (`finish_reason: length`), and the CLI retries by replaying that empty turn as `content: null`. Ollama rejects null content, producing the misleading error:
-
-```
-Error: 400 invalid message content type: <nil>
-```
+When the context is exhausted, Ollama returns an empty response or an error, causing the request to fail.
 
 The fix is to increase Ollama's context window so the CLI's baseline overhead fits comfortably alongside your conversation.
 
@@ -76,7 +72,7 @@ The right value depends on your model size and available VRAM. The table below u
 | **16384** | ~2-4 GB | Good default for general use |
 | 32768 | ~5-7 GB | Long sessions; monitor VRAM with `nvidia-smi` |
 
-**Do not go below 8192.** The Copilot CLI's system prompt + tool definitions need ~4,000 tokens as a baseline before any user content.
+**Do not go below 8192.** The CLI's system prompt + tool definitions need ~4,000 tokens as a baseline before any user content.
 
 For larger models (e.g. 27B+), reduce the context size accordingly since the model weights consume more VRAM.
 
@@ -100,22 +96,10 @@ sudo systemctl restart ollama
 
 ## Complementary: SDK-side compaction
 
-Sidekick also supports a **Context window (tokens)** setting in **Settings → Models** (for BYOK providers). This controls when the Copilot SDK compacts conversation history *before* sending to the provider. Set it to a value slightly below your Ollama context (e.g. 14000 for a 16384 context) so long conversations compact gracefully instead of hitting the hard limit.
+Synapse natively leverages the Claude Agent SDK's auto-compaction feature (Infinite Sessions), which automatically compacts the conversation history when context utilization reaches ~80%. You can also configure the context-window tier or enable/disable this feature under the model settings menu in the chat view.
 
 ## Troubleshooting
 
-**Still getting `invalid message content type: <nil>`?**
 - Verify the override took effect: `ps aux | grep '[l]lama-server' | grep -oE '\-c [0-9]+'` should show the new value.
 - Make sure you restarted the correct Ollama instance (the one in WSL, not the Windows tray app).
-- Start a **new chat** in Sidekick (click `+`) — existing sessions cache the old config.
-
-**Getting `exceed_context_size_error`?**
-- The request (system prompt + tools + conversation history) exceeds your `num_ctx`. Either increase the context size or enable SDK-side compaction via the **Context window (tokens)** setting.
-
-**How to check VRAM usage:**
-
-```bash
-nvidia-smi
-# or for continuous monitoring:
-watch -n 1 nvidia-smi
-```
+- Start a **new chat** in Synapse (click `+`) — existing sessions cache the old config.

@@ -1,6 +1,6 @@
-# Sidekick repository instructions
+# Synapse repository instructions
 
-This repository is the source for Sidekick, an Obsidian Community Plugin that brings GitHub Copilot and BYOK AI providers into Obsidian through a configurable sidebar, editor actions, triggers, search, and optional bot integrations.
+This repository is the source for Synapse, an Obsidian Community Plugin that embeds a Claude-native AI assistant (with support for agents, skills, MCP tool servers, and local models).
 
 ## Core expectations
 
@@ -12,18 +12,17 @@ This repository is the source for Sidekick, an Obsidian Community Plugin that br
 ## Architectural boundaries
 
 - Keep `src/main.ts` small and focused on plugin lifecycle, settings bootstrapping, view registration, and top-level command wiring.
-- Put Copilot SDK, CLI resolution, provider wiring, reconnect logic, and session bridge behavior in `src/copilot.ts` rather than scattering that logic across UI files.
-- Keep vault-local customization parsing in `src/configLoader.ts`. If the change affects agents, skills, prompts, triggers, or MCP configuration loading, update the parser and types deliberately.
-- Keep translation from Obsidian state into SDK session config, attachments, and MCP server mappings in `src/view/sessionConfig.ts`.
+- Put Claude Agent SDK interactions, CLI binary resolution, session bridge behavior, and environment configuration in `src/copilot.ts` (`AgentService`) and `src/runtimeManager.ts`.
+- Keep vault-local customization writers in `src/configWriter.ts`.
+- Keep translation from Obsidian state into SDK session config, attachments, and model details in `src/view/sessionConfig.ts`.
 - Keep persisted plugin settings and secret handling in `src/settings.ts`.
 - Prefer adding focused modules under `src/view/`, `src/modals/`, `src/editor/`, or `src/bots/` instead of growing monolithic files.
 
-## Sidekick customization model
+## Synapse customization model
 
-- Sidekick runtime customizations are vault-local and rooted at `settings.sidekickFolder`, which defaults to `sidekick/`.
-- Preserve the current layout and semantics unless the task is explicitly about changing them: `agents/*.agent.md`, `prompts/*.prompt.md`, `skills/<name>/SKILL.md`, `tools/mcp.json`, and `triggers/*.trigger.md`.
-- Do not imply that VS Code or GitHub Copilot customization files such as `.github/copilot-instructions.md`, `*.instructions.md`, `.prompt.md`, or `.agent.md` are automatically loaded by the plugin runtime. They are repository authoring aids unless the code explicitly imports or translates them.
-- When changing customization formats, keep backward compatibility in mind for existing frontmatter and JSON shapes.
+- Synapse runtime customizations are vault-local and rooted at the hardcoded `_synapse/` directory.
+- Preserve the layout and semantics of customization artifacts: `agents/*.md` (subagents), `skills/*/SKILL.md` (skills), and `.mcp.json` (MCP servers config).
+- Do not imply that VS Code or Claude customization files (such as `.github/instructions.md`) are automatically loaded by the plugin runtime. They are repository authoring aids unless the code explicitly imports or translates them.
 
 ## Settings, safety, and privacy
 
@@ -40,5 +39,5 @@ This repository is the source for Sidekick, an Obsidian Community Plugin that br
 
 ## Documentation expectations
 
-- Update `README.md` or the relevant docs file when a change affects setup, configuration, supported providers, customization behavior, or user workflows.
-- For documentation about customization, clearly distinguish between repository/editor customization files and Sidekick's own vault-local runtime configuration.
+- Update `README.md` or the relevant docs file when a change affects setup, configuration, supported models, customization behavior, or user workflows.
+- Clearly distinguish between repository/editor customization files and Synapse's own vault-local runtime configuration.

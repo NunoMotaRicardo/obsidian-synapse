@@ -1,18 +1,18 @@
-# Sidekick
+# Synapse
 
-![Obsidian Sidekick](./docs/images/banner.png)
+![Obsidian Synapse](./docs/images/banner.png)
 
-Your AI-powered second brain inside Obsidian. Chat with agents, run tools, search your vault with AI, and transform text — all without leaving your notes.
+Your Claude-native AI assistant inside Obsidian. Chat with agents, run tools, search your vault with AI, and transform text — all without leaving your notes.
 
-Claude Brain connects to Claude or your own AI provider and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, prompt templates, and an AI-powered editor.
+Synapse connects to Claude (via the Anthropic API or OAuth) or your own local AI provider (like Ollama) and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, and an AI-powered editor.
 
 ---
 
 ## Overview
 
-The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent, toggle skills and tools, then chat — responses stream in with full Markdown rendering and collapsible tool-call details.
+The Synapse panel sits in the right sidebar alongside your notes. Pick an agent, toggle skills and tools, then chat — responses stream in with full Markdown rendering and collapsible tool-call details.
 
-![Obsidian Sidekick Screenshot](./docs/images/screenshot.png)
+![Obsidian Synapse Screenshot](./docs/images/screenshot.png)
 
 **What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions and search all work from the same panel.
 
@@ -24,21 +24,20 @@ The Sidekick panel sits in the right sidebar alongside your notes. Pick an agent
 ## Quick start
 
 > [!IMPORTANT]
-> Sidekick 1.2.2+ requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) when using `@github/copilot-sdk@1.x`.
+> Synapse requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) and talks to the Claude CLI via `@anthropic-ai/claude-agent-sdk`.
 
 1. **Install** — Either:
-   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add `https://github.com/vieiraae/obsidian-claude-brain` as a beta plugin. BRAT handles downloads and updates automatically.
-   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](https://github.com/vieiraae/obsidian-claude-brain/releases/latest) into `<YourVault>/.obsidian/plugins/claude-brain/`. Then reload Obsidian and enable **Claude Brain** in **Settings → Community plugins**.
-2. **Pick a provider** — Open **Settings → Sidekick**. Use **GitHub (built-in)** with a Copilot subscription ([set up the CLI](#setting-up-the-copilot-cli)), or choose a [BYOK provider](#byok-providers) (OpenAI, Anthropic, Ollama, etc.). Click **Test** to verify. With Ollama or Microsoft Foundry Local you can work offline.
-3. **Initialize** — Under **Sidekick settings**, set a folder name (default: `sidekick`) and click **Initialize** to scaffold the config structure:
+   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add `https://github.com/NunoMotaRicardo/obsidian-synapse` as a beta plugin. BRAT handles downloads and updates automatically.
+   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the latest release into `<YourVault>/.obsidian/plugins/synapse/`. Then reload Obsidian and enable **Synapse** in **Settings → Community plugins**.
+2. **Configure API / CLI** — Open **Settings → Synapse**. Configure your **Anthropic API Key** or use **OAuth** (Claude Subscription), or configure a local model provider like **Ollama**.
+3. **Initialize** — Under **Synapse settings** (Capabilities tab), click **Initialize** to scaffold the config structure under the hardcoded `_synapse/` folder:
    ```
-   sidekick/
-     agents/    ← *.agent.md persona files
+   _synapse/
+     agents/    ← *.md agent/persona files
      skills/    ← subfolder per skill with SKILL.md
-     tools/     ← mcp.json server config
-     prompts/   ← *.prompt.md slash commands
+     .mcp.json  ← MCP server config
    ```
-4. **Open Sidekick** — Click the **brain** icon in the ribbon, or run **Open Sidekick** from the command palette.
+4. **Open Synapse** — Click the **brain** icon in the ribbon, or run **Open Synapse** from the command palette.
 
 You're ready. Start chatting, or read on to unlock every feature.
 
@@ -46,57 +45,21 @@ You're ready. Start chatting, or read on to unlock every feature.
 
 ## Table of contents
 
-- [Setting up the Copilot CLI](#setting-up-the-copilot-cli)
-- [The Sidekick panel](#the-sidekick-panel)
+- [The Synapse panel](#the-synapse-panel)
 - [Agents](#agents)
 - [Models](#models)
 - [Skills](#skills)
 - [MCP Tools (MCP servers)](#mcp-tools-mcp-servers)
 - [Browser use](#browser-use)
-- [CLI Tools](#cli-tools)
-- [Prompt templates](#prompt-templates)
 - [Bots](#bots)
 - [Inline edits](#inline-edits)
 - [Settings reference](#settings-reference)
-- [Using your vault with GitHub Copilot in VS Code or Copilot CLI](#using-your-vault-with-github-copilot-in-vs-code-or-copilot-cli)
+- [Using your vault with Claude / VS Code](#using-your-vault-with-claude--vs-code)
 - [Feedback](#feedback)
 
 ---
 
-## Setting up the Copilot CLI
-
-If you chose the **GitHub (built-in)** provider, Sidekick talks to GitHub Copilot through its CLI. If you have [GitHub Copilot in VS Code](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot), the CLI is already installed.
-
-**Check it works:**
-
-```bash
-copilot --version
-```
-
-If not found, look here:
-
-| OS | Typical path |
-|----|-------------|
-| **Windows** | `%LOCALAPPDATA%\Programs\copilot-cli\copilot.exe` or `%USERPROFILE%\.vscode\extensions\github.copilot-*\copilot\dist\` |
-| **Linux / macOS** | `~/.local/bin/copilot` or `~/.vscode/extensions/github.copilot-*/copilot/dist/` |
-
-**Authenticate** (if needed):
-
-```bash
-copilot auth login    # browser-based flow
-copilot auth status   # confirm you're logged in
-```
-
-**Configure in Sidekick** — Go to **Settings → Sidekick → GitHub Copilot Client**:
-
-- **Local CLI** — Set the path to the binary (leave blank if it's on `PATH`). Toggle **Use Logged-in User** or supply a **GitHub Token**.
-- **Remote CLI** — Enter the URL of a running CLI server and a **GitHub Token**.
-
-Click **Test**.
-
----
-
-## The Sidekick panel
+## The Synapse panel
 
 The panel lives in the right sidebar and has two tabs: **Chat** and **Search**.
 
@@ -148,17 +111,15 @@ Sessions are auto-named as `<Agent>: <first message>`.
 
 ## Agents
 
-Agents live in `sidekick/agents/` as `*.agent.md` files. Each one defines a persona with its own system prompt, preferred model, and access controls.
+Agents live in `_synapse/agents/` as `*.md` files. Each one defines a persona with its own system prompt, preferred model, and access controls.
 
-### Example: `grammar.agent.md`
+### Example: `grammar.md`
 
 ```yaml
 ---
 name: Grammar
 description: Helps users improve their writing
-model: Claude Sonnet 4.5
-tools:
-  - github
+model: sonnet
 skills:
   - ascii-art
 ---
@@ -173,56 +134,36 @@ You are the **Grammar Assistant** — help users write clearly and correctly.
 | `name` | Yes | Display name in the agent dropdown |
 | `description` | No | Short purpose description |
 | `model` | No | Preferred model (auto-selected when the agent is chosen) |
-| `tools` | No | Which MCP servers to enable (see below) |
-| `skills` | No | Which skills to enable (see below) |
+| `tools` | No | List of allowed tool names (omit = inherit all) |
+| `disallowedTools`| No | Explicitly blocked tool names |
+| `skills` | No | List of skill names to preload |
 
 The Markdown body is the agent's **system prompt**, sent as context with every message.
-
-### How `tools` and `skills` work
-
-| Frontmatter | Effect |
-|-------------|--------|
-| Property **omitted** | All tools/skills **enabled** |
-| Property **present but empty** (`tools:`) | All tools/skills **disabled** |
-| Property **lists specific items** | Only those items enabled |
-
-This lets you create focused agents. A writing agent with `tools:` (empty) has no tool access. A general-purpose agent with no `tools` property gets everything.
-
-You can always override the agent's defaults by toggling individual items in the toolbar menus.
 
 ---
 
 ## Models
 
-With GitHub Copilot, all built-in models are available out of the box — or bring your own API key to onboard models from OpenAI, Anthropic, Ollama, Microsoft Foundry, and other OpenAI-compatible providers.
+Synapse is built natively for Claude models (via the Anthropic API or OAuth). It also supports local models (e.g. Ollama, Microsoft Foundry Local, and other OpenAI-compatible local endpoints) as a free, offline alternative.
 
-### BYOK providers
+### Supported providers
 
-Use your own API key instead of (or alongside) GitHub Copilot. Go to **Settings → Sidekick → Models** and pick a provider:
+Configure providers under **Settings → Synapse → Models**:
 
-| Provider | Type | Default endpoint |
-|----------|------|-----------------|
-| **GitHub (built-in)** | — | Via Copilot CLI |
-| **OpenAI** | `openai` | `https://api.openai.com/v1` |
-| **Microsoft Foundry** | `azure` | Your Azure endpoint |
+| Provider | Preset | Default endpoint |
+|----------|--------|-----------------|
 | **Anthropic** | `anthropic` | `https://api.anthropic.com` |
-| **Ollama** | `openai` | `http://localhost:11434/v1` |
+| **Ollama** | `ollama` | `http://localhost:11434/v1` |
 | **Microsoft Foundry Local** | `openai` | Local Foundry model server |
 | **Other OpenAI-compatible** | `openai` | Any compatible endpoint |
-
-Fill in **Base URL**, **Model name** (e.g. `gpt-5.4`, `claude-opus-4.6`, `llama3.2`), and either an **API key** or **Bearer token**. Choose the **Wire API** format (`Completions` or `Responses`). Click **Test**.
-
-The model name appears in both the chat and inline operations model dropdowns.
-
-> **Note:** Streaming is automatically disabled for **Microsoft Foundry Local**.
 
 ---
 
 ## Skills
 
-Skills are subfolders inside `sidekick/skills/`, each containing a `SKILL.md` file that provides domain-specific knowledge to the AI.
+Skills are subfolders inside `_synapse/skills/`, each containing a `SKILL.md` file that provides domain-specific knowledge to the AI.
 
-### Example: `sidekick/skills/ascii-art/SKILL.md`
+### Example: `_synapse/skills/ascii-art/SKILL.md`
 
 ```yaml
 ---
@@ -237,23 +178,17 @@ Generate ASCII art representations of text using block-style Unicode characters.
 
 Toggle skills on/off from the **wand** icon in the toolbar.
 
-Browse and download additional community skills from [skills.sh](https://skills.sh). Just drop them into your `sidekick/skills/` folder.
-
 ---
 
 ## MCP Tools (MCP servers)
 
-Configure external tool servers in `sidekick/tools/mcp.json`. Sidekick supports **stdio** (local process) and **HTTP/SSE** (remote) MCP servers.
+Configure external tool servers in `_synapse/.mcp.json`. Synapse discovers and spawns stdio and SSE-based MCP servers.
 
-### Example: `mcp.json`
+### Example: `.mcp.json`
 
 ```json
 {
-  "servers": {
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/"
-    },
+  "mcpServers": {
     "workiq": {
       "command": "npx",
       "args": ["-y", "@microsoft/workiq", "mcp"]
@@ -267,124 +202,18 @@ Configure external tool servers in `sidekick/tools/mcp.json`. Sidekick supports 
 }
 ```
 
-- **`github`** — GitHub Copilot's built-in MCP endpoint.
-- **`workiq`** — [Microsoft Work IQ](https://github.com/microsoft/work-iq-mcp): query Microsoft 365 data (emails, meetings, documents, Teams) with natural language. Requires Node.js 18+ and admin consent ([admin guide](https://github.com/microsoft/work-iq-mcp/blob/main/ADMIN-INSTRUCTIONS.md)).
-
-The format also accepts `"mcpServers"` as the top-level key. Toggle servers from the **plug** icon.
-
-### Keeping secrets out of `mcp.json`
-
-Use **input variables** to avoid hardcoding API keys. Define an `"inputs"` array and reference values with `${input:variable-id}`:
-
-```json
-{
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "api-key",
-      "description": "API key for my tool server",
-      "password": true
-    }
-  ],
-  "servers": {
-    "my-tool": {
-      "command": "node",
-      "args": ["./my-tool/index.js"],
-      "env": { "API_KEY": "${input:api-key}" }
-    }
-  }
-}
-```
-
-This follows the [VS Code MCP input variable](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration#_input-variables-for-sensitive-data) format.
-
-| Property | Required | Description |
-|----------|----------|-------------|
-| `type` | Yes | Input prompt type (e.g. `"promptString"`) |
-| `id` | Yes | Unique ID referenced as `${input:id}` |
-| `description` | Yes | Prompt text shown to the user |
-| `password` | No | Mask input and store securely (`false` by default) |
-
-Sidekick prompts for missing values at load time. Manage stored values in **Settings → Sidekick → MCP input variables**. Password values are kept in Obsidian's local storage and never written to `data.json`.
-
-### Additional MCP tools
-
-The [mcp-sidekick](https://github.com/vieiraae/mcp-sidekick) repository maintains ready-to-use MCP servers for Spotify, Microsoft To Do, Weather, and more (with additional tools planned).
-
-To use them:
-
-Add the servers to your `sidekick/tools/mcp.json`:
-
-```json
-{
-	"servers": {
-		"spotify": {
-			"type": "stdio",
-			"command": "npx",
-			"args": ["-y", "@mcp-sidekick/spotify"],
-			"env": {
-				"SPOTIFY_CLIENT_ID": "${input:spotify-client-id}",
-				"SPOTIFY_CLIENT_SECRET": "${input:spotify-client-secret}",
-				"SPOTIFY_REDIRECT_URI": "http://127.0.0.1:3000/callback"
-			}
-		},
-		"microsoft-todo": {
-			"type": "stdio",
-			"command": "npx",
-			"args": ["-y", "@mcp-sidekick/microsoft-todo"],
-			"env": {
-				"MICROSOFT_TODO_CLIENT_ID": "${input:microsoft-todo-client-id}",
-				"MICROSOFT_TODO_CLIENT_SECRET": "${input:microsoft-todo-client-secret}",
-				"MICROSOFT_TODO_REDIRECT_URI": "http://localhost:3000/callback"
-			}
-		},
-		"weather": {
-			"type": "stdio",
-			"command": "npx",
-			"args": ["-y", "@mcp-sidekick/weather"]
-		}
-	},
-	"inputs": [
-		{
-		"type": "promptString",
-		"id": "spotify-client-id",
-		"description": "Spotify Client ID",
-		"password": true
-		},
-		{
-		"type": "promptString",
-		"id": "spotify-client-secret",
-		"description": "Spotify Client Secret",
-		"password": true
-		},
-		{
-		"type": "promptString",
-		"id": "microsoft-todo-client-id",
-		"description": "Microsoft To Do Client ID",
-		"password": true
-		},
-		{
-		"type": "promptString",
-		"id": "microsoft-todo-client-secret",
-		"description": "Microsoft To Do Client Secret",
-		"password": true
-		}
-	]	
-}
-```
-
 ### Tool approval
 
-In **Settings → Sidekick → Tools approval**:
+In **Settings → Synapse → Tools approval**:
 
 - **Allow** — Tool calls run automatically.
-- **Ask** — Confirm each tool call in a modal.
+- **Ask** — Confirm each tool call in a modal before execution.
 
 ---
 
 ## Browser use
 
-Give Sidekick control of a real browser — navigate pages, click elements, fill forms, take screenshots, and extract content — all driven by AI through the Playwright MCP server.
+Give Synapse control of a real browser — navigate pages, click elements, fill forms, take screenshots, and extract content — all driven by AI through the Playwright MCP server.
 
 ### 1. Install the browser extension
 
@@ -392,11 +221,11 @@ Install the [Playwright MCP Bridge](https://chromewebstore.google.com/detail/pla
 
 ### 2. Add the Playwright MCP server
 
-In `sidekick/tools/mcp.json`, add the `playwright-extension` server:
+In `_synapse/.mcp.json`, add the `playwright-extension` server:
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "playwright-extension": {
       "command": "npx",
       "args": ["@playwright/mcp@latest", "--extension"]
@@ -405,122 +234,34 @@ In `sidekick/tools/mcp.json`, add the `playwright-extension` server:
 }
 ```
 
-By default, Playwright connects to Chrome. To use a different browser, set the `PLAYWRIGHT_MCP_BROWSER` environment variable:
-
-```json
-{
-  "servers": {
-    "playwright-extension": {
-      "command": "npx",
-      "args": ["@playwright/mcp@latest", "--extension"],
-      "env": { "PLAYWRIGHT_MCP_BROWSER": "msedge" }
-    }
-  }
-}
-```
-
-Supported values: `chrome` (default), `msedge`.
-
-### 3. Use it
-
-Open the browser with the extension active, then ask Sidekick to browse, search, or interact with web pages. The AI will use the Playwright tools to control the browser on your behalf.
-
----
-
-## CLI Tools
-
-Sidekick can invoke command-line tools directly from the chat — any CLI available on your system can be called by the AI as part of a conversation. This is useful for automating workflows that involve external services or local utilities.
-
-### Google Workspace CLI
-
-The [Google Workspace CLI](https://github.com/googleworkspace/cli) provides access to Drive, Gmail, Calendar, and every Workspace API from the command line. Once installed, the AI can search your email, create calendar events, manage Drive files, and more — all through natural language.
-
-To get the most out of it, add the companion [Google Workspace CLI skills](https://github.com/googleworkspace/cli/tree/main/skills) to your `sidekick/skills/` folder. These skills teach the AI how to use the CLI effectively, including authentication, available commands, and best practices.
-
-### Obsidian CLI
-
-The [Obsidian CLI](https://help.obsidian.md/cli) can also be invoked from the chat — an inception effect where Sidekick drives Obsidian itself. This is useful for searching tags, querying properties, listing tasks, and performing vault operations that go beyond what the AI can do with file access alone.
-
-You can add the [`obsidian-cli` skill](https://github.com/kepano/obsidian-skills) to your `sidekick/skills/` folder to enable full command reference.
-
----
-
-## Prompt templates
-
-Prompt templates are `*.prompt.md` files in `sidekick/prompts/`. They act as reusable slash commands.
-
-### Example: `en-to-pt.prompt.md`
-
-```yaml
----
-agent: Grammar
-description: Translate English → Portuguese
----
-Translate the provided text from English to Portuguese.
-```
-
-### How to use
-
-1. Type `/` in the chat input.
-2. Filter and select a prompt with arrow keys + **Enter** or **Tab**.
-3. The prompt content is prepended to your message. If it specifies an `agent`, that agent is auto-selected.
-
-| Frontmatter | Required | Description |
-|-------------|----------|-------------|
-| `agent` | No | Auto-select this agent |
-| `description` | No | Shown in the dropdown for context |
-
 ---
 
 ## Bots
 
-Connect external messaging platforms to Sidekick so you can chat with your agents from anywhere — not just inside Obsidian. Each bot type runs as a background service, forwarding messages to the AI and sending replies back.
+Connect external messaging platforms to Synapse so you can chat with your agents from anywhere — not just inside Obsidian.
 
 ### Telegram
 
-Turn a Telegram bot into a front-end for your Sidekick agents. Messages you send in Telegram are processed by Sidekick using your configured agent, model, skills, and MCP tools — then the response is sent back to the chat.
+Turn a Telegram bot into a front-end for your Synapse agents. Messages you send in Telegram are processed by Synapse using your configured agent, model, skills, and MCP tools — then the response is sent back to the chat.
 
 #### 1. Create a Telegram bot
 
 1. Open Telegram and message [@BotFather](https://t.me/BotFather).
-2. Send `/newbot` and follow the prompts to choose a name and username.
-3. BotFather gives you a **bot token** — copy it.
+2. Send `/newbot` and follow the prompts.
+3. Copy the **bot token**.
 
-#### 2. Configure in Sidekick
+#### 2. Configure in Synapse
 
-Go to **Settings → Sidekick → Bots**:
+Go to **Settings → Synapse → Bots**:
 
 | Setting | Description |
 |---------|-------------|
-| **Bot ID** | Your bot's username (e.g. `myassistant_bot`) — informational only |
+| **Bot ID** | Your bot's username — informational only |
 | **Bot token** | The token from BotFather (stored securely) |
-| **Allowed users** | Comma-separated Telegram user IDs (required — see below) |
+| **Allowed users** | Comma-separated Telegram user IDs (required) |
 | **Default agent** | Which agent responds to incoming messages |
 
-#### Finding your Telegram user ID
-
-The **Allowed users** field requires numeric Telegram user IDs (not usernames). To find yours:
-
-1. Message [@userinfobot](https://t.me/userinfobot) on Telegram — it replies with your user ID.
-2. Alternatively, message [@RawDataBot](https://t.me/RawDataBot) and look for `"id"` in the `"from"` section.
-
-Add each authorized user’s ID separated by commas, e.g. `123456789, 987654321`. The bot silently ignores messages from anyone not in the list.
-
-#### 3. Connect
-
-Click **Connect** next to the Telegram heading. The status updates to show your bot's username. Click **Disconnect** to stop.
-
-#### How it works
-
-- Sidekick uses **long-polling** to receive messages — no webhooks or public URLs needed.
-- Each Telegram chat (or forum topic) gets its own conversation session with full history.
-- File attachments (photos, documents, audio, video) are downloaded and passed to the AI.
-- The bot supports `/new` to reset the session and `/help` for usage info.
-- All configured MCP tools, skills, and the default agent's system prompt are available.
-- MCP input variables (API keys, etc.) are resolved from your stored values — configure them in **Settings → Sidekick → MCP input variables** before connecting.
-- Use the Sessions App from [VS Code Insiders](https://code.visualstudio.com/insiders/) to review conversation history and see which tools were invoked.
-
-> **Note:** The bot runs only while Obsidian is open and the connection is active.
+The bot silently ignores messages from anyone not in the allowed list. Use the `/new` command in Telegram to reset the session.
 
 ---
 
@@ -528,8 +269,9 @@ Click **Connect** next to the Telegram heading. The status updates to show your 
 
 ### Editor context menu
 
-Right-click in any note → **Sidekick** to access inline AI actions. The menu adapts based on whether you have text selected.
-If you prefer not to see the inline Sidekick icon beside the active line, disable **Show inline Sidekick icon** in **Settings → Sidekick → Capabilities**.
+Right-click in any note → **Synapse** to access inline AI actions. The menu adapts based on whether you have text selected.
+
+If you prefer not to see the inline Synapse icon beside the active line, disable **Show inline Synapse icon** in **Settings → Synapse → Capabilities**.
 
 #### With text selected
 
@@ -540,13 +282,13 @@ If you prefer not to see the inline Sidekick icon beside the active line, disabl
 | **Proofread** | Fixes grammar, spelling, and punctuation |
 | **Use synonyms** | Swaps words for variety |
 | **Minor revise** | Polishes without changing meaning |
-| **Major revise** | Significantly reworks structure and flow |
+| **Major revise** | Reworks structure and flow |
 | **Describe** | Explains what the text conveys |
 | **Answer** | Responds to a question in the text |
 | **Explain** | Breaks down in simple terms |
 | **Expand** | Adds detail and depth |
 | **Summarize** | Creates a concise summary |
-| **Chat with sidekick** | Opens chat with the selection as context |
+| **Chat with Synapse** | Opens chat with the selection as context |
 
 Quick actions **replace the selected text** in-place using the **Inline operations model**.
 
@@ -556,114 +298,44 @@ Quick actions **replace the selected text** in-place using the **Inline operatio
 |--------|-------------|
 | **Edit the note** | Opens the Edit modal for the whole note |
 | **Structure and refine** | Restructures and improves the entire note |
-| **Chat with sidekick** | Opens the chat panel |
-
----
+| **Chat with Synapse** | Opens the chat panel |
 
 ### File and folder context menu
 
-Right-click a file or folder in the vault explorer → **Sidekick**.
+Right-click a file or folder in the vault explorer → **Synapse**.
 
-**Markdown files:** Edit the note, Structure and refine, Chat with sidekick.
-
-**Folders:** New note (AI-generated), New summary note (summarizes all notes in the folder), Chat with sidekick.
-
-**Images:** Insert extracted content below, Replace with extracted content, or Convert to mermaid diagram below — uses AI to pull text from images or generate a Mermaid diagram representing the image.
-
----
-
-### Edit modal
-
-A dedicated modal for fine-grained text transformation. Open it via **Edit** in the context menu.
-
-| Control | Options |
-|---------|---------|
-| **Task** | Rewrite, Proofread, Use synonyms, Minor revise, Major revise, etc. |
-| **Tone** | Professional, Casual, Enthusiastic, Informational, Confident, Technical, Funny |
-| **Format** | Single paragraph, List, Table, Headings, Code blocks, JSON, and more |
-| **Length** | Slider — shorter to longer |
-| **Choices** | How many alternatives to generate |
-| **Edit prompt** | Free-text instruction to guide the transformation |
-
-Each control can be toggled on/off individually. Preview alternatives and pick the one you want.
-
----
-
-### Vault scope
-
-Limit what the AI can see. Click the **folder** icon in the chat input bar to open the vault scope modal, then select specific files and folders. Only scoped content will be included as context — useful for focusing the AI on a project or topic.
+- **Markdown files:** Edit the note, Structure and refine, Chat with Synapse.
+- **Folders:** New note (AI-generated), New summary note (summarizes all notes in the folder), Chat with Synapse.
+- **Images:** Insert extracted content below, Replace with extracted content, or Convert to mermaid diagram below — uses AI to pull text from images or generate a Mermaid diagram representing the image.
 
 ---
 
 ## Settings reference
 
-**Settings → Sidekick**
-
-### GitHub Copilot Client
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Type** | Local CLI | `Local CLI` or `Remote CLI` |
-| **Path** | *(empty)* | Copilot CLI binary path. Blank = use `PATH`. |
-| **URL** | *(empty)* | CLI server URL (Remote mode) |
-| **Use Logged-in User** | On | Use OS-level GitHub auth (Local mode) |
-| **GitHub Token** | *(empty)* | PAT for manual auth |
+**Settings → Synapse**
 
 ### Models
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Provider** | GitHub (built-in) | GitHub, OpenAI, Microsoft Foundry, Anthropic, Ollama, Foundry Local, or Other |
-| **Base URL** | *(per provider)* | API endpoint |
-| **Model name** | *(empty)* | Model ID (e.g. `gpt-4o`, `claude-sonnet-4`) |
-| **API key** | *(empty)* | `x-api-key` header |
-| **Bearer token** | *(empty)* | `Authorization` header |
-| **Wire API** | Completions | `Completions` or `Responses` |
+| **Provider** | Anthropic | Anthropic, Ollama, MS Foundry Local, or Other |
+| **Model name** | *(empty)* | Model ID (e.g. `claude-3-5-sonnet-latest`, `llama3`) |
+| **API key / Token** | *(empty)* | Credentials for the chosen provider |
 
-### Sidekick settings
+### Synapse settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Inline operations model** | Default | Model for context-menu actions |
-| **Sidekick folder** | `sidekick` | Root folder for agents, skills, tools, and prompts |
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
-| **Search agent** | *(empty)* | Default agent for the Search tab |
-
-### Bots
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Telegram → Bot ID** | *(empty)* | Bot username (informational) |
-| **Telegram → Bot token** | *(empty)* | BotFather token (stored securely) |
-| **Telegram → Allowed users** | *(empty)* | Comma-separated user IDs (required) |
-| **Telegram → Default agent** | *(none)* | Agent used for bot responses |
-| **Telegram → Connect / Disconnect** | Disconnected | Start or stop the Telegram bot |
 
 ---
 
-### Folder structure overview
+## Using your vault with Claude / VS Code
 
-```
-<YourVault>/
-  sidekick/
-    agents/
-      grammar.agent.md
-    skills/
-      ascii-art/
-        SKILL.md
-    tools/
-      mcp.json
-    prompts/
-      en-to-pt.prompt.md
-```
-
----
-
-## Using your vault with GitHub Copilot in VS Code or Copilot CLI
-
-Your Sidekick agents, skills, prompts, and tools can also work with GitHub Copilot in VS Code (or the Copilot CLI). The trick is creating a `.github` symbolic link that points to your `sidekick` folder — Copilot automatically picks up instructions, agents, and MCP config from `.github/`.
+Your Synapse agents, skills, and tools can also work with Claude CLI or VS Code. Simply create a `.github` symbolic link pointing to your `_synapse` folder — developer tools automatically pick up instructions, agents, and MCP configurations from `.github/`.
 
 ### Create the symlinks
 
@@ -672,39 +344,17 @@ Open a terminal at your vault root and run:
 **Windows (PowerShell — run as Administrator):**
 
 ```powershell
-New-Item -ItemType SymbolicLink -Path ".github" -Target "sidekick"
-New-Item -ItemType SymbolicLink -Path ".vscode" -Target "sidekick\tools"
-```
-
-**Windows (Command Prompt — run as Administrator):**
-
-```cmd
-mklink /D .github sidekick
-mklink /D .vscode sidekick\tools
+New-Item -ItemType SymbolicLink -Path ".github" -Target "_synapse"
 ```
 
 **macOS / Linux:**
 
 ```bash
-ln -s sidekick .github
-ln -s sidekick/tools .vscode
+ln -s _synapse .github
 ```
-
-### What this enables
-
-With the symlinks in place, opening your vault folder in VS Code or GitHub Copilot CLI gives Copilot access to:
-
-- **Agents** (`sidekick/agents/*.agent.md`) — available as Copilot chat participants
-- **Skills** — referenced by agents as instruction files
-- **MCP servers** (`sidekick/tools/mcp.json`) — Copilot discovers and uses them automatically
-- **Prompts** (`sidekick/prompts/*.prompt.md`) — usable as reusable prompt files
-
-This means you can author your agents and tools once in Sidekick and use them seamlessly in both Obsidian, VS Code and GitHub Copilot CLI.
 
 ---
 
 ## Feedback
 
-Found a bug or missing a feature? [Open an issue](https://github.com/vieiraae/obsidian-claude-brain/issues) — all feedback is welcome. If you find Sidekick useful, [give the repo a star](https://github.com/vieiraae/obsidian-claude-brain) — it helps others discover it.
-
-![Obsidian Sidekick](./docs/images/bottom-banner.png)
+Found a bug or missing a feature? [Open an issue](https://github.com/NunoMotaRicardo/obsidian-synapse/issues) — all feedback is welcome.

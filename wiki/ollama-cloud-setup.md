@@ -1,8 +1,8 @@
-# Using Ollama Cloud Models with Sidekick
+# Using Ollama Cloud Models with Synapse
 
 Ollama offers **Cloud models**, which allow you to run large, high-performance models (such as `deepseek-v3.1:671b-cloud` or `gpt-oss:120b-cloud`) hosted on Ollama's datacenter-grade hardware. 
 
-Instead of adding a new preset or direct cloud API integration to the plugin, Sidekick leverages your local Ollama daemon as a gateway. This means you can use both local and cloud-hosted models seamlessly without changing your plugin configuration or managing raw API keys in your settings.
+Instead of adding a new preset or direct cloud API integration to the plugin, Synapse leverages your local Ollama daemon as a gateway. This means you can use both local and cloud-hosted models seamlessly without changing your plugin configuration or managing raw API keys in your settings.
 
 ---
 
@@ -44,12 +44,12 @@ ollama list
 
 You should see your cloud model (e.g., `deepseek-v3.1:671b-cloud`) in the list.
 
-### 4. Configure Sidekick
-1. Open Obsidian and go to **Settings** → **Sidekick**.
+### 4. Configure Synapse
+1. Open Obsidian and go to **Settings** → **Synapse**.
 2. Go to the **Models** tab.
 3. Select **Ollama** as your **Provider**.
 4. Keep the default **Base URL** (`http://localhost:11434/v1`).
-5. Click **Test** to fetch your model list. Sidekick will automatically detect the cloud model from your local daemon.
+5. Click **Test** to fetch your model list. Synapse will automatically detect the cloud model from your local daemon.
 6. In the **Model name** input field, select or type the cloud model name exactly as it appeared in `ollama list` (e.g., `deepseek-v3.1:671b-cloud`).
 7. Save settings.
 
