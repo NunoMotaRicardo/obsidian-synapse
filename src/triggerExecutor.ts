@@ -6,11 +6,11 @@
  * triggers, issue #50).
  */
 
-import {App, normalizePath} from 'obsidian';
+import {App, TFile, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
 import type {TriggerConfig} from './types';
 import {SYNAPSE_FOLDER} from './settings';
-import {parseFrontmatter} from './configWriter';
+import {parseFrontmatter, modifyArtifact} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
 
 // ---------------------------------------------------------------------------
@@ -66,8 +66,12 @@ async function ensureReportsFolder(app: App): Promise<void> {
  * Report path: `_synapse/reports/<trigger-name>-YYYY-MM-DD.md`
  *
  * If the file does not yet exist for today it is created with the
- * `# <name> — YYYY-MM-DD` heading.  If it already exists the result
+ * `# <name> — YYYY-MM-DD` heading. If it already exists the result
  * is appended separated by a blank line.
+ *
+ * Uses vault.read() + vault.modify() (not adapter.read/write) so the
+ * Obsidian cache stays consistent and concurrent appends go through
+ * Obsidian's internal file queue.
  */
 async function appendToReport(
 	app: App,
@@ -87,8 +91,12 @@ async function appendToReport(
 	if (!exists) {
 		await app.vault.create(fileName, `${heading}\n\n${block}\n`);
 	} else {
-		const current = await app.vault.adapter.read(fileName);
-		await app.vault.adapter.write(fileName, `${current}\n${block}\n`);
+		// FIX (BLOCKING 2): use vault.read() + vault.modify() instead of
+		// adapter.read/write to go through Obsidian's cache and avoid
+		// concurrent-write clobbering.
+		const tfile = app.vault.getAbstractFileByPath(fileName) as TFile;
+		const current = await app.vault.read(tfile);
+		await app.vault.modify(tfile, `${current}\n${block}\n`);
 	}
 }
 
@@ -115,8 +123,8 @@ async function executeWithLocalModel(
 	let fileContent = '';
 	try {
 		const file = plugin.app.vault.getAbstractFileByPath(filePath);
-		if (file && 'vault' in file) {
-			fileContent = await plugin.app.vault.read(file as import('obsidian').TFile);
+		if (file instanceof TFile) {
+			fileContent = await plugin.app.vault.read(file);
 		}
 	} catch {
 		// File may not exist (e.g. delete events) — proceed without content
@@ -183,10 +191,16 @@ async function applyWriteMode(
 	const app = plugin.app;
 
 	if (trigger.write === true) {
+		// FIX (BLOCKING 1): guard against empty model response to avoid wiping the file.
+		if (!result) {
+			console.warn(`[synapse] Trigger "${trigger.name}": model returned empty content, skipping write-back`);
+			await appendToReport(app, trigger.name, '(empty response — write skipped)');
+			return;
+		}
 		// Full write: replace file content
 		const file = app.vault.getAbstractFileByPath(normalizePath(filePath));
-		if (file && 'vault' in file) {
-			await app.vault.modify(file as import('obsidian').TFile, result);
+		if (file instanceof TFile) {
+			await app.vault.modify(file, result);
 		} else {
 			// File doesn't exist (e.g. it was deleted) — fall back to report
 			console.warn(`[synapse] Trigger "${trigger.name}": file not found for write-back, appending to report instead`);
@@ -196,53 +210,23 @@ async function applyWriteMode(
 	}
 
 	if (trigger.write === 'frontmatter') {
-		// Frontmatter merge: parse response as YAML, merge into file frontmatter
+		// FIX (BLOCKING 3 + 4): parse response via parseFrontmatter (fence the response
+		// so lists and scalars are handled correctly) and write back via modifyArtifact
+		// (which uses serializeFmField to quote values containing colons).
 		const file = app.vault.getAbstractFileByPath(normalizePath(filePath));
-		if (!file || !('vault' in file)) {
+		if (!(file instanceof TFile)) {
 			console.warn(`[synapse] Trigger "${trigger.name}": file not found for frontmatter merge, appending to report instead`);
 			await appendToReport(app, trigger.name, result);
 			return;
 		}
 
-		const tfile = file as import('obsidian').TFile;
-		const existing = await app.vault.read(tfile);
-		const {meta: existingMeta, body} = parseFrontmatter(existing);
+		// Wrap the model's response in a frontmatter fence so parseFrontmatter
+		// correctly handles scalars, quoted strings, and list values.
+		const {meta: newMeta} = parseFrontmatter(`---\n${result}\n---\n`);
 
-		// Parse response as simple YAML key: value pairs
-		const newMeta: Record<string, string | string[]> = {};
-		for (const line of result.split('\n')) {
-			const idx = line.indexOf(':');
-			if (idx > 0) {
-				const k = line.slice(0, idx).trim();
-				let v = line.slice(idx + 1).trim();
-				// Strip surrounding quotes
-				if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-					v = v.slice(1, -1);
-				}
-				if (k) newMeta[k] = v;
-			}
-		}
-
-		const mergedMeta = {...existingMeta, ...newMeta};
-
-		// Reconstruct frontmatter block
-		const fmLines: string[] = [];
-		for (const [k, v] of Object.entries(mergedMeta)) {
-			if (Array.isArray(v)) {
-				fmLines.push(`${k}:`);
-				for (const item of v) {
-					fmLines.push(`  - ${item}`);
-				}
-			} else {
-				fmLines.push(`${k}: ${v}`);
-			}
-		}
-
-		const newContent = fmLines.length > 0
-			? `---\n${fmLines.join('\n')}\n---\n${body}`
-			: body;
-
-		await app.vault.modify(tfile, newContent);
+		// modifyArtifact merges newMeta into existing frontmatter and serializes
+		// values via serializeFmField (quotes values containing colons).
+		await modifyArtifact(app, normalizePath(filePath), newMeta as Record<string, string | string[] | boolean | undefined>);
 		return;
 	}
 
