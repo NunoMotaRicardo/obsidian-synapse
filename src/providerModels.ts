@@ -209,7 +209,7 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 }
 
 export type LocalQueryResult =
-	| {ok: true; content: string}
+	| {ok: true; content: string; truncated?: boolean}
 	| {ok: false; error: string};
 
 export function isLocalBackendConfigured(options?: ProviderConfigOptions): boolean {
@@ -288,6 +288,7 @@ export async function executeLocalProviderQuery(
 	let turn = 0;
 	const maxTurns = params.maxTurns ?? 5;
 	let latestContent = '';
+	let lastNonEmptyContent = '';
 
 	try {
 		while (turn < maxTurns) {
@@ -377,6 +378,9 @@ export async function executeLocalProviderQuery(
 			}
 
 			latestContent = responseMessage.content || '';
+			if (latestContent) {
+				lastNonEmptyContent = latestContent;
+			}
 
 			if (!toolCalls || toolCalls.length === 0) {
 				return {ok: true, content: latestContent};
@@ -398,7 +402,7 @@ export async function executeLocalProviderQuery(
 					try {
 						args = JSON.parse(rawArgs) as Record<string, unknown>;
 					} catch (e) {
-						console.error(`Failed to parse arguments for tool ${toolName}:`, e);
+						console.error(`Synapse: failed to parse arguments for tool ${toolName}:`, e);
 					}
 				} else if (typeof rawArgs === 'object' && rawArgs !== null) {
 					args = rawArgs as Record<string, unknown>;
@@ -430,7 +434,10 @@ export async function executeLocalProviderQuery(
 			turn++;
 		}
 
-		return {ok: true, content: latestContent};
+		// maxTurns exhausted without a final no-tool-call response: surface that the
+		// content is truncated, falling back to the last non-empty assistant content
+		// if the final turn was tool-calls-only.
+		return {ok: true, content: latestContent || lastNonEmptyContent, truncated: true};
 	} catch (e) {
 		return {ok: false, error: `Local query failed: ${String(e)}`};
 	}

@@ -114,11 +114,18 @@ async function executeWithLocalModel(
 	plugin: SynapsePlugin,
 	prompt: string,
 	filePath: string,
+	modelId?: string,
 ): Promise<string> {
 	const providerConfig = plugin.copilot?.getProviderConfig();
 	if (!providerConfig) {
 		throw new Error('Local provider config is not available.');
 	}
+
+	// Only equip the model with vault tools if it's known to support tool calling.
+	// Models with no capability info (not found / undetermined) default to allowed,
+	// since most OpenAI-compatible backends don't expose a capability list at all.
+	const modelInfo = modelId ? plugin.copilot?.getModels().find(m => m.id === modelId) : undefined;
+	const supportsTools = modelInfo?.supportsTools !== false;
 
 	// Read file content (best-effort: skip if file doesn't exist, e.g. delete events)
 	let fileContent = '';
@@ -137,13 +144,15 @@ async function executeWithLocalModel(
 
 	const res = await executeLocalProviderQuery(providerConfig, {
 		prompt: fullPrompt,
-		tools: vaultTools,
-		app: plugin.app,
+		...(supportsTools ? {tools: vaultTools, app: plugin.app} : {}),
 	});
 	if (!res.ok) {
 		throw new Error(res.error);
 	}
-	return res.content ?? '';
+	const content = res.content ?? '';
+	return res.truncated
+		? `${content}\n\n_(Synapse: tool-calling loop reached the turn limit before the model finished.)_`
+		: content;
 }
 
 /**
@@ -268,7 +277,7 @@ export async function executeTrigger(
 			plugin.copilot?.isLocalModel(trigger.model) === true;
 
 		if (useLocalModel) {
-			result = await executeWithLocalModel(plugin, promptBody, filePath);
+			result = await executeWithLocalModel(plugin, promptBody, filePath, trigger.model);
 		} else {
 			result = await executeWithClaude(plugin, trigger, promptBody);
 		}
