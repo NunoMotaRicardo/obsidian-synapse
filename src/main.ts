@@ -8,7 +8,7 @@ import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
-import {TriggerWatcher} from './triggers';
+import {TriggerWatcher, TriggerScheduler} from './triggers';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -19,6 +19,7 @@ export default class SynapsePlugin extends Plugin {
 	copilot: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 	triggerWatcher: TriggerWatcher | null = null;
+	triggerScheduler: TriggerScheduler | null = null;
 
 	async onload() {
 		// Register custom Synapse icon in Obsidian's global icon registry
@@ -185,6 +186,14 @@ export default class SynapsePlugin extends Plugin {
 		} catch (e) {
 			console.error('Synapse: failed to start trigger watcher', e);
 		}
+
+		// Start trigger scheduler (cron-based scheduling — independent of copilot)
+		try {
+			this.triggerScheduler = new TriggerScheduler(this);
+			await this.triggerScheduler.start();
+		} catch (e) {
+			console.error('Synapse: failed to start trigger scheduler', e);
+		}
 	}
 
 	async initCopilot(): Promise<void> {
@@ -275,6 +284,7 @@ export default class SynapsePlugin extends Plugin {
 		if (this.triggerWatcher) {
 			this.triggerWatcher.stop();
 		}
+		this.triggerScheduler = null;
 		if (this.copilot) {
 			void this.copilot.stop();
 		}

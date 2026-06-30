@@ -114,6 +114,14 @@ and reloads trigger configs with a 1-second debounce.
 ### Current status
 
 Type definitions and parser/writer are implemented (issue #48). Event watcher is
-implemented (issue #49) — detects vault events and matches triggers. Trigger execution
-(the agent/model invocation that runs the matched trigger's prompt) is tracked in
-issue #51.
+implemented (issue #49) — detects vault events and matches triggers.
+
+Scheduled trigger runner is implemented (issue #50): `TriggerScheduler` in `src/triggers.ts`
+evaluates cron-scheduled triggers on a 60-second tick via `plugin.registerInterval()`.
+Cron parsing supports the full 5-field standard format (minute, hour, day-of-month, month,
+day-of-week) with wildcards (`*`), exact values, ranges (`N-M`), steps (`*/N`, `N/N`), and
+comma-separated lists. `lastFired` is persisted in `settings.triggerLastFired` (keyed by
+trigger name) so triggers don't re-fire within the same minute even across plugin reloads.
+
+Trigger execution (the agent/model invocation that runs the matched trigger's prompt) is
+tracked in issue #51.
