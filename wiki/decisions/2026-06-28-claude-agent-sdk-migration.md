@@ -201,5 +201,5 @@ module names, file paths, and API shapes are the planner's job):
   survives, re-homed onto a vision-capable handler agent.
 - [`../ai-customization-guide.md`](../ai-customization-guide.md) — the vault-local customization
   model that re-bases onto native Agent SDK primitives.
-- `.claude/skills/copilot-sdk-reference/` — to be superseded by a Claude-Agent-SDK reference once
-  the migration is planned.
+- `.claude/skills/claude-agent-sdk-reference/` — Claude Agent SDK reference skill (supersedes
+  the old `copilot-sdk-reference/` skill that was relevant before the migration).
