@@ -1,4 +1,4 @@
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest'
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 
 // ---------------------------------------------------------------------------
 // resolveDefaultCliPath — unit tests
@@ -20,70 +20,70 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest'
 // dynamic import in resolveDefaultCliPath picks up our mock.
 vi.mock('node:fs/promises', () => ({
 	access: vi.fn(),
-}))
+}));
 
-import {resolveDefaultCliPath} from '../src/runtimeManager'
-import * as fsMock from 'node:fs/promises'
+import {resolveDefaultCliPath} from '../src/runtimeManager';
+import * as fsMock from 'node:fs/promises';
 
-const mockedAccess = fsMock.access as ReturnType<typeof vi.fn>
+const mockedAccess = fsMock.access as ReturnType<typeof vi.fn>;
 
 describe('resolveDefaultCliPath', () => {
-	const originalEnv = {...process.env}
+	const originalEnv = {...process.env};
 
 	beforeEach(() => {
-		mockedAccess.mockReset()
-	})
+		mockedAccess.mockReset();
+	});
 
 	afterEach(() => {
 		// Restore env
 		for (const key of Object.keys(process.env)) {
-			if (!(key in originalEnv)) delete process.env[key]
+			if (!(key in originalEnv)) delete process.env[key];
 		}
-		Object.assign(process.env, originalEnv)
-	})
+		Object.assign(process.env, originalEnv);
+	});
 
 	it('returns sdk-fallback source when all fs.access calls reject', async () => {
 		// All access checks fail → fall through to sdk-fallback
-		mockedAccess.mockRejectedValue(new Error('ENOENT'))
+		mockedAccess.mockRejectedValue(new Error('ENOENT'));
 
-		const result = await resolveDefaultCliPath()
+		const result = await resolveDefaultCliPath();
 
-		expect(result.source).toBe('sdk-fallback')
-		expect(typeof result.path).toBe('string')
-		expect(result.path.length).toBeGreaterThan(0)
-	})
+		expect(result.source).toBe('sdk-fallback');
+		expect(typeof result.path).toBe('string');
+		expect(result.path.length).toBeGreaterThan(0);
+	});
 
 	it('returns the first accessible path with its source tag', async () => {
 		// Reject everything except the first call
 		mockedAccess.mockImplementation(() => {
 			// Accept the very first candidate that is checked
 			if (mockedAccess.mock.calls.length === 1) {
-				return Promise.resolve(undefined)
+				return Promise.resolve(undefined);
 			}
-			return Promise.reject(new Error('ENOENT'))
-		})
+			return Promise.reject(new Error('ENOENT'));
+		});
 
-		const result = await resolveDefaultCliPath()
+		const result = await resolveDefaultCliPath();
 
 		// The source should be one of the valid CliPathSource values
-		expect(['global-npm', 'os-links', 'sdk-fallback']).toContain(result.source)
-		expect(typeof result.path).toBe('string')
-	})
+		expect(['global-npm', 'os-links', 'sdk-fallback']).toContain(result.source);
+		expect(typeof result.path).toBe('string');
+	});
 
 	it('includes the platform in the binary package name within the resolved path', async () => {
-		mockedAccess.mockRejectedValue(new Error('ENOENT'))
+		mockedAccess.mockRejectedValue(new Error('ENOENT'));
 
-		const result = await resolveDefaultCliPath()
+		const result = await resolveDefaultCliPath();
 
 		// The sdk-fallback path should contain the platform name
-		expect(result.path).toContain(process.platform)
-	})
+		expect(result.path).toContain(process.platform);
+	});
 
 	it('includes process.arch in the resolved path', async () => {
-		mockedAccess.mockRejectedValue(new Error('ENOENT'))
+		mockedAccess.mockRejectedValue(new Error('ENOENT'));
 
-		const result = await resolveDefaultCliPath()
+		const result = await resolveDefaultCliPath();
 
-		expect(result.path).toContain(process.arch)
-	})
-})
+		expect(result.path).toContain(process.arch);
+	});
+});

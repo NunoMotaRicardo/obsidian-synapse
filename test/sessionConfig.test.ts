@@ -1,15 +1,15 @@
-import {describe, it, expect, vi, beforeEach} from 'vitest'
-import type {App, TFile} from 'obsidian'
+import {describe, it, expect, vi, beforeEach} from 'vitest';
+import type {App, TFile} from 'obsidian';
 
 // Mock configWriter so scanVaultStructure can be controlled per test
 vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
-}))
+}));
 
-import {buildSelfImproveHint, buildVaultContextBlock} from '../src/view/sessionConfig'
-import {scanVaultStructure} from '../src/configWriter'
+import {buildSelfImproveHint, buildVaultContextBlock} from '../src/view/sessionConfig';
+import {scanVaultStructure} from '../src/configWriter';
 
-const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>
+const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // buildSelfImproveHint
@@ -17,33 +17,33 @@ const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>
 
 describe('buildSelfImproveHint', () => {
 	it('contains the agent name', () => {
-		const result = buildSelfImproveHint('TestAgent')
-		expect(result).toContain('TestAgent')
-	})
+		const result = buildSelfImproveHint('TestAgent');
+		expect(result).toContain('TestAgent');
+	});
 
 	it('references the _synapse/ folder', () => {
-		const result = buildSelfImproveHint('TestAgent')
-		expect(result).toContain('_synapse/')
-	})
+		const result = buildSelfImproveHint('TestAgent');
+		expect(result).toContain('_synapse/');
+	});
 
 	it('contains "Self-Improve" heading marker', () => {
-		const result = buildSelfImproveHint('TestAgent')
-		expect(result).toContain('Self-Improve')
-	})
+		const result = buildSelfImproveHint('TestAgent');
+		expect(result).toContain('Self-Improve');
+	});
 
 	it('returns a non-empty string for any agent name', () => {
-		expect(buildSelfImproveHint('').length).toBeGreaterThan(0)
-		expect(buildSelfImproveHint('   ').length).toBeGreaterThan(0)
-	})
+		expect(buildSelfImproveHint('').length).toBeGreaterThan(0);
+		expect(buildSelfImproveHint('   ').length).toBeGreaterThan(0);
+	});
 
 	it('different agent names produce different outputs', () => {
-		const a = buildSelfImproveHint('AgentAlpha')
-		const b = buildSelfImproveHint('AgentBeta')
-		expect(a).not.toBe(b)
-		expect(a).toContain('AgentAlpha')
-		expect(b).toContain('AgentBeta')
-	})
-})
+		const a = buildSelfImproveHint('AgentAlpha');
+		const b = buildSelfImproveHint('AgentBeta');
+		expect(a).not.toBe(b);
+		expect(a).toContain('AgentAlpha');
+		expect(b).toContain('AgentBeta');
+	});
+});
 
 // ---------------------------------------------------------------------------
 // buildVaultContextBlock
@@ -55,68 +55,68 @@ describe('buildVaultContextBlock', () => {
 		vault: {
 			getFiles: () => [] as TFile[],
 		},
-	} as unknown as App
+	} as unknown as App;
 
 	beforeEach(() => {
-		mockedScanVaultStructure.mockReset()
-	})
+		mockedScanVaultStructure.mockReset();
+	});
 
 	it('returns empty string when scanVaultStructure returns no folders', () => {
-		mockedScanVaultStructure.mockReturnValue([])
+		mockedScanVaultStructure.mockReturnValue([]);
 
-		const result = buildVaultContextBlock(mockApp)
+		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).toBe('')
-	})
+		expect(result).toBe('');
+	});
 
 	it('returns a non-empty string when folders exist', () => {
 		mockedScanVaultStructure.mockReturnValue([
 			{name: 'inbox', fileCount: 3},
 			{name: 'projects', fileCount: 12},
-		])
+		]);
 
-		const result = buildVaultContextBlock(mockApp)
+		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).not.toBe('')
-	})
+		expect(result).not.toBe('');
+	});
 
 	it('includes folder names in the output', () => {
 		mockedScanVaultStructure.mockReturnValue([
 			{name: 'inbox', fileCount: 3},
 			{name: 'projects', fileCount: 12},
-		])
+		]);
 
-		const result = buildVaultContextBlock(mockApp)
+		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).toContain('inbox')
-		expect(result).toContain('projects')
-	})
+		expect(result).toContain('inbox');
+		expect(result).toContain('projects');
+	});
 
 	it('includes item counts in the output', () => {
 		mockedScanVaultStructure.mockReturnValue([
 			{name: 'notes', fileCount: 7},
-		])
+		]);
 
-		const result = buildVaultContextBlock(mockApp)
+		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).toContain('7')
-	})
+		expect(result).toContain('7');
+	});
 
 	it('contains [Vault Structure] label', () => {
 		mockedScanVaultStructure.mockReturnValue([
 			{name: 'notes', fileCount: 1},
-		])
+		]);
 
-		const result = buildVaultContextBlock(mockApp)
+		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).toContain('[Vault Structure]')
-	})
+		expect(result).toContain('[Vault Structure]');
+	});
 
 	it('passes the app to scanVaultStructure', () => {
-		mockedScanVaultStructure.mockReturnValue([])
+		mockedScanVaultStructure.mockReturnValue([]);
 
-		buildVaultContextBlock(mockApp)
+		buildVaultContextBlock(mockApp);
 
-		expect(mockedScanVaultStructure).toHaveBeenCalledWith(mockApp)
-	})
-})
+		expect(mockedScanVaultStructure).toHaveBeenCalledWith(mockApp);
+	});
+});

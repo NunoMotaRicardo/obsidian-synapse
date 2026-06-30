@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
-import {vi} from 'vitest'
+import {vi} from 'vitest';
 
 // Global mock for the Obsidian API since it's only available inside the Obsidian app.
 vi.mock('obsidian', () => {
@@ -11,30 +11,30 @@ vi.mock('obsidian', () => {
 		App: class {
 			vault = {
 				getFiles: () => [],
-			}
+			};
 		},
 		PluginSettingTab: class {
-			app: any
-			plugin: any
+			app: any;
+			plugin: any;
 			constructor(app: any, plugin: any) {
-				this.app = app
-				this.plugin = plugin
+				this.app = app;
+				this.plugin = plugin;
 			}
 		},
 		Setting: class {
 			constructor(containerEl: any) {}
-			setName(name: string) { return this }
-			setDesc(desc: string) { return this }
-			addText(cb: any) { return this }
-			addToggle(cb: any) { return this }
-			addDropdown(cb: any) { return this }
-			addButton(cb: any) { return this }
-			addTextArea(cb: any) { return this }
+			setName(name: string) { return this; }
+			setDesc(desc: string) { return this; }
+			addText(cb: any) { return this; }
+			addToggle(cb: any) { return this; }
+			addDropdown(cb: any) { return this; }
+			addButton(cb: any) { return this; }
+			addTextArea(cb: any) { return this; }
 		},
 		Modal: class {
-			app: any
+			app: any;
 			constructor(app: any) {
-				this.app = app
+				this.app = app;
 			}
 			open() {}
 			close() {}
@@ -58,11 +58,11 @@ vi.mock('obsidian', () => {
 			isSafari: false,
 		},
 		Plugin: class {
-			app: any
-			manifest: any
+			app: any;
+			manifest: any;
 			constructor(app: any, manifest: any) {
-				this.app = app
-				this.manifest = manifest
+				this.app = app;
+				this.manifest = manifest;
 			}
 			onload() {}
 			onunload() {}
@@ -71,13 +71,13 @@ vi.mock('obsidian', () => {
 			addCommand() {}
 			addSettingTab() {}
 			addRibbonIcon() {}
-			loadData() { return Promise.resolve({}) }
-			saveData() { return Promise.resolve() }
+			loadData() { return Promise.resolve({}); }
+			saveData() { return Promise.resolve(); }
 		},
 		addIcon: vi.fn(),
 		setIcon: vi.fn(),
 		Menu: class {
-			addItem() { return this }
+			addItem() { return this; }
 			showAtPosition() {}
 		},
 		MarkdownView: class {},
@@ -86,5 +86,5 @@ vi.mock('obsidian', () => {
 			load() {}
 			unload() {}
 		},
-	}
-})
+	};
+});
