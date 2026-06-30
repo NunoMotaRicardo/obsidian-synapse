@@ -130,8 +130,12 @@ executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string):
   `model`, `agent`, `systemMessage` from trigger, `cwd` set to vault root (absolute basePath),
   `plugins` set to the `_synapse/` local plugin path (same pattern as bots and editor actions).
 - `trigger.model` resolves to a local model → `executeLocalProviderQuery()` with file content
-  prepended to the prompt as context, equipped with the built-in vault tools (`read_note`,
-  `list_notes`, `search_notes`) and the Obsidian `App` instance to enable a ReAct tool-calling loop.
+  prepended to the prompt as context, equipped with:
+  - Built-in vault tools (`read_note`, `list_notes`, `search_notes`) from `vaultTools`.
+  - MCP-bridged tools discovered from `_synapse/.mcp.json` via `McpBridgeSession` (see
+    [mcp-bridge.md](mcp-bridge.md)) — web search, GitHub, or any other configured MCP server.
+  Combined with the Obsidian `App` instance to enable a full ReAct tool-calling loop. If no MCP
+  config is present, the bridge returns an empty list and execution continues with vault tools only.
 
 **Write modes** (applied to the model response):
 

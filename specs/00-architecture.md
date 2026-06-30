@@ -36,6 +36,7 @@ CLI process per query.
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots-triggers.md](bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
 | triggers | [bots-triggers.md](bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
+| mcp-bridge | [mcp-bridge.md](mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
 
 ## Vault customization (`_synapse/`)
 
