@@ -341,6 +341,7 @@ configurations between machines.
 
 ## 10. Suggested reading
 
+- [`local-model-react-guide.md`](local-model-react-guide.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
 - [`decisions/2026-06-29-native-sdk-customization-model.md`](decisions/2026-06-29-native-sdk-customization-model.md) —
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.
 - [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md) —
