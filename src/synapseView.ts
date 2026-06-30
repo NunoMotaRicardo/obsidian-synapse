@@ -13,8 +13,8 @@ import type {
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
-} from './copilot';
-import {Session} from './copilot';
+} from './agentService';
+import {Session} from './agentService';
 import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills, scanTriggers} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
@@ -80,7 +80,7 @@ export class SynapseView extends ItemView {
 
 	// ── Session sidebar state ──────────────────────────────────
 	activeSessions = new Map<string, BackgroundSession>();
-	sessionList: import('./copilot').SessionMetadata[] = [];
+	sessionList: import('./agentService').SessionMetadata[] = [];
 	sessionNames: Record<string, string> = {};
 	currentSessionId: string | null = null;
 	sidebarWidth = 40;
@@ -181,7 +181,7 @@ export class SynapseView extends ItemView {
 				sessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as import('./copilot').SessionMetadata);
+			} as import('./agentService').SessionMetadata);
 		}
 
 		if (this.sidebarListEl) {
@@ -316,8 +316,8 @@ export class SynapseView extends ItemView {
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
 
 			// Populate available models from AgentService
-			if (this.plugin.copilot) {
-				this.refreshProviderModels(this.plugin.copilot.getModels());
+			if (this.plugin.agentService) {
+				this.refreshProviderModels(this.plugin.agentService.getModels());
 			}
 		} catch (e) {
 			console.error('Synapse: failed to load configs', e);
@@ -436,8 +436,8 @@ export class SynapseView extends ItemView {
 		const rawInput = this.inputEl.value.trim();
 		if (!rawInput || this.isStreaming) return;
 
-		if (!this.plugin.copilot) {
-			new Notice('Copilot is not configured.');
+		if (!this.plugin.agentService) {
+			new Notice('Synapse is not configured.');
 			return;
 		}
 
@@ -623,7 +623,7 @@ export class SynapseView extends ItemView {
 				(this.earlyEventBuffer as SessionEvent[]).push(event);
 			}
 		};
-		this.currentSession = await this.plugin.copilot!.createSession(sessionConfig, onEvent);
+		this.currentSession = await this.plugin.agentService!.createSession(sessionConfig, onEvent);
 		this.currentSessionId = this.currentSession.sessionId;
 
 		// Explicitly select the agent via RPC — the `agent` field in SessionConfig
@@ -647,7 +647,7 @@ export class SynapseView extends ItemView {
 				sessionId: this.currentSession.sessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as import('./copilot').SessionMetadata);
+			} as import('./agentService').SessionMetadata);
 		}
 		this.renderSessionList();
 	}
@@ -865,7 +865,7 @@ export class SynapseView extends ItemView {
 		selectedAgentName?: string;
 	}): SessionConfig {
 		// Permission handler — canUseTool for Agent SDK
-		const permissionHandler: import('./copilot').PermissionHandler = async (toolName, input, options) => {
+		const permissionHandler: import('./agentService').PermissionHandler = async (toolName, input, options) => {
 			if (this.plugin.settings.toolApproval === 'allow') {
 				return {behavior: 'allow' as const, ...(options.suggestions ? {updatedPermissions: options.suggestions} : {})};
 			}
@@ -883,7 +883,7 @@ export class SynapseView extends ItemView {
 		};
 
 		// Elicitation handler — shows a form modal for structured input requests
-		const elicitationHandler: import('./copilot').ElicitationHandler = (context) => {
+		const elicitationHandler: import('./agentService').ElicitationHandler = (context) => {
 			const modal = new ElicitationModal(this.app, context);
 			modal.open();
 			return modal.promise;

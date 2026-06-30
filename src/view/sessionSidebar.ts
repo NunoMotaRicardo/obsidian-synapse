@@ -1,6 +1,6 @@
 import type {SynapseView} from '../synapseView';
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
-import type {SessionMetadata} from '../copilot';
+import type {SessionMetadata} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
 import {formatTimeAgo} from './utils';
@@ -146,9 +146,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.loadSessions = async function (): Promise<void> {
-		if (!this.plugin.copilot) return;
+		if (!this.plugin.agentService) return;
 		try {
-			this.sessionList = await this.plugin.copilot.listSessions();
+			this.sessionList = await this.plugin.agentService.listSessions();
 			this.sortSessionList();
 			this.renderSessionList();
 		} catch {
@@ -680,7 +680,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			});
 
 			this.earlyEventBuffer = [];
-			const session = await this.plugin.copilot!.createSession({
+			const session = await this.plugin.agentService!.createSession({
 				...sessionConfig,
 				resume: sessionId,
 			});
@@ -834,7 +834,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		}
 
 		try {
-			await this.plugin.copilot!.deleteSession(sessionId);
+			await this.plugin.agentService!.deleteSession(sessionId);
 		} catch (e) {
 			new Notice(`Failed to delete session: ${String(e)}`);
 			return;

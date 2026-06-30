@@ -117,7 +117,7 @@ async function executeWithLocalModel(
 	filePath: string,
 	modelId?: string,
 ): Promise<string> {
-	const providerConfig = plugin.copilot?.getProviderConfig();
+	const providerConfig = plugin.agentService?.getProviderConfig();
 	if (!providerConfig) {
 		throw new Error('Local provider config is not available.');
 	}
@@ -125,7 +125,7 @@ async function executeWithLocalModel(
 	// Only equip the model with vault tools if it's known to support tool calling.
 	// Models with no capability info (not found / undetermined) default to allowed,
 	// since most OpenAI-compatible backends don't expose a capability list at all.
-	const modelInfo = modelId ? plugin.copilot?.getModels().find(m => m.id === modelId) : undefined;
+	const modelInfo = modelId ? plugin.agentService?.getModels().find(m => m.id === modelId) : undefined;
 	const supportsTools = modelInfo?.supportsTools !== false;
 
 	// Read file content (best-effort: skip if file doesn't exist, e.g. delete events)
@@ -183,7 +183,7 @@ async function executeWithClaude(
 	trigger: TriggerConfig,
 	prompt: string,
 ): Promise<string> {
-	if (!plugin.copilot) {
+	if (!plugin.agentService) {
 		throw new Error('AgentService is not initialized.');
 	}
 
@@ -191,7 +191,7 @@ async function executeWithClaude(
 	const normalizedBase = basePath.replace(/\\/g, '/');
 	const pluginsPath = `${normalizedBase}/_synapse/`;
 
-	const result = await plugin.copilot.inlineChat({
+	const result = await plugin.agentService.inlineChat({
 		prompt,
 		model: trigger.model,
 		agent: trigger.agent,
@@ -294,7 +294,7 @@ export async function executeTrigger(
 		const useLocalModel =
 			trigger.model !== undefined &&
 			trigger.model !== '' &&
-			plugin.copilot?.isLocalModel(trigger.model) === true;
+			plugin.agentService?.isLocalModel(trigger.model) === true;
 
 		if (useLocalModel) {
 			result = await executeWithLocalModel(plugin, promptBody, filePath, trigger.model);

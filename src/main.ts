@@ -1,6 +1,6 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
-import {AgentService} from "./copilot";
+import {AgentService} from "./agentService";
 import {fetchProviderModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
@@ -16,7 +16,7 @@ export const SYNAPSE_ICON_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3
 
 export default class SynapsePlugin extends Plugin {
 	settings!: SynapseSettings;
-	copilot: AgentService | null = null;
+	agentService: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
 	triggerWatcher: TriggerWatcher | null = null;
 	triggerScheduler: TriggerScheduler | null = null;
@@ -156,11 +156,11 @@ export default class SynapsePlugin extends Plugin {
 		registerFileMenu(this);
 
 		try {
-			await this.initCopilot();
+			await this.initAgentService();
 			// Eagerly connect so auth errors surface at startup.
-			if (this.copilot) {
-				await this.copilot.ensureConnected();
-				this.copilot.fetchModels()
+			if (this.agentService) {
+				await this.agentService.ensureConnected();
+				this.agentService.fetchModels()
 					.then(models => this.notifySidebarModelsChanged(models))
 					.catch(() => {});
 			}
@@ -196,18 +196,18 @@ export default class SynapsePlugin extends Plugin {
 		}
 	}
 
-	async initCopilot(): Promise<void> {
-		if (this.copilot) {
+	async initAgentService(): Promise<void> {
+		if (this.agentService) {
 			try {
-				await this.copilot.stop();
+				await this.agentService.stop();
 			} catch {
 				// ignore stop errors
 			}
-			this.copilot = null;
+			this.agentService = null;
 		}
 		const s = this.settings;
 
-		this.copilot = new AgentService({
+		this.agentService = new AgentService({
 			auth: {
 				type: s.authType,
 				apiKey: s.authType === 'apiKey' ? s.anthropicApiKey : undefined,
@@ -235,7 +235,7 @@ export default class SynapsePlugin extends Plugin {
 				}
 			}).catch(() => {});
 		}
-		this.notifySidebarModelsChanged(this.copilot.getModels());
+		this.notifySidebarModelsChanged(this.agentService.getModels());
 	}
 
 	/**
@@ -285,8 +285,8 @@ export default class SynapsePlugin extends Plugin {
 			this.triggerWatcher.stop();
 		}
 		this.triggerScheduler = null;
-		if (this.copilot) {
-			void this.copilot.stop();
+		if (this.agentService) {
+			void this.agentService.stop();
 		}
 		if (this.telegramBot) {
 			void this.telegramBot.disconnect();
@@ -308,14 +308,14 @@ export default class SynapsePlugin extends Plugin {
 		}
 	}
 
-	setProviderModels(models: import('./copilot').ModelInfo[]): void {
-		if (this.copilot) {
-			this.copilot.setCustomModels(models);
-			this.notifySidebarModelsChanged(this.copilot.getModels());
+	setProviderModels(models: import('./agentService').ModelInfo[]): void {
+		if (this.agentService) {
+			this.agentService.setCustomModels(models);
+			this.notifySidebarModelsChanged(this.agentService.getModels());
 		}
 	}
 
-	notifySidebarModelsChanged(models: import('./copilot').ModelInfo[]): void {
+	notifySidebarModelsChanged(models: import('./agentService').ModelInfo[]): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE)) {
 			const view = leaf.view;
 			if (view instanceof SynapseView) {

@@ -1,5 +1,5 @@
 import {App, Modal} from 'obsidian';
-import type {ElicitationContext, ElicitationResult} from '../copilot';
+import type {ElicitationContext, ElicitationResult} from '../agentService';
 
 // Elicitation schema types — the Agent SDK uses a generic JSON Schema Record
 // rather than typed field descriptors. We define compatible shapes here.

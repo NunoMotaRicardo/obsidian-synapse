@@ -9,21 +9,16 @@ triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed
 - TypeScript (strict) → single `main.js` via esbuild. Node/Electron APIs allowed (desktop-only).
 - `npm run build` = `tsc -noEmit -skipLibCheck` + production bundle. `npm run dev` = watch.
 - `npm run lint` (eslint + eslint-plugin-obsidianmd).
-- **Migrating to the Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) — see
-  `.claude/skills/claude-agent-sdk-reference/` and the migration decision record. Until the engine
-  swap lands, the code still uses the Copilot SDK below.
-- Current dependency: `@github/copilot-sdk` (1.x, GA). It talks JSON-RPC to a system-installed
-  `copilot` CLI (SDK protocol v3; CLI must be ≥ ~1.0.5x). SDK type reference lives in
-  `node_modules/@github/copilot-sdk/dist/*.d.ts` — read those before guessing API shapes,
-  and see `.claude/skills/copilot-sdk-reference/` (transitional).
+- Key dependency: `@anthropic-ai/claude-agent-sdk` (0.3.x). It talks JSON-RPC to a system-installed
+  `claude` CLI. SDK type reference lives in `node_modules/@anthropic-ai/claude-agent-sdk/dist/*.d.ts`
+  and see `.claude/skills/claude-agent-sdk-reference/`.
 
 ## Architecture
 
 Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 
-- **All SDK access goes through the single service in `src/copilot.ts`** (today `CopilotService`;
-  becoming `AgentService` in the migration). Other modules import SDK types only via its
-  re-exports.
+- **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
+  SDK types only via its re-exports.
 - `src/main.ts` stays lifecycle-only. UI in `src/view/*` + `src/modals/*`, editor features in
   `src/editor/*`, vault config parsing in `src/configLoader.ts`, session config assembly in
   `src/view/sessionConfig.ts`, settings/secrets in `src/settings.ts`.

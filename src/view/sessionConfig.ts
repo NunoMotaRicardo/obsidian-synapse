@@ -1,6 +1,6 @@
 import {normalizePath, TFile, TFolder} from 'obsidian';
 import type {App} from 'obsidian';
-import type {ModelInfo} from '../copilot';
+import type {ModelInfo} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
 
 /** Minimal MessageOptions shape for SDK attachments. */
@@ -55,7 +55,7 @@ export function buildPrompt(
 			prompt += `\n\n---\nClipboard content:\n${clip.content}`;
 		}
 	}
-	// Inline selection text in the prompt because the Copilot CLI server's
+	// Inline selection text in the prompt because the Claude CLI server's
 	// session.send handler normalises all attachments to {type, path, displayName},
 	// stripping the selection-specific fields (filePath, text, selection range).
 	const selections = attachments.filter(a => a.type === 'selection');
@@ -107,7 +107,7 @@ export function buildSdkAttachments(params: {
 				displayName: att.name,
 			});
 		} else if (att.type === 'selection' && att.path) {
-			// Workaround: send as 'file' instead of 'selection' because the Copilot CLI
+			// Workaround: send as 'file' instead of 'selection' because the Claude CLI
 			// server's session.send handler maps all attachments to {type, path, displayName},
 			// reading .path (not .filePath) and dropping text/selection fields.
 			// The selection text is inlined in the prompt by buildPrompt().

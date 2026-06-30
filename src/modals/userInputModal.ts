@@ -30,7 +30,7 @@ export class UserInputModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('synapse-userinput-modal');
 
-		contentEl.createEl('h3', {text: 'Copilot needs your input'});
+		contentEl.createEl('h3', {text: 'Synapse needs your input'});
 
 		contentEl.createDiv({cls: 'synapse-userinput-question', text: this.request.question});
 

@@ -7,7 +7,7 @@ import {normalizePath, Notice} from 'obsidian';
 import type SynapsePlugin from '../main';
 import type {SynapseView} from '../synapseView';
 import {SYNAPSE_VIEW_TYPE} from '../synapseView';
-import type {SessionConfig} from '../copilot';
+import type {SessionConfig} from '../agentService';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo} from '../types';
 import {SYNAPSE_FOLDER} from '../settings';
@@ -49,7 +49,7 @@ export class TelegramBotService {
 	status: BotConnectionStatus = 'disconnected';
 	botUsername = '';
 
-	/** Active copilot sessions keyed by chat:thread. */
+	/** Active Synapse sessions keyed by chat:thread. */
 	private sessions = new Map<string, ActiveBotSession>();
 
 	/** Cached agent/skill configs (reloaded on connect). */
@@ -265,7 +265,7 @@ export class TelegramBotService {
 			const timeoutMs = getAdaptiveTimeout(this.plugin.app, undefined, this.plugin.settings.providerRequestTimeout);
 
 			// Use inlineChat which handles session resume internally
-			const {content, sessionId} = await this.plugin.copilot!.inlineChat({
+			const {content, sessionId} = await this.plugin.agentService!.inlineChat({
 				prompt: sendOpts.prompt,
 				...(entry.sessionId ? {resume: entry.sessionId} : {}),
 				...config,
@@ -324,7 +324,7 @@ export class TelegramBotService {
 			allowDangerouslySkipPermissions: true,
 			cwd: basePath,
 			plugins: [{type: 'local', path: `${normalizedBasePath}/_synapse/`}],
-			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../copilot').ReasoningEffort} : {}),
+			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../agentService').ReasoningEffort} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
 			systemPrompt: systemContent,
 		};
@@ -480,7 +480,7 @@ export class TelegramBotService {
 		return (this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
 	}
 
-	private getAvailableModels(): import('../copilot').ModelInfo[] {
+	private getAvailableModels(): import('../agentService').ModelInfo[] {
 		const view = this.getSynapseView();
 		return view?.models ?? [];
 	}

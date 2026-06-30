@@ -1,10 +1,9 @@
-# agent-service (copilot-service)
+# agent-service
 
-Source: `src/copilot.ts` — class `AgentService`. The single place the plugin touches
+Source: `src/agentService.ts` — class `AgentService`. The single place the plugin touches
 `@anthropic-ai/claude-agent-sdk`. Every other module goes through this wrapper.
 
-> **Module naming:** The spec filename is `copilot-service.md` for historical continuity
-> (migrated from `CopilotService`). The live class and all code references use `AgentService`.
+> **Module naming:** The spec filename is `agent-service.md`. The live class and all code references use `AgentService`.
 
 ## Responsibilities
 
