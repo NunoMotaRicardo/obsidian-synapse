@@ -130,7 +130,8 @@ executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string):
   `model`, `agent`, `systemMessage` from trigger, `cwd` set to vault root (absolute basePath),
   `plugins` set to the `_synapse/` local plugin path (same pattern as bots and editor actions).
 - `trigger.model` resolves to a local model → `executeLocalProviderQuery()` with file content
-  prepended to the prompt as context.
+  prepended to the prompt as context, equipped with the built-in vault tools (`read_note`,
+  `list_notes`, `search_notes`) and the Obsidian `App` instance to enable a ReAct tool-calling loop.
 
 **Write modes** (applied to the model response):
 

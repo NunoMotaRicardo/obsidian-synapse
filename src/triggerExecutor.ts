@@ -12,6 +12,7 @@ import type {TriggerConfig} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {parseFrontmatter, modifyArtifact} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
+import {vaultTools} from './vaultTools';
 
 // ---------------------------------------------------------------------------
 // Template substitution
@@ -134,7 +135,11 @@ async function executeWithLocalModel(
 		? `File: ${filePath}\n\n${fileContent}\n\n---\n\n${prompt}`
 		: prompt;
 
-	const res = await executeLocalProviderQuery(providerConfig, {prompt: fullPrompt});
+	const res = await executeLocalProviderQuery(providerConfig, {
+		prompt: fullPrompt,
+		tools: vaultTools,
+		app: plugin.app,
+	});
 	if (!res.ok) {
 		throw new Error(res.error);
 	}
