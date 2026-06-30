@@ -139,10 +139,10 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	toolApproval: 'ask',
 	inlineModel: '',
 	featureAgents: {
-		chat: 'General',
-		inline: 'General',
-		search: 'General',
-		telegram: 'General',
+		chat: '',
+		inline: '',
+		search: '',
+		telegram: '',
 		vision: 'Vision',
 	},
 
@@ -619,7 +619,9 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 			const vaultAgents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
 			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
-			const agentOptions: Record<string, string> = {};
+			const agentOptions: Record<string, string> = {
+				'': 'Auto'
+			};
 			for (const name of agentNamesSet) {
 				agentOptions[name] = name;
 			}
@@ -633,7 +635,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			];
 
 			for (const feat of features) {
-				const currentAgent = this.plugin.settings.featureAgents?.[feat.id] || (feat.id === 'vision' ? 'Vision' : 'General');
+				const currentAgent = this.plugin.settings.featureAgents?.[feat.id] ?? '';
 				new Setting(dynamicContainer)
 					.setName(feat.name)
 					.setDesc(feat.desc)

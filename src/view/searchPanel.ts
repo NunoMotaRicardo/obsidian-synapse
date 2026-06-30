@@ -183,15 +183,19 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		// Models
 		this.searchModelSelect.empty();
+		const defaultOpt = this.searchModelSelect.createEl('option', {text: 'Default model'});
+		defaultOpt.value = '';
 		for (const model of this.models) {
 			const opt = this.searchModelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
-		if (this.searchModel && this.models.some(m => m.id === this.searchModel)) {
+		if (this.searchModel === '') {
+			this.searchModelSelect.value = '';
+		} else if (this.searchModel && this.models.some(m => m.id === this.searchModel)) {
 			this.searchModelSelect.value = this.searchModel;
-		} else if (this.models.length > 0 && this.models[0]) {
-			this.searchModel = this.models[0].id;
-			this.searchModelSelect.value = this.searchModel;
+		} else {
+			this.searchModel = '';
+			this.searchModelSelect.value = '';
 		}
 
 		// Apply agent's tools and skills filter
@@ -353,7 +357,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		const {content} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
-			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
 			cwd: this.getSearchWorkingDirectory(),
 			permissionMode: 'plan',
 			tools: [],
@@ -400,7 +404,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.buildBasicSearchSessionConfig = function (this: SynapseView): SessionConfig {
 		const pluginPath = `${this.getVaultBasePath().replace(/\\/g, '/')}/_synapse/`;
 		return {
-			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
+			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
 			permissionMode: 'plan',
 			cwd: this.getSearchWorkingDirectory(),
 			plugins: [{type: 'local', path: pluginPath}],

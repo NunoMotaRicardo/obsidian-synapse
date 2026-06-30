@@ -237,7 +237,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 				`TITLE: <short descriptive title for the note>\n` +
 				`---\n` +
 				`<note content in Markdown>`,
-			agent: plugin.settings.featureAgents?.inline || 'General',
+			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are a note creation assistant. When asked to create a note, return a title line ' +
@@ -325,7 +325,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 				`TITLE: <short descriptive title for the canvas>\n` +
 				`---\n` +
 				`<valid Obsidian canvas JSON>`,
-			agent: plugin.settings.featureAgents?.inline || 'General',
+			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are a canvas creation assistant for Obsidian. When asked to create a canvas, return a title line ' +
@@ -418,7 +418,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 				`Summarize the following ${mdFiles.length} notes from the folder "${folder.name}". ` +
 				`Produce a single cohesive summary note in Markdown that captures the key topics, ` +
 				`themes, and important details across all notes.\n\n${combined}`,
-			agent: plugin.settings.featureAgents?.inline || 'General',
+			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are a note summarisation assistant. Return ONLY the summary note in Markdown. ' +
@@ -495,7 +495,7 @@ async function runActionPrompt(
 
 	const {content: result, sessionId} = await plugin.agentService.inlineChat({
 		prompt: action.prompt(selectedText),
-		agent: plugin.settings.featureAgents?.inline || 'General',
+		agent: plugin.settings.featureAgents?.inline || undefined,
 		plugins: getVaultPlugins(plugin),
 		systemMessage: TEXT_ACTION_SYSTEM_MESSAGE,
 		permissionMode: plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
@@ -924,7 +924,7 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 			prompt:
 				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
 				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
-			agent: plugin.settings.featureAgents?.inline || 'General',
+			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are a note editor. When given a note and an edit instruction, return ONLY the updated note content. ' +
@@ -987,7 +987,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 				`Structure and refine the following note using Markdown. ${templateClause}` +
 				`Organise the content with headings, lists, and emphasis where appropriate. ` +
 				`Improve clarity and readability while preserving all original information.\n\nNOTE:\n${doc}`,
-			agent: plugin.settings.featureAgents?.inline || 'General',
+			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are a note structuring assistant. Return ONLY the restructured note in Markdown. ' +

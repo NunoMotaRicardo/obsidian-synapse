@@ -412,7 +412,7 @@ export class EditModal extends Modal {
 			if (!this.isProcessing) return; // cancelled
 
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'Auto';
 
 			// Replace generating indicator with results
 			this.resultsContainer.empty();
@@ -420,7 +420,7 @@ export class EditModal extends Modal {
 		} catch (e) {
 			if (!this.isProcessing) return;
 			const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-			const agentUsed = this.plugin.settings.featureAgents?.inline || 'General';
+			const agentUsed = this.plugin.settings.featureAgents?.inline || 'Auto';
 			this.resultsContainer.empty();
 			const errorHeader = this.resultsContainer.createDiv({cls: 'synapse-edit-results-header synapse-edit-error'});
 			errorHeader.createSpan({text: `\u26A0\uFE0F \uD83E\uDDE0 ${agentUsed} | \u231A ${elapsed}s | Error: ${String(e)}`});
@@ -458,7 +458,7 @@ export class EditModal extends Modal {
 
 		const {content: result, sessionId} = await this.plugin.agentService!.inlineChat({
 			prompt,
-			agent: this.plugin.settings.featureAgents?.inline || 'General',
+			agent: this.plugin.settings.featureAgents?.inline || undefined,
 			plugins: [{type: 'local', path: `${(this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath.replace(/\\/g, '/')}/_synapse/`}],
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',

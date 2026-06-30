@@ -154,6 +154,8 @@ export class SynapseView extends ItemView {
 	constructor(leaf: WorkspaceLeaf, plugin: SynapsePlugin) {
 		super(leaf);
 		this.plugin = plugin;
+		this.selectedAgent = this.plugin.settings?.featureAgents?.chat ?? '';
+		this.selectedModel = '';
 	}
 
 	getViewType(): string {
@@ -337,10 +339,10 @@ export class SynapseView extends ItemView {
 		this.models = models;
 
 		const preferred = this.selectedModel;
-		if (preferred && models.some(m => m.id === preferred)) {
+		if (preferred === '') {
+			// Stay at '' (Default model)
+		} else if (preferred && models.some(m => m.id === preferred)) {
 			this.selectedModel = preferred;
-		} else if (models.length > 0) {
-			this.selectedModel = models[0]!.id;
 		} else {
 			this.selectedModel = '';
 		}
@@ -348,6 +350,8 @@ export class SynapseView extends ItemView {
 		this.populateModelSelect();
 		if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
 			this.modelSelect.value = this.selectedModel;
+		} else {
+			this.modelSelect.value = '';
 		}
 	}
 
@@ -393,14 +397,17 @@ export class SynapseView extends ItemView {
 			opt.value = agent.name;
 			opt.title = agent.instructions;
 		}
-		if (this.selectedAgent && this.agents.some(a => a.name === this.selectedAgent)) {
+		if (this.selectedAgent === '') {
+			this.agentSelect.value = '';
+			this.agentSelect.title = '';
+		} else if (this.selectedAgent && this.agents.some(a => a.name === this.selectedAgent)) {
 			this.agentSelect.value = this.selectedAgent;
 			const selAgent = this.agents.find(a => a.name === this.selectedAgent);
 			this.agentSelect.title = selAgent ? selAgent.instructions : '';
-		} else if (this.agents.length > 0 && this.agents[0]) {
-			this.selectedAgent = this.agents[0].name;
-			this.agentSelect.value = this.selectedAgent;
-			this.agentSelect.title = this.agents[0].instructions;
+		} else {
+			this.selectedAgent = '';
+			this.agentSelect.value = '';
+			this.agentSelect.title = '';
 		}
 
 		// Auto-select agent's preferred model
@@ -412,11 +419,13 @@ export class SynapseView extends ItemView {
 
 		// Models
 		this.populateModelSelect();
-		if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
+		if (this.selectedModel === '') {
+			this.modelSelect.value = '';
+		} else if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
 			this.modelSelect.value = this.selectedModel;
-		} else if (this.models.length > 0 && this.models[0]) {
-			this.selectedModel = this.models[0].id;
-			this.modelSelect.value = this.selectedModel;
+		} else {
+			this.selectedModel = '';
+			this.modelSelect.value = '';
 		}
 
 		// Apply agent's tools and skills filter
@@ -614,7 +623,7 @@ export class SynapseView extends ItemView {
 
 		const sessionConfig = this.buildSessionConfig({
 			model: this.selectedModel || undefined,
-			selectedAgentName: this.selectedAgent || undefined,
+			selectedAgentName: this.selectedAgent,
 		});
 
 		this.earlyEventBuffer = [];
@@ -845,6 +854,9 @@ export class SynapseView extends ItemView {
 			this.streamingComponent = null;
 		}
 		this.isStreaming = false;
+		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
+		this.selectedModel = '';
+		this.updateConfigUI();
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];
@@ -920,7 +932,7 @@ export class SynapseView extends ItemView {
 			cwd: this.getWorkingDirectory(),
 			plugins: [{type: 'local', path: `${vaultRoot}/_synapse/`}],
 			skills: Array.from(this.enabledSkills),
-			agent: opts.selectedAgentName || this.plugin.settings.featureAgents?.chat || 'General',
+			agent: opts.selectedAgentName !== undefined ? (opts.selectedAgentName || undefined) : (this.plugin.settings.featureAgents?.chat || undefined),
 			systemPrompt: systemContent,
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 		};

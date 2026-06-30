@@ -144,6 +144,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 
 	proto.populateModelSelect = function(): void {
 		this.modelSelect.empty();
+		const defaultOpt = this.modelSelect.createEl('option', {text: 'Default model'});
+		defaultOpt.value = '';
 		for (const model of this.models) {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;

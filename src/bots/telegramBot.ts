@@ -298,7 +298,7 @@ export class TelegramBotService {
 
 	private buildBotSessionConfig(): SessionConfig {
 		const basePath = this.getVaultBasePath();
-		const defaultAgentName = this.plugin.settings.featureAgents?.telegram || this.plugin.settings.telegramDefaultAgent || 'General';
+		const defaultAgentName = this.plugin.settings.featureAgents?.telegram || this.plugin.settings.telegramDefaultAgent || undefined;
 
 		// Resolve agent
 		const agent = defaultAgentName
@@ -315,7 +315,7 @@ export class TelegramBotService {
 			'[Workspace Path Information]',
 			`Vault root: ${normalizedBasePath}`,
 			`Working directory: ${normalizedBasePath}`,
-		].join('\n') + buildSelfImproveHint(defaultAgentName);
+		].join('\n') + buildSelfImproveHint(defaultAgentName || 'Auto');
 
 		return {
 			model,
