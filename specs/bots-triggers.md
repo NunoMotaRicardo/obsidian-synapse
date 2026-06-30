@@ -157,7 +157,19 @@ file under an `## Error` heading (so failures are visible in the vault).
 ### Current status
 
 Type definitions and parser/writer are implemented (issue #48). Event watcher is
-implemented (issue #49) — detects vault events and matches triggers. Trigger executor
-is implemented (issue #51) — `src/triggerExecutor.ts` runs matched triggers against
-the configured model (local provider or Claude via `AgentService.inlineChat()`),
-applies write modes, and appends results to `_synapse/reports/`.
+implemented (issue #49) — detects vault events and matches triggers.
+
+Scheduled trigger runner is implemented (issue #50): `TriggerScheduler` in `src/triggers.ts`
+evaluates cron-scheduled triggers on a 60-second tick via `plugin.registerInterval()`.
+Cron parsing supports the full 5-field standard format (minute, hour, day-of-month, month,
+day-of-week) with wildcards (`*`), exact values, ranges (`N-M`), steps (`*/N`, `N/N`), and
+comma-separated lists. `lastFired` is persisted in `settings.triggerLastFired` (keyed by
+trigger name) so triggers don't re-fire within the same minute even across plugin reloads.
+
+Trigger executor is implemented (issue #51) — `src/triggerExecutor.ts` runs matched triggers
+against the configured model (local provider or Claude via `AgentService.inlineChat()`),
+applies write modes, and appends results to `_synapse/reports/`. **Known gap:**
+`TriggerScheduler.tick()` currently only logs and stamps `triggerLastFired` for matched
+scheduled triggers — it does not yet call `executeTrigger()`, so scheduled (cron) triggers
+do not actually run the model. Wiring the scheduler to the executor is tracked as a
+follow-up.

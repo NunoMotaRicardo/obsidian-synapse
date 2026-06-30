@@ -74,6 +74,118 @@ function globToRegex(pattern: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Cron matching
+// ---------------------------------------------------------------------------
+
+/**
+ * Match a single cron field against a numeric value.
+ *
+ * Supported syntax:
+ * - `*`      — matches any value
+ * - `N`      — exact match
+ * - `N-M`    — inclusive range
+ * - `* /N`   — step from 0 (every N)
+ * - `N/N`    — step from a start value
+ * - Comma-separated list of the above (e.g. `1,15`, `1-5,10`)
+ *
+ * @param field  The cron field string (one of the five space-separated tokens)
+ * @param value  The numeric value extracted from the current time
+ * @param min    Minimum valid value for this field (inclusive)
+ * @param max    Maximum valid value for this field (inclusive)
+ */
+function matchField(field: string, value: number, min: number, max: number): boolean {
+	// Comma-separated list: any part may match
+	const parts = field.split(',');
+	for (const part of parts) {
+		if (matchFieldPart(part.trim(), value, min, max)) return true;
+	}
+	return false;
+}
+
+function matchFieldPart(part: string, value: number, min: number, max: number): boolean {
+	// Step syntax: `base/step` where base may be `*` or a number or a range
+	if (part.includes('/')) {
+		const [base, stepStr] = part.split('/', 2) as [string, string];
+		const step = parseInt(stepStr, 10);
+		if (isNaN(step) || step <= 0) return false;
+
+		let start = min;
+		let end = max;
+		if (base === '*') {
+			start = min;
+			end = max;
+		} else if (base.includes('-')) {
+			const [lo, hi] = base.split('-', 2) as [string, string];
+			start = parseInt(lo, 10);
+			end = parseInt(hi, 10);
+			if (isNaN(start) || isNaN(end)) return false;
+		} else {
+			start = parseInt(base, 10);
+			if (isNaN(start)) return false;
+			end = max;
+		}
+
+		for (let v = start; v <= end; v += step) {
+			if (v === value) return true;
+		}
+		return false;
+	}
+
+	// Wildcard
+	if (part === '*') return true;
+
+	// Range: `N-M`
+	if (part.includes('-')) {
+		const [lo, hi] = part.split('-', 2) as [string, string];
+		const lo_n = parseInt(lo, 10);
+		const hi_n = parseInt(hi, 10);
+		if (isNaN(lo_n) || isNaN(hi_n)) return false;
+		return value >= lo_n && value <= hi_n;
+	}
+
+	// Exact match
+	const n = parseInt(part, 10);
+	if (isNaN(n)) return false;
+	return value === n;
+}
+
+/**
+ * Test whether a 5-field cron expression matches the given Date.
+ *
+ * Field order: `minute hour day-of-month month day-of-week`
+ * Month: 1–12. Day-of-week: 0–6 (Sunday=0).
+ *
+ * Returns false (with console.warn) if the expression is not exactly 5 fields.
+ */
+export function matchCron(expr: string, now: Date): boolean {
+	if (typeof expr !== 'string') {
+		console.warn(`[synapse] matchCron: expected string expression, got ${typeof expr}`);
+		return false;
+	}
+	const fields = expr.trim().split(/\s+/);
+	if (fields.length !== 5) {
+		console.warn(`[synapse] matchCron: expected 5 fields, got ${fields.length} in "${expr}"`);
+		return false;
+	}
+
+	const [minuteF, hourF, domF, monthF, dowF] = fields as [string, string, string, string, string];
+
+	const minute = now.getMinutes();        // 0–59
+	const hour = now.getHours();            // 0–23
+	const dom = now.getDate();              // 1–31
+	const month = now.getMonth() + 1;      // 1–12
+	const dow = now.getDay();              // 0–6 (Sunday=0)
+
+	return (
+		matchField(minuteF, minute, 0, 59) &&
+		matchField(hourF, hour, 0, 23) &&
+		matchField(domF, dom, 1, 31) &&
+		matchField(monthF, month, 1, 12) &&
+		matchField(dowF, dow, 0, 6)
+	);
+}
+
+// ---------------------------------------------------------------------------
 // TriggerWatcher
 // ---------------------------------------------------------------------------
 
@@ -211,6 +323,9 @@ export class TriggerWatcher {
 		this.configReloadTimer = setTimeout(() => {
 			this.configReloadTimer = null;
 			void this.loadTriggers();
+			if (this.plugin.triggerScheduler) {
+				void this.plugin.triggerScheduler.loadTriggers();
+			}
 		}, CONFIG_RELOAD_MS);
 	}
 
@@ -251,6 +366,92 @@ export class TriggerWatcher {
 
 			// Match found — fire the executor (fire-and-forget; errors caught inside)
 			void executeTrigger(this.plugin, trigger, filePath);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TriggerScheduler
+// ---------------------------------------------------------------------------
+
+/**
+ * Evaluates scheduled (cron-based) triggers on a 60-second tick.
+ *
+ * - Uses `plugin.registerInterval()` for clean unload — no manual stop() needed.
+ * - Deduplicates within the same minute via `plugin.settings.triggerLastFired`
+ *   (persisted across plugin reloads).
+ */
+export class TriggerScheduler {
+	private plugin: SynapsePlugin;
+	private triggers: TriggerConfig[] = [];
+	private started = false;
+
+	constructor(plugin: SynapsePlugin) {
+		this.plugin = plugin;
+	}
+
+	/**
+	 * Load scheduled triggers and register the 60-second tick interval.
+	 * The interval is registered via Obsidian's `registerInterval()` so it is
+	 * automatically cleared on plugin unload.
+	 */
+	async start(): Promise<void> {
+		if (this.started) return;
+		this.started = true;
+
+		await this.loadTriggers();
+
+		// Run immediate tick to handle the current minute on startup/reload
+		this.tick();
+
+		this.plugin.registerInterval(window.setInterval(() => this.tick(), 60_000));
+
+		console.log(`[synapse] TriggerScheduler started — ${this.triggers.length} scheduled trigger(s) loaded`);
+	}
+
+	/** Called every 60 seconds to evaluate scheduled triggers. */
+	private tick(): void {
+		const now = new Date();
+		let didFire = false;
+
+		for (const trigger of this.triggers) {
+			// Only enabled triggers (enabled defaults to true when omitted)
+			if (trigger.enabled === false) continue;
+
+			// Must have a schedule
+			if (!trigger.schedule) continue;
+
+			// Check cron match
+			if (!matchCron(trigger.schedule, now)) continue;
+
+			// Dedup: skip if already fired in this same minute
+			const lastFired = this.plugin.settings.triggerLastFired[trigger.name];
+			if (lastFired !== undefined) {
+				if (Math.floor(lastFired / 60_000) === Math.floor(now.getTime() / 60_000)) {
+					continue;
+				}
+			}
+
+			// Fire!
+			console.log(`[synapse] Scheduled trigger "${trigger.name}" firing`);
+			this.plugin.settings.triggerLastFired[trigger.name] = now.getTime();
+			didFire = true;
+		}
+
+		if (didFire) {
+			void this.plugin.saveSettings();
+		}
+	}
+
+	/** Load scheduled triggers from `_synapse/triggers/`, keeping only those with a `schedule`. */
+	async loadTriggers(): Promise<void> {
+		try {
+			const folder = normalizePath(`${SYNAPSE_FOLDER}/triggers`);
+			const all = await scanTriggers(this.plugin.app, folder);
+			this.triggers = all.filter(t => t.schedule !== undefined);
+		} catch (e) {
+			console.error('[synapse] TriggerScheduler: failed to load triggers:', e);
+			this.triggers = [];
 		}
 	}
 }
