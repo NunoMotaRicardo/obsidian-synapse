@@ -157,6 +157,10 @@ function matchFieldPart(part: string, value: number, min: number, max: number): 
  * Returns false (with console.warn) if the expression is not exactly 5 fields.
  */
 export function matchCron(expr: string, now: Date): boolean {
+	if (typeof expr !== 'string') {
+		console.warn(`[synapse] matchCron: expected string expression, got ${typeof expr}`);
+		return false;
+	}
 	const fields = expr.trim().split(/\s+/);
 	if (fields.length !== 5) {
 		console.warn(`[synapse] matchCron: expected 5 fields, got ${fields.length} in "${expr}"`);
@@ -318,6 +322,9 @@ export class TriggerWatcher {
 		this.configReloadTimer = setTimeout(() => {
 			this.configReloadTimer = null;
 			void this.loadTriggers();
+			if (this.plugin.triggerScheduler) {
+				void this.plugin.triggerScheduler.loadTriggers();
+			}
 		}, CONFIG_RELOAD_MS);
 	}
 
@@ -376,6 +383,7 @@ export class TriggerWatcher {
 export class TriggerScheduler {
 	private plugin: SynapsePlugin;
 	private triggers: TriggerConfig[] = [];
+	private started = false;
 
 	constructor(plugin: SynapsePlugin) {
 		this.plugin = plugin;
@@ -387,7 +395,13 @@ export class TriggerScheduler {
 	 * automatically cleared on plugin unload.
 	 */
 	async start(): Promise<void> {
+		if (this.started) return;
+		this.started = true;
+
 		await this.loadTriggers();
+
+		// Run immediate tick to handle the current minute on startup/reload
+		this.tick();
 
 		this.plugin.registerInterval(window.setInterval(() => this.tick(), 60_000));
 
@@ -397,6 +411,7 @@ export class TriggerScheduler {
 	/** Called every 60 seconds to evaluate scheduled triggers. */
 	private tick(): void {
 		const now = new Date();
+		let didFire = false;
 
 		for (const trigger of this.triggers) {
 			// Only enabled triggers (enabled defaults to true when omitted)
@@ -419,12 +434,16 @@ export class TriggerScheduler {
 			// Fire!
 			console.log(`[synapse] Scheduled trigger "${trigger.name}" firing`);
 			this.plugin.settings.triggerLastFired[trigger.name] = now.getTime();
+			didFire = true;
+		}
+
+		if (didFire) {
 			void this.plugin.saveSettings();
 		}
 	}
 
 	/** Load scheduled triggers from `_synapse/triggers/`, keeping only those with a `schedule`. */
-	private async loadTriggers(): Promise<void> {
+	async loadTriggers(): Promise<void> {
 		try {
 			const folder = normalizePath(`${SYNAPSE_FOLDER}/triggers`);
 			const all = await scanTriggers(this.plugin.app, folder);
