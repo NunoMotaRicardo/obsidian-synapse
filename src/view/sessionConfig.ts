@@ -253,9 +253,10 @@ export function buildVaultContextBlock(
  */
 export function buildSelfImproveHint(agentName: string): string {
 	return '\n\n[Self-Improve] If the user expresses a preference about how Synapse should behave' +
-		' (e.g. "always use APA citations", "make the assistant more concise"),' +
+		' (e.g. "always use APA citations", "make the assistant more concise", or "summarize inbox notes every morning"),' +
 		' propose creating or modifying a Synapse customization artifact (agent, skill, or trigger).' +
 		' Artifacts live in the _synapse/ folder (.md files for agents in _synapse/agents/, SKILL.md files for skills in _synapse/skills/<name>/SKILL.md, and .md files for triggers in _synapse/triggers/).' +
+		' Triggers are markdown files in _synapse/triggers/ with frontmatter fields: name (required), description (required), event (one of: file-created, file-modified, file-deleted, file-renamed) or schedule (cron expression, e.g. "0 9 * * *"), and optional fields: path (glob), model, agent, write (true/false/\'frontmatter\'), enabled (true/false). The body is the prompt instructions using {{file}} (event) or {{files}} (scheduled).' +
 		' State what you would create (type and summary), then ask permission before writing.' +
 		` Current agent: ${agentName}.`;
 }

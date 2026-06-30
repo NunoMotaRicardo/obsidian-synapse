@@ -76,7 +76,7 @@ excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by
 ## Self-improve hint
 
 `buildSelfImproveHint(agentName)` in `sessionConfig.ts` teaches agents to recognize
-customization intent. Mentions "agent", "skill", and "trigger" as artifact types.
+customization intent. Mentions "agent", "skill", and "trigger" as artifact types, and describes the native trigger layout schema (fields and template variables).
 Skipped when the user is already using the `improve-synapse` skill.
 
 ## First-run seeding
