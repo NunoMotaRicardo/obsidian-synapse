@@ -13,6 +13,7 @@ import {SYNAPSE_FOLDER} from './settings';
 import {parseFrontmatter, modifyArtifact} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
 import {vaultTools} from './vaultTools';
+import {McpBridgeSession} from './mcpBridge';
 
 // ---------------------------------------------------------------------------
 // Template substitution
@@ -142,17 +143,36 @@ async function executeWithLocalModel(
 		? `File: ${filePath}\n\n${fileContent}\n\n---\n\n${prompt}`
 		: prompt;
 
-	const res = await executeLocalProviderQuery(providerConfig, {
-		prompt: fullPrompt,
-		...(supportsTools ? {tools: vaultTools, app: plugin.app} : {}),
-	});
-	if (!res.ok) {
-		throw new Error(res.error);
+	// Start MCP bridge session — spawn servers from _synapse/.mcp.json and collect
+	// their tools to merge alongside built-in vault tools.
+	const vaultBasePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+	const mcpSession = new McpBridgeSession();
+	let mcpTools: import('./providerModels').LocalTool[] = [];
+	if (supportsTools) {
+		try {
+			mcpTools = await mcpSession.start(vaultBasePath);
+		} catch (e) {
+			console.warn('[synapse] MCP bridge start failed (continuing without MCP tools):', e);
+		}
 	}
-	const content = res.content ?? '';
-	return res.truncated
-		? `${content}\n\n_(Synapse: tool-calling loop reached the turn limit before the model finished.)_`
-		: content;
+
+	try {
+		const allTools = supportsTools ? [...vaultTools, ...mcpTools] : [];
+		const res = await executeLocalProviderQuery(providerConfig, {
+			prompt: fullPrompt,
+			...(allTools.length > 0 ? {tools: allTools, app: plugin.app} : {}),
+		});
+		if (!res.ok) {
+			throw new Error(res.error);
+		}
+		const content = res.content ?? '';
+		return res.truncated
+			? `${content}\n\n_(Synapse: tool-calling loop reached the turn limit before the model finished.)_`
+			: content;
+	} finally {
+		// Always shut down MCP servers after the query completes (success or error)
+		await mcpSession.stop();
+	}
 }
 
 /**
