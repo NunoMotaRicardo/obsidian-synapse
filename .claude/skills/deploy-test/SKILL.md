@@ -25,7 +25,7 @@ D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\
    ```
    If the `obsidian` CLI is unavailable, tell the user to reload manually
    (**Settings → Community plugins** toggle, or Ctrl+R).
-4. Verify behavior relevant to the change. For Claude connectivity: open the Claude Brain panel,
+4. Verify behavior relevant to the change. For Claude connectivity: open the Synapse panel,
    check the model dropdown populates and a short chat streams. Console errors show in the
    Obsidian developer console (Ctrl+Shift+I) prefixed `[synapse]`.
 5. Record the result in the active issue's "Verification log" section.

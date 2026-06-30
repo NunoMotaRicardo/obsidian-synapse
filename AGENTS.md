@@ -26,8 +26,8 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 ## Workflow
 
 - Work items are GitHub issues on `NunoMotaRicardo/obsidian-claude-brain` (`gh issue
-  list/view/create/edit`); `in-progress` label marks active work. Run `/brain-build <#N |
-  "description">` for the full plan→code→review→PR cycle, or `/brain-lite "description"` for
+  list/view/create/edit`); `in-progress` label marks active work. Run `/synapse-build <#N |
+  "description">` for the full plan→code→review→PR cycle, or `/synapse-lite "description"` for
   a quick one-pass change (still build/lint/deploy-test, opens a draft PR). See
   `wiki/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
@@ -38,26 +38,26 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 
 ## Agents
 
-`.claude/agents/brain-*.md` are Claude Code dev-workflow agents for *building* this
-plugin, orchestrated by `/brain-build` and `/brain-lite`:
+`.claude/agents/synapse-*.md` are Claude Code dev-workflow agents for *building* this
+plugin, orchestrated by `/synapse-build` and `/synapse-lite`:
 
-- **brain-analyst** — synthesizes `grill-me` sessions and librarian work into `wiki/`
+- **synapse-analyst** — synthesizes `grill-me` sessions and librarian work into `wiki/`
   (decision records, guides). Hands functional intent to the planner.
-- **brain-technical-planner** — entry point of `/brain-build`: audits `specs/`/`src/`
+- **synapse-technical-planner** — entry point of `/synapse-build`: audits `specs/`/`src/`
   against the request, creates or scopes a GitHub issue, and splits oversized work into
   sub-issues. Owns `specs/<module>.md` updates.
-- **brain-coder** — implements one issue (full mode) or one description (lite mode) at a
+- **synapse-coder** — implements one issue (full mode) or one description (lite mode) at a
   time in small, verified increments (build + lint + deploy-test), on a `claude/<slug>` branch.
-- **brain-reviewer** — diff-only quality + security gate (`/code-review` +
+- **synapse-reviewer** — diff-only quality + security gate (`/code-review` +
   `/security-review`), pass/fail verdict and PR description draft; full mode only.
 
-Live elicitation (`grill-me`) runs in the main thread; spawn brain-analyst afterwards to
+Live elicitation (`grill-me`) runs in the main thread; spawn synapse-analyst afterwards to
 write it up.
 
 > **Don't confuse with the plugin's own feature:** the vault-local `synapse/` folder
 > (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
 > customization model parsed by `src/configLoader.ts` — documented in
-> `wiki/ai-customization-guide.md`. The `.claude/agents/brain-*.md` files above are
+> `wiki/ai-customization-guide.md`. The `.claude/agents/synapse-*.md` files above are
 > developer tooling for working on this repo.
 
 ## Conventions

@@ -1,0 +1,10 @@
+description = "Run the synapse-build playbook: plan → implement → review → open PR for a GitHub issue or feature description."
+
+prompt = """
+Follow this playbook end to end. Planning and review run here in this session; use the
+@synapse-coder subagent for implementation if available, otherwise implement inline.
+
+@{.claude/skills/synapse-build/SKILL.md}
+
+Input: {{args}}
+"""

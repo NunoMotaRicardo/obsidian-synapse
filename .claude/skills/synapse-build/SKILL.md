@@ -1,21 +1,21 @@
 ---
-name: brain-build
-description: Full build cycle for a GitHub issue or feature description — plan/scope, implement, review (up to 3 rounds), and open a PR. Use when the user asks to build, implement, or fix something via the brain agent pipeline, or invokes /brain-build.
+name: synapse-build
+description: Full build cycle for a GitHub issue or feature description — plan/scope, implement, review (up to 3 rounds), and open a PR. Use when the user asks to build, implement, or fix something via the synapse agent pipeline, or invokes /synapse-build.
 ---
 
-# /brain-build <#N | "description">
+# /synapse-build <#N | "description">
 
 Orchestrates the full plan → implement → review → PR cycle for one GitHub issue on
 `NunoMotaRicardo/obsidian-claude-brain` (the repo that `origin` points to). See
 `wiki/decisions/2026-06-14-github-issue-workflow.md` for the design rationale.
 
-Planning and review run **in the main thread** (the `brain-technical-planner` and `brain-reviewer`
-skills); only implementation is delegated to the **brain-coder** agent, for context isolation
+Planning and review run **in the main thread** (the `synapse-technical-planner` and `synapse-reviewer`
+skills); only implementation is delegated to the **synapse-coder** agent, for context isolation
 during long iterative work.
 
 ## Steps
 
-1. **Plan & scope** — run the **`brain-technical-planner`** skill with the input (`#N` or the
+1. **Plan & scope** — run the **`synapse-technical-planner`** skill with the input (`#N` or the
    description).
    - If given a description, it creates the GitHub issue.
    - If given an existing issue, it audits feasibility (one coder pass + ≤3 review rounds).
@@ -29,9 +29,9 @@ during long iterative work.
 3. **Derive the branch name** — `claude/<slug>` from the issue title.
 
 4. **Build/review loop** (max 3 rounds):
-   - Spawn the **brain-coder** agent (foreground, full mode) with the issue number and branch
+   - Spawn the **synapse-coder** agent (foreground, full mode) with the issue number and branch
      name. On rounds 2-3, also pass the previous round's reviewer findings.
-   - Run the **`brain-reviewer`** skill in the main thread to review `git diff main`.
+   - Run the **`synapse-reviewer`** skill in the main thread to review `git diff main`.
    - **APPROVED** → break to step 5.
    - **CHANGES REQUESTED** and round < 3 → loop back to the coder with the findings.
    - **CHANGES REQUESTED** at round 3 → **stop**. Report the branch name, issue number, and the

@@ -1,9 +1,9 @@
 ---
-name: brain-reviewer
-description: Quality + security gate run after brain-coder in the /brain-build cycle. Reviews ONLY the current branch's diff against main for correctness, issue/spec adherence, Obsidian plugin conventions, and security. Reuses /code-review and /security-review. Produces a pass/fail verdict and, on APPROVED, the PR description body. Use to review a freshly-coded branch before opening a PR.
+name: synapse-reviewer
+description: Quality + security gate run after synapse-coder in the /synapse-build cycle. Reviews ONLY the current branch's diff against main for correctness, issue/spec adherence, Obsidian plugin conventions, and security. Reuses /code-review and /security-review. Produces a pass/fail verdict and, on APPROVED, the PR description body. Use to review a freshly-coded branch before opening a PR.
 ---
 
-# brain-reviewer — quality + security gate
+# synapse-reviewer — quality + security gate
 
 Use this skill (in the main thread) as the combined code-quality and security gate. It **never
 writes code** — it reports a verdict.
@@ -74,7 +74,7 @@ it as the final PR body, not notes to a human.
 
 ## Rules
 - Any **BLOCKING** finding, failing build/lint, or **security FAIL** ⇒ CHANGES REQUESTED; the
-  build loop sends it back to `brain-coder` (max 3 rounds — if round 3 still has issues, report
+  build loop sends it back to `synapse-coder` (max 3 rounds — if round 3 still has issues, report
   CHANGES REQUESTED honestly and let the loop escalate to the user).
 - APPROVED with NON-BLOCKING findings ⇒ proceed, listing them under "Known follow-ups" in the PR body.
 - Out-of-scope issues ⇒ note as "out of scope — log separately", do not fix.

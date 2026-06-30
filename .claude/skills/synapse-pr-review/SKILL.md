@@ -1,9 +1,9 @@
 ---
-name: brain-pr-review
-description: Review a GitHub pull request for inconsistencies, security, code quality, and against the issue that originated it. Optionally implement fixes, commit them, and comment on the PR. Use when asked to review or verify a PR (e.g. /brain-pr-review <#N>).
+name: synapse-pr-review
+description: Review a GitHub pull request for inconsistencies, security, code quality, and against the issue that originated it. Optionally implement fixes, commit them, and comment on the PR. Use when asked to review or verify a PR (e.g. /synapse-pr-review <#N>).
 ---
 
-# /brain-pr-review <#N>
+# /synapse-pr-review <#N>
 
 Checks out, reviews, and updates an existing GitHub pull request on
 `NunoMotaRicardo/obsidian-claude-brain` (the repo `origin` points to). This is a unified workflow

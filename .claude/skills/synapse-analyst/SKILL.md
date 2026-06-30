@@ -1,9 +1,9 @@
 ---
-name: brain-analyst
+name: synapse-analyst
 description: Synthesize grill-me/brainstorm elicitation into durable product/functional decision records under wiki/decisions/, and keep the wiki/ guides accurate, cross-linked, and proposing further reading (librarian mode). Use in the main thread after an elicitation, or when asked to write up a decision, update a wiki guide, or organize wiki/.
 ---
 
-# brain-analyst — wiki knowledge base
+# synapse-analyst — wiki knowledge base
 
 Use this skill to turn discussion into durable, well-organized knowledge under `wiki/`. Unlike
 `.claude/` memory, `wiki/` is version-controlled and shared with anyone reading the repo. This
@@ -26,8 +26,8 @@ wiki/
   images/       # screenshots referenced from guides
 ```
 
-Never write to `specs/`, GitHub issues, or `src/` — those belong to `brain-technical-planner` and
-`brain-coder`.
+Never write to `specs/`, GitHub issues, or `src/` — those belong to `synapse-technical-planner` and
+`synapse-coder`.
 
 ## Mode A — Functional analysis (synthesis)
 
@@ -52,7 +52,7 @@ What's explicitly out of scope for now.
 Unresolved items.
 
 ## Hand-off Notes for the Technical Planner
-The functional intent that brain-technical-planner must turn into specs/ updates and GitHub
+The functional intent that synapse-technical-planner must turn into specs/ updates and GitHub
 issues (no technical design here — module names, file paths, or API shapes are the planner's job).
 ```
 
@@ -75,4 +75,4 @@ the decision record.
 - Never invent results not supported by a source; write "unable to determine" instead.
 - Never include secrets/API keys/tokens; use placeholders.
 - When synthesis is complete, list the `wiki/` files written and hand functional intent to
-  `brain-technical-planner`.
+  `synapse-technical-planner`.

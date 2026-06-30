@@ -1063,7 +1063,7 @@ async function openSynapseSearchWithScope(plugin: SynapsePlugin, folderPath: str
 
 /**
  * Populate a menu with Synapse actions. Used by both the context menu
- * and the gutter brain-button to keep behaviour consistent.
+ * and the gutter synapse-button to keep behaviour consistent.
  *
  * @param menu      The Obsidian Menu (or submenu) to populate.
  * @param plugin    The Synapse plugin instance.

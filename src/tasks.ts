@@ -1,6 +1,6 @@
 /**
  * Shared task definitions used by the editor context menu, the gutter
- * brain-button, and the Edit modal.  Add a task here and it appears
+ * synapse-button, and the Edit modal.  Add a task here and it appears
  * everywhere automatically.
  */
 

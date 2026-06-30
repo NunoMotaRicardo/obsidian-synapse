@@ -28,8 +28,8 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 
 - Work items are GitHub issues on `NunoMotaRicardo/obsidian-claude-brain` (the repo `origin`
   points to; `gh issue list/view/create/edit`); `in-progress` label marks active work. Run
-  `/brain-build <#N | "description">` for the full plan→code→review→PR cycle, or
-  `/brain-lite "description"` for a quick one-pass change (still build/lint/deploy-test, opens a
+  `/synapse-build <#N | "description">` for the full plan→code→review→PR cycle, or
+  `/synapse-lite "description"` for a quick one-pass change (still build/lint/deploy-test, opens a
   draft PR). See `wiki/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\` → reload
@@ -42,20 +42,20 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 The dev workflow lives in `.claude/` (canonical, Claude-first). Only one bespoke **agent**
 remains; the rest are **skills** run in the main thread (warm context, no cold-start re-derivation):
 
-- **brain-coder** (`.claude/agents/brain-coder.md`) — the one spawned agent. Implements one issue
+- **synapse-coder** (`.claude/agents/synapse-coder.md`) — the one spawned agent. Implements one issue
   (full mode) or one description (lite mode) in small, verified increments (build + lint +
   deploy-test), on a `claude/<slug>` branch. Isolated because implementation is long and noisy.
-- **brain-technical-planner** (skill) — audits `specs/`/`src/` against a request, creates/scopes a
+- **synapse-technical-planner** (skill) — audits `specs/`/`src/` against a request, creates/scopes a
   GitHub issue, splits oversized work. Owns `specs/<module>.md`. Heavy audits → spawn a generic
   `Explore` agent for the read-only sweep.
-- **brain-reviewer** (skill) — diff-only quality + security gate (`/code-review` +
+- **synapse-reviewer** (skill) — diff-only quality + security gate (`/code-review` +
   `/security-review`), verdict + PR description draft.
-- **brain-analyst** (skill) — synthesizes `grill-me`/`brainstorm` sessions and librarian work into
+- **synapse-analyst** (skill) — synthesizes `grill-me`/`brainstorm` sessions and librarian work into
   `wiki/` (decision records, guides). Hands functional intent to the planner.
 
-Orchestrated by `/brain-build` (planner skill → brain-coder agent → reviewer skill loop → PR) and
-`/brain-lite` (coder agent only, draft PR). Live elicitation runs in the main thread; use the
-`brain-analyst` skill afterward to write it up.
+Orchestrated by `/synapse-build` (planner skill → synapse-coder agent → reviewer skill loop → PR) and
+`/synapse-lite` (coder agent only, draft PR). Live elicitation runs in the main thread; use the
+`synapse-analyst` skill afterward to write it up.
 
 **Gemini support (Claude-first):** Gemini reads `GEMINI.md` (which `@`-imports this `CLAUDE.md`)
 and `.gemini/commands/*` — thin TOML wrappers that inject the canonical `.claude/skills/`

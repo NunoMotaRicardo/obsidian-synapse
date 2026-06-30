@@ -1,6 +1,6 @@
 # Code Audit — Synapse Plugin (2026-06-30)
 
-> Produced by brain-analyst + brain-technical-planner after a full review of `src/`, `specs/`,
+> Produced by synapse-analyst + synapse-technical-planner after a full review of `src/`, `specs/`,
 > `wiki/`, and GitHub issues on `NunoMotaRicardo/obsidian-claude-brain`. Scope: consistency
 > check, completeness assessment, and prioritised recommendations.
 
@@ -223,7 +223,7 @@ remove the section from the spec.
 
 This is the most stale spec in the codebase. The Agent SDK's `query()` model (stateless
 per-query, no persistent connection, `pathToClaudeCodeExecutable`, no `ping()`) differs
-substantially from what the spec describes. A brain-coder working from this spec would build
+substantially from what the spec describes. A synapse-coder working from this spec would build
 the wrong thing.
 
 **Priority: HIGH.** The spec is the contract for implementers.

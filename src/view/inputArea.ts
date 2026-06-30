@@ -559,7 +559,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.inputEl.focus();
 	};
 
-	/** Add a selection attachment from the editor context menu / brain button. */
+	/** Add a selection attachment from the editor context menu / synapse button. */
 	proto.addSelectionAttachment = function (text: string, info: SelectionInfo): void {
 		// Resolve filePath: prefer info.filePath, fall back to current active file
 		const filePath = info.filePath ?? this.app.workspace.getActiveFile()?.path;

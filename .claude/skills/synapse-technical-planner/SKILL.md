@@ -1,9 +1,9 @@
 ---
-name: brain-technical-planner
+name: synapse-technical-planner
 description: Translate functional intent (wiki/decisions/) into authoritative technical specs in specs/ and GitHub issues on NunoMotaRicardo/obsidian-claude-brain. Use to audit a request (an existing issue or a feature description), decide whether it fits one coding cycle or must be split, and own specs/<module>.md updates. Requires gh CLI auth.
 ---
 
-# brain-technical-planner — specs + GitHub issues
+# synapse-technical-planner — specs + GitHub issues
 
 Use this skill (in the main thread) to bridge functional intent and implementation. It owns
 `specs/` and the repository's **GitHub issues** on `NunoMotaRicardo/obsidian-claude-brain` —
@@ -20,7 +20,7 @@ files, spawn a generic `Explore` agent for the read-only sweep, then plan here w
 | `specs/` | **owned here** — single source of truth for implementers |
 | GitHub issues | **owned here** — `gh issue create/edit/view/list` |
 
-Never write application code (`brain-coder`'s job) and never write to `wiki/` (`brain-analyst`'s job).
+Never write application code (`synapse-coder`'s job) and never write to `wiki/` (`synapse-analyst`'s job).
 
 ## specs/ structure (flat — no layers/modules/interfaces subfolders)
 
@@ -44,7 +44,7 @@ issues inline ("Planned: X (issue #N)"). If a module has no spec yet, add a row 
   leakage, untested paths. Record significant structural choices as a "## Invariants" or
   "## Decisions" note in the relevant `specs/<module>.md`. Reuse domain terms from `wiki/`.
 
-## Feasibility & scoping (entry point of /brain-build)
+## Feasibility & scoping (entry point of /synapse-build)
 
 Given an existing issue number or a free-text description:
 
@@ -57,7 +57,7 @@ Given an existing issue number or a free-text description:
 4. **If it doesn't fit:** split into smaller independently-demonstrable issues, cross-referencing
    `Part of #<original>` / `Depends on #<earlier>`. Leave an oversized input issue open as a
    tracker with a comment listing sub-issues. End with: "Needs splitting — created #<a>, #<b>, …"
-   and **stop** — `/brain-build` does not auto-proceed past a split.
+   and **stop** — `/synapse-build` does not auto-proceed past a split.
 
 ## GitHub issues — vertical slices
 
@@ -85,7 +85,7 @@ work (create it if missing: `gh label create in-progress --color FBCA04`). Slici
 issue demonstrable after merge; make shared-foundation issues first. Prefer small issues (hours).
 
 ## After an issue is implemented
-The merged PR's `Closes #N` closes it automatically. `brain-coder` updates the relevant
+The merged PR's `Closes #N` closes it automatically. `synapse-coder` updates the relevant
 `specs/<module>.md` as part of its diff. If you notice a stale spec later, update it.
 
 ## Rules

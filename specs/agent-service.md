@@ -29,8 +29,8 @@ Key query option fields used:
 | `pathToClaudeCodeExecutable` | `resolveCliPath()` → `runtimeManager.resolveDefaultCliPath()` |
 | `env` | `buildEnv()` — allowlisted env via `cleanEnv()`, plus `ANTHROPIC_API_KEY` for API-key auth |
 | `model` | toolbar / agent frontmatter / settings |
-| `reasoningEffort` | settings + toolbar brain menu, only when the model supports it |
-| `reasoningSummary` | settings + toolbar brain menu, same gating |
+| `reasoningEffort` | settings + toolbar reasoning menu (brain icon), only when the model supports it |
+| `reasoningSummary` | settings + toolbar reasoning menu (brain icon), same gating |
 | `contextTier` | settings `contextTier` (`'default'` or `'long_context'`); omitted when `'default'` |
 | `infiniteSessions` | settings `infiniteSessionsEnabled`; omitted when `true` (SDK default) |
 | `systemPrompt` | agent body / built-in prompt |
