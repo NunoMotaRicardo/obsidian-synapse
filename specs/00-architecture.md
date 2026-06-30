@@ -68,3 +68,13 @@ dropdowns (display-only). See [config-loader.md](config-loader.md) for details.
   list/view/create/edit`); `in-progress` marks active work.
 - Build: `npm run build` (tsc typecheck + esbuild bundle). Deploy/verify: see
   `.claude/skills/deploy-test/`.
+
+## Testing
+
+An automated unit test suite is configured using Vitest.
+- Run tests: `npm run test` (or `npx vitest run`)
+- Interactive watch mode: `npm run test:watch` (or `npx vitest`)
+- Environment: Node.js (via Vitest config)
+- Mocking: Global mock for the Obsidian API is configured in `test/setup.ts` to mock native interfaces not available under Node.
+- Files: Unit tests live in the `test/` directory, named `<module>.test.ts`.
+
