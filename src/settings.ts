@@ -1,6 +1,6 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
-import type {ContextTier} from "./copilot";
+import type {ContextTier} from "./agentService";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 
@@ -358,7 +358,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.anthropicApiKey)
 							.onChange(async (value) => {
 								updateSecureField(this.app, this.plugin, 'anthropicApiKey', value.trim());
-								await this.plugin.initCopilot();
+								await this.plugin.initAgentService();
 							});
 					});
 			} else {
@@ -378,7 +378,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.authType = value as 'subscription' | 'apiKey';
 					await this.plugin.saveSettings();
-					await this.plugin.initCopilot();
+					await this.plugin.initAgentService();
 					renderAuthFields();
 				}))
 			.addButton(button => button
@@ -387,10 +387,10 @@ export class SynapseSettingTab extends PluginSettingTab {
 					button.setDisabled(true);
 					button.setButtonText('Testing…');
 					try {
-						if (!this.plugin.copilot) {
+						if (!this.plugin.agentService) {
 							throw new Error('Claude service is not available');
 						}
-						const models = await this.plugin.copilot.fetchModels();
+						const models = await this.plugin.agentService.fetchModels();
 						this.plugin.notifySidebarModelsChanged(models);
 						new Notice(`Connected — found ${models.length} model(s).`);
 					} catch (e) {
@@ -413,7 +413,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.claudeLocation = value.trim();
 					await this.plugin.saveSettings();
-					await this.plugin.initCopilot();
+					await this.plugin.initAgentService();
 					await renderCliStatus();
 				}));
 
@@ -421,9 +421,9 @@ export class SynapseSettingTab extends PluginSettingTab {
 		cliStatusEl.style.marginTop = '8px';
 		const renderCliStatus = async () => {
 			cliStatusEl.empty();
-			if (this.plugin.copilot) {
+			if (this.plugin.agentService) {
 				try {
-					const resolved = await this.plugin.copilot.getVersionInfo();
+					const resolved = await this.plugin.agentService.getVersionInfo();
 					const sourceLabels: Record<string, string> = {
 						'settings': 'settings override',
 						'global-npm': 'global npm install',
@@ -471,7 +471,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				datalist = providerFieldsEl.createEl('datalist', {attr: {id: datalistId}});
 			}
 
-			const updateModelDatalist = (models: import('./copilot').ModelInfo[]) => {
+			const updateModelDatalist = (models: import('./agentService').ModelInfo[]) => {
 				datalist.empty();
 				for (const m of models) {
 					const opt = datalist.createEl('option', {attr: {value: m.id}});
@@ -500,7 +500,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 							this.plugin.settings.providerBaseUrl = 'http://localhost:11434';
 						}
 						await this.plugin.saveSettings();
-						await this.plugin.initCopilot();
+						await this.plugin.initAgentService();
 						updateProviderDesc();
 						renderProviderFields();
 					}))
@@ -561,7 +561,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					.onChange(async (val) => {
 						this.plugin.settings.providerBaseUrl = val.trim();
 						await this.plugin.saveSettings();
-						await this.plugin.initCopilot();
+						await this.plugin.initAgentService();
 					}));
 
 			if (this.plugin.settings.providerPreset !== 'ollama') {
@@ -574,7 +574,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 						text.setValue(this.plugin.settings.providerApiKey)
 							.onChange(async (val) => {
 								updateSecureField(this.app, this.plugin, 'providerApiKey', val.trim());
-								await this.plugin.initCopilot();
+								await this.plugin.initAgentService();
 							});
 					});
 			}

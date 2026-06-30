@@ -8,7 +8,7 @@ CLI process per query.
 ┌──────────────────────────────────────────────────────────────┐
 │ Obsidian (Electron renderer, Node integration)               │
 │                                                              │
-│  main.ts ──► AgentService (src/copilot.ts)                   │
+│  main.ts ──► AgentService (src/agentService.ts)               │
 │  │               │  @anthropic-ai/claude-agent-sdk           │
 │  │               ▼                                           │
 │  │           claude CLI process (spawned per query)          │
@@ -26,7 +26,7 @@ CLI process per query.
 | Module | Spec | Source | Responsibility |
 |---|---|---|---|
 | main | — | `src/main.ts` | Plugin lifecycle, service wiring, commands, ribbon |
-| agent-service | [copilot-service.md](copilot-service.md) | `src/copilot.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
+| agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
 | provider-models | [settings.md](settings.md) | `src/providerModels.ts` | Shared BYOK model-list fetch (`/v1/models`, `/api/tags`), used by Settings Test button and `onListModels` |

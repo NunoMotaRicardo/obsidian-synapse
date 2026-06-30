@@ -1,6 +1,6 @@
 import {Menu, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {ModelInfo, ReasoningEffort, ReasoningSummary, ContextTier} from '../copilot';
+import type {ModelInfo, ReasoningEffort, ReasoningSummary, ContextTier} from '../agentService';
 import type {SynapseSettings} from '../settings';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';

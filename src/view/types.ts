@@ -1,5 +1,5 @@
 import type {Component} from 'obsidian';
-import type {Session} from '../copilot';
+import type {Session} from '../agentService';
 import type {ChatMessage} from '../types';
 
 /** State for a session that may be running in the background while the user views another session. */

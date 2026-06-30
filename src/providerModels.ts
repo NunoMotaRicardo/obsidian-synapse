@@ -1,5 +1,5 @@
 import type {App} from 'obsidian';
-import type {ModelInfo} from './copilot';
+import type {ModelInfo} from './agentService';
 
 export interface LocalToolCall {
 	id?: string;

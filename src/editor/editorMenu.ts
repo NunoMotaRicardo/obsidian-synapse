@@ -1,7 +1,7 @@
 import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
-import type {SdkPluginConfig} from '../copilot';
+import type {SdkPluginConfig} from '../agentService';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
@@ -221,7 +221,7 @@ function showNewNoteModal(plugin: SynapsePlugin, folder: TFolder): void {
 }
 
 async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateType: string): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 
 	const templateClause = templateType
 		? `The note should follow a "${templateType}" template. `
@@ -230,7 +230,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 	const notice = new Notice('Synapse: creating note…', 0);
 	try {
 		// Ask the LLM for a suggested filename and structured content
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Create a new Markdown note. ${templateClause}` +
 				`Return the output in exactly this format:\n` +
@@ -310,7 +310,7 @@ function showNewCanvasModal(plugin: SynapsePlugin, folder: TFolder): void {
 }
 
 async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateType: string): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 
 	const templateClause = templateType
 		? `The canvas should follow a "${templateType}" template. `
@@ -318,7 +318,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 
 	const notice = new Notice('Synapse: creating canvas\u2026', 0);
 	try {
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Create an Obsidian canvas. ${templateClause}` +
 				`Return the output in exactly this format:\n` +
@@ -388,7 +388,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 }
 
 async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 
 	// Gather markdown notes in the folder
 	const mdFiles = folder.children
@@ -413,7 +413,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 
 		const combined = noteContents.join('\n\n---\n\n');
 
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Summarize the following ${mdFiles.length} notes from the folder "${folder.name}". ` +
 				`Produce a single cohesive summary note in Markdown that captures the key topics, ` +
@@ -453,8 +453,8 @@ export async function runSelectionAction(
 	selectedText: string,
 	action: TextTask,
 ): Promise<void> {
-	if (!plugin.copilot) {
-		new Notice('Copilot is not configured.');
+	if (!plugin.agentService) {
+		new Notice('Synapse is not configured.');
 		return;
 	}
 
@@ -491,9 +491,9 @@ async function runActionPrompt(
 	action: TextTask,
 	selectedText: string,
 ): Promise<string | null> {
-	if (!plugin.copilot) return null;
+	if (!plugin.agentService) return null;
 
-	const {content: result, sessionId} = await plugin.copilot.inlineChat({
+	const {content: result, sessionId} = await plugin.agentService.inlineChat({
 		prompt: action.prompt(selectedText),
 		agent: plugin.settings.featureAgents?.inline || 'General',
 		plugins: getVaultPlugins(plugin),
@@ -611,7 +611,7 @@ function showAskAboutImageModal(plugin: SynapsePlugin, file: TFile, embedHint?: 
 
 /** Send a user prompt about an image and insert the response below the embed. */
 async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: string, embedHint?: {from: number; to: number}): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 
 	const ctx = getActiveEditorAndEmbed(plugin, file, embedHint);
 	if (!ctx) return;
@@ -620,7 +620,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 	const absPath = getAbsolutePath(plugin, file);
 	const notice = new Notice('Synapse: asking about image…', 0);
 	try {
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt: userPrompt,
 			agent: plugin.settings.featureAgents?.vision || 'Vision',
 			plugins: getVaultPlugins(plugin),
@@ -688,11 +688,11 @@ function getVaultPlugins(plugin: SynapsePlugin): SdkPluginConfig[] {
 
 /** Extract content from an image by sending it to the LLM. */
 async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<string | null> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return null; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return null; }
 
 	const absPath = getAbsolutePath(plugin, file);
 
-	const {content: result, sessionId} = await plugin.copilot.inlineChat({
+	const {content: result, sessionId} = await plugin.agentService.inlineChat({
 		prompt:
 			`Extract all visible content from this image and convert it to well-structured Markdown. ` +
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
@@ -830,12 +830,12 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 	if (!ctx) return;
 	const {cmView, embed} = ctx;
 
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 
 	const absPath = getAbsolutePath(plugin, file);
 	const notice = new Notice('Synapse: converting image to Mermaid diagram…', 0);
 	try {
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Analyze this image and convert it into a Mermaid diagram. ` +
 				`Use the mermaid skill available in the vault to produce valid Mermaid syntax. ` +
@@ -916,11 +916,11 @@ export function showEditNoteModal(plugin: SynapsePlugin, view: EditorView): void
 }
 
 async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt: string): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 	const doc = view.state.doc.toString();
 	const notice = new Notice('Synapse: editing note…', 0);
 	try {
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
 				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
@@ -973,7 +973,7 @@ export function showStructureModal(plugin: SynapsePlugin, view: EditorView): voi
 }
 
 async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateType: string): Promise<void> {
-	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
 	const doc = view.state.doc.toString();
 	const notice = new Notice('Synapse: structuring note…', 0);
 
@@ -982,7 +982,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 		: '';
 
 	try {
-		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt:
 				`Structure and refine the following note using Markdown. ${templateClause}` +
 				`Organise the content with headings, lists, and emphasis where appropriate. ` +

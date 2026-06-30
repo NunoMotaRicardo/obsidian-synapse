@@ -1,5 +1,5 @@
 import {App, Modal} from 'obsidian';
-import type {PermissionResult, PermissionUpdate} from '../copilot';
+import type {PermissionResult, PermissionUpdate} from '../agentService';
 
 export interface ToolApprovalRequest {
 	toolName: string;

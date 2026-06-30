@@ -1,6 +1,6 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {SessionConfig, SessionMetadata} from '../copilot';
+import type {SessionConfig, SessionMetadata} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
@@ -317,8 +317,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		const query = this.searchInputEl.value.trim();
 		if (!query) return;
 
-		if (!this.plugin.copilot) {
-			new Notice('Copilot is not configured.');
+		if (!this.plugin.agentService) {
+			new Notice('Synapse is not configured.');
 			return;
 		}
 
@@ -351,7 +351,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
-		const {content} = await this.plugin.copilot!.inlineChat({
+		const {content} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || 'General',
 			cwd: this.getSearchWorkingDirectory(),
@@ -370,7 +370,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
-		const {content, sessionId} = await this.plugin.copilot!.inlineChat({
+		const {content, sessionId} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			...sessionConfig,
 			timeoutMs,

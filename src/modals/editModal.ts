@@ -392,8 +392,8 @@ export class EditModal extends Modal {
 			new Notice('Please enter some text.');
 			return;
 		}
-		if (!this.plugin.copilot) {
-			new Notice('Copilot is not configured.');
+		if (!this.plugin.agentService) {
+			new Notice('Synapse is not configured.');
 			return;
 		}
 
@@ -456,7 +456,7 @@ export class EditModal extends Modal {
 			`When asked for multiple variations, separate them with ===CHOICE=== on its own line. ` +
 			`Do not add any labels, numbers, or headings before each choice.`;
 
-		const {content: result, sessionId} = await this.plugin.copilot!.inlineChat({
+		const {content: result, sessionId} = await this.plugin.agentService!.inlineChat({
 			prompt,
 			agent: this.plugin.settings.featureAgents?.inline || 'General',
 			plugins: [{type: 'local', path: `${(this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath.replace(/\\/g, '/')}/_synapse/`}],
