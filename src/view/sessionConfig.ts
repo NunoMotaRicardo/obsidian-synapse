@@ -248,14 +248,34 @@ export function computeAdditionalDirectories(params: {
 	blobPaths: Map<ChatAttachment, string>;
 	vaultBasePath: string;
 	workingDirectory: string;
+	scopePaths?: string[];
+	app?: App;
 }): string[] {
-	const {attachments, blobPaths, vaultBasePath, workingDirectory} = params;
+	const {attachments, blobPaths, vaultBasePath, workingDirectory, scopePaths = [], app} = params;
 	const dirs = new Set<string>();
+	const path = nodeRequire?.('node:path') as typeof import('node:path') | undefined;
 
 	const addForPath = (absPath: string, isDirectory: boolean) => {
 		const normalized = absPath.replace(/\\/g, '/');
-		if (isPathInside(normalized, workingDirectory)) return; // already readable via cwd
-		const dir = isDirectory ? normalized : normalized.slice(0, normalized.lastIndexOf('/'));
+		const normalizedCwd = workingDirectory.replace(/\\/g, '/');
+		if (isPathInside(normalized, normalizedCwd)) return; // already readable via cwd
+
+		let dir: string;
+		if (isDirectory) {
+			dir = normalized;
+		} else {
+			if (path) {
+				dir = path.dirname(absPath).replace(/\\/g, '/');
+			} else {
+				const idx = normalized.lastIndexOf('/');
+				dir = idx === -1 ? '' : normalized.slice(0, idx);
+			}
+		}
+
+		// Ensure Windows drive-root gets trailing slash (e.g. C: -> C:/)
+		if (dir && /^[a-zA-Z]:$/.test(dir)) {
+			dir += '/';
+		}
 		if (dir) dirs.add(dir);
 	};
 
@@ -271,6 +291,21 @@ export function computeAdditionalDirectories(params: {
 
 	for (const blobPath of blobPaths.values()) {
 		addForPath(blobPath, false);
+	}
+
+	for (const scopePath of scopePaths) {
+		const normalizedScope = scopePath === '/' ? '' : normalizePath(scopePath);
+		const absPath = scopePath === '/' ? vaultBasePath : vaultBasePath + '/' + normalizedScope;
+		let isDir = false;
+		if (scopePath === '/') {
+			isDir = true;
+		} else if (app) {
+			const abstract = app.vault.getAbstractFileByPath(normalizedScope);
+			if (abstract && 'children' in abstract) { // TFolder
+				isDir = true;
+			}
+		}
+		addForPath(absPath, isDir);
 	}
 
 	return Array.from(dirs);

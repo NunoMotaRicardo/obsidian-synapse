@@ -571,6 +571,8 @@ export class SynapseView extends ItemView {
 				blobPaths,
 				vaultBasePath,
 				workingDirectory: this.getWorkingDirectory(),
+				scopePaths: currentScopePaths,
+				app: this.app,
 			});
 
 			try {
