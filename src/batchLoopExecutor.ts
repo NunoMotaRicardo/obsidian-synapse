@@ -10,7 +10,7 @@
  * (#74, #75).
  */
 
-import {App, Notice, TFile, TFolder, createFragment, normalizePath} from 'obsidian';
+import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
 import {SYNAPSE_FOLDER} from './settings';
 import {ensureFolder} from './configWriter';
@@ -297,7 +297,7 @@ export async function runBatchLoop(
  * loop finishes (caller is responsible for hiding it).
  */
 function showStopNotice(handle: BatchLoopHandle): Notice {
-	const fragment = createFragment((el) => {
+	const fragment = createFragment((el: DocumentFragment) => {
 		el.createSpan({text: 'Synapse: batch loop running… '});
 		const btn = el.createEl('button', {text: 'Stop'});
 		btn.addEventListener('click', () => {
