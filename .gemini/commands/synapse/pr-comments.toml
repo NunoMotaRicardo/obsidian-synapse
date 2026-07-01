@@ -1,0 +1,9 @@
+description = "Retrieve, analyze, and fix the review comments of a PR, reply, and resolve the threads."
+
+prompt = """
+Follow this playbook to retrieve review comments on a GitHub PR, analyze and plan fixes, implement them, reply to comments, and resolve conversation threads:
+
+@{.claude/skills/synapse-pr-comments/SKILL.md}
+
+{{args}}
+"""
