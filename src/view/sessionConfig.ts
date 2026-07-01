@@ -65,6 +65,7 @@ async function writeBlobToTempFile(att: ChatAttachment): Promise<string | undefi
 		const safeName = (att.name || 'attachment').replace(/[\\/:*?"<>|]/g, '_');
 		const ext = safeName.includes('.') ? '' : (att.mimeType?.startsWith('image/') ? `.${att.mimeType.split('/')[1]}` : '');
 		const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}${ext}`;
+		const filePath = path.join(dir, fileName);
 
 		await fs.writeFile(filePath, Buffer.from(att.data, 'base64'));
 		return filePath;
