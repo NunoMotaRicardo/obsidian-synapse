@@ -24,11 +24,12 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-/** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
-const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
+/** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
+const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 
 // ── Synapse view ───────────────────────────────────────────────
 
@@ -748,7 +749,10 @@ export class SynapseView extends ItemView {
 			}
 			case 'tool.execution_start':
 				this.turnToolsUsed.push(data.toolName as string);
-				this.addToolCallBlock(data.toolCallId as string, data.toolName as string, data.arguments as string);
+				{
+					const toolInput = (data as {input?: unknown}).input;
+					this.addToolCallBlock(data.toolCallId as string, data.toolName as string, toolInput);
+				}
 				break;
 			case 'tool.execution_complete': {
 				const toolError = data.error as {message: string} | undefined;
@@ -758,7 +762,13 @@ export class SynapseView extends ItemView {
 					data.result as {content?: string; detailedContent?: string} | undefined,
 					toolError,
 				);
-				// Tool error guidance removed (BYOK cleanup)
+				// Surface a clear, actionable message for transient-looking write/edit
+				// failures (e.g. a file locked by sync or open elsewhere) instead of
+				// leaving the user to dig the raw error out of the collapsed tool block.
+				if (toolError) {
+					const friendly = friendlyWriteToolError(data.toolName as string | undefined, toolError.message);
+					if (friendly) this.addInfoMessage(friendly);
+				}
 				break;
 			}
 			case 'skill.invoked':
@@ -935,7 +945,7 @@ export class SynapseView extends ItemView {
 		const vaultContext = buildVaultContextBlock(this.app);
 		let systemContent = (opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
-			: wsInfo) + vaultContext;
+			: wsInfo) + vaultContext + buildResilienceHint();
 
 		const effectiveAgentName = opts.selectedAgentName !== undefined ? opts.selectedAgentName : (this.plugin.settings.featureAgents?.chat || '');
 

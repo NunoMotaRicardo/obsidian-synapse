@@ -12,7 +12,7 @@ import type {SessionConfig} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
 import {SYNAPSE_FOLDER} from '../settings';
 import {scanAgents, scanSkills} from '../configWriter';
-import {buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
+import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError} from './telegramApi';
@@ -316,7 +316,7 @@ export class TelegramBotService {
 			'[Workspace Path Information]',
 			`Vault root: ${normalizedBasePath}`,
 			`Working directory: ${normalizedBasePath}`,
-		].join('\n') + buildSelfImproveHint(defaultAgentName || 'Auto');
+		].join('\n') + buildResilienceHint() + buildSelfImproveHint(defaultAgentName || 'Auto');
 
 		return {
 			model,

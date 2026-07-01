@@ -1,6 +1,7 @@
 # chat-view
 
-Source: `src/synapseView.ts` (panel shell, session orchestration) plus `src/view/*`:
+Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErrors.ts`
+(friendly write/edit tool error formatting), plus `src/view/*`:
 
 | File | Role |
 |---|---|
@@ -83,6 +84,12 @@ vault scope, folder tree.
   always asking permission before writing. The block includes the current agent name for
   context. It is skipped when the user is already using the `improve-synapse` prompt
   (no double-activation).
+  A compact `[Resilience]` block is appended to every session's system prompt (chat, search,
+  and Telegram bot) via `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask
+  guidance for failed writes/edits and confirm-before-acting guidance for referenced
+  attachments; see "Write/edit tool error guidance (issue #78)" below. This matters most for
+  the Telegram bot, which runs unattended with `permissionMode: 'bypassPermissions'` and no UI
+  to catch a silent failure.
   When `settings.autoIncludeNoteImages` is enabled (default),
   `handleSend()` reads the active note content, scans for image embeds (`![[image.png]]` and
   `![alt](path.png)` syntaxes), resolves them to vault files via `resolveNoteImageEmbeds()`
@@ -126,15 +133,37 @@ vault scope, folder tree.
   `image_url` content parts (base64) and is an explicit follow-up, not covered by this fix.
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
 
-## Ollama error handling (#30)
+## Error handling
 
-When `providerPreset === 'ollama'`, chat error messages are intercepted and replaced with
-user-friendly Ollama-specific messages via `src/ollamaErrors.ts`:
+`session.error` events and `handleSend()` catch blocks pass raw errors through
+`formatErrorForChat()` (`synapseView.ts`), which currently just strips a leading `Error: `
+prefix. (The pre-engine-swap Ollama-specific `friendlyOllamaError()` pattern-matcher in
+`src/ollamaErrors.ts` — connection refused, model not found, OOM, etc. — was removed when the
+plugin moved off the Copilot SDK/BYOK-only model and has not been reinstated; `providerPreset`
+still exists for BYOK local-provider routing in `providerModels.ts`, but chat error display is
+no longer preset-gated.)
 
-- `session.error` events and `handleSend` catch blocks pass raw errors through
-  `formatErrorForChat()`, which uses `friendlyOllamaError()` to pattern-match common failure
-  modes (connection refused, model not found, OOM, etc.) and return actionable guidance.
-- `tool.execution_complete` failures that indicate the model lacks tool-use or vision support
-  show additional guidance messages suggesting alternative models (e.g. qwen2.5 for tools,
-  llava for vision).
-- All friendly messages are Ollama-preset-gated — non-Ollama providers see raw error text.
+### Write/edit tool error guidance (issue #78)
+
+Native `Write`/`Edit`/`NotebookEdit` tool calls are executed by the `claude` CLI subprocess —
+the plugin has no custom tool implementation to intercept or retry them. Two complementary
+mechanisms handle failures:
+
+- **Display:** `tool.execution_complete` events with an error (see `agent-service.md`) are
+  checked by `friendlyWriteToolError()` (`src/toolErrors.ts`). For a Write/Edit/NotebookEdit
+  failure whose message matches a transient-looking signature (`EBUSY`, `EPERM`, `EACCES`,
+  "resource busy or locked", "being used by another process", "permission denied", "locked"),
+  it returns an actionable message (e.g. suggesting the file may be locked by sync or open
+  elsewhere) shown via `addInfoMessage()`, in addition to the raw error already shown in the
+  collapsed tool-call block. `ENOENT` (no such file or directory) is deliberately excluded —
+  it's a bad-path logical error, not a transient lock, so it falls through to the existing
+  raw-error display along with other non-write-tool and non-transient errors.
+- **Retry-once + ask-before-fabricating:** since the plugin can't programmatically retry a
+  native tool call, the behavior is instructed via a `[Resilience]` system-prompt block
+  (`buildResilienceHint()`, `sessionConfig.ts`) appended in `buildSessionConfig()` alongside the
+  `[Workspace Path Information]` / `[Self-Improve]` blocks. It tells the agent to retry a failed
+  write/edit once, then stop and ask the user (rather than silently abandoning the task or
+  claiming success) if it fails again — and to confirm it actually read a referenced
+  attachment/file (via a tool result) before acting on its content, stopping to ask for
+  clarification or re-attachment instead of proceeding with guessed/fabricated content if a
+  referenced file can't be found or read.
