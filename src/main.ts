@@ -9,6 +9,7 @@ import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
 import {TriggerWatcher, TriggerScheduler} from './triggers';
+import {launchBatchLoop} from './batchLoopExecutor';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -148,6 +149,13 @@ export default class SynapsePlugin extends Plugin {
 				},
 			});
 		}
+
+		// Command: Run batch loop over notes
+		this.addCommand({
+			id: 'run-batch-loop',
+			name: 'Run batch loop over notes',
+			callback: () => launchBatchLoop(this),
+		});
 
 		// Editor context menu (Synapse submenu for selected text)
 		registerEditorMenu(this);
