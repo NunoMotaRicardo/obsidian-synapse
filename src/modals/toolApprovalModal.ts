@@ -56,6 +56,7 @@ export class ToolApprovalModal extends Modal {
 			this.resolved = true;
 			this.resolve({
 				behavior: 'allow',
+				updatedInput: this.request.input,
 				...(this.request.suggestions ? {updatedPermissions: this.request.suggestions} : {}),
 			});
 			this.close();

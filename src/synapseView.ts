@@ -906,7 +906,11 @@ export class SynapseView extends ItemView {
 		// Permission handler — canUseTool for Agent SDK
 		const permissionHandler: import('./agentService').PermissionHandler = async (toolName, input, options) => {
 			if (this.plugin.settings.toolApproval === 'allow') {
-				return {behavior: 'allow' as const, ...(options.suggestions ? {updatedPermissions: options.suggestions} : {})};
+				return {
+					behavior: 'allow' as const,
+					updatedInput: input,
+					...(options.suggestions ? {updatedPermissions: options.suggestions} : {}),
+				};
 			}
 			const modal = new ToolApprovalModal(this.app, {
 				toolName,
