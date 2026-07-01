@@ -920,9 +920,11 @@ export class SynapseView extends ItemView {
 			? opts.systemContent + '\n\n' + wsInfo
 			: wsInfo) + vaultContext;
 
+		const effectiveAgentName = opts.selectedAgentName !== undefined ? opts.selectedAgentName : (this.plugin.settings.featureAgents?.chat || '');
+
 		// Inject self-improve detection hint unless the user is already using the improve-synapse agent
-		if (opts.selectedAgentName !== 'improve-synapse') {
-			systemContent += buildSelfImproveHint(opts.selectedAgentName || 'Auto');
+		if (effectiveAgentName !== 'improve-synapse') {
+			systemContent += buildSelfImproveHint(effectiveAgentName || 'Auto');
 		}
 
 		const config: SessionConfig = {
@@ -932,7 +934,7 @@ export class SynapseView extends ItemView {
 			cwd: this.getWorkingDirectory(),
 			plugins: [{type: 'local', path: `${vaultRoot}/_synapse/`}],
 			skills: Array.from(this.enabledSkills),
-			agent: opts.selectedAgentName !== undefined ? (opts.selectedAgentName || undefined) : (this.plugin.settings.featureAgents?.chat || undefined),
+			agent: effectiveAgentName || undefined,
 			systemPrompt: systemContent,
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 		};

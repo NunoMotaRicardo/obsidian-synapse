@@ -622,7 +622,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			prompt: userPrompt,
-			agent: plugin.settings.featureAgents?.vision || 'Vision',
+			agent: plugin.settings.featureAgents?.vision || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are an image analysis assistant. Answer the user’s question about the provided image. ' +
@@ -697,7 +697,7 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 			`Extract all visible content from this image and convert it to well-structured Markdown. ` +
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
 			`If the image contains a diagram or chart, describe it in detail.`,
-		agent: plugin.settings.featureAgents?.vision || 'Vision',
+		agent: plugin.settings.featureAgents?.vision || undefined,
 		plugins: getVaultPlugins(plugin),
 		systemMessage:
 			'You are an image content extraction assistant. Extract all visible content from the provided image ' +
@@ -842,7 +842,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				`Choose the most appropriate diagram type (e.g. flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, mindmap, etc.) ` +
 				`that best represents the content of the image. ` +
 				`Return only the Mermaid code block, with no additional explanation.`,
-			agent: plugin.settings.featureAgents?.vision || 'Vision',
+			agent: plugin.settings.featureAgents?.vision || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. Use <br> to break lines instead of \\n for obsidian compatibility. ' +

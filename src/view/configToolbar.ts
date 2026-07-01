@@ -164,7 +164,9 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && !!supported && supported.length > 0;
 		const menu = new Menu();
 
-		if (supportsReasoning) {
+		if (this.selectedModel === '') {
+			menu.addItem(item => item.setTitle('Default model (capabilities unknown)').setDisabled(true));
+		} else if (supportsReasoning) {
 			const current = this.plugin.settings.reasoningEffort;
 			for (const level of supported!) {
 				menu.addItem(item => {
@@ -246,19 +248,33 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateReasoningBadge = function(): void {
+		const level = this.plugin.settings.reasoningEffort;
+		const summary = this.plugin.settings.reasoningSummary;
+		const longContext = this.plugin.settings.contextTier === 'long_context';
+		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
+
+		if (this.selectedModel === '') {
+			const active = (level !== '' || summary !== '') || longContext || !infiniteSessions;
+			this.modelIconEl.toggleClass('is-active', active);
+			this.modelIconEl.toggleClass('is-non-interactive', false);
+			const parts: string[] = [];
+			if (level !== '') parts.push(`effort ${effortLabel(level).toLowerCase()}`);
+			if (summary !== '') parts.push(`summary ${summaryLabel(summary).toLowerCase()}`);
+			if (longContext) parts.push('long context');
+			if (!infiniteSessions) parts.push('infinite sessions off');
+			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context (default model)');
+			return;
+		}
+
 		const model = this.getSelectedModelInfo();
 		const supported = model?.capabilities?.supportedReasoningEfforts as string[] | undefined;
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
-		const level = this.plugin.settings.reasoningEffort;
 		// Reset if current level isn't supported by the new model
 		if (level !== '' && supportsReasoning && supported && !supported.includes(level)) {
 			this.plugin.settings.reasoningEffort = '';
 			void this.plugin.saveSettings();
 		}
 		const current = this.plugin.settings.reasoningEffort;
-		const summary = this.plugin.settings.reasoningSummary;
-		const longContext = this.plugin.settings.contextTier === 'long_context';
-		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
 		// The icon stays interactive even without reasoning support, because the menu
 		// always offers the long-context and infinite-sessions toggles.
 		const active = ((current !== '' || summary !== '') && supportsReasoning) || longContext || !infiniteSessions;
