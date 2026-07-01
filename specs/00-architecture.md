@@ -37,6 +37,7 @@ CLI process per query.
 | bots | [bots-triggers.md](bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
 | triggers | [bots-triggers.md](bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
 | mcp-bridge | [mcp-bridge.md](mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
+| batch-loops | [batch-loops.md](batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file execution, report writing |
 
 ## Vault customization (`_synapse/`)
 
