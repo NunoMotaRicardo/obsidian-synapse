@@ -366,6 +366,21 @@ export function buildVaultContextBlock(
 }
 
 /**
+ * Build a compact resilience hint for the system prompt: instructs the agent to retry a
+ * failed write/edit once before giving up (and ask the user rather than silently abandoning
+ * or claiming partial success), and to confirm it actually read referenced attachments/files
+ * before acting on their content rather than guessing or fabricating.
+ */
+export function buildResilienceHint(): string {
+	return '\n\n[Resilience] If a Write/Edit/NotebookEdit tool call fails (e.g. a file locked by sync or open elsewhere),' +
+		' retry the same edit once. If it fails again, stop, clearly tell the user what happened and which file was affected,' +
+		' and ask before doing anything else (e.g. suggesting they close the file or retry manually) — never silently abandon the task or claim it succeeded when it did not.' +
+		' Before acting on a referenced attachment or file, confirm you actually read its content via a tool result' +
+		' (do not assume or infer content you have not seen). If a referenced file cannot be found or read, stop and ask the user' +
+		' to confirm the path or re-attach it instead of proceeding with guessed or fabricated content.';
+}
+
+/**
  * Build a compact self-improve detection hint for the system prompt.
  * Teaches the agent to recognize customization intent and propose artifact changes.
  */

@@ -26,7 +26,8 @@ import type {BackgroundSession} from './view/types';
 
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 
@@ -756,7 +757,13 @@ export class SynapseView extends ItemView {
 					data.result as {content?: string; detailedContent?: string} | undefined,
 					toolError,
 				);
-				// Tool error guidance removed (BYOK cleanup)
+				// Surface a clear, actionable message for transient-looking write/edit
+				// failures (e.g. a file locked by sync or open elsewhere) instead of
+				// leaving the user to dig the raw error out of the collapsed tool block.
+				if (toolError) {
+					const friendly = friendlyWriteToolError(data.toolName as string | undefined, toolError.message);
+					if (friendly) this.addInfoMessage(friendly);
+				}
 				break;
 			}
 			case 'skill.invoked':
@@ -933,7 +940,7 @@ export class SynapseView extends ItemView {
 		const vaultContext = buildVaultContextBlock(this.app);
 		let systemContent = (opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
-			: wsInfo) + vaultContext;
+			: wsInfo) + vaultContext + buildResilienceHint();
 
 		const effectiveAgentName = opts.selectedAgentName !== undefined ? opts.selectedAgentName : (this.plugin.settings.featureAgents?.chat || '');
 

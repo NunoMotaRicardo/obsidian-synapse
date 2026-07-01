@@ -137,6 +137,19 @@ dynamically based on the number of files in scope:
 `AgentService` wraps `listSessions()`, `deleteSession()`, `renameSession()` from the SDK for
 the session sidebar. Session history replay uses `session.getEvents()`.
 
+## Tool execution events (issue #78)
+
+`Session.convertToSessionEvent()` dispatches `tool.execution_start` from `tool_use` content
+blocks on `assistant` messages, and `tool.execution_complete` from `tool_result` content blocks
+on `user` messages (tool results are delivered as synthetic `user` messages by the SDK, not a
+separate event type). A `pendingToolCalls` map (`toolCallId -> toolName`) populated on
+`tool.execution_start` lets the matching `tool.execution_complete` event report which tool
+produced the result, since `tool_result` blocks only carry `tool_use_id`. `tool.execution_complete`
+data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` — `success` is
+`!tool_result.is_error`, and `error` is included only when `is_error` is true. `synapseView.ts`
+consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
+surface a friendlier chat message — see `chat-view.md`.
+
 ## BYOK local provider injection
 
 When a local provider is configured (Ollama, Foundry Local, or other OpenAI-compatible endpoint),

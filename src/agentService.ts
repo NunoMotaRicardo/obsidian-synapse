@@ -865,6 +865,8 @@ export class Session {
 	private abortController: AbortController | null = null;
 	private handlers: Map<string, SessionEventHandler[]> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
+	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
+	private pendingToolCalls: Map<string, string> = new Map();
 	/** Expose the RPC-like interface (stubbed — Agent SDK handles agent selection via options). */
 	readonly rpc = {
 		agent: {
@@ -1043,6 +1045,7 @@ export class Session {
 						});
 					} else if (block.type === 'tool_use') {
 						const toolBlock = block as {id: string; name: string; input: unknown};
+						this.pendingToolCalls.set(toolBlock.id, toolBlock.name);
 						this.dispatch({
 							type: 'tool.execution_start',
 							data: {toolName: toolBlock.name, toolCallId: toolBlock.id, input: toolBlock.input},
@@ -1065,6 +1068,38 @@ export class Session {
 					type: 'assistant.message',
 					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
 				});
+				return null;
+			}
+			case 'user': {
+				// Tool results arrive as `tool_result` content blocks on `user` messages.
+				// Emit `tool.execution_complete` for each, matched back to the tool name
+				// tracked from the corresponding `tool_use` block.
+				const userMsg = msg as {message?: {content?: unknown}};
+				const content = userMsg.message?.content;
+				if (Array.isArray(content)) {
+					for (const block of content) {
+						const b = block as {type?: string; tool_use_id?: string; content?: string | Array<{type?: string; text?: string}>; is_error?: boolean};
+						if (b.type !== 'tool_result' || !b.tool_use_id) continue;
+						const toolCallId = b.tool_use_id;
+						const toolName = this.pendingToolCalls.get(toolCallId);
+						this.pendingToolCalls.delete(toolCallId);
+						const resultText = typeof b.content === 'string'
+							? b.content
+							: Array.isArray(b.content)
+								? b.content.filter(c => c.type === 'text').map(c => c.text ?? '').join('')
+								: '';
+						this.dispatch({
+							type: 'tool.execution_complete',
+							data: {
+								toolCallId,
+								toolName,
+								success: !b.is_error,
+								result: {content: resultText},
+								...(b.is_error ? {error: {message: resultText || 'Tool execution failed'}} : {}),
+							},
+						});
+					}
+				}
 				return null;
 			}
 			case 'result': {
