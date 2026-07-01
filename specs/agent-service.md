@@ -104,6 +104,25 @@ Both `chat()` and `inlineChat()` use `sendAndWaitWithAbort(fn, options)`:
 `Session.abort()` is used by `synapseView.ts` to cancel in-flight work when a `session.error`
 event is received.
 
+## Attachment delivery (issue #77)
+
+`query()`'s `Options` has no top-level `attachments` field (`prompt` is
+`string | AsyncIterable<SDKUserMessage>`), so `AgentService`/`Session` do not accept or forward
+any `attachments` parameter — there used to be a dead, silently-dropped `attachments?: unknown[]`
+param on `Session.send()`/`inlineChat()` and a `MessageOptions`/`buildSdkAttachments()` pair in
+`sessionConfig.ts` that targeted a nonexistent SDK shape; both were removed. Callers (the chat
+view, editor image actions, the Telegram bot) instead inline attachment paths directly into the
+prompt string — see `chat-view.md`'s "Attachment delivery" section for the chat-view mechanism
+(`buildPrompt()`, `materializeBlobAttachments()`, `computeAdditionalDirectories()` in
+`sessionConfig.ts`).
+
+`Session.send({prompt, additionalDirectories?, timeoutMs?})` accepts an optional
+`additionalDirectories` list for a single send() call, merged (deduped) with the session's own
+`config.additionalDirectories` from `Options` before being passed to `query()` — this grants the
+SDK read access to attachment paths that fall outside the session's `cwd` (out-of-vault absolute
+paths, OneDrive-synced folders, or clipboard-blob temp files under `os.tmpdir()`) without
+widening what's readable when no such attachment is present in a given turn.
+
 ### Adaptive indexing/search timeouts
 
 `getAdaptiveTimeout(app, scopePath, configuredTimeoutSec)` calculates the client-side timeout

@@ -26,7 +26,7 @@ import type {BackgroundSession} from './view/types';
 
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
-import {buildPrompt, buildSdkAttachments, buildSelfImproveHint, buildVaultContextBlock, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, resolveNoteImageEmbeds} from './view/sessionConfig';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 
@@ -55,6 +55,8 @@ export class SynapseView extends ItemView {
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
 	workingDir = '';
+	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
+	attachmentTempFiles: Set<string> = new Set();
 
 	isStreaming = false;
 	configDirty = true;
@@ -224,6 +226,10 @@ export class SynapseView extends ItemView {
 			this.basicSearchSession = null;
 		}
 		await this.disconnectAllSessions();
+		if (this.attachmentTempFiles.size > 0) {
+			await cleanupAttachmentTempFiles(Array.from(this.attachmentTempFiles));
+			this.attachmentTempFiles.clear();
+		}
 	}
 
 	// ── UI construction ──────────────────────────────────────────
@@ -550,18 +556,29 @@ export class SynapseView extends ItemView {
 				this.renderSessionList();
 			}
 
-			const sdkAttachments = buildSdkAttachments({
+			// Clipboard-pasted image attachments (type: 'blob', base64 data, no path) are
+			// written to temp files first so they can be inlined into the prompt like any
+			// other file attachment. Temp files are tracked for cleanup on session end / unload.
+			const vaultBasePath = this.getVaultBasePath();
+			const blobPaths = await materializeBlobAttachments(currentAttachments);
+			for (const tempPath of blobPaths.values()) {
+				this.attachmentTempFiles.add(tempPath);
+			}
+
+			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths);
+			const additionalDirectories = computeAdditionalDirectories({
 				attachments: currentAttachments,
-				scopePaths: this.scopePaths,
-				vaultBasePath: this.getVaultBasePath(),
+				blobPaths,
+				vaultBasePath,
+				workingDirectory: this.getWorkingDirectory(),
+				scopePaths: currentScopePaths,
 				app: this.app,
 			});
-			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection);
 
 			try {
 				await this.currentSession!.send({
 					prompt: fullPrompt,
-					...(sdkAttachments && sdkAttachments.length > 0 ? {attachments: sdkAttachments} : {}),
+					...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 				});
 			} catch (sendErr) {
 				// If the session is stale (e.g. SDK restarted), invalidate and retry once
@@ -574,7 +591,7 @@ export class SynapseView extends ItemView {
 					this.registerSessionEvents();
 					await this.currentSession!.send({
 						prompt: fullPrompt,
-						...(sdkAttachments && sdkAttachments.length > 0 ? {attachments: sdkAttachments} : {}),
+						...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 					});
 				} else {
 					throw sendErr;

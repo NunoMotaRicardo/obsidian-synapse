@@ -635,7 +635,6 @@ export class AgentService {
 		effort?: EffortLevel;
 		resume?: string;
 		cwd?: string;
-		attachments?: unknown[];
 		onEvent?: (msg: SDKMessage) => void;
 		abortController?: AbortController;
 		signal?: AbortSignal;
@@ -908,17 +907,27 @@ export class Session {
 	 * Send a message to the session. Creates a query() call, streaming
 	 * events to registered handlers. If a sessionId was captured from
 	 * a previous query, resumes that session.
+	 *
+	 * `additionalDirectories` is merged with `this.config.additionalDirectories` (deduped)
+	 * so callers can grant read access to attachment paths that fall outside the session's
+	 * `cwd` — e.g. absolute out-of-vault paths or clipboard-blob temp files — for this
+	 * specific send() call, on top of whatever the session was already configured with.
 	 */
-	async send(options: {prompt: string; attachments?: unknown[]; timeoutMs?: number}): Promise<void> {
+	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
 
 		try {
 			await sendAndWaitWithAbort(async (ctrl) => {
+				const mergedAdditionalDirectories = Array.from(new Set([
+					...(this.config.additionalDirectories ?? []),
+					...(options.additionalDirectories ?? []),
+				]));
 				const queryOpts: Options = {
 					...this.config,
 					abortController: ctrl,
 					...(this._sessionId ? {resume: this._sessionId} : {}),
+					...(mergedAdditionalDirectories.length > 0 ? {additionalDirectories: mergedAdditionalDirectories} : {}),
 				};
 
 				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig()) {

@@ -621,13 +621,12 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 	const notice = new Notice('Synapse: asking about image…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
-			prompt: userPrompt,
+			prompt: `${userPrompt}\n\n---\nAttached image: ${file.name}\nPath: ${absPath}`,
 			agent: plugin.settings.featureAgents?.vision || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
 				'You are an image analysis assistant. Answer the user’s question about the provided image. ' +
 				'Return your answer as clean Markdown. Do not include markdown code fences or introductory text.',
-			attachments: [{type: 'file', path: absPath, displayName: file.name}],
 		});
 		registerInlineSession(plugin, sessionId, `Ask: ${userPrompt.slice(0, 30)}`);
 
@@ -696,14 +695,14 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 		prompt:
 			`Extract all visible content from this image and convert it to well-structured Markdown. ` +
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
-			`If the image contains a diagram or chart, describe it in detail.`,
+			`If the image contains a diagram or chart, describe it in detail.\n\n---\n` +
+			`Attached image: ${file.name}\nPath: ${absPath}`,
 		agent: plugin.settings.featureAgents?.vision || undefined,
 		plugins: getVaultPlugins(plugin),
 		systemMessage:
 			'You are an image content extraction assistant. Extract all visible content from the provided image ' +
 			'and return it as clean Markdown. Do not include markdown code fences, introductory text, or explanations. ' +
 			'Return only the extracted content.',
-		attachments: [{type: 'file', path: absPath, displayName: file.name}],
 	});
 	registerInlineSession(plugin, sessionId, `Extract ${file.name}`);
 
@@ -841,7 +840,8 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				`Use the mermaid skill available in the vault to produce valid Mermaid syntax. ` +
 				`Choose the most appropriate diagram type (e.g. flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, mindmap, etc.) ` +
 				`that best represents the content of the image. ` +
-				`Return only the Mermaid code block, with no additional explanation.`,
+				`Return only the Mermaid code block, with no additional explanation.\n\n---\n` +
+				`Attached image: ${file.name}\nPath: ${absPath}`,
 			agent: plugin.settings.featureAgents?.vision || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage:
@@ -849,7 +849,6 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
 				'Analyze the provided image and return a single Mermaid code block (wrapped in ```mermaid ... ```) ' +
 				'that faithfully represents the structure shown. Do not include any introductory text or explanation.',
-			attachments: [{type: 'file', path: absPath, displayName: file.name}],
 		});
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
 
