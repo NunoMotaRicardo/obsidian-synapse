@@ -570,6 +570,7 @@ export class SynapseView extends ItemView {
 				attachments: currentAttachments,
 				blobPaths,
 				vaultBasePath,
+				workingDirectory: this.getWorkingDirectory(),
 			});
 
 			try {

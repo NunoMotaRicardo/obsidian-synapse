@@ -106,11 +106,17 @@ vault scope, folder tree.
   `<os.tmpdir()>/obsidian-synapse-attachments/`, then inlined the same way as file attachments;
   temp files are tracked per-view (`SynapseView.attachmentTempFiles`) and deleted via
   `cleanupAttachmentTempFiles()` in `onClose()` (view unload). For any attachment path that
-  falls outside the vault root (out-of-vault files, OneDrive-synced folders, blob temp files),
+  falls outside the session's actual `cwd` (`SynapseView.getWorkingDirectory()` — the vault
+  root, or a narrower subfolder when the working directory is scoped via the toolbar or
+  `autoUpdateWorkingDirectory`) — e.g. out-of-vault files, OneDrive-synced folders, blob temp
+  files, or vault-relative attachments outside a scoped working directory —
   `computeAdditionalDirectories()` computes the parent directory and it's passed as
   `Session.send({additionalDirectories})`, merged with the session's own
   `config.additionalDirectories` (see agent-service.md) so the SDK grants read access beyond
-  the session `cwd`. Attachment tag icons correctly distinguish image types: `type: 'blob'`
+  the session `cwd`. Containment is checked with a path-boundary-aware helper (`path.relative`
+  based, not raw string prefix matching) so a sibling folder that merely shares a string
+  prefix with the boundary (e.g. `vault-backup/` vs `vault/`) isn't miscounted as "inside".
+  Attachment tag icons correctly distinguish image types: `type: 'blob'`
   (clipboard paste) and `type: 'file'` with an image extension both display the image icon,
   matching the existing `type: 'image'` path.
   **BYOK local provider caveat:** `executeLocalProviderQuery()` (`providerModels.ts`) sends

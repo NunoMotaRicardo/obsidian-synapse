@@ -208,26 +208,53 @@ export async function materializeBlobAttachments(attachments: ChatAttachment[]):
 }
 
 /**
+ * Path-boundary-aware containment check: is `target` equal to or nested inside `base`?
+ * Unlike a raw string `startsWith`, this won't false-positive on sibling paths that
+ * merely share a string prefix (e.g. base `C:/vault` vs target `C:/vault-backup/x`).
+ *
+ * Uses `path.relative()` and checks the result is neither empty/absolute nor a `..`
+ * escape — the standard "is target inside base" pattern. Falls back to a normalized
+ * string-equality/prefix check (with an explicit separator boundary) if Node's `path`
+ * module isn't available.
+ */
+function isPathInside(target: string, base: string): boolean {
+	const path = nodeRequire?.('node:path') as typeof import('node:path') | undefined;
+	if (path) {
+		const rel = path.relative(base, target);
+		return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+	}
+	// Fallback: normalize slashes/case and require a path-separator boundary.
+	const normalizedTarget = target.replace(/\\/g, '/').toLowerCase();
+	const normalizedBase = base.replace(/\\/g, '/').toLowerCase().replace(/\/$/, '');
+	return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
+}
+
+/**
  * Compute the list of directories to pass as `Options.additionalDirectories` for a
  * query, so the SDK grants read access to attachment paths that fall outside the
- * session's `cwd` (vault root or configured working directory) — e.g. absolute
- * Windows paths, OneDrive-synced folders, or blob temp files.
+ * session's actual `cwd` — e.g. absolute Windows paths, OneDrive-synced folders, blob
+ * temp files, or vault-relative attachments that fall outside a scoped working
+ * directory.
  *
- * Vault-relative attachments and scope paths are always within the vault root and
- * don't need to be listed here.
+ * `vaultBasePath` is used only to resolve vault-relative attachment paths to absolute
+ * paths (vault-relative paths are always joined against the vault root, not the
+ * working directory). `workingDirectory` is the actual session `cwd` — the boundary
+ * used to decide whether a resolved path is "already readable" and can be omitted.
+ * These are frequently the same value (unscoped working directory), but must not be
+ * conflated when the user has scoped the working directory to a subfolder.
  */
 export function computeAdditionalDirectories(params: {
 	attachments: ChatAttachment[];
 	blobPaths: Map<ChatAttachment, string>;
 	vaultBasePath: string;
+	workingDirectory: string;
 }): string[] {
-	const {attachments, blobPaths, vaultBasePath} = params;
+	const {attachments, blobPaths, vaultBasePath, workingDirectory} = params;
 	const dirs = new Set<string>();
-	const normalizedVaultBase = vaultBasePath.replace(/\\/g, '/').toLowerCase();
 
 	const addForPath = (absPath: string, isDirectory: boolean) => {
 		const normalized = absPath.replace(/\\/g, '/');
-		if (normalized.toLowerCase().startsWith(normalizedVaultBase)) return; // inside vault — already readable via cwd
+		if (isPathInside(normalized, workingDirectory)) return; // already readable via cwd
 		const dir = isDirectory ? normalized : normalized.slice(0, normalized.lastIndexOf('/'));
 		if (dir) dirs.add(dir);
 	};
