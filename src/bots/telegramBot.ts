@@ -244,18 +244,19 @@ export class TelegramBotService {
 			entry.lastActivity = Date.now();
 			entry.abortController = new AbortController();
 
-			// Download attachments if any
+			// Download attachments if any, and inline their absolute paths into the prompt.
+			// query()'s Options has no top-level `attachments` field — the Agent SDK only
+			// accepts `prompt: string | AsyncIterable<SDKUserMessage>` — so a real path the
+			// model can Read itself is the only way the content actually reaches it (same
+			// mechanism as the chat view's buildPrompt()).
 			const attachmentPaths = await this.downloadAttachments(msg);
-
-			// Build SDK attachments
-			const sdkAttachments: Array<{type: 'file'; path: string; displayName: string}> = [];
+			let promptText = text || '(attachment)';
 			for (const att of attachmentPaths) {
-				sdkAttachments.push({type: 'file', path: att.path, displayName: att.name});
+				promptText += `\n\n---\nAttached file: ${att.name}\nPath: ${att.path}`;
 			}
 
 			const sendOpts = {
-				prompt: text || '(attachment)',
-				...(sdkAttachments.length > 0 ? {attachments: sdkAttachments} : {}),
+				prompt: promptText,
 			};
 
 			// Create a fresh session for each message. If we have a previous sessionId,

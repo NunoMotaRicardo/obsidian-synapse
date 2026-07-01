@@ -92,13 +92,32 @@ vault scope, folder tree.
   The shared `IMAGE_EXTS` constant (`types.ts`) defines the supported image extensions
   (`png, jpg, jpeg, gif, webp, bmp, svg`). Non-vision models are unaffected (the SDK/model
   handles or ignores image attachments gracefully).
-- Image attachments: the input area supports drag/drop (OS and vault files), clipboard paste
-  (screenshot to blob), and the paperclip attachment button. `buildSdkAttachments()` in
-  `sessionConfig.ts` converts `ChatAttachment` items to SDK format using a hybrid strategy:
-  on-disk files as `{type: 'file', path}`, clipboard pastes as `{type: 'blob', data, mimeType}`.
-  Verified end-to-end with vision-capable Ollama models. Attachment tag icons correctly
-  distinguish image types: `type: 'blob'` (clipboard paste) and `type: 'file'` with an
-  image extension both display the image icon, matching the existing `type: 'image'` path.
+- Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
+  clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
+  `query()` `Options` has no top-level `attachments` field — `prompt` is
+  `string | AsyncIterable<SDKUserMessage>` — so attachments are delivered by **inlining an
+  absolute path into the prompt text**, the same "the transport strips extra fields" pattern
+  already used for `selection`/`clipboard` content. `buildPrompt()` (`sessionConfig.ts`) inlines
+  `file`/`image`/`directory` attachment paths (resolved to absolute OS paths via
+  `vaultBasePath`), vault scope paths, clipboard text, and selection text. This gives the model
+  a real path it reads itself with its own `Read` tool (which already supports image files).
+  `type: 'blob'` attachments (clipboard-pasted images — base64 data, no path) are first written
+  to a temp file by `materializeBlobAttachments()` under
+  `<os.tmpdir()>/obsidian-synapse-attachments/`, then inlined the same way as file attachments;
+  temp files are tracked per-view (`SynapseView.attachmentTempFiles`) and deleted via
+  `cleanupAttachmentTempFiles()` in `onClose()` (view unload). For any attachment path that
+  falls outside the vault root (out-of-vault files, OneDrive-synced folders, blob temp files),
+  `computeAdditionalDirectories()` computes the parent directory and it's passed as
+  `Session.send({additionalDirectories})`, merged with the session's own
+  `config.additionalDirectories` (see agent-service.md) so the SDK grants read access beyond
+  the session `cwd`. Attachment tag icons correctly distinguish image types: `type: 'blob'`
+  (clipboard paste) and `type: 'file'` with an image extension both display the image icon,
+  matching the existing `type: 'image'` path.
+  **BYOK local provider caveat:** `executeLocalProviderQuery()` (`providerModels.ts`) sends
+  the (now path-inlined) prompt as plain OpenAI-compatible chat-completion text — there is no
+  agentic `Read` tool on that path, so a local model only sees the attachment's path as text,
+  not its actual image content. True multimodal support there needs OpenAI-compatible
+  `image_url` content parts (base64) and is an explicit follow-up, not covered by this fix.
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
 
 ## Ollama error handling (#30)
