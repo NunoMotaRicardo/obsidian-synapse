@@ -10,7 +10,7 @@
  * (#74, #75).
  */
 
-import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
+import {App, Notice, TFile, TFolder, createFragment, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
 import {SYNAPSE_FOLDER} from './settings';
 import {ensureFolder} from './configWriter';
