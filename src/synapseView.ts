@@ -24,12 +24,12 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-/** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
-const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
+/** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
+const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 
 // ── Synapse view ───────────────────────────────────────────────
 
@@ -747,7 +747,7 @@ export class SynapseView extends ItemView {
 			}
 			case 'tool.execution_start':
 				this.turnToolsUsed.push(data.toolName as string);
-				this.addToolCallBlock(data.toolCallId as string, data.toolName as string, data.arguments as string);
+				this.addToolCallBlock(data.toolCallId as string, data.toolName as string, (data as {input?: unknown}).input);
 				break;
 			case 'tool.execution_complete': {
 				const toolError = data.error as {message: string} | undefined;
