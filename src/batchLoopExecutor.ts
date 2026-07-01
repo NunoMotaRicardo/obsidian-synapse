@@ -255,8 +255,9 @@ export async function runBatchLoop(
 
 	for (let i = 0; i < total; i++) {
 		if (handle.cancelled) {
-			new Notice(`Synapse: batch loop stopped by user after ${processed}/${total} file(s).`);
-			return {processed, failed, skipped: total - processed, cancelled: true};
+			const attempted = processed + failed;
+			new Notice(`Synapse: batch loop stopped by user after ${attempted}/${total} file(s).`);
+			return {processed, failed, skipped: total - attempted, cancelled: true};
 		}
 
 		const filePath = filePaths[i]!;
