@@ -72,6 +72,11 @@ vault scope, folder tree.
   To anchor path resolution, the session is configured with standard system instructions containing
   the absolute vault root, active note path, and working directory, preventing the LLM from constructing
   incorrect absolute paths (e.g., nesting file paths under attached image subfolders).
+  All of these system-prompt blocks are delivered as
+  `systemPrompt: {type: 'preset', preset: 'claude_code', append: ...}` — appended to Claude
+  Code's default system prompt, never replacing it. (A plain-string `systemPrompt` replaces the
+  whole default prompt and the model stops using tools/reading files; this applies to chat,
+  advanced search, and the Telegram bot alike.)
   A compact `[Vault Structure]` block is appended to every session's system prompt listing
   top-level vault folders (name + child count), excluding system folders (`.obsidian`, `.trash`,
   the synapse folder, and any dot-prefixed folder). This gives agents awareness of the vault's
@@ -132,6 +137,32 @@ vault scope, folder tree.
   not its actual image content. True multimodal support there needs OpenAI-compatible
   `image_url` content parts (base64) and is an explicit follow-up, not covered by this fix.
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
+  A new session's id is unknown until the first send streams a message: `handleSend()` stores
+  the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched
+  by the `Session` wrapper when the SDK delivers the id — see agent-service.md) adopts the id
+  into `currentSessionId`, writes the `[chat] <Agent>: <snippet>` name, and adds the sidebar
+  entry. Never write a session-name entry keyed by an empty id: `registerInlineSession` (view
+  and editor-menu variants), the edit modal, and advanced search all no-op when `sessionId` is
+  empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
+  builds.
+
+## Search panel
+
+Both modes send a shared prompt (`buildSearchPrompt()`) that instructs tool-driven exploration
+(Glob/Grep/Read) and strict JSON-array output (`file`/`folder`/`reason`), rendered by
+`renderSearchResults()` (clickable file rows; raw text fallback when the response isn't JSON).
+Both modes are **read-only**: `tools: ['Read', 'Glob', 'Grep']` (`SEARCH_TOOLS`) — no write or
+exec tools regardless of the tool-approval setting.
+
+- **Basic** (`handleBasicSearch`): one-shot `inlineChat` with the feature/search agent,
+  `permissionMode: 'default'`, `maxTurns: 20`, adaptive timeout. (Historic bug: `tools: []` +
+  `maxTurns: 1` + `permissionMode: 'plan'` made every search fail with "Reached maximum number
+  of turns (1)" — a search config must always include the read tools and a multi-turn budget.)
+- **Advanced** (`handleAdvancedSearch` + `buildSearchSessionConfig`): adds the selected search
+  agent, model, vault plugins, and enabled skills (the `skills` option enables the Skill tool
+  itself), `maxTurns: 40`, and the resilience/self-improve blocks appended to the
+  `claude_code` preset. The resulting session is named `[search] <Agent>: <query>` and added
+  to the sidebar (skipped when the query aborted without an id).
 
 ## Error handling
 

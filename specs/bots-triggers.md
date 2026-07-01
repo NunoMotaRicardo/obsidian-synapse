@@ -9,7 +9,9 @@
 - Uses the default agent from settings; skills and MCP servers are discovered natively via the
   `_synapse/` plugin registration (passed in session `Options.plugins`).
 - The `[Self-Improve]` detection block is appended to the bot's system prompt via
-  `buildSelfImproveHint()`, using the bot's default agent name.
+  `buildSelfImproveHint()`, using the bot's default agent name. The bot's system prompt is
+  delivered as `{type: 'preset', preset: 'claude_code', append: ...}` — appended to Claude
+  Code's default prompt so unattended tool use (with `bypassPermissions`) keeps working.
 - Runs only while Obsidian is open and connected.
 
 ## Triggers (`_synapse/triggers/`)
@@ -127,8 +129,10 @@ executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string):
 
 **Model routing:**
 - `trigger.model` absent or resolves to a Claude model → `AgentService.inlineChat()` with
-  `model`, `agent`, `systemMessage` from trigger, `cwd` set to vault root (absolute basePath),
-  `plugins` set to the `_synapse/` local plugin path (same pattern as bots and editor actions).
+  `model`, `agent` from trigger, `systemPrompt: {type: 'preset', preset: 'claude_code'}` (the
+  default tool-usage prompt, so the trigger can read the affected files), `cwd` set to vault
+  root (absolute basePath), `plugins` set to the `_synapse/` local plugin path (same pattern
+  as bots and editor actions), `maxTurns: 10`, `permissionMode: 'default'`.
 - `trigger.model` resolves to a local model → `executeLocalProviderQuery()` with file content
   prepended to the prompt as context, equipped with:
   - Built-in vault tools (`read_note`, `list_notes`, `search_notes`) from `vaultTools`.

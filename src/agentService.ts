@@ -116,22 +116,22 @@ export interface ModelInfo {
 }
 
 /**
- * Derive the CLI-compatible model alias from SDK ModelInfo.
- * The CLI accepts aliases ('haiku', 'sonnet', 'opus') — NOT the full
- * dated API IDs ('claude-haiku-4-5-20251001') that sdk.value contains.
+ * Derive the model identifier to pass to the CLI from SDK ModelInfo.
+ * `sdk.value` is the model identifier the CLI itself reports and accepts
+ * ('default', 'sonnet', 'sonnet[1m]', 'opus', 'claude-fable-5[1m]', …).
+ * 'default' maps to '' — empty id means "let the CLI pick its default".
+ * (Do NOT derive from displayName: "Sonnet (1M context)" or "Fable" do not
+ * round-trip to valid model identifiers.)
  */
-function sdkModelAlias(sdk: SDKModelInfo): string {
-	const base = sdk.displayName.split('(')[0]!.trim().toLowerCase();
-	if (base === 'default') return '';
-	if (/1m/i.test(sdk.displayName)) return base + '-1m';
-	return base;
+function sdkModelId(sdk: SDKModelInfo): string {
+	return sdk.value === 'default' ? '' : sdk.value;
 }
 
 /** Map SDK ModelInfo to the plugin's ModelInfo shape. */
 function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	const efforts = sdk.supportedEffortLevels ?? [];
 	return {
-		id: sdkModelAlias(sdk),
+		id: sdkModelId(sdk),
 		name: sdk.displayName,
 		capabilities: {
 			supports: {
@@ -161,6 +161,13 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 		supportsTools: true,
 	},
 ];
+
+/**
+ * Default turn budget for agentic one-shot helpers (inlineChat).
+ * High enough for multi-step tool use (search, read, summarize), low enough
+ * to stop a runaway loop in unattended contexts (triggers, Telegram).
+ */
+export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
 /** Reasoning summary — kept as a string union for settings compatibility. */
 export type ReasoningSummary = 'none' | 'concise' | 'detailed';
@@ -645,7 +652,7 @@ export class AgentService {
 				await this.ensureConnected();
 
 				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
-					const sysPrompt = options.systemMessage ?? (options.systemPrompt as string | undefined);
+					const sysPrompt = options.systemMessage ?? (typeof options.systemPrompt === 'string' ? options.systemPrompt : undefined);
 					const res = await executeLocalProviderQuery(this.providerConfig, {
 						prompt: options.prompt,
 						systemPrompt: sysPrompt,
@@ -670,13 +677,15 @@ export class AgentService {
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
 						model: options.model,
-						systemPrompt: options.systemMessage ?? (options.systemPrompt as string | undefined),
+						systemPrompt: options.systemMessage ?? options.systemPrompt,
 						...(options.plugins ? {plugins: options.plugins} : {}),
 						...(options.skills ? {skills: options.skills} : {}),
 						agent: options.agent,
 						canUseTool: options.canUseTool,
 						onElicitation: options.onElicitation,
-						maxTurns: options.maxTurns ?? 1,
+						// Agentic default: enough turns for real tool use (Read/Glob/Grep
+						// loops). Callers that want a pure text transform pass maxTurns: 1.
+						maxTurns: options.maxTurns ?? DEFAULT_AGENTIC_MAX_TURNS,
 						permissionMode: options.permissionMode ?? 'default',
 						...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
 						tools: options.tools,
@@ -966,9 +975,15 @@ export class Session {
 				for await (const msg of stream) {
 					const sdkMsg = msg as SDKMessage;
 
-					// Capture session ID
+					// Capture session ID — announce it the first time so the view can
+					// name the session and update the sidebar (the id is unknown at
+					// Session construction time; it only arrives with the first message).
 					if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
+						const isNew = this._sessionId !== sdkMsg.session_id;
 						this._sessionId = sdkMsg.session_id;
+						if (isNew) {
+							this.dispatch({type: 'session.init', data: {sessionId: this._sessionId}});
+						}
 					}
 
 					// Convert SDKMessage to SessionEvent and dispatch
@@ -1105,7 +1120,14 @@ export class Session {
 			case 'result': {
 				const resultMsg = msg as SDKResultMessage;
 				if (resultMsg.is_error) {
-					return {type: 'session.error', data: {error: 'result' in resultMsg ? String((resultMsg as {result?: string}).result) : 'Unknown error'}};
+					const raw = (resultMsg as {result?: string}).result;
+					const subtype = (resultMsg as {subtype?: string}).subtype;
+					const error = (typeof raw === 'string' && raw)
+						? raw
+						: subtype === 'error_max_turns'
+							? 'The agent hit its turn limit before finishing. Try again or narrow the request.'
+							: `Query failed${subtype ? ` (${subtype})` : ''}.`;
+					return {type: 'session.error', data: {error}};
 				}
 				return null; // session.idle is dispatched after the loop
 			}
