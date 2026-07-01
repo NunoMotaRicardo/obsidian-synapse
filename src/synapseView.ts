@@ -86,6 +86,8 @@ export class SynapseView extends ItemView {
 	sessionList: import('./agentService').SessionMetadata[] = [];
 	sessionNames: Record<string, string> = {};
 	currentSessionId: string | null = null;
+	/** First-prompt snippet used to name a new session once its id arrives via 'session.init'. */
+	pendingSessionLabel: string | null = null;
 	sidebarWidth = 40;
 	sessionFilter = '';
 	sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
@@ -177,6 +179,7 @@ export class SynapseView extends ItemView {
 	}
 
 	registerInlineSession(sessionId: string, description: string): void {
+		if (!sessionId) return; // no id (e.g. aborted query) — don't create a junk entry
 		this.sessionNames[sessionId] = `[inline] ${description}`;
 		this.saveSessionNames();
 
@@ -204,6 +207,12 @@ export class SynapseView extends ItemView {
 
 		// Load persisted state before rendering lists
 		this.sessionNames = this.plugin.settings.sessionNames ?? {};
+		// Drop legacy junk entries keyed by an empty session id (written by older
+		// builds that named sessions before the SDK delivered the real id).
+		if ('' in this.sessionNames) {
+			delete this.sessionNames[''];
+			this.saveSessionNames();
+		}
 
 		await this.loadAllConfigs();
 		void this.loadSessions();
@@ -548,14 +557,10 @@ export class SynapseView extends ItemView {
 		try {
 			await this.ensureSession();
 
-			// Name the session if this is the first message
-			if (this.currentSessionId && !this.sessionNames[this.currentSessionId]) {
-				const agentName = this.selectedAgent || 'Chat';
-				const truncated = prompt.length > 40 ? prompt.slice(0, 40) + '…' : prompt;
-				this.sessionNames[this.currentSessionId] = `[chat] ${agentName}: ${truncated}`;
-				this.saveSessionNames();
-				this.renderSessionList();
-			}
+			// Remember the first prompt so the session can be named once the SDK
+			// assigns a session id (delivered via the 'session.init' event during
+			// the first send — the id is not known before that).
+			this.pendingSessionLabel = prompt.length > 40 ? prompt.slice(0, 40) + '…' : prompt;
 
 			// Clipboard-pasted image attachments (type: 'blob', base64 data, no path) are
 			// written to temp files first so they can be inlined into the prompt like any
@@ -651,7 +656,9 @@ export class SynapseView extends ItemView {
 			}
 		};
 		this.currentSession = await this.plugin.agentService!.createSession(sessionConfig, onEvent);
-		this.currentSessionId = this.currentSession.sessionId;
+		// For a brand-new session the id is unknown until the first send() streams a
+		// message; 'session.init' delivers it (handled in handleSessionEvent).
+		this.currentSessionId = this.currentSession.sessionId || null;
 
 		// Explicitly select the agent via RPC — the `agent` field in SessionConfig
 		// should do this, but some CLI versions require the explicit call.
@@ -667,11 +674,13 @@ export class SynapseView extends ItemView {
 		this.registerSessionEvents();
 		this.updateToolbarLock();
 
-		// Add new session to list immediately so sidebar updates instantly
-		if (!this.sessionList.some(s => s.sessionId === this.currentSession!.sessionId)) {
+		// Add resumed sessions to the list immediately; brand-new sessions are added
+		// when 'session.init' delivers their real id (an empty-id entry here would
+		// leave a junk row the sidebar can never resolve).
+		if (this.currentSessionId && !this.sessionList.some(s => s.sessionId === this.currentSessionId)) {
 			const now = new Date();
 			this.sessionList.unshift({
-				sessionId: this.currentSession.sessionId,
+				sessionId: this.currentSessionId,
 				summary: '',
 				lastModified: now.getTime(),
 			} as import('./agentService').SessionMetadata);
@@ -684,6 +693,28 @@ export class SynapseView extends ItemView {
 		const type = event.type;
 		const data = event.data as Record<string, unknown>;
 		switch (type) {
+			case 'session.init': {
+				// First message of a new session delivered its id — adopt it, name the
+				// session from the first prompt, and surface it in the sidebar.
+				const sessionId = data.sessionId as string;
+				if (!sessionId) break;
+				this.currentSessionId = sessionId;
+				if (!this.sessionNames[sessionId] && this.pendingSessionLabel) {
+					const agentName = this.selectedAgent || 'Chat';
+					this.sessionNames[sessionId] = `[chat] ${agentName}: ${this.pendingSessionLabel}`;
+					this.saveSessionNames();
+				}
+				this.pendingSessionLabel = null;
+				if (!this.sessionList.some(s => s.sessionId === sessionId)) {
+					this.sessionList.unshift({
+						sessionId,
+						summary: '',
+						lastModified: Date.now(),
+					} as import('./agentService').SessionMetadata);
+				}
+				this.renderSessionList();
+				break;
+			}
 			case 'assistant.turn_start':
 				if (this.turnStartTime === 0) {
 					this.turnStartTime = Date.now();
@@ -810,6 +841,7 @@ export class SynapseView extends ItemView {
 		// the typed handlers for type-safety and because resumeSession paths
 		// don't go through buildSessionConfig's onEvent.
 		this.eventUnsubscribers.push(
+			session.on('session.init', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.turn_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.reasoning_delta', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.reasoning', (event) => { this.handleSessionEvent(event); }),
@@ -864,6 +896,7 @@ export class SynapseView extends ItemView {
 			this.currentSession = null;
 		}
 		this.currentSessionId = null;
+		this.pendingSessionLabel = null;
 		this.messages = [];
 		if (this.fullRenderTimer) {
 			clearTimeout(this.fullRenderTimer);
@@ -966,7 +999,10 @@ export class SynapseView extends ItemView {
 			plugins: [{type: 'local', path: `${vaultRoot}/_synapse/`}],
 			skills: Array.from(this.enabledSkills),
 			agent: effectiveAgentName || undefined,
-			systemPrompt: systemContent,
+			// Append to the Claude Code preset rather than replacing it — a plain
+			// string here would wipe the default system prompt (tool usage, agentic
+			// behavior) and the model stops using tools or reading files.
+			systemPrompt: {type: 'preset', preset: 'claude_code', append: systemContent},
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 		};
 

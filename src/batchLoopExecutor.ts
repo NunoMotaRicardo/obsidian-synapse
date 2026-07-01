@@ -166,6 +166,9 @@ async function runOnFile(
 
 	const result = await plugin.agentService.inlineChat({
 		prompt,
+		// Claude Code preset supplies the default tool-usage system prompt so the
+		// loop can read the target file referenced by the substituted path.
+		systemPrompt: {type: 'preset', preset: 'claude_code'},
 		cwd: basePath,
 		plugins: [{type: 'local', path: pluginsPath}],
 		maxTurns: 10,

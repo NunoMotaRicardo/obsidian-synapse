@@ -5,6 +5,19 @@ import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 
+/** Read-only file tools for vault search — no write/exec access needed. */
+const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
+
+/** Shared search prompt: instructs tool-driven exploration + strict JSON output. */
+function buildSearchPrompt(query: string): string {
+	return 'Search the vault (your working directory) for files matching the query below. ' +
+		'Use your Glob/Grep/Read tools to explore file names and contents. ' +
+		'Then return ONLY a JSON array of objects, each with "file" (vault-relative path), ' +
+		'"folder" (parent folder path), and "reason" (brief description why it matches). ' +
+		'Sort by relevance (best match first). Return [] if nothing matches. ' +
+		'No markdown fences, no extra text.\n\nQuery: ' + query;
+}
+
 declare module '../synapseView' {
 	interface SynapseView {
 		searchAbortController?: AbortController | null;
@@ -26,7 +39,6 @@ declare module '../synapseView' {
 		handleSearch(): Promise<void>;
 		handleBasicSearch(query: string): Promise<void>;
 		handleAdvancedSearch(query: string): Promise<void>;
-		buildBasicSearchSessionConfig(): SessionConfig;
 		renderSearchResults(content: string): void;
 		updateSearchButton(): void;
 	}
@@ -290,12 +302,19 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		return {
 			model: this.searchModel || undefined,
+			agent: this.searchAgent || this.plugin.settings.featureAgents?.search || undefined,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
 			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
 			plugins: [{type: 'local', path: pluginPath}],
 			skills: Array.from(this.searchEnabledSkills),
-			systemPrompt: (resilienceBlock + selfImproveBlock).trim(),
+			// Search is read-only: expose only file-exploration tools. Enabled skills
+			// remain available (the `skills` option enables the Skill tool itself).
+			tools: SEARCH_TOOLS,
+			maxTurns: 40,
+			// Append to the Claude Code preset — a plain string would replace the
+			// default system prompt and the model stops using its tools.
+			systemPrompt: {type: 'preset', preset: 'claude_code', append: (resilienceBlock + selfImproveBlock).trim()},
 		};
 	};
 
@@ -352,17 +371,20 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.handleBasicSearch = async function (this: SynapseView, query: string): Promise<void> {
-		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
+		const searchPrompt = buildSearchPrompt(query);
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
+		// Read-only file tools + enough turns to actually explore the vault.
+		// (tools: [] with maxTurns: 1 made every search fail with
+		// "Reached maximum number of turns (1)".)
 		const {content} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
 			cwd: this.getSearchWorkingDirectory(),
-			permissionMode: 'plan',
-			tools: [],
-			maxTurns: 1,
+			permissionMode: 'default',
+			tools: SEARCH_TOOLS,
+			maxTurns: 20,
 			timeoutMs,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
@@ -371,7 +393,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 	proto.handleAdvancedSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const sessionConfig = this.buildSearchSessionConfig();
-		const searchPrompt = `Perform a semantic search for files matching the following query. Return ONLY a JSON array of objects, each with "file" (vault-relative path), "folder" (parent folder path), and "reason" (brief description why it matches). Sort by relevance (best match first). No markdown fences, no extra text.\n\nQuery: ${query}`;
+		const searchPrompt = buildSearchPrompt(query);
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
@@ -382,7 +404,11 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 
-		// Name the session
+		// Name the session (skip if the query never got an id, e.g. aborted)
+		if (!sessionId) {
+			this.renderSearchResults(content || '');
+			return;
+		}
 		const agentLabel = this.searchAgent || 'Search';
 		const truncated = query.length > 40 ? query.slice(0, 40) + '...' : query;
 		this.sessionNames[sessionId] = `[search] ${agentLabel}: ${truncated}`;
@@ -400,17 +426,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.renderSessionList();
 
 		this.renderSearchResults(content || '');
-	};
-
-	proto.buildBasicSearchSessionConfig = function (this: SynapseView): SessionConfig {
-		const pluginPath = `${this.getVaultBasePath().replace(/\\/g, '/')}/_synapse/`;
-		return {
-			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
-			permissionMode: 'plan',
-			cwd: this.getSearchWorkingDirectory(),
-			plugins: [{type: 'local', path: pluginPath}],
-			tools: [],
-		};
 	};
 
 	proto.renderSearchResults = function (this: SynapseView, content: string): void {

@@ -195,7 +195,9 @@ async function executeWithClaude(
 		prompt,
 		model: trigger.model,
 		agent: trigger.agent,
-		systemMessage: undefined, // triggers use body-as-prompt; no separate system message
+		// Triggers use body-as-prompt; the Claude Code preset supplies the default
+		// tool-usage system prompt so the trigger can read the affected files.
+		systemPrompt: {type: 'preset', preset: 'claude_code'},
 		cwd: basePath,
 		plugins: [{type: 'local', path: pluginsPath}],
 		maxTurns: 10,

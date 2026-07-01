@@ -327,7 +327,9 @@ export class TelegramBotService {
 			plugins: [{type: 'local', path: `${normalizedBasePath}/_synapse/`}],
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../agentService').ReasoningEffort} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
-			systemPrompt: systemContent,
+			// Append to the Claude Code preset — a plain string would replace the
+			// default system prompt and the bot stops using tools/reading files.
+			systemPrompt: {type: 'preset' as const, preset: 'claude_code' as const, append: systemContent},
 		};
 	}
 

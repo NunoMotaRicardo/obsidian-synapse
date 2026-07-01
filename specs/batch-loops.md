@@ -62,7 +62,9 @@ reports how many files were processed vs. skipped via `Notice`.
 
 **Per-file execution — `runOnFile()`:** mirrors `triggerExecutor.ts`'s Claude routing path
 exactly: substitutes `{{file}}` in the instruction with the vault-relative path, then calls
-`AgentService.inlineChat()` with `cwd` set to the absolute vault base path and `plugins` set to
+`AgentService.inlineChat()` with `systemPrompt: {type: 'preset', preset: 'claude_code'}` (the
+default tool-usage prompt, so the loop can read the substituted file path), `cwd` set to the
+absolute vault base path and `plugins` set to
 the `_synapse/` local plugin path (same SDK plugin-discovery wiring bots/triggers/editor actions
 use), `maxTurns: 10`, `permissionMode: 'default'`. This slice always routes through Claude —
 local-model routing (as `triggerExecutor.ts` has for triggers) is out of scope for #73.

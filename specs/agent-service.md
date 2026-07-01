@@ -12,6 +12,14 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
 - Manage session list/delete/rename via `listSessions()`, `deleteSession()`, `renameSession()`.
 - One-shot helpers: `chat()` (ephemeral, no session) and `inlineChat()` (persisted session)
   used by editor actions, search, triggers, and bots.
+  - `chat()` defaults to a pure text transform (`maxTurns: 1`, `tools: []`, `permissionMode:
+    'plan'`).
+  - `inlineChat()` defaults to **agentic** behavior: `maxTurns` falls back to
+    `DEFAULT_AGENTIC_MAX_TURNS` (50) so multi-step tool use (Read/Glob/Grep loops) can finish.
+    Callers doing pure text transforms (editor text actions, note edit/structure, new
+    note/canvas/summary) must pass `tools: []` + `maxTurns: 1` explicitly. A `maxTurns: 1`
+    default here was the root cause of every tool-using one-shot failing with "Reached maximum
+    number of turns (1)".
 - Re-export all SDK types consumed elsewhere so the SDK import surface stays in one file.
 - Track own `ConnectionState` (`'disconnected' | 'connecting' | 'connected' | 'error'`) around
   resolution and first query attempt.
@@ -33,7 +41,7 @@ Key query option fields used:
 | `reasoningSummary` | settings + toolbar reasoning menu (brain icon), same gating |
 | `contextTier` | settings `contextTier` (`'default'` or `'long_context'`); omitted when `'default'` |
 | `infiniteSessions` | settings `infiniteSessionsEnabled`; omitted when `true` (SDK default) |
-| `systemPrompt` | agent body / built-in prompt |
+| `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots, triggers, batch loops); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
 | `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: ...}`) |
 | `skills` | enabled skill names array from toolbar |
 | `canUseTool` | tool-approval modal or `approveAll` |
@@ -136,6 +144,20 @@ dynamically based on the number of files in scope:
 
 `AgentService` wraps `listSessions()`, `deleteSession()`, `renameSession()` from the SDK for
 the session sidebar. Session history replay uses `session.getEvents()`.
+
+A new `Session`'s id is unknown until the first `send()` streams a message. When the wrapper
+first captures a `session_id` (also when it changes on resume), it dispatches a
+`session.init` event (`{sessionId}`) before any other event of that turn, so the view can adopt
+the real id, name the session, and add it to the sidebar. Do not read `Session.sessionId`
+right after `createSession()` for a new session — it is `''` at that point.
+
+## Model list mapping
+
+`fetchModels()` maps the CLI's `initializationResult().models` to the plugin `ModelInfo` shape.
+`ModelInfo.id` is `sdk.value` verbatim (`'sonnet'`, `'sonnet[1m]'`, `'opus'`,
+`'claude-fable-5[1m]'`, …) with `'default'` mapped to `''` (= let the CLI pick). Never derive
+ids from `displayName` — labels like "Sonnet (1M context)" or "Fable" do not round-trip to
+valid model identifiers.
 
 ## Tool execution events (issue #78)
 
