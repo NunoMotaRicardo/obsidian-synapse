@@ -4,7 +4,7 @@
  * The Agent SDK's Write/Edit/NotebookEdit tools are executed natively by the `claude` CLI
  * subprocess — the plugin has no custom tool implementation and can't intercept or retry a
  * failed call itself (that's handled by system-prompt guidance, see
- * `buildWriteRetryGuidance()` in `view/sessionConfig.ts`). This module only improves how a
+ * `buildResilienceHint()` in `view/sessionConfig.ts`). This module only improves how a
  * failed write/edit is *displayed* to the user, mirroring the pattern the pre-BYOK-cleanup
  * `ollamaErrors.ts` used for Ollama connection errors: pattern-match common failure signatures
  * and return actionable guidance instead of a raw error string.
@@ -20,10 +20,12 @@ export function isWriteToolName(toolName: string | undefined): boolean {
 /**
  * True when a raw error message looks like a transient filesystem lock/permission issue
  * (e.g. a file open in another program, or mid-sync in OneDrive/Dropbox/iCloud) rather than
- * a logical error (bad path, invalid diff, etc.).
+ * a logical error (bad path, invalid diff, etc.). Deliberately excludes `ENOENT` (no such
+ * file or directory) — that's a bad-path logical error, not a transient lock, and retrying
+ * or blaming "sync" would be misleading.
  */
 export function isTransientWriteError(rawError: string): boolean {
-	return /\bEBUSY\b|\bEPERM\b|\bEACCES\b|\bENOENT\b|resource busy or locked|being used by another process|permission denied|locked/i.test(rawError);
+	return /\bEBUSY\b|\bEPERM\b|\bEACCES\b|resource busy or locked|being used by another process|permission denied|locked/i.test(rawError);
 }
 
 /**

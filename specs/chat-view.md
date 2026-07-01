@@ -84,10 +84,12 @@ vault scope, folder tree.
   always asking permission before writing. The block includes the current agent name for
   context. It is skipped when the user is already using the `improve-synapse` prompt
   (no double-activation).
-  A compact `[Resilience]` block is appended to every chat session's system prompt via
-  `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask guidance for failed
-  writes/edits and confirm-before-acting guidance for referenced attachments; see "Write/edit
-  tool error guidance (issue #78)" below.
+  A compact `[Resilience]` block is appended to every session's system prompt (chat, search,
+  and Telegram bot) via `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask
+  guidance for failed writes/edits and confirm-before-acting guidance for referenced
+  attachments; see "Write/edit tool error guidance (issue #78)" below. This matters most for
+  the Telegram bot, which runs unattended with `permissionMode: 'bypassPermissions'` and no UI
+  to catch a silent failure.
   When `settings.autoIncludeNoteImages` is enabled (default),
   `handleSend()` reads the active note content, scans for image embeds (`![[image.png]]` and
   `![alt](path.png)` syntaxes), resolves them to vault files via `resolveNoteImageEmbeds()`
@@ -150,11 +152,12 @@ mechanisms handle failures:
 - **Display:** `tool.execution_complete` events with an error (see `agent-service.md`) are
   checked by `friendlyWriteToolError()` (`src/toolErrors.ts`). For a Write/Edit/NotebookEdit
   failure whose message matches a transient-looking signature (`EBUSY`, `EPERM`, `EACCES`,
-  `ENOENT`, "resource busy or locked", "being used by another process", "permission denied",
-  "locked"), it returns an actionable message (e.g. suggesting the file may be locked by sync
-  or open elsewhere) shown via `addInfoMessage()`, in addition to the raw error already shown in
-  the collapsed tool-call block. Non-write tools and non-transient errors fall through to the
-  existing raw-error display only.
+  "resource busy or locked", "being used by another process", "permission denied", "locked"),
+  it returns an actionable message (e.g. suggesting the file may be locked by sync or open
+  elsewhere) shown via `addInfoMessage()`, in addition to the raw error already shown in the
+  collapsed tool-call block. `ENOENT` (no such file or directory) is deliberately excluded —
+  it's a bad-path logical error, not a transient lock, so it falls through to the existing
+  raw-error display along with other non-write-tool and non-transient errors.
 - **Retry-once + ask-before-fabricating:** since the plugin can't programmatically retry a
   native tool call, the behavior is instructed via a `[Resilience]` system-prompt block
   (`buildResilienceHint()`, `sessionConfig.ts`) appended in `buildSessionConfig()` alongside the
