@@ -9,7 +9,6 @@ import {IMAGE_EXTS} from '../types';
 // used only for writing clipboard/blob attachments to temp files.
 const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
 
-
 /**
  * Resolve a model ID from an agent's preferred model name / partial match.
  * Returns the matching model ID, or falls back to `fallback` when the
@@ -104,9 +103,10 @@ export async function cleanupAttachmentTempFiles(paths: string[]): Promise<void>
  * `attachments` field — the Agent SDK only accepts `prompt: string | AsyncIterable<SDKUserMessage>`.
  * Giving the model a real absolute path lets it use its own `Read` tool (which already
  * supports image files) to actually see the content. Blob attachments (clipboard-pasted
- * images with no path) are first written to a temp file by the caller so they can be
- * inlined the same way; `tempFilePaths` should be threaded to `additionalDirectories`
- * and cleaned up via `cleanupAttachmentTempFiles()`.
+ * images with no path) are first written to a temp file via `materializeBlobAttachments()`
+ * (the resulting `blobPaths` map is passed in here); those temp file paths should also be
+ * threaded to `computeAdditionalDirectories()`/`Session.send({additionalDirectories})` and
+ * cleaned up via `cleanupAttachmentTempFiles()` when the view/session ends.
  */
 export function buildPrompt(
 	basePrompt: string,
