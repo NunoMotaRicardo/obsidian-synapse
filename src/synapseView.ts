@@ -747,7 +747,10 @@ export class SynapseView extends ItemView {
 			}
 			case 'tool.execution_start':
 				this.turnToolsUsed.push(data.toolName as string);
-				this.addToolCallBlock(data.toolCallId as string, data.toolName as string, (data as {input?: unknown}).input);
+				{
+					const toolInput = (data as {input?: unknown}).input;
+					this.addToolCallBlock(data.toolCallId as string, data.toolName as string, toolInput);
+				}
 				break;
 			case 'tool.execution_complete': {
 				const toolError = data.error as {message: string} | undefined;
