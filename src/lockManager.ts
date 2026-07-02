@@ -68,18 +68,32 @@ class LockManager {
 		// whichever holder we're currently waiting behind.
 		this.tails.set(key, ownTail);
 
+		let acquired = false;
+
 		try {
 			// Wait for our turn, bounded by LOCK_TIMEOUT_MS so a wedged holder
 			// ahead of us can't block this acquisition forever.
 			await this.waitTurn(previousTail, key);
+			acquired = true;
 			return await fn();
 		} finally {
-			releaseLock();
-			// Only clear the map entry if nobody has queued behind us — if a
-			// later caller already replaced `tails.get(key)` with their own
-			// tail, leave the map alone (their tail is now the current one).
-			if (this.tails.get(key) === ownTail) {
-				this.tails.delete(key);
+			if (acquired) {
+				releaseLock();
+				// Only clear the map entry if nobody has queued behind us — if a
+				// later caller already replaced `tails.get(key)` with their own
+				// tail, leave the map alone (their tail is now the current one).
+				if (this.tails.get(key) === ownTail) {
+					this.tails.delete(key);
+				}
+			} else {
+				// If we timed out waiting, don't unblock callers queued behind us until the
+				// previous tail resolves (otherwise they can run concurrently with the holder).
+				void previousTail.finally(() => {
+					releaseLock();
+					if (this.tails.get(key) === ownTail) {
+						this.tails.delete(key);
+					}
+				});
 			}
 		}
 	}
