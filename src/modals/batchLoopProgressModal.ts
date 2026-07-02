@@ -67,11 +67,14 @@ export class BatchLoopProgressModal extends Modal {
 		});
 	}
 
-	/** Called from the loop's `onProgress` hook after each file starts. */
+	/** Called from the loop's `onProgress` hook, before and after each file. */
 	updateProgress(progress: BatchLoopProgress, usage: BatchLoopUsage): void {
 		if (this.completed) return;
-		this.statusEl.setText(`${progress.index - 1}/${progress.total} processed`);
-		this.fileEl.setText(`Processing: ${progress.filePath}`);
+		const done = progress.phase === 'done' ? progress.index : progress.index - 1;
+		this.statusEl.setText(`${done}/${progress.total} processed`);
+		this.fileEl.setText(
+			progress.phase === 'done' ? `Finished: ${progress.filePath}` : `Processing: ${progress.filePath}`,
+		);
 		this.renderBudget(usage);
 	}
 
@@ -80,7 +83,7 @@ export class BatchLoopProgressModal extends Modal {
 		this.completed = true;
 
 		const attempted = result.processed + result.failed;
-		this.statusEl.setText(`${attempted}/${this.total} processed`);
+		this.statusEl.setText(`${attempted}/${this.total} attempted`);
 		this.renderBudget(usage);
 
 		this.fileEl.empty();

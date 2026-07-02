@@ -84,9 +84,12 @@ each file's `SDKResultMessage` (`type: 'result'`) to the caller, which accumulat
 token/cost usage for budget enforcement.
 
 **Per-file progress:** the optional `onProgress` callback is invoked twice per file — once when the
-file starts, with `{index, total, filePath}` paired with cumulative usage *before* that file's
-result comes back, and again immediately after the file's result arrives, with the same
-`{index, total, filePath}` paired with updated cumulative usage. This lets a live progress UI
+file starts, with `{index, total, filePath, phase: 'starting'}` paired with cumulative usage
+*before* that file's result comes back, and again immediately after the file's result arrives
+(success path only — a failed file only gets the `'starting'` call), with
+`{index, total, filePath, phase: 'done'}` paired with updated cumulative usage. The `phase` field
+lets a caller distinguish the two calls without re-deriving it from `index` alone, since both
+calls carry the same `index`/`total`/`filePath`. This lets a live progress UI
 (`BatchLoopProgressModal`, #75) show "N/total processed" and elapsed budget without re-deriving
 usage from `SDKResultMessage`s itself, and without changing the executor's core loop. The per-file
 `Notice`s from #73/#74 have been removed now that the progress modal shows this live; the

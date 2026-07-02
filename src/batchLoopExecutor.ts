@@ -332,15 +332,21 @@ export interface BatchLoopProgress {
 	total: number;
 	/** Vault-relative path of the file currently being processed. */
 	filePath: string;
+	/**
+	 * Whether this call marks the file *starting* (usage does not yet include
+	 * it) or *done* (usage includes its result) — lets a live UI distinguish
+	 * "N-1/total processed, now starting N" from "N/total processed".
+	 */
+	phase: 'starting' | 'done';
 }
 
 /**
  * Cumulative usage-so-far, passed alongside each `onProgress` call so a
  * caller (e.g. #75's `BatchLoopProgressModal`) can show elapsed budget live
- * without re-deriving it from individual `SDKResultMessage`s itself. Reflects
- * usage accumulated from files that have *completed* before the file named in
- * the paired `BatchLoopProgress` — i.e. it does not yet include the
- * in-flight file's own usage.
+ * without re-deriving it from individual `SDKResultMessage`s itself.
+ * `onProgress` fires twice per file: once with `phase: 'starting'`, where
+ * usage does not yet include the in-flight file, and again with
+ * `phase: 'done'`, where usage includes that file's own result.
  */
 export type BatchLoopOnProgress = (progress: BatchLoopProgress, usage: BatchLoopUsage) => void;
 
@@ -465,7 +471,7 @@ export async function runBatchLoop(
 		const filePath = filePaths[i]!;
 		const index = i + 1;
 
-		onProgress?.({index, total, filePath}, {...usage});
+		onProgress?.({index, total, filePath, phase: 'starting'}, {...usage});
 
 		const fileController = new AbortController();
 		handle.setActiveController(fileController);
@@ -480,7 +486,7 @@ export async function runBatchLoop(
 			console.log(`[synapse] Batch loop processed ${filePath} (${index}/${total})`);
 			// Report again with post-file usage so a live UI reflects this
 			// file's cost/tokens without waiting for the next file to start.
-			onProgress?.({index, total, filePath}, {...usage});
+			onProgress?.({index, total, filePath, phase: 'done'}, {...usage});
 		} catch (e) {
 			if (handle.cancelled) {
 				// Aborted by handle.stop() mid-file — treat as cancellation, not a
