@@ -77,6 +77,9 @@ describe('lockManager.withLock — serialization', () => {
 		expect(events).toContain('b-start');
 	});
 
+	it('normalizes path separators so equivalent paths serialize together', async () => {
+		const events: string[] = [];
+
 		const first = lockManager.withLock('folder/note.md', async () => {
 			events.push('first-start');
 			await delay(15);
