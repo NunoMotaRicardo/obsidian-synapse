@@ -253,19 +253,25 @@ async function applyWriteMode(
 		}
 		// Full write: replace file content
 		const normalized = normalizePath(filePath);
-		const file = app.vault.getAbstractFileByPath(normalized);
-		if (file instanceof TFile) {
-			try {
-				await lockManager.withLock(normalized, () => app.vault.modify(file, result));
-			} catch (e) {
-				if (e instanceof LockAcquisitionError) {
-					console.warn(`[synapse] Trigger "${trigger.name}": could not acquire lock for write-back, appending to report instead:`, e.message);
-					await appendToReport(app, trigger.name, result);
+		let fileFound = false;
+		try {
+			await lockManager.withLock(normalized, async () => {
+				const file = app.vault.getAbstractFileByPath(normalized);
+				if (!(file instanceof TFile)) {
 					return;
 				}
-				throw e;
+				fileFound = true;
+				await app.vault.modify(file, result);
+			});
+		} catch (e) {
+			if (e instanceof LockAcquisitionError) {
+				console.warn(`[synapse] Trigger "${trigger.name}": could not acquire lock for write-back, appending to report instead:`, e.message);
+				await appendToReport(app, trigger.name, result);
+				return;
 			}
-		} else {
+			throw e;
+		}
+		if (!fileFound) {
 			// File doesn't exist (e.g. it was deleted) — fall back to report
 			console.warn(`[synapse] Trigger "${trigger.name}": file not found for write-back, appending to report instead`);
 			await appendToReport(app, trigger.name, result);
