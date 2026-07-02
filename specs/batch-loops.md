@@ -180,12 +180,12 @@ last file-level entry for that run, via `appendRunSummary()`:
 - Cumulative usage: 512,340 tokens, $1.2345
 ```
 
-`Status` reads one of: `stopped by user (cancelled)`, `stopped — budget exhausted (limit: ...)`,
-or `scope exceeded the file-count limit before the run started` (the last for the
-`scope-too-large` early-return, which appends a summary with `Files processed: 0` — there is no
-usage to report since no file ran). Completed runs (`reason: 'completed'`) do *not* get a run
-summary block — the per-file entries and completion `Notice` are sufficient, matching #73's
-original behavior.
+`Status` reads one of: `stopped by user (cancelled)` or `stopped — budget exhausted (limit: ...)`
+— these are the two early-stop reasons a run summary block is written for. The `scope-too-large`
+stop is `Notice`-only: it happens before any file starts (and possibly before today's report file
+even exists), so there is nothing to append — no run summary block is written for it. Completed
+runs (`reason: 'completed'`) also do *not* get a run summary block — the per-file entries and
+completion `Notice` are sufficient, matching #73's original behavior.
 
 `_synapse/reports/` is created automatically if missing, via `configWriter.ts`'s `ensureFolder()`
 (shared with other writers rather than duplicating trigger-executor's own folder-creation logic).

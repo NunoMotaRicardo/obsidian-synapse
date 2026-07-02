@@ -188,28 +188,23 @@ function todayString(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Append a result block to today's batch-loop report file.
+ * Create-or-append `block` to today's batch-loop report file, creating the
+ * file (and its `# batch-loop — YYYY-MM-DD` heading) if this is the first
+ * entry written for today. Shared by `appendToReport()` (per-file result
+ * entries) and `appendRunSummary()` (early-stop run summary entries) — only
+ * the block content differs between them.
  *
- * Report path: `_synapse/reports/batch-loop-YYYY-MM-DD.md`. Created with a
- * `# batch-loop — YYYY-MM-DD` heading if absent for today, otherwise appended
- * (uses vault.read()/vault.modify() so the Obsidian cache and internal file
- * queue stay consistent — same rationale as the trigger executor).
+ * Uses vault.read()/vault.modify() (not `adapter.read`/`write`) so the
+ * Obsidian cache and internal file queue stay consistent — same rationale as
+ * the trigger executor's `appendToReport()`.
  */
-async function appendToReport(
-	plugin: SynapsePlugin,
-	filePath: string,
-	result: string,
-	isError = false,
-): Promise<void> {
+async function appendBlockToReport(plugin: SynapsePlugin, block: string): Promise<void> {
 	const app = plugin.app;
 	await ensureFolder(app, REPORTS_FOLDER);
 
 	const today = todayString();
 	const reportPath = normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`);
-
 	const heading = `# ${REPORT_NAME} — ${today}`;
-	const entryHeading = `## ${filePath}`;
-	const block = isError ? `${entryHeading}\n\n### Error\n\n${result}` : `${entryHeading}\n\n${result}`;
 
 	const exists = await app.vault.adapter.exists(reportPath);
 	if (!exists) {
@@ -219,6 +214,23 @@ async function appendToReport(
 		const current = await app.vault.read(tfile);
 		await app.vault.modify(tfile, `${current}\n${block}\n`);
 	}
+}
+
+/**
+ * Append a result block to today's batch-loop report file.
+ *
+ * Report path: `_synapse/reports/batch-loop-YYYY-MM-DD.md`. See
+ * `appendBlockToReport()` for the shared create-or-append logic.
+ */
+async function appendToReport(
+	plugin: SynapsePlugin,
+	filePath: string,
+	result: string,
+	isError = false,
+): Promise<void> {
+	const entryHeading = `## ${filePath}`;
+	const block = isError ? `${entryHeading}\n\n### Error\n\n${result}` : `${entryHeading}\n\n${result}`;
+	await appendBlockToReport(plugin, block);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,13 +358,6 @@ async function appendRunSummary(
 	budget?: BatchLoopBudget,
 	usage?: BatchLoopUsage,
 ): Promise<void> {
-	const app = plugin.app;
-	await ensureFolder(app, REPORTS_FOLDER);
-
-	const today = todayString();
-	const reportPath = normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`);
-	const heading = `# ${REPORT_NAME} — ${today}`;
-
 	const reasonText = reason === 'cancelled'
 		? 'stopped by user (cancelled)'
 		: reason === 'budget-exceeded'
@@ -365,14 +370,7 @@ async function appendRunSummary(
 
 	const block = `### Run summary\n\n- Status: ${reasonText}\n- Files processed: ${processed}\n- Files failed: ${failed}\n- Files skipped/remaining: ${skipped}\n- Total files in scope: ${total}${usageLine}`;
 
-	const exists = await app.vault.adapter.exists(reportPath);
-	if (!exists) {
-		await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
-	} else {
-		const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
-		const current = await app.vault.read(tfile);
-		await app.vault.modify(tfile, `${current}\n${block}\n`);
-	}
+	await appendBlockToReport(plugin, block);
 }
 
 // ---------------------------------------------------------------------------
