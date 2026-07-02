@@ -9,9 +9,9 @@ plugin-orchestrated alternative to the autonomous batch/agentic loops other tool
 caps; it never hands control of the loop itself to the model.
 
 This is built on the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by
-#66), and adds budget-based cost caps and true in-flight cancellation (issue #74). A dedicated
-progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75) and can build on
-the `onProgress` hook without a rewrite.
+#66), and adds budget-based cost caps and true in-flight cancellation (issue #74). Issue #75 adds a
+dedicated progress modal that replaces the plain per-file `Notice`s with a live-updating view of
+the run.
 
 ## Launch flow (`src/batchLoopExecutor.ts`)
 
@@ -38,9 +38,9 @@ Entry point: `launchBatchLoop(plugin: SynapsePlugin): void`, wired to the comman
    budget; unparseable non-empty input re-prompts (up to 3 attempts) rather than silently treating
    a typo as "no budget". After 3 failed attempts the run proceeds without a budget rather than
    blocking indefinitely.
-5. Shows a persistent (`duration: 0`) `Notice` containing a "Stop" button (built via the global
-   `createFragment()` helper) tied to a `BatchLoopHandle`, then calls `runBatchLoop()` with the
-   parsed budget. The notice is hidden once the run finishes, regardless of outcome.
+5. Opens a `BatchLoopProgressModal` (`src/modals/batchLoopProgressModal.ts`, issue #75) tied to a
+   `BatchLoopHandle`, then calls `runBatchLoop()` with the parsed budget, passing an `onProgress`
+   callback that forwards each update to the modal. See **Progress UI** below.
 
 ## Core executor: `runBatchLoop()`
 
@@ -50,9 +50,11 @@ runBatchLoop(
   filePaths: string[],
   instruction: string,
   handle: BatchLoopHandle,
-  onProgress?: (progress: BatchLoopProgress) => void,
+  onProgress?: BatchLoopOnProgress,
   budget?: BatchLoopBudget,
 ): Promise<BatchLoopResult>
+
+type BatchLoopOnProgress = (progress: BatchLoopProgress, usage: BatchLoopUsage) => void;
 ```
 
 **File-count cap:** `BATCH_LOOP_MAX_FILES` (currently `50`, a plain exported constant — no
@@ -81,10 +83,14 @@ per-file `AbortController` (see **Cancellation** below) and an `onEvent` callbac
 each file's `SDKResultMessage` (`type: 'result'`) to the caller, which accumulates cumulative
 token/cost usage for budget enforcement.
 
-**Per-file progress:** after each file starts, a `Notice` is shown ("Synapse: processing N/total:
-`<file>`") and the optional `onProgress` callback is invoked with `{index, total, filePath}`. This
-hook exists so a future progress UI (#75) can subscribe without changing the executor's core
-loop — it is not otherwise used currently.
+**Per-file progress:** the optional `onProgress` callback is invoked twice per file — once when the
+file starts, with `{index, total, filePath}` paired with cumulative usage *before* that file's
+result comes back, and again immediately after the file's result arrives, with the same
+`{index, total, filePath}` paired with updated cumulative usage. This lets a live progress UI
+(`BatchLoopProgressModal`, #75) show "N/total processed" and elapsed budget without re-deriving
+usage from `SDKResultMessage`s itself, and without changing the executor's core loop. The per-file
+`Notice`s from #73/#74 have been removed now that the progress modal shows this live; the
+completion `Notice` (see **Completion** below) is unaffected.
 
 **Per-file error handling:** an error for one file is caught, logged via `console.error`, appended
 to the report under a `### Error` heading, and does *not* abort the rest of the run — subsequent
@@ -231,4 +237,26 @@ prompt (`promptForBudget()`/`parseBudgetInput()`), cumulative usage/cost trackin
 `BatchLoopHandle.stop()` for immediate in-flight cancellation, and `### Run summary` report
 entries for both budget-triggered and user-cancelled early stops.
 
-A dedicated progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75).
+A dedicated progress modal implemented (issue #75): `BatchLoopProgressModal`
+(`src/modals/batchLoopProgressModal.ts`) opens once the scope/instruction/budget prompts resolve
+and stays open for the duration of the run, replacing the #73/#74 per-file `Notice`s. It shows:
+
+- The current file being processed and "N/total processed", updated live via `onProgress`.
+- Elapsed budget — "`<used>` / `<cap>` tokens" or "$`<used>` / $`<cap>`" — when a budget is set, or
+  "no cap" when it isn't. Usage-so-far is threaded through `onProgress`'s new `BatchLoopUsage`
+  parameter (see **Core executor** above) rather than tracked separately by the modal.
+- A "Cancel" button wired directly to `handle.stop()` — the same cancellation path #74 introduced
+  (in-flight abort via `BatchLoopHandle`'s registered `AbortController`, not just a between-files
+  flag).
+- On completion (any `BatchLoopResult.reason`), a final summary phrased consistently with the
+  `### Run summary` report block: status, files processed/failed/skipped, and total files in
+  scope. The modal stays open afterward with a "Close" button — it does not auto-close, so the
+  user can read the summary at their own pace.
+
+**Non-closing-doesn't-stop invariant (AC-5):** dismissing the modal any way other than the
+"Cancel" button — the built-in `x`, Escape, or a backdrop click, all of which route through
+Obsidian's `Modal.onClose()` — does not stop the loop. `onClose()` intentionally never calls
+`handle.stop()`; only the "Cancel" button does. A loop dismissed this way keeps running in the
+background and keeps appending to the report; there is no way to reopen its progress view for
+that run (out of scope for this slice) — only the report file and the final completion `Notice`
+remain as a record.
