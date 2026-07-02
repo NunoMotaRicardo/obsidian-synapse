@@ -24,7 +24,7 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -581,10 +581,19 @@ export class SynapseView extends ItemView {
 				app: this.app,
 			});
 
+			// Local/BYOK models have no agentic Read tool, so a path inlined into the prompt
+			// (buildPrompt(), above) isn't enough for them to actually see image content —
+			// resolve base64 image data instead. Skipped entirely for cloud/SDK models to
+			// avoid unnecessary file I/O, since they can Read the inlined path themselves.
+			const images = this.plugin.agentService?.isLocalModel(this.selectedModel || undefined)
+				? await resolveImageAttachments(currentAttachments, blobPaths, vaultBasePath)
+				: undefined;
+
 			try {
 				await this.currentSession!.send({
 					prompt: fullPrompt,
 					...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
+					...(images && images.length > 0 ? {images} : {}),
 				});
 			} catch (sendErr) {
 				// If the session is stale (e.g. SDK restarted), invalidate and retry once
@@ -598,6 +607,7 @@ export class SynapseView extends ItemView {
 					await this.currentSession!.send({
 						prompt: fullPrompt,
 						...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
+						...(images && images.length > 0 ? {images} : {}),
 					});
 				} else {
 					throw sendErr;

@@ -131,11 +131,29 @@ vault scope, folder tree.
   Attachment tag icons correctly distinguish image types: `type: 'blob'`
   (clipboard paste) and `type: 'file'` with an image extension both display the image icon,
   matching the existing `type: 'image'` path.
-  **BYOK local provider caveat:** `executeLocalProviderQuery()` (`providerModels.ts`) sends
-  the (now path-inlined) prompt as plain OpenAI-compatible chat-completion text — there is no
-  agentic `Read` tool on that path, so a local model only sees the attachment's path as text,
-  not its actual image content. True multimodal support there needs OpenAI-compatible
-  `image_url` content parts (base64) and is an explicit follow-up, not covered by this fix.
+  **BYOK local provider multimodal delivery (issue #79):** local/BYOK models have no agentic
+  `Read` tool, so a path inlined into the prompt text only gives them text describing a path —
+  chat-view sends actual image bytes instead when the selected model is local
+  (`AgentService.isLocalModel()`). Before calling `Session.send()`, `SynapseView` calls
+  `resolveImageAttachments()` (`sessionConfig.ts`) — skipped entirely for cloud/SDK models to
+  avoid unnecessary file I/O — which base64-encodes `type: 'image'` attachments, `type: 'file'`
+  attachments with an image extension (`png/jpg/jpeg/gif/webp/bmp`; `svg` is excluded even
+  though it's in `IMAGE_EXTS` since `image_url` data URIs for SVG aren't reliably supported by
+  vision models), and `type: 'blob'` attachments (reusing their existing base64 `data` directly,
+  no re-read). Unreadable/missing files are logged and skipped, not thrown. The result is
+  threaded through `Session.send({images})` (`agentService.ts`) to
+  `executeLocalProviderQuery()` (`providerModels.ts`), which — only when `images` is
+  non-empty — builds the first user message as an OpenAI-compatible multimodal `content` array
+  (`[{type: 'text', ...}, {type: 'image_url', image_url: {url: 'data:<mime>;base64,...'}}, ...]`)
+  for OpenAI-compatible presets, or (for `preset: 'ollama'`, which calls Ollama's native
+  `/api/chat` rather than `/v1/chat/completions`) `content: <prompt text>` plus a sibling
+  `images: string[]` of raw base64 (no `data:` prefix) per Ollama's own chat message schema —
+  that endpoint rejects the OpenAI array shape outright. Calls with no images keep the existing
+  plain-string `content` unchanged for either preset. This is scoped to the chat-view send path
+  only — the Telegram bot's
+  `inlineChat()` doesn't thread structured attachments today and is unaffected (no regression).
+  Non-image file attachments still have no delivery path for local providers (no filesystem
+  tool) and stay text-path-inlined — unreadable to the model, but no worse than before.
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched

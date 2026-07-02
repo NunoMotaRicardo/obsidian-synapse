@@ -923,8 +923,13 @@ export class Session {
 	 * so callers can grant read access to attachment paths that fall outside the session's
 	 * `cwd` — e.g. absolute out-of-vault paths or clipboard-blob temp files — for this
 	 * specific send() call, on top of whatever the session was already configured with.
+	 *
+	 * `images` (base64-encoded image attachments) is only used in the local-model branch,
+	 * where it's threaded through to `executeLocalProviderQuery()` to build a multimodal
+	 * message — local models have no agentic `Read` tool, so they need the actual image
+	 * bytes rather than a path inlined into the prompt text.
 	 */
-	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number}): Promise<void> {
+	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
 
@@ -948,6 +953,7 @@ export class Session {
 						prompt: options.prompt,
 						systemPrompt: sysPrompt,
 						model: queryOpts.model,
+						images: options.images,
 					});
 					if (ctrl.signal.aborted) return;
 					if (res.ok) {

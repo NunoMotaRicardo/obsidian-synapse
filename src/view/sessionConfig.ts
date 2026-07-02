@@ -230,6 +230,67 @@ function isPathInside(target: string, base: string): boolean {
 	return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
 }
 
+/** Simple file-extension -> MIME type map for image attachments sent to local providers. */
+const IMAGE_MIME_TYPES: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	gif: 'image/gif',
+	webp: 'image/webp',
+	bmp: 'image/bmp',
+};
+
+/**
+ * Resolve `type: 'image'`, image-extension `type: 'file'`, and `type: 'blob'` attachments
+ * to base64-encoded content for local/BYOK providers, which have no agentic `Read` tool and
+ * so need the actual image bytes rather than a path inlined into the prompt text (see
+ * `buildPrompt()`'s doc comment for why paths are inlined for the Agent SDK path instead).
+ *
+ * Blob attachments (clipboard-pasted images) already carry base64 `data` — reused directly
+ * rather than re-reading the temp file `materializeBlobAttachments()` wrote it to. File/image
+ * attachments are read from disk and base64-encoded; `svg` is excluded even though it's in
+ * `IMAGE_EXTS` because `image_url` data URIs for SVG aren't reliably supported by vision
+ * models — it's treated like a non-image file and skipped (same "no clean path forward" gap
+ * as other non-image files). Failures (missing file, read error) are logged and skipped, not
+ * thrown — same resilience pattern as `writeBlobToTempFile()`.
+ */
+export async function resolveImageAttachments(
+	attachments: ChatAttachment[],
+	blobPaths: Map<ChatAttachment, string>,
+	vaultBasePath: string,
+): Promise<Array<{mimeType: string; base64: string}>> {
+	const results: Array<{mimeType: string; base64: string}> = [];
+
+	const blobAttachments = attachments.filter(a => a.type === 'blob' && a.data);
+	for (const att of blobAttachments) {
+		results.push({mimeType: att.mimeType || 'image/png', base64: att.data!});
+	}
+
+	const fileAttachments = attachments.filter(a => a.type === 'image' || a.type === 'file');
+	if (fileAttachments.length === 0) return results;
+
+	const fs = nodeRequire?.('node:fs/promises') as typeof import('node:fs/promises') ?? await import('node:fs/promises');
+
+	for (const att of fileAttachments) {
+		const ext = (att.name || att.path || '').split('.').pop()?.toLowerCase() ?? '';
+		const mimeType = IMAGE_MIME_TYPES[ext];
+		if (!mimeType) continue; // not an image extension (or svg) — skip, no delivery path for local providers
+
+		const blobPath = blobPaths.get(att);
+		const resolvedPath = blobPath ?? resolveAttachmentPath(att, vaultBasePath);
+		if (!resolvedPath) continue;
+
+		try {
+			const buf = await fs.readFile(resolvedPath);
+			results.push({mimeType, base64: buf.toString('base64')});
+		} catch (e) {
+			console.error('[synapse] Failed to read image attachment for local provider:', resolvedPath, e);
+		}
+	}
+
+	return results;
+}
+
 /**
  * Compute the list of directories to pass as `Options.additionalDirectories` for a
  * query, so the SDK grants read access to attachment paths that fall outside the
