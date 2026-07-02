@@ -8,8 +8,8 @@ plugin-orchestrated alternative to the autonomous batch/agentic loops other tool
 `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`, the plugin owns iteration and applies
 caps; it never hands control of the loop itself to the model.
 
-This built on the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by
-#66) and added budget-based cost caps and true in-flight cancellation (issue #74). A dedicated
+This is built on the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by
+#66), and adds budget-based cost caps and true in-flight cancellation (issue #74). A dedicated
 progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75) and can build on
 the `onProgress` hook without a rewrite.
 

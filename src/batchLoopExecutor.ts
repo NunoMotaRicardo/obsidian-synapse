@@ -5,11 +5,11 @@
  *
  * User-initiated (command palette), plugin-orchestrated iteration — mirrors
  * `src/triggerExecutor.ts`'s model-routing and report-writing pattern. This is
- * the foundational slice (#73) of the Tier-2 batch-loops feature (#66);
- * budget caps and true in-flight cancellation (#74) build on the extension
- * points (`onProgress`, `BatchLoopHandle`) #73 left in place. A richer
- * progress UI (replacing the plain per-file `Notice`s) is tracked separately
- * (#75).
+ * the foundational slice (#73) of the Tier-2 batch-loops feature (#66).
+ * Budget caps and true in-flight cancellation (#74) build on the extension
+ * points (`onProgress`, `BatchLoopHandle`) that #73 left in place for them. A
+ * richer progress UI (replacing the plain per-file `Notice`s) is tracked
+ * separately (#75).
  */
 
 import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
@@ -57,7 +57,9 @@ export type BatchLoopBudget =
  *
  * Accepted formats:
  * - `$5`, `$5.50`, `5 dollars`, `5 usd` → dollar budget.
- * - `500000`, `500000 tokens` → token budget (bare numbers default to tokens).
+ * - `500000`, `500000 tokens` → token budget (bare numbers default to tokens;
+ *   must be a whole number — token usage is always integer, so a fractional
+ *   value like `1.5` is almost certainly a typo and is rejected).
  * - `` (empty), `none`, `skip` → no budget (unlimited, case-insensitive).
  *
  * Returns `null` if the input doesn't parse as any of the above, so the
@@ -79,7 +81,7 @@ export function parseBudgetInput(raw: string): BatchLoopBudget | undefined | nul
 	const tokenMatch = trimmed.match(/^([0-9]+(?:\.[0-9]+)?)\s*(tokens?)?$/i);
 	if (tokenMatch) {
 		const max = Number(tokenMatch[1]);
-		if (!Number.isFinite(max) || max <= 0) return null;
+		if (!Number.isInteger(max) || max <= 0) return null;
 		return {type: 'tokens', max};
 	}
 
