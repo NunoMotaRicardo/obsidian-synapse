@@ -7,7 +7,7 @@ Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErro
 |---|---|
 | `configToolbar.ts` | Agent / model / reasoning-effort / skills / tools / working-dir / debug controls |
 | `inputArea.ts` | Message input, slash-command prompts, attachments, vault scope button |
-| `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details |
+| `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
 | `sessionSidebar.ts` | Session list, restore (cold resume via `getEvents()`), rename/delete, background sessions |
 | `searchPanel.ts` | AI vault search tab (basic/advanced) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
@@ -56,6 +56,40 @@ vault scope, folder tree.
     sets a persisted setting, marks config dirty, omitted from session config when `true`
     (matching the SDK default). `infiniteSessions: { enabled: false }` is passed only when
     the user explicitly disables it. Planned: issue #5.
+- **Task/plan tracking panel** (issue #87): Claude Code surfaces its running plan via a
+  `TodoWrite` tool call rather than a dedicated event, so `handleSessionEvent()`'s
+  `tool.execution_start` case branches on `toolName === 'TodoWrite'`, parses `data.input` with
+  `AgentService.parseTodoWritePayload()`, and — when it returns a non-null list — routes it to
+  `renderTaskPanel()` (`chatRenderer.ts`) instead of the generic `addToolCallBlock()`. A malformed
+  `TodoWrite` payload (parser returns `null`) falls back to the generic tool-call block rather
+  than being silently dropped.
+  - `renderTaskPanel(todos)` **replaces** the panel contents on every call — each `TodoWrite`
+    update is the current full plan state, not a delta, so there is exactly one live
+    `.synapse-task-panel` element per turn (created lazily on the first `TodoWrite`, kept as the
+    first child of `toolCallsContainer` so the plan reads above per-tool detail blocks). Each task
+    row shows a status icon (pending/in-progress/completed) and its label (the in-progress task
+    shows `activeForm` when present, e.g. "Running tests", instead of the imperative `content`);
+    the in-progress row is visually distinct (bold, accent-colored spinner icon) and completed
+    rows are struck through.
+  - The panel header shows a live elapsed-runtime label reusing the existing per-turn
+    `turnStartTime` (`chatRenderer.ts` — the same clock the message-metadata footer's clock badge
+    reads). A `window.setInterval` (registered via `registerInterval()`, ticking every second)
+    refreshes the label while a panel is visible; `finalizeStreamingMessage()` freezes the label
+    at its final value and stops the interval (`clearTaskPanelState()`) without removing the
+    panel's DOM, so a completed turn's task panel stays visible in history at its last state.
+  - No plan for a turn (no `TodoWrite` call) → `toolCallsContainer` never gets a
+    `.synapse-task-panel` child, so nothing renders (the container itself is hidden when empty
+    via existing `:empty` CSS).
+  - Turn/session-switch lifecycle: `newConversation()` and `finalizeStreamingMessage()` call
+    `clearTaskPanelState()` (clears `currentTodos`/`taskPanelEl`/stops the timer). Background
+    sessions (`sessionSidebar.ts`) carry `currentTodos`/`taskPanelEl` on `BackgroundSession` the
+    same way as `toolCallsContainer`/`activeToolCalls` — the panel's DOM travels inside the saved
+    `chatContainer` fragment on `saveCurrentToBackground()` (no separate serialization needed),
+    and `restoreFromBackground()` resumes the live-elapsed timer if a panel is still showing for
+    an in-progress background turn. A hidden/background session's `tool.execution_start` handler
+    tracks `TodoWrite` updates into `bg.currentTodos` (no DOM — the session isn't visible) so the
+    latest plan state is available if/when the view re-attaches; `session.idle`/`session.error`
+    reset `bg.currentTodos`/`bg.taskPanelEl` for the next turn.
 - **Compaction events in debug view** (issue #5): when the debug toggle is on,
   `session.compaction_start` and `session.compaction_complete` events render inline debug
   blocks in the chat (same visibility gating as tool calls via `.synapse-hide-debug`).

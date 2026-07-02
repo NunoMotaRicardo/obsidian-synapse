@@ -11,6 +11,7 @@ import type {SynapseView} from '../synapseView';
 import {SYNAPSE_ICON_ID} from '../main';
 import {isImageAttachment, type ChatMessage, type ChatAttachment} from '../types';
 import {renderMarkdownSafe} from './utils';
+import type {TodoItem} from '../agentService';
 
 const MAX_DEBUG_DISPLAY_LEN = 5000;
 
@@ -42,6 +43,9 @@ declare module '../synapseView' {
 		doFullReasoningRender(): Promise<void>;
 		finalizeReasoning(): void;
 		clearReasoningState(): void;
+		renderTaskPanel(todos: TodoItem[]): void;
+		updateTaskPanelElapsed(): void;
+		clearTaskPanelState(): void;
 	}
 }
 
@@ -508,6 +512,11 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		// Render metadata footer
 		this.renderMessageMetadata();
 
+		// Freeze the task panel's elapsed label at its final value, then stop live-tracking it —
+		// the DOM itself is left in place (part of the finalized message).
+		this.updateTaskPanelElapsed();
+		this.clearTaskPanelState();
+
 		this.streamingContent = '';
 		this.streamingBodyEl = null;
 		this.streamingWrapperEl = null;
@@ -657,6 +666,76 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		this.activeToolCalls.delete(toolCallId);
 		this.scrollToBottom();
+	};
+
+	// ── Task/plan tracking (TodoWrite) ──────────────────────────
+
+	const TASK_STATUS_ICON: Record<TodoItem['status'], string> = {
+		pending: 'circle',
+		in_progress: 'loader',
+		completed: 'check-circle-2',
+	};
+
+	/**
+	 * Render (or replace) the live task-tracking panel for the current turn. Each `TodoWrite`
+	 * call is the *current* full plan state, so this always rebuilds the panel from scratch
+	 * rather than appending — there is exactly one live panel per turn.
+	 */
+	proto.renderTaskPanel = function (todos: TodoItem[]): void {
+		if (!this.toolCallsContainer) return;
+
+		if (!this.taskPanelEl || !this.taskPanelEl.isConnected) {
+			this.taskPanelEl = this.toolCallsContainer.createDiv({cls: 'synapse-task-panel'});
+			// Keep the panel first among tool blocks — the plan is the headline, tool calls are detail.
+			this.toolCallsContainer.prepend(this.taskPanelEl);
+		}
+		this.currentTodos = todos;
+
+		const panel = this.taskPanelEl;
+		panel.empty();
+
+		const header = panel.createDiv({cls: 'synapse-task-panel-header'});
+		header.createSpan({cls: 'synapse-task-panel-title', text: 'Plan'});
+		const elapsedSpan = header.createSpan({cls: 'synapse-task-panel-elapsed'});
+		elapsedSpan.setAttribute('data-synapse-task-elapsed', 'true');
+
+		const list = panel.createDiv({cls: 'synapse-task-list'});
+		for (const todo of todos) {
+			const item = list.createDiv({cls: `synapse-task-item is-${todo.status}`});
+			const iconEl = item.createSpan({cls: 'synapse-task-item-icon'});
+			setIcon(iconEl, TASK_STATUS_ICON[todo.status]);
+			const label = todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
+			item.createSpan({cls: 'synapse-task-item-label', text: label});
+		}
+
+		this.updateTaskPanelElapsed();
+		if (!this.taskPanelTimer) {
+			const timerId = window.setInterval(() => this.updateTaskPanelElapsed(), 1000);
+			this.taskPanelTimer = timerId as unknown as ReturnType<typeof setInterval>;
+			this.registerInterval(timerId);
+		}
+
+		this.scrollToBottom();
+	};
+
+	/** Refresh the live elapsed-runtime label in the current task panel, if any is shown. */
+	proto.updateTaskPanelElapsed = function (): void {
+		if (!this.taskPanelEl || !this.taskPanelEl.isConnected || this.turnStartTime === 0) return;
+		const elapsedSpan = this.taskPanelEl.querySelector('[data-synapse-task-elapsed]');
+		if (!elapsedSpan) return;
+		const elapsed = Date.now() - this.turnStartTime;
+		const timeText = elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`;
+		elapsedSpan.textContent = timeText;
+	};
+
+	/** Reset task-panel state (called on turn finalize, new conversation, and session switches). */
+	proto.clearTaskPanelState = function (): void {
+		if (this.taskPanelTimer) {
+			window.clearInterval(this.taskPanelTimer as unknown as number);
+			this.taskPanelTimer = null;
+		}
+		this.taskPanelEl = null;
+		this.currentTodos = null;
 	};
 
 	// ── Compaction debug blocks ─────────────────────────────────

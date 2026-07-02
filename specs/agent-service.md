@@ -179,6 +179,27 @@ data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` �
 consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
 surface a friendlier chat message — see `chat-view.md`.
 
+## Plan/task tracking — `TodoWrite` (issue #87)
+
+Claude Code emits its running plan as a `TodoWrite` tool call (no separate SDK event type for
+plan/task state) — `tool.execution_start` data for a `TodoWrite` call carries the full todo list
+in `data.input`. Rather than adding a new `SessionEvent` variant, the view branches on
+`toolName === 'TodoWrite'` in the existing `tool.execution_start` handler; `AgentService` stays
+the sole SDK-access point by owning the *parsing*, not a new event type.
+
+`parseTodoWritePayload(input: unknown): TodoItem[] | null` (exported alongside the `TodoItem`
+type) normalizes an `input` value into a todo list:
+
+- Returns `null` when `input` doesn't look like a `TodoWrite` payload at all (not an object, or
+  no `todos` array) — callers fall back to generic tool-call rendering for that case.
+- Returns `[]` for a valid-shaped but empty todo list (a legitimate "plan cleared" state).
+- Parsed defensively, not schema-validated: the exact `{todos: [{content, status, activeForm?}]}`
+  shape isn't part of the SDK's typed public surface and could drift across CLI versions. Each
+  todo entry needs a non-empty string `content`; `status` falls back to `'pending'` for any
+  missing/unrecognized value (only `'in_progress'` and `'completed'` are recognized otherwise);
+  `activeForm` (the present-tense form shown while a task is in progress, e.g. "Running tests")
+  is included only when present as a non-empty string. Non-object entries in `todos` are skipped.
+
 ## BYOK local provider injection
 
 When a local provider is configured (Ollama, Foundry Local, or other OpenAI-compatible endpoint),

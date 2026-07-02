@@ -854,6 +854,46 @@ export interface SessionEvent {
 	data: Record<string, unknown>;
 }
 
+// ── Plan/task tracking (TodoWrite) ───────────────────────────────
+
+/** A single sub-task from a `TodoWrite` tool call, normalized for the view's task panel. */
+export interface TodoItem {
+	content: string;
+	status: 'pending' | 'in_progress' | 'completed';
+	/** Present-tense form used while the task is in progress (e.g. "Running tests"). */
+	activeForm?: string;
+}
+
+/**
+ * Parse a `TodoWrite` tool call's `input` payload into a normalized todo list.
+ *
+ * The Claude Code CLI emits `{todos: [{content, status, activeForm?}, ...]}`, but this is
+ * parsed defensively (not schema-validated against the SDK) since the exact shape isn't a typed
+ * part of the SDK's public surface and could drift across CLI versions. Returns `null` when
+ * `input` doesn't look like a `TodoWrite` payload at all (so callers can fall back to generic
+ * tool-call rendering); returns an empty array when it's a valid-shaped but empty todo list.
+ */
+export function parseTodoWritePayload(input: unknown): TodoItem[] | null {
+	if (!input || typeof input !== 'object') return null;
+	const todos = (input as {todos?: unknown}).todos;
+	if (!Array.isArray(todos)) return null;
+
+	const items: TodoItem[] = [];
+	for (const raw of todos) {
+		if (!raw || typeof raw !== 'object') continue;
+		const t = raw as {content?: unknown; status?: unknown; activeForm?: unknown};
+		const content = typeof t.content === 'string' ? t.content : '';
+		if (!content) continue;
+		const status: TodoItem['status'] = t.status === 'in_progress' || t.status === 'completed' ? t.status : 'pending';
+		items.push({
+			content,
+			status,
+			...(typeof t.activeForm === 'string' && t.activeForm ? {activeForm: t.activeForm} : {}),
+		});
+	}
+	return items;
+}
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;

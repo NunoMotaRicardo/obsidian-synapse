@@ -13,8 +13,9 @@ import type {
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
+	TodoItem,
 } from './agentService';
-import {Session} from './agentService';
+import {Session, parseTodoWritePayload} from './agentService';
 import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills, scanTriggers} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
@@ -80,6 +81,14 @@ export class SynapseView extends ItemView {
 	turnSkillsUsed: string[] = [];
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null = null;
 	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>();
+
+	// ── Task/plan tracking (TodoWrite) ──────────────────────────
+	/** Current plan's sub-tasks, from the most recent `TodoWrite` call this turn. `null` = no plan yet. */
+	currentTodos: TodoItem[] | null = null;
+	/** Root element of the live task panel for the current turn, if a plan exists. */
+	taskPanelEl: HTMLElement | null = null;
+	/** Ticks while a task panel is visible to keep its elapsed-runtime label live. */
+	taskPanelTimer: ReturnType<typeof setInterval> | null = null;
 
 	// ── Session sidebar state ──────────────────────────────────
 	activeSessions = new Map<string, BackgroundSession>();
@@ -788,13 +797,21 @@ export class SynapseView extends ItemView {
 				this.addInfoMessage(this.formatErrorForChat(errMsg));
 				break;
 			}
-			case 'tool.execution_start':
-				this.turnToolsUsed.push(data.toolName as string);
-				{
-					const toolInput = (data as {input?: unknown}).input;
-					this.addToolCallBlock(data.toolCallId as string, data.toolName as string, toolInput);
+			case 'tool.execution_start': {
+				const toolName = data.toolName as string;
+				this.turnToolsUsed.push(toolName);
+				const toolInput = (data as {input?: unknown}).input;
+				if (toolName === 'TodoWrite') {
+					const todos = parseTodoWritePayload(toolInput);
+					if (todos) {
+						this.renderTaskPanel(todos);
+						break;
+					}
+					// Payload didn't look like a TodoWrite plan — fall through to generic rendering.
 				}
+				this.addToolCallBlock(data.toolCallId as string, toolName, toolInput);
 				break;
+			}
 			case 'tool.execution_complete': {
 				const toolError = data.error as {message: string} | undefined;
 				this.completeToolCallBlock(
@@ -919,6 +936,7 @@ export class SynapseView extends ItemView {
 		this.toolCallsContainer = null;
 		this.activeToolCalls.clear();
 		this.clearReasoningState();
+		this.clearTaskPanelState();
 		if (this.streamingComponent) {
 			this.removeChild(this.streamingComponent);
 			this.streamingComponent = null;
