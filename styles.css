@@ -1427,6 +1427,41 @@
 	margin-top: 10px;
 }
 
+/* ── Batch loop progress modal ────────────────────────────────── */
+
+.synapse-batch-progress-modal h3 {
+	margin-top: 0;
+	margin-bottom: 12px;
+}
+
+.synapse-batch-progress-status {
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.synapse-batch-progress-file {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	word-break: break-all;
+}
+
+.synapse-batch-progress-file h4 {
+	margin: 8px 0 6px;
+}
+
+.synapse-batch-progress-budget {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 16px;
+}
+
+.synapse-batch-progress-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
 /* ── Settings page models list ────────────────────────────────── */
 
 .synapse-models-list {
