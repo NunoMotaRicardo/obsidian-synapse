@@ -124,12 +124,19 @@ prompt string — see `chat-view.md`'s "Attachment delivery" section for the cha
 (`buildPrompt()`, `materializeBlobAttachments()`, `computeAdditionalDirectories()` in
 `sessionConfig.ts`).
 
-`Session.send({prompt, additionalDirectories?, timeoutMs?})` accepts an optional
+`Session.send({prompt, additionalDirectories?, timeoutMs?, images?})` accepts an optional
 `additionalDirectories` list for a single send() call, merged (deduped) with the session's own
 `config.additionalDirectories` from `Options` before being passed to `query()` — this grants the
 SDK read access to attachment paths that fall outside the session's `cwd` (out-of-vault absolute
 paths, OneDrive-synced folders, or clipboard-blob temp files under `os.tmpdir()`) without
 widening what's readable when no such attachment is present in a given turn.
+
+`images` (`Array<{mimeType, base64}>`, issue #79) is only consulted in the local-model branch
+(`this.service.isLocalModel(queryOpts.model)`) and passed straight through to
+`executeLocalProviderQuery()` — see `chat-view.md`'s "BYOK local provider multimodal delivery"
+section for how chat-view populates it and why. `chat()`/`inlineChat()` do not accept or forward
+`images` — no caller threads structured attachments through those paths today, so there's no
+plumbing to add yet.
 
 ### Adaptive indexing/search timeouts
 

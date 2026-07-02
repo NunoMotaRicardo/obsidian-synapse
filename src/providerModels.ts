@@ -244,6 +244,7 @@ export async function executeLocalProviderQuery(
 		tools?: LocalTool[];
 		app?: App;
 		maxTurns?: number;
+		images?: Array<{mimeType: string; base64: string}>;
 	}
 ): Promise<LocalQueryResult> {
 	const baseUrl = (options.baseUrl || '').trim();
@@ -279,11 +280,32 @@ export async function executeLocalProviderQuery(
 		}
 	}));
 
-	const messages: Array<{role: string; content: string; tool_calls?: LocalToolCall[]; tool_call_id?: string; name?: string}> = [];
+	// Ollama's native /api/chat endpoint (used below when preset === 'ollama') does not accept
+	// OpenAI-style `content: [{type: 'image_url', ...}]` arrays — it expects `content: string`
+	// plus a sibling `images: string[]` (raw base64, no data: URI prefix) on the message.
+	// Every other preset goes through an OpenAI-compatible /v1/chat/completions endpoint, which
+	// does accept the `image_url` content-part array. Build whichever shape matches the target
+	// endpoint; calls with no images keep the existing plain-string content unchanged either way.
+	type MessageContent = string | Array<{type: string; text?: string; image_url?: {url: string}}>;
+	const messages: Array<{role: string; content: MessageContent; images?: string[]; tool_calls?: LocalToolCall[]; tool_call_id?: string; name?: string}> = [];
 	if (params.systemPrompt) {
 		messages.push({role: 'system', content: params.systemPrompt});
 	}
-	messages.push({role: 'user', content: params.prompt});
+	if (params.images && params.images.length > 0) {
+		if (preset === 'ollama') {
+			messages.push({role: 'user', content: params.prompt, images: params.images.map(img => img.base64)});
+		} else {
+			const content: Array<{type: string; text?: string; image_url?: {url: string}}> = [
+				{type: 'text', text: params.prompt},
+			];
+			for (const img of params.images) {
+				content.push({type: 'image_url', image_url: {url: `data:${img.mimeType};base64,${img.base64}`}});
+			}
+			messages.push({role: 'user', content});
+		}
+	} else {
+		messages.push({role: 'user', content: params.prompt});
+	}
 
 	let turn = 0;
 	const maxTurns = params.maxTurns ?? 5;
@@ -296,7 +318,8 @@ export async function executeLocalProviderQuery(
 				model: string;
 				messages: Array<{
 					role: string;
-					content: string;
+					content: MessageContent;
+					images?: string[];
 					tool_calls?: LocalToolCall[];
 					tool_call_id?: string;
 					name?: string;
