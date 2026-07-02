@@ -31,4 +31,8 @@ export interface BackgroundSession {
 	/** Current plan's sub-tasks from the most recent `TodoWrite` call this turn, if any. */
 	currentTodos: TodoItem[] | null;
 	taskPanelEl: HTMLElement | null;
+	/** Incrementally-built plan from `TaskCreate`/`TaskUpdate` calls this turn (taskId -> item). */
+	taskPlan: Map<string, TodoItem>;
+	/** `TaskCreate` calls awaiting their result (which carries the assigned task id). */
+	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}>;
 }

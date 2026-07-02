@@ -15,7 +15,7 @@ import type {
 	SessionEvent,
 	TodoItem,
 } from './agentService';
-import {Session, parseTodoWritePayload} from './agentService';
+import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from './agentService';
 import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills, scanTriggers} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
@@ -82,13 +82,17 @@ export class SynapseView extends ItemView {
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null = null;
 	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>();
 
-	// ── Task/plan tracking (TodoWrite) ──────────────────────────
+	// ── Task/plan tracking (TodoWrite, or TaskCreate/TaskUpdate) ─
 	/** Current plan's sub-tasks, from the most recent `TodoWrite` call this turn. `null` = no plan yet. */
 	currentTodos: TodoItem[] | null = null;
 	/** Root element of the live task panel for the current turn, if a plan exists. */
 	taskPanelEl: HTMLElement | null = null;
 	/** Ticks while a task panel is visible to keep its elapsed-runtime label live. */
 	taskPanelTimer: ReturnType<typeof setInterval> | null = null;
+	/** Incrementally-built plan from `TaskCreate`/`TaskUpdate` calls this turn (taskId -> item), the newer sibling of `TodoWrite`. */
+	taskPlan: Map<string, TodoItem> = new Map();
+	/** `TaskCreate` calls awaiting their `tool.execution_complete` result, which carries the server-assigned task id. */
+	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}> = new Map();
 
 	// ── Session sidebar state ──────────────────────────────────
 	activeSessions = new Map<string, BackgroundSession>();
@@ -808,14 +812,51 @@ export class SynapseView extends ItemView {
 						break;
 					}
 					// Payload didn't look like a TodoWrite plan — fall through to generic rendering.
+				} else if (toolName === 'TaskCreate') {
+					const parsed = parseTaskCreateInput(toolInput);
+					if (parsed) {
+						// The id is only known once the result arrives — stash the fields keyed by
+						// toolCallId so tool.execution_complete can add the entry to taskPlan.
+						this.pendingTaskCreates.set(data.toolCallId as string, parsed);
+						break;
+					}
+				} else if (toolName === 'TaskUpdate') {
+					const parsed = parseTaskUpdateInput(toolInput);
+					if (parsed && this.taskPlan.has(parsed.taskId)) {
+						if (parsed.status === 'deleted') {
+							this.taskPlan.delete(parsed.taskId);
+						} else {
+							const existing = this.taskPlan.get(parsed.taskId)!;
+							this.taskPlan.set(parsed.taskId, {
+								content: parsed.subject ?? existing.content,
+								status: parsed.status ?? existing.status,
+								activeForm: parsed.activeForm ?? existing.activeForm,
+							});
+						}
+						this.renderTaskPanel([...this.taskPlan.values()]);
+						break;
+					}
 				}
 				this.addToolCallBlock(data.toolCallId as string, toolName, toolInput);
 				break;
 			}
 			case 'tool.execution_complete': {
 				const toolError = data.error as {message: string} | undefined;
+				const toolName = data.toolName as string | undefined;
+				const toolCallId = data.toolCallId as string;
+				if (toolName === 'TaskCreate' && this.pendingTaskCreates.has(toolCallId)) {
+					const pending = this.pendingTaskCreates.get(toolCallId)!;
+					this.pendingTaskCreates.delete(toolCallId);
+					const resultText = (data.result as {content?: string} | undefined)?.content;
+					const taskId = !toolError ? parseTaskCreateResultId(resultText) : null;
+					if (taskId) {
+						this.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
+						this.renderTaskPanel([...this.taskPlan.values()]);
+					}
+					break;
+				}
 				this.completeToolCallBlock(
-					data.toolCallId as string,
+					toolCallId,
 					data.success as boolean,
 					data.result as {content?: string; detailedContent?: string} | undefined,
 					toolError,
@@ -824,7 +865,7 @@ export class SynapseView extends ItemView {
 				// failures (e.g. a file locked by sync or open elsewhere) instead of
 				// leaving the user to dig the raw error out of the collapsed tool block.
 				if (toolError) {
-					const friendly = friendlyWriteToolError(data.toolName as string | undefined, toolError.message);
+					const friendly = friendlyWriteToolError(toolName, toolError.message);
 					if (friendly) this.addInfoMessage(friendly);
 				}
 				break;

@@ -56,40 +56,60 @@ vault scope, folder tree.
     sets a persisted setting, marks config dirty, omitted from session config when `true`
     (matching the SDK default). `infiniteSessions: { enabled: false }` is passed only when
     the user explicitly disables it. Planned: issue #5.
-- **Task/plan tracking panel** (issue #87): Claude Code surfaces its running plan via a
-  `TodoWrite` tool call rather than a dedicated event, so `handleSessionEvent()`'s
-  `tool.execution_start` case branches on `toolName === 'TodoWrite'`, parses `data.input` with
-  `AgentService.parseTodoWritePayload()`, and — when it returns a non-null list — routes it to
-  `renderTaskPanel()` (`chatRenderer.ts`) instead of the generic `addToolCallBlock()`. A malformed
-  `TodoWrite` payload (parser returns `null`) falls back to the generic tool-call block rather
-  than being silently dropped.
-  - `renderTaskPanel(todos)` **replaces** the panel contents on every call — each `TodoWrite`
-    update is the current full plan state, not a delta, so there is exactly one live
-    `.synapse-task-panel` element per turn (created lazily on the first `TodoWrite`, kept as the
-    first child of `toolCallsContainer` so the plan reads above per-tool detail blocks). Each task
-    row shows a status icon (pending/in-progress/completed) and its label (the in-progress task
-    shows `activeForm` when present, e.g. "Running tests", instead of the imperative `content`);
-    the in-progress row is visually distinct (bold, accent-colored spinner icon) and completed
-    rows are struck through.
+- **Task/plan tracking panel** (issue #87): Claude Code surfaces its running plan via a tool
+  call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
+  newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
+  are supported. `handleSessionEvent()`'s `tool.execution_start`/`tool.execution_complete` cases
+  branch on `toolName`:
+  - `TodoWrite`: parses `data.input` with `AgentService.parseTodoWritePayload()` and, when it
+    returns a non-null list, calls `renderTaskPanel(todos)` directly (the call is authoritative —
+    it fully replaces prior plan state).
+  - `TaskCreate`: `tool.execution_start` parses the input with `parseTaskCreateInput()` and
+    stashes `{subject, activeForm}` in a `pendingTaskCreates` map keyed by `toolCallId` (the task
+    id isn't known until the result arrives). `tool.execution_complete` extracts the id with
+    `parseTaskCreateResultId()`, adds a `{status: 'pending'}` entry to the view's `taskPlan` map
+    (`Map<taskId, TodoItem>`), and calls `renderTaskPanel([...taskPlan.values()])`.
+  - `TaskUpdate`: `tool.execution_start` parses the input with `parseTaskUpdateInput()` and, if
+    `taskId` is already tracked in `taskPlan`, patches that entry (`status: 'deleted'` removes it
+    instead) and re-renders.
+  - A malformed/unrecognized payload for any of these three tool names, or a `TaskUpdate` for an
+    untracked `taskId`, falls back to the generic `addToolCallBlock()` rendering rather than being
+    silently dropped.
+  - `renderTaskPanel(todos)` **replaces** the panel contents on every call — the caller always
+    passes the full current plan state (either `TodoWrite`'s payload directly, or the
+    view-maintained `taskPlan` map's values for the `TaskCreate`/`TaskUpdate` family) — so there is
+    exactly one live `.synapse-task-panel` element per turn (created lazily on the first
+    plan-related call, kept as the first child of `toolCallsContainer` so the plan reads above
+    per-tool detail blocks). Each task row shows a status icon (pending/in-progress/completed) and
+    its label (the in-progress task shows `activeForm` when present, e.g. "Running tests", instead
+    of the imperative `content`); the in-progress row is visually distinct (bold, accent-colored
+    spinner icon) and completed rows are struck through.
   - The panel header shows a live elapsed-runtime label reusing the existing per-turn
     `turnStartTime` (`chatRenderer.ts` — the same clock the message-metadata footer's clock badge
     reads). A `window.setInterval` (registered via `registerInterval()`, ticking every second)
     refreshes the label while a panel is visible; `finalizeStreamingMessage()` freezes the label
     at its final value and stops the interval (`clearTaskPanelState()`) without removing the
     panel's DOM, so a completed turn's task panel stays visible in history at its last state.
-  - No plan for a turn (no `TodoWrite` call) → `toolCallsContainer` never gets a
-    `.synapse-task-panel` child, so nothing renders (the container itself is hidden when empty
-    via existing `:empty` CSS).
+  - No plan for a turn (no `TodoWrite`/`TaskCreate`/`TaskUpdate` call) → `toolCallsContainer`
+    never gets a `.synapse-task-panel` child, so nothing renders (the container itself is hidden
+    when empty via existing `:empty` CSS).
   - Turn/session-switch lifecycle: `newConversation()` and `finalizeStreamingMessage()` call
-    `clearTaskPanelState()` (clears `currentTodos`/`taskPanelEl`/stops the timer). Background
-    sessions (`sessionSidebar.ts`) carry `currentTodos`/`taskPanelEl` on `BackgroundSession` the
-    same way as `toolCallsContainer`/`activeToolCalls` — the panel's DOM travels inside the saved
-    `chatContainer` fragment on `saveCurrentToBackground()` (no separate serialization needed),
-    and `restoreFromBackground()` resumes the live-elapsed timer if a panel is still showing for
-    an in-progress background turn. A hidden/background session's `tool.execution_start` handler
-    tracks `TodoWrite` updates into `bg.currentTodos` (no DOM — the session isn't visible) so the
-    latest plan state is available if/when the view re-attaches; `session.idle`/`session.error`
-    reset `bg.currentTodos`/`bg.taskPanelEl` for the next turn.
+    `clearTaskPanelState()` (clears `currentTodos`/`taskPanelEl`/`taskPlan`/`pendingTaskCreates`,
+    stops the timer). Background sessions (`sessionSidebar.ts`) carry the same four fields on
+    `BackgroundSession`, the same way as `toolCallsContainer`/`activeToolCalls` — the panel's DOM
+    travels inside the saved `chatContainer` fragment on `saveCurrentToBackground()` (no separate
+    serialization needed), and `restoreFromBackground()` resumes the live-elapsed timer if a panel
+    is still showing for an in-progress background turn. A hidden/background session's
+    `tool.execution_start`/`tool.execution_complete` handlers mirror the foreground parsing logic
+    into `bg.currentTodos`/`bg.taskPlan`/`bg.pendingTaskCreates` (no DOM — the session isn't
+    visible) so the latest plan state is available if/when the view re-attaches;
+    `session.idle`/`session.error` reset all four for the next turn.
+  - **Verified live** (issue #87 deploy-test): the installed CLI (2.1.195) used `TaskCreate`
+    (three sub-tasks with a `subject`/`description`/`activeForm`) followed by `TaskUpdate` calls
+    (dependency links via `addBlockedBy`, then `status: 'in_progress'` → `'completed'`
+    transitions per task) for a multi-step vault-exploration prompt — `TodoWrite` was never
+    emitted by that CLI/session. The panel rendered and updated live from the `TaskCreate`/
+    `TaskUpdate` path.
 - **Compaction events in debug view** (issue #5): when the debug toggle is on,
   `session.compaction_start` and `session.compaction_complete` events render inline debug
   blocks in the chat (same visibility gating as tool calls via `.synapse-hide-debug`).

@@ -736,6 +736,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		}
 		this.taskPanelEl = null;
 		this.currentTodos = null;
+		this.taskPlan.clear();
+		this.pendingTaskCreates.clear();
 	};
 
 	// ── Compaction debug blocks ─────────────────────────────────
