@@ -8,11 +8,10 @@ plugin-orchestrated alternative to the autonomous batch/agentic loops other tool
 `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`, the plugin owns iteration and applies
 caps; it never hands control of the loop itself to the model.
 
-This is the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by #66).
-Later slices add budget-based cost caps and richer in-flight cancellation (#74) and a dedicated
-progress UI (#75) — this slice intentionally keeps the executor's surface small but leaves
-extension points (a per-file progress hook, a cooperative cancellation handle) for those slices
-to build on without a rewrite.
+This is built on the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by
+#66), and adds budget-based cost caps and true in-flight cancellation (issue #74). A dedicated
+progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75) and can build on
+the `onProgress` hook without a rewrite.
 
 ## Launch flow (`src/batchLoopExecutor.ts`)
 
@@ -32,9 +31,16 @@ Entry point: `launchBatchLoop(plugin: SynapsePlugin): void`, wired to the comman
 3. Opens `UserInputModal` (`src/modals/userInputModal.ts`, reused as-is) prompting for the
    instruction to run per file, telling the user how many files are in scope and that `{{file}}`
    is available for substitution. An empty/cancelled answer cancels the run with a `Notice`.
-4. Shows a persistent (`duration: 0`) `Notice` containing a "Stop" button (built via the global
-   `createFragment()` helper) tied to a `BatchLoopHandle`, then calls `runBatchLoop()`. The notice
-   is hidden once the run finishes, regardless of outcome.
+4. Prompts for an optional budget cap via `promptForBudget()` (also `UserInputModal`, reused): a
+   max token count, a max dollar spend, or blank/`none`/`skip` for no cap (unlimited, the
+   original #73 default). Free-text is parsed by `parseBudgetInput()` — `$5`, `$5.50`, `5
+   dollars`, `5 usd` parse as a dollar budget; a bare number or `500000 tokens` parses as a token
+   budget; unparseable non-empty input re-prompts (up to 3 attempts) rather than silently treating
+   a typo as "no budget". After 3 failed attempts the run proceeds without a budget rather than
+   blocking indefinitely.
+5. Shows a persistent (`duration: 0`) `Notice` containing a "Stop" button (built via the global
+   `createFragment()` helper) tied to a `BatchLoopHandle`, then calls `runBatchLoop()` with the
+   parsed budget. The notice is hidden once the run finishes, regardless of outcome.
 
 ## Core executor: `runBatchLoop()`
 
@@ -45,20 +51,23 @@ runBatchLoop(
   instruction: string,
   handle: BatchLoopHandle,
   onProgress?: (progress: BatchLoopProgress) => void,
+  budget?: BatchLoopBudget,
 ): Promise<BatchLoopResult>
 ```
 
 **File-count cap:** `BATCH_LOOP_MAX_FILES` (currently `50`, a plain exported constant — no
 settings UI yet) is a hard ceiling. If `filePaths.length` exceeds it, the run does not start at
 all: it reports the overage (files in scope vs. the limit, and how many would be skipped) via
-`Notice` and returns `{processed: 0, failed: 0, skipped, cancelled: false}`. This is a stop-early
-guard, not a "process the first N and skip the rest" behavior — the user must narrow the
-selection and re-run.
+`Notice` and returns `{processed: 0, failed: 0, skipped, cancelled: false, reason:
+'scope-too-large'}`. This is a stop-early guard, not a "process the first N and skip the rest"
+behavior — the user must narrow the selection and re-run.
 
 **Sequential iteration:** files are processed one at a time, in the sorted order
-`resolveScopeToFiles()` produced. Before each file (including the first), the loop checks
-`handle.cancelled`; if set, it stops immediately (before starting that file, never mid-file) and
-reports how many files were processed vs. skipped via `Notice`.
+`resolveScopeToFiles()` produced. Before each file (including the first), the loop checks, in
+order: `handle.cancelled` (stops immediately if set, before starting that file), then whether the
+cumulative `budget` (if any) has already been exceeded by prior files' usage (stops before
+starting the next file — see **Budget enforcement** below). Either stop appends a run summary to
+the report and reports processed vs. skipped via `Notice`.
 
 **Per-file execution — `runOnFile()`:** mirrors `triggerExecutor.ts`'s Claude routing path
 exactly: substitutes `{{file}}` in the instruction with the vault-relative path, then calls
@@ -66,21 +75,54 @@ exactly: substitutes `{{file}}` in the instruction with the vault-relative path,
 default tool-usage prompt, so the loop can read the substituted file path), `cwd` set to the
 absolute vault base path and `plugins` set to
 the `_synapse/` local plugin path (same SDK plugin-discovery wiring bots/triggers/editor actions
-use), `maxTurns: 10`, `permissionMode: 'default'`. This slice always routes through Claude —
-local-model routing (as `triggerExecutor.ts` has for triggers) is out of scope for #73.
+use), `maxTurns: 10`, `permissionMode: 'default'`. This always routes through Claude — local-model
+routing (as `triggerExecutor.ts` has for triggers) remains out of scope. It also passes a
+per-file `AbortController` (see **Cancellation** below) and an `onEvent` callback that forwards
+each file's `SDKResultMessage` (`type: 'result'`) to the caller, which accumulates cumulative
+token/cost usage for budget enforcement.
 
 **Per-file progress:** after each file starts, a `Notice` is shown ("Synapse: processing N/total:
 `<file>`") and the optional `onProgress` callback is invoked with `{index, total, filePath}`. This
 hook exists so a future progress UI (#75) can subscribe without changing the executor's core
-loop — it is not otherwise used in this slice.
+loop — it is not otherwise used currently.
 
 **Per-file error handling:** an error for one file is caught, logged via `console.error`, appended
 to the report under a `### Error` heading, and does *not* abort the rest of the run — subsequent
 files still run. The run's `failed` count reflects it and it's mentioned in the completion
-`Notice`.
+`Notice`. The one exception is an `AbortError` raised by `handle.stop()` aborting the in-flight
+query (see **Cancellation**) — that is treated as a cancellation, not a per-file failure, and
+ends the run immediately rather than continuing to the next file.
 
-**Completion:** once all files are processed (or the loop is cancelled), a summary `Notice` is
-shown and a `BatchLoopResult` (`{processed, failed, skipped, cancelled}`) is returned.
+**Completion:** once all files are processed (or the loop is cancelled/budget-exhausted), a
+summary `Notice` is shown and a `BatchLoopResult` (`{processed, failed, skipped, cancelled,
+reason}`) is returned. `reason` (`'completed' | 'cancelled' | 'budget-exceeded' |
+'scope-too-large'`) records why the run ended.
+
+## Budget enforcement (`BatchLoopBudget`)
+
+```ts
+type BatchLoopBudget =
+  | {type: 'tokens'; max: number}
+  | {type: 'dollars'; max: number};
+```
+
+An optional, user-configured cap on total spend for a single run — `undefined` means unlimited
+(the original #73 behavior, unchanged when no budget is set).
+
+- **Usage source:** each file's `SDKResultMessage.usage` (input, output, cache-creation, and
+  cache-read token fields, summed) and `total_cost_usd` are accumulated into a running
+  `BatchLoopUsage` (`{totalTokens, totalCostUsd}`) as results come back from `runOnFile()`'s
+  `onEvent` forwarding — the same usage/cost data `AgentService` already surfaces for session
+  tracking (`specs/agent-service.md`), not a separate estimate.
+- **Check timing:** the budget is checked once per loop iteration, immediately after the
+  cancellation check and *before* the next file starts (`budgetExceeded(usage, budget)`). A
+  budget check never truncates a file mid-flight — the file whose result pushed cumulative usage
+  over the cap is allowed to finish and is counted as processed; the *next* file is the one that
+  doesn't start.
+- **Parsing:** `parseBudgetInput()` (used by the launch flow) accepts `$5`/`$5.50`/`5
+  dollars`/`5 usd` for a dollar budget, a bare number or `N tokens` for a token budget, and
+  empty/`none`/`skip` for no budget; returns `null` for anything else so the launch flow can
+  re-prompt instead of silently defaulting.
 
 ## Cancellation (`BatchLoopHandle`)
 
@@ -88,20 +130,32 @@ shown and a `BatchLoopResult` (`{processed, failed, skipped, cancelled}`) is ret
 class BatchLoopHandle {
   cancelled: boolean;
   stop(): void;
+  setActiveController(controller: AbortController | null): void;
 }
 ```
 
-A minimal mutable handle: `stop()` sets `cancelled = true`. Cancellation is **cooperative** —
-checked only between files, never mid-flight — so clicking "Stop" while a file's `inlineChat()`
-call is in progress lets that call finish before halting. This slice does not abort in-flight SDK
-calls; true in-flight cancellation (aborting the current file's query) is deferred to #74.
+`stop()` sets `cancelled = true` **and** aborts whichever `AbortController` the loop most recently
+registered via `setActiveController()` — the loop creates one `AbortController` per file, passes
+it to `runOnFile()` → `AgentService.inlineChat()` (which threads it into the SDK's
+`sendAndWaitWithAbort()`, per `specs/agent-service.md` — no new cancellation mechanism was
+introduced), and clears the registration once that file's call settles. So clicking "Stop":
+- Between files: caught by the top-of-loop `handle.cancelled` check, same as before.
+- While a file's `inlineChat()` call is in flight: aborts that call immediately via the SDK's
+  existing abort machinery, rather than waiting for it to finish. The resulting abort is caught,
+  recognized via `handle.cancelled` being `true`, and treated as a cancellation (not a per-file
+  failure) — the in-progress file is *not* counted as processed.
+
+Either path appends a run summary to the report (see below) recording files processed vs.
+remaining and the cancellation reason, in addition to the completion `Notice`.
 
 ## Report format
 
 Results are appended to `_synapse/reports/batch-loop-YYYY-MM-DD.md` — one file per day, shared
 across all batch-loop runs that day (not one file per run). Created with a top-level heading if
 absent for the day; each file processed appends a `## <vault-relative-path>` sub-heading followed
-by the model's response (or, on error, `### Error` followed by the error message):
+by the model's response (or, on error, `### Error` followed by the error message). If a run stops
+early (budget exhaustion or cancellation), a `### Run summary` block is appended once, after the
+last file-level entry for that run, via `appendRunSummary()`:
 
 ```
 # batch-loop — YYYY-MM-DD
@@ -115,7 +169,23 @@ by the model's response (or, on error, `### Error` followed by the error message
 ### Error
 
 <error message>
+
+### Run summary
+
+- Status: stopped — budget exhausted (limit: 500,000 tokens)
+- Files processed: 3
+- Files failed: 1
+- Files skipped/remaining: 6
+- Total files in scope: 10
+- Cumulative usage: 512,340 tokens, $1.2345
 ```
+
+`Status` reads one of: `stopped by user (cancelled)` or `stopped — budget exhausted (limit: ...)`
+— these are the two early-stop reasons a run summary block is written for. The `scope-too-large`
+stop is `Notice`-only: it happens before any file starts (and possibly before today's report file
+even exists), so there is nothing to append — no run summary block is written for it. Completed
+runs (`reason: 'completed'`) also do *not* get a run summary block — the per-file entries and
+completion `Notice` are sufficient, matching #73's original behavior.
 
 `_synapse/reports/` is created automatically if missing, via `configWriter.ts`'s `ensureFolder()`
 (shared with other writers rather than duplicating trigger-executor's own folder-creation logic).
@@ -126,7 +196,8 @@ and internal file queue stay consistent — same rationale as `triggerExecutor.t
 This report format is deliberately close to (but distinct from) the trigger executor's: triggers
 key their report file by trigger name (`<trigger-name>-YYYY-MM-DD.md`) with one heading per day
 and one result block per firing; batch loops key by the fixed name `batch-loop` and add a
-per-file `##` sub-heading within each day's file, since a single run covers many files at once.
+per-file `##` sub-heading (and, on early stop, a `### Run summary`) within each day's file, since
+a single run covers many files at once.
 
 ## Invariants
 
@@ -137,15 +208,27 @@ per-file `##` sub-heading within each day's file, since a single run covers many
 - `_synapse/` is excluded from recursive folder expansion to avoid the loop re-processing its own
   reports/agents/skills.
 - The file-count cap is a hard stop-before-start guard, not a truncate-and-continue behavior.
-- Cancellation is cooperative and file-granular, not mid-file.
+- Cancellation aborts the current in-flight file's query (reusing `AgentService`'s existing
+  `AbortController`/`sendAndWaitWithAbort` pattern — no parallel cancellation mechanism), not just
+  the loop between files; an aborted in-progress file is not counted as processed.
+- Budget checks happen between files, using cumulative usage from completed files' results — a
+  budget never truncates a file mid-flight; the file that pushes usage over the cap still
+  completes and counts as processed.
 - One failing file does not abort the run; failures are recorded in the report and reflected in
-  the run's `failed` count.
+  the run's `failed` count. An abort from `handle.stop()` is the one exception — it is treated as
+  a cancellation, not a per-file failure, and ends the run.
+- No budget set (`undefined`) means unlimited — unchanged from #73's original behavior.
 
 ## Current status
 
 Core executor and launch command implemented (issue #73): command palette entry, scope/prompt
 launch flow, sequential per-file execution via `AgentService.inlineChat()`, file-count cap,
-cooperative Stop-notice cancellation, per-file report appending, and progress `Notice`s.
+per-file report appending, and progress `Notice`s.
 
-Budget-based cost caps and richer in-flight cancellation are tracked separately (#74). A
-dedicated progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75).
+Budget caps and true in-flight cancellation implemented (issue #74): optional launch-flow budget
+prompt (`promptForBudget()`/`parseBudgetInput()`), cumulative usage/cost tracking from
+`SDKResultMessage`, between-file budget enforcement, per-file `AbortController` threaded through
+`BatchLoopHandle.stop()` for immediate in-flight cancellation, and `### Run summary` report
+entries for both budget-triggered and user-cancelled early stops.
+
+A dedicated progress UI (replacing the plain per-file `Notice`s) is tracked separately (#75).
