@@ -246,8 +246,10 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
  * so need the actual image bytes rather than a path inlined into the prompt text (see
  * `buildPrompt()`'s doc comment for why paths are inlined for the Agent SDK path instead).
  *
- * Blob attachments (clipboard-pasted images) already carry base64 `data` — reused directly
- * rather than re-reading the temp file `materializeBlobAttachments()` wrote it to. File/image
+ * Blob attachments (clipboard-pasted or drag/dropped images) already carry base64 `data` —
+ * reused directly rather than re-reading the temp file `materializeBlobAttachments()` wrote it
+ * to, but only when `mimeType` is one of the raster types in `IMAGE_MIME_TYPES`; a dragged/
+ * pasted `.svg` reports `image/svg+xml` and is skipped for the same reason as below. File/image
  * attachments are read from disk and base64-encoded; `svg` is excluded even though it's in
  * `IMAGE_EXTS` because `image_url` data URIs for SVG aren't reliably supported by vision
  * models — it's treated like a non-image file and skipped (same "no clean path forward" gap
@@ -261,9 +263,12 @@ export async function resolveImageAttachments(
 ): Promise<Array<{mimeType: string; base64: string}>> {
 	const results: Array<{mimeType: string; base64: string}> = [];
 
+	const supportedBlobMimeTypes = new Set(Object.values(IMAGE_MIME_TYPES));
 	const blobAttachments = attachments.filter(a => a.type === 'blob' && a.data);
 	for (const att of blobAttachments) {
-		results.push({mimeType: att.mimeType || 'image/png', base64: att.data!});
+		const mimeType = att.mimeType || 'image/png';
+		if (!supportedBlobMimeTypes.has(mimeType)) continue; // e.g. image/svg+xml (dragged/pasted .svg) — same "no reliable delivery" gap as file-attachment svgs
+		results.push({mimeType, base64: att.data!});
 	}
 
 	const fileAttachments = attachments.filter(a => a.type === 'image' || a.type === 'file');
