@@ -1,6 +1,7 @@
 import type {SynapseView} from '../synapseView';
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
 import type {SessionMetadata} from '../agentService';
+import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
 import {formatTimeAgo} from './utils';
@@ -406,6 +407,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			toolCallsContainer: this.toolCallsContainer,
 			reasoningEl: this.reasoningEl,
 			reasoningBodyEl: this.reasoningBodyEl,
+			currentTodos: this.currentTodos,
+			taskPanelEl: this.taskPanelEl,
+			taskPlan: new Map(this.taskPlan),
+			pendingTaskCreates: new Map(this.pendingTaskCreates),
 		};
 
 		// If still streaming, attach background event routing
@@ -421,6 +426,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		}
 		this.lastFullRenderLen = 0;
 		this.clearReasoningState();
+		// The task panel's DOM travels with the saved fragment (it lives inside
+		// toolCallsContainer) — just stop this view's live-elapsed timer for it.
+		this.clearTaskPanelState();
 
 		// Detach streaming component from the view (it lives in the bg now)
 		if (this.streamingComponent) {
@@ -461,6 +469,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.activeToolCalls = bg.activeToolCalls;
 			this.reasoningEl = bg.reasoningEl;
 			this.reasoningBodyEl = bg.reasoningBodyEl;
+			this.currentTodos = bg.currentTodos;
+			this.taskPanelEl = bg.taskPanelEl;
+			this.taskPlan = bg.taskPlan;
+			this.pendingTaskCreates = bg.pendingTaskCreates;
 			this.chatContainer.appendChild(bg.savedDom);
 			bg.savedDom = null;
 			if (this.streamingReasoning && this.reasoningBodyEl) {
@@ -473,6 +485,18 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			if (this.streamingContent && this.streamingBodyEl) {
 				void this.updateStreamingRender();
 			}
+			// The saved DOM's task panel (if any) reflects whatever state it was in when the
+			// session was backgrounded — background event routing keeps taskPlan/currentTodos
+			// current but deliberately does no DOM work while hidden, so the panel itself can be
+			// stale (missing tasks created, or showing pre-update statuses). Force a fresh render
+			// from the up-to-date state now that the session is foreground again; renderTaskPanel()
+			// also (re-)starts the live-elapsed timer since it was stopped on background-save.
+			const restoredTodos = this.taskPlan.size > 0 ? [...this.taskPlan.values()] : this.currentTodos;
+			if (restoredTodos) {
+				this.renderTaskPanel(restoredTodos);
+			} else {
+				this.taskPanelEl = null;
+			}
 		} else {
 			// Session finished while in background — re-render messages from scratch
 			this.streamingComponent = null;
@@ -481,6 +505,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.toolCallsContainer = null;
 			this.clearReasoningState();
 			this.activeToolCalls.clear();
+			this.clearTaskPanelState();
 			const renderPromises: Promise<void>[] = [];
 			for (const msg of this.messages) {
 				renderPromises.push(this.renderMessageBubble(msg));
@@ -581,6 +606,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				bg.turnSkillsUsed = [];
 				bg.turnUsage = null;
 				bg.isStreaming = false;
+				bg.currentTodos = null;
+				bg.taskPanelEl = null;
+				bg.taskPlan.clear();
+				bg.pendingTaskCreates.clear();
 				// Re-render sidebar to remove the green dot
 				this.renderSessionList();
 				void this.loadSessions();
@@ -603,13 +632,55 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				bg.reasoningBodyEl = null;
 				bg.activeToolCalls.clear();
 				bg.streamingComponent = null;
+				bg.currentTodos = null;
+				bg.taskPanelEl = null;
+				bg.taskPlan.clear();
+				bg.pendingTaskCreates.clear();
 				this.renderSessionList();
 			}),
 			session.on('tool.execution_start', (event) => {
-				bg.turnToolsUsed.push(event.data.toolName as string);
+				const toolName = event.data.toolName as string;
+				bg.turnToolsUsed.push(toolName);
+				const toolInput = (event.data as {input?: unknown}).input;
+				if (toolName === 'TodoWrite') {
+					const todos = parseTodoWritePayload(toolInput);
+					if (todos) bg.currentTodos = todos;
+				} else if (toolName === 'TaskCreate') {
+					const parsed = parseTaskCreateInput(toolInput);
+					if (parsed) bg.pendingTaskCreates.set(event.data.toolCallId as string, parsed);
+				} else if (toolName === 'TaskUpdate') {
+					const parsed = parseTaskUpdateInput(toolInput);
+					// Same untracked-field guard as the foreground path in synapseView.ts —
+					// skip the mutation entirely for dependency-only updates.
+					const hasVisibleChange = parsed !== null && (parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined);
+					if (parsed && hasVisibleChange && bg.taskPlan.has(parsed.taskId)) {
+						if (parsed.status === 'deleted') {
+							bg.taskPlan.delete(parsed.taskId);
+						} else {
+							const existing = bg.taskPlan.get(parsed.taskId)!;
+							bg.taskPlan.set(parsed.taskId, {
+								content: parsed.subject ?? existing.content,
+								status: parsed.status ?? existing.status,
+								activeForm: parsed.activeForm ?? existing.activeForm,
+							});
+						}
+					}
+				}
 				// No DOM manipulation — hidden session
 			}),
-			session.on('tool.execution_complete', () => {
+			session.on('tool.execution_complete', (event) => {
+				const toolName = event.data.toolName as string | undefined;
+				const toolCallId = event.data.toolCallId as string;
+				if (toolName === 'TaskCreate' && bg.pendingTaskCreates.has(toolCallId)) {
+					const pending = bg.pendingTaskCreates.get(toolCallId)!;
+					bg.pendingTaskCreates.delete(toolCallId);
+					const toolError = event.data.error as {message: string} | undefined;
+					const resultText = (event.data.result as {content?: string} | undefined)?.content;
+					const taskId = !toolError ? parseTaskCreateResultId(resultText) : null;
+					if (taskId) {
+						bg.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
+					}
+				}
 				// No DOM manipulation — hidden session
 			}),
 			session.on('skill.invoked', (event) => {
