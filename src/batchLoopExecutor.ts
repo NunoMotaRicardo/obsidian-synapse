@@ -18,10 +18,12 @@ import type SynapsePlugin from './main';
 import type {SDKResultMessage} from './agentService';
 import {SYNAPSE_FOLDER} from './settings';
 import {ensureFolder} from './configWriter';
-import {VaultScopeModal} from './modals/vaultScopeModal';
-import {UserInputModal} from './modals/userInputModal';
+import type {Budget, BudgetUsage} from './budget';
+import {parseBudgetInput as parseBudgetInputShared, describeBudget, budgetExceeded} from './budget';
 import {lockManager} from './lockManager';
 import {BatchLoopProgressModal} from './modals/batchLoopProgressModal';
+import {VaultScopeModal} from './modals/vaultScopeModal';
+import {UserInputModal} from './modals/userInputModal';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -48,48 +50,15 @@ const REPORT_NAME = 'batch-loop';
  * `SDKResultMessage` seen) or a maximum total dollar spend (summed
  * `total_cost_usd`). `undefined` (no budget set) means unlimited, matching
  * #73's original behavior.
- */
-export type BatchLoopBudget =
-	| {type: 'tokens'; max: number}
-	| {type: 'dollars'; max: number};
-
-/**
- * Parse the free-text budget prompt from `launchBatchLoop()`'s launch-flow
- * modal into a `BatchLoopBudget`, or `undefined` for "no budget" (empty
- * input, or the literal `none`/`skip`).
  *
- * Accepted formats:
- * - `$5`, `$5.50`, `5 dollars`, `5 usd` → dollar budget.
- * - `500000`, `500000 tokens` → token budget (bare numbers default to tokens;
- *   must be a whole number — token usage is always integer, so a fractional
- *   value like `1.5` is almost certainly a typo and is rejected).
- * - `` (empty), `none`, `skip` → no budget (unlimited, case-insensitive).
- *
- * Returns `null` if the input doesn't parse as any of the above, so the
- * caller can re-prompt rather than silently ignoring a typo.
+ * Alias of the shared `Budget`/`BudgetUsage` types (`src/budget.ts`, extracted
+ * in #88 so the interactive chat-view turn/cost thresholds can reuse the same
+ * parse/describe/exceeded helpers instead of duplicating them).
  */
-export function parseBudgetInput(raw: string): BatchLoopBudget | undefined | null {
-	const trimmed = raw.trim();
-	if (trimmed === '' || /^(none|skip)$/i.test(trimmed)) {
-		return undefined;
-	}
+export type BatchLoopBudget = Budget;
 
-	const dollarMatch = trimmed.match(/^\$?\s*([0-9]+(?:\.[0-9]+)?)\s*(usd|dollars?|\$)?$/i);
-	if (dollarMatch && (trimmed.startsWith('$') || /usd|dollars?|\$/i.test(dollarMatch[2] ?? ''))) {
-		const max = Number(dollarMatch[1]);
-		if (!Number.isFinite(max) || max <= 0) return null;
-		return {type: 'dollars', max};
-	}
-
-	const tokenMatch = trimmed.match(/^([0-9]+(?:\.[0-9]+)?)\s*(tokens?)?$/i);
-	if (tokenMatch) {
-		const max = Number(tokenMatch[1]);
-		if (!Number.isInteger(max) || max <= 0) return null;
-		return {type: 'tokens', max};
-	}
-
-	return null;
-}
+/** Re-exported from `src/budget.ts` — see there for parsing rules. */
+export const parseBudgetInput = parseBudgetInputShared;
 
 /** Sum the token fields Anthropic reports as "usage" for a result message. */
 function totalTokensForResult(usage: SDKResultMessage['usage']): number {
@@ -101,23 +70,11 @@ function totalTokensForResult(usage: SDKResultMessage['usage']): number {
 	);
 }
 
-/** Cumulative usage/cost tracked across a batch loop run, for budget enforcement. */
-export interface BatchLoopUsage {
-	totalTokens: number;
-	totalCostUsd: number;
-}
-
-/** Human-readable description of a budget, for `Notice`s and report entries. */
-function describeBudget(budget: BatchLoopBudget): string {
-	return budget.type === 'dollars'
-		? `$${budget.max.toFixed(2)}`
-		: `${budget.max.toLocaleString()} tokens`;
-}
-
-/** Whether cumulative usage has met or exceeded the configured budget. */
-function budgetExceeded(usage: BatchLoopUsage, budget: BatchLoopBudget): boolean {
-	return budget.type === 'dollars' ? usage.totalCostUsd >= budget.max : usage.totalTokens >= budget.max;
-}
+/**
+ * Cumulative usage/cost tracked across a batch loop run, for budget
+ * enforcement. Alias of the shared `BudgetUsage` type (`src/budget.ts`).
+ */
+export type BatchLoopUsage = BudgetUsage;
 
 // ---------------------------------------------------------------------------
 // Scope resolution

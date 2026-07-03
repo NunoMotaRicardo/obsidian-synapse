@@ -110,7 +110,26 @@ Both `chat()` and `inlineChat()` use `sendAndWaitWithAbort(fn, options)`:
   rethrowing. A `timedOut` flag distinguishes timeout aborts from user-initiated ones.
 
 `Session.abort()` is used by `synapseView.ts` to cancel in-flight work when a `session.error`
-event is received.
+event is received, and also by the interactive loop turn/token guardrails (see below).
+
+## Run cost reporting (issue #88)
+
+`Session.convertToSessionEvent()` dispatches a new `assistant.run_result` event
+(`{totalCostUsd, numTurns}`) whenever an SDK `result` message carries a numeric
+`total_cost_usd` — for both success and error results, since an aborted/failed run can still
+have accrued cost. Dispatched in addition to (not instead of) the existing `session.error`
+mapping for error results.
+
+**Why this can't drive real-time cancellation:** the Agent SDK only reports `total_cost_usd`
+(and `num_turns`, `modelUsage`) on the terminal `result` message of a `query()` stream — after
+every turn of that run has already executed. By the time `assistant.run_result` fires, there is
+nothing left to abort for that run. Real-time, mid-run token counts *are* available (each
+`assistant` message's `usage.input_tokens`/`output_tokens`, mapped to `assistant.usage` — see
+"Tool execution events" above), which is why the interactive turn/token thresholds
+(`chat-view.md`) enforce in real time on turn count and token count, and treat the dollar
+threshold as informational-only, checked once `assistant.run_result` arrives. Faking a
+per-turn cost estimate to enable "real-time" dollar cancellation was deliberately avoided —
+see the invariant below.
 
 ## Attachment delivery (issue #77)
 
@@ -263,3 +282,6 @@ that need provider config (e.g. `buildSessionConfig`) receive it directly from `
 - All public methods that invoke `query()` call `resolveCliPath()` first; a missing binary
   is surfaced as an error before any SDK interaction.
 - `sendAndWaitWithAbort()` is used for every query — never call `query()` raw.
+- No fabricated cost estimates: dollar cost is only ever reported when the SDK itself provides
+  `total_cost_usd` (the terminal `result` message). No per-turn/per-token cost approximation is
+  computed or displayed anywhere in the plugin.

@@ -82,6 +82,17 @@ export class SynapseView extends ItemView {
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null = null;
 	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>();
 
+	// ── Run-level guardrail counters (issue #88) ────────────────
+	// Unlike turnStartTime/turnUsage above (reset per rendered assistant
+	// message), these accumulate across an entire handleSend() run — a run can
+	// span several `assistant.turn_start` events (tool-use loops) before
+	// `session.idle`. Reset at the start of every handleSend() call, not at
+	// finalizeStreamingMessage() (which fires per rendered message).
+	runTurnCount = 0;
+	runUsage: {totalTokens: number} = {totalTokens: 0};
+	/** True once handleAbort() has been triggered by a threshold in the current run, so the resulting session.idle/error doesn't also re-report it. */
+	runAutoCancelled = false;
+
 	// ── Task/plan tracking (TodoWrite, or TaskCreate/TaskUpdate) ─
 	/** Current plan's sub-tasks, from the most recent `TodoWrite` call this turn. `null` = no plan yet. */
 	currentTodos: TodoItem[] | null = null;
@@ -567,6 +578,13 @@ export class SynapseView extends ItemView {
 		this.renderSessionList();  // Show green active dot
 		this.addAssistantPlaceholder();
 
+		// Reset run-level guardrail counters (issue #88) — a fresh run starts here,
+		// distinct from the per-message turnStartTime/turnUsage reset in
+		// finalizeStreamingMessage().
+		this.runTurnCount = 0;
+		this.runUsage = {totalTokens: 0};
+		this.runAutoCancelled = false;
+
 		try {
 			await this.ensureSession();
 
@@ -633,7 +651,14 @@ export class SynapseView extends ItemView {
 			if (e instanceof Error) {
 				console.error('[synapse] Stack:', e.stack);
 			}
-			this.addInfoMessage(this.formatErrorForChat(String(e)));
+			// A guardrail-triggered abort (checkLoopThresholds() -> handleAbort()) rejects
+			// this send() call — that rejection is an expected consequence of the abort, not
+			// a second failure. The guardrail's specific reason was already shown; don't
+			// re-report it here as a generic "Error: Operation aborted". Same rationale as
+			// the session.error handler above.
+			if (!this.runAutoCancelled) {
+				this.addInfoMessage(this.formatErrorForChat(String(e)));
+			}
 		}
 	}
 
@@ -651,6 +676,45 @@ export class SynapseView extends ItemView {
 		}
 
 		this.finalizeStreamingMessage();
+	}
+
+	/**
+	 * Interactive Tier-1 loop guardrails (issue #88). Checked on every
+	 * `assistant.turn_start` / `assistant.usage` event for the current run
+	 * (reset per handleSend() call — see runTurnCount/runUsage). Distinct from
+	 * the SDK's raw `maxTurns`: this is a plugin-side cap that auto-cancels via
+	 * `Session.abort()` (the same path `session.error` already uses) and shows
+	 * a clear, specific reason — not the SDK's silent "reached max turns".
+	 *
+	 * Only the turn and token thresholds are enforced here in real time —
+	 * dollar cost is only known after a run finishes (see
+	 * `assistant.run_result` handling above / specs/agent-service.md), so it
+	 * can't drive in-flight cancellation and is surfaced separately.
+	 *
+	 * Turn check is `>` (not `>=`): `runTurnCount` is incremented on
+	 * `assistant.turn_start` *before* this runs, so by the time turn N is seen
+	 * the model has already completed N turns of work. `>` lets the run
+	 * complete up to `turnLimit` turns and only cancels once it tries to go
+	 * beyond that — `>=` would cancel on the very first turn for a limit of 1,
+	 * allowing zero turns of actual work.
+	 */
+	checkLoopThresholds(): void {
+		if (this.runAutoCancelled || !this.isStreaming) return;
+
+		const turnLimit = this.plugin.settings.loopTurnThreshold;
+		const tokenLimit = this.plugin.settings.loopTokenThreshold;
+
+		let reason: string | null = null;
+		if (turnLimit > 0 && this.runTurnCount > turnLimit) {
+			reason = `Synapse: run auto-cancelled — reached the turn limit of ${turnLimit.toLocaleString()} (Settings → Capabilities → Turn limit).`;
+		} else if (tokenLimit > 0 && this.runUsage.totalTokens >= tokenLimit) {
+			reason = `Synapse: run auto-cancelled — reached the token budget of ${tokenLimit.toLocaleString()} tokens (Settings → Capabilities → Token budget).`;
+		}
+		if (!reason) return;
+
+		this.runAutoCancelled = true;
+		this.addInfoMessage(reason);
+		void this.handleAbort();
 	}
 
 	// ── Session management ───────────────────────────────────────
@@ -742,6 +806,8 @@ export class SynapseView extends ItemView {
 				if (this.turnStartTime === 0) {
 					this.turnStartTime = Date.now();
 				}
+				this.runTurnCount++;
+				this.checkLoopThresholds();
 				break;
 			case 'assistant.reasoning_delta':
 				this.appendReasoningDelta(data.deltaContent as string);
@@ -784,6 +850,25 @@ export class SynapseView extends ItemView {
 					this.turnUsage.cacheWriteTokens += d.cacheWriteTokens ?? 0;
 					if (d.model) this.turnUsage.model = d.model;
 				}
+				// input + output only — `assistant.usage` (dispatched in agentService.ts)
+				// never carries cache token fields, so summing them here would always add 0
+				// while implying cache usage is tracked. See specs/chat-view.md.
+				this.runUsage.totalTokens += (d.inputTokens ?? 0) + (d.outputTokens ?? 0);
+				this.checkLoopThresholds();
+				break;
+			}
+			case 'assistant.run_result': {
+				// Dollar cost is only known once the run has already finished (see
+				// agentService.ts) — can't auto-cancel on it, but can flag it after
+				// the fact rather than silently ignoring an over-budget run (#88/AC-2).
+				const costThreshold = this.plugin.settings.loopCostThresholdUsd;
+				const totalCostUsd = (data as {totalCostUsd?: number}).totalCostUsd;
+				if (costThreshold > 0 && typeof totalCostUsd === 'number' && totalCostUsd >= costThreshold) {
+					this.addInfoMessage(
+						`Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
+						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
+					);
+				}
 				break;
 			}
 			case 'session.idle':
@@ -798,7 +883,12 @@ export class SynapseView extends ItemView {
 					try { void this.currentSession.abort(); } catch { /* ignore */ }
 				}
 				this.finalizeStreamingMessage();
-				this.addInfoMessage(this.formatErrorForChat(errMsg));
+				// checkLoopThresholds() already reported the specific guardrail reason and
+				// triggered this abort — the resulting session.error is an expected
+				// consequence of that cancellation, not a second failure to report.
+				if (!this.runAutoCancelled) {
+					this.addInfoMessage(this.formatErrorForChat(errMsg));
+				}
 				break;
 			}
 			case 'tool.execution_start': {
@@ -924,6 +1014,7 @@ export class SynapseView extends ItemView {
 			session.on('assistant.message_delta', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.message', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.usage', (event) => { this.handleSessionEvent(event); }),
+			session.on('assistant.run_result', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.idle', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.error', (event) => { this.handleSessionEvent(event); }),
 			session.on('tool.execution_start', (event) => { this.handleSessionEvent(event); }),

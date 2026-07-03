@@ -222,6 +222,63 @@ vault scope, folder tree.
   empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
   builds.
 
+## Loop turn/cost thresholds (issue #88)
+
+Opt-in, settings-backed guardrails for interactive Tier-1 chat runs — distinct from the SDK's
+raw `maxTurns` cap (which fails silently with "Reached maximum number of turns (N)"): these are
+plugin-side limits that auto-cancel the in-flight run via the existing `Session.abort()` path
+(`agent-service.md` "Cancellation and timeouts") and show a clear, specific chat message stating
+why, via `addInfoMessage()` (not a generic error). All three thresholds default to `0` (off) —
+`0` means "no limit" for each independently, so a normal short chat is unaffected by default.
+
+- **Settings** (`src/settings.ts`, Capabilities tab, "Chat run guardrails"): `loopTurnThreshold`
+  (max agent turns), `loopTokenThreshold` (max cumulative tokens: input + output only — see
+  **Token threshold** below), `loopCostThresholdUsd` (max dollar cost). Free numeric inputs, not
+  the batch-loop launch flow's free-text budget prompt (`parseBudgetInput()`) — these are
+  always-on session defaults, not a per-run prompt, so a plain number field fits better than
+  parsing `$5`/`5 tokens` strings. Parsed with `Number()` + `Number.isInteger()` (not `parseInt()`,
+  which would truncate scientific notation like `1e2` at the `e` and silently floor fractional
+  input) — non-integer or out-of-range input is rejected outright rather than saving a value that
+  doesn't match what the user typed. `src/budget.ts` (extracted from `batchLoopExecutor.ts` in
+  this same change) still backs the batch-loop launch flow's free-text budget; it wasn't reused
+  verbatim for these settings-backed thresholds since the input shape differs (persisted numeric
+  setting vs. one-off free-text prompt) — see `specs/batch-loops.md`.
+- **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
+  distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
+  `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`
+  call can span several `assistant.turn_start` events (tool-use loops) before `session.idle`, so
+  the run-level counters are reset once per `handleSend()` call (before `ensureSession()`), not
+  per rendered message. `runAutoCancelled` gates `checkLoopThresholds()` to fire (and call
+  `Session.abort()`) at most once per run, and also suppresses the generic error message that
+  the abort's consequences would otherwise add on **both** paths that can report it: the
+  `session.error` event, and `handleSend()`'s own `catch` block (the pending `send()` call's
+  promise rejects once the abort takes effect, and that rejection can surface through either
+  path depending on timing). The guardrail's specific reason has already been shown via
+  `checkLoopThresholds()`; neither path re-reports it as a second, generic failure.
+- **Turn threshold:** checked in `handleSessionEvent()`'s `assistant.turn_start` case, against
+  `runTurnCount` (incremented on every turn start for the run) with a strict `>` comparison —
+  by the time turn N is observed the model has already completed N turns of work, so `>` lets a
+  run finish up to `turnLimit` turns before cancelling on the attempt to start turn `turnLimit +
+  1`. (`>=` would cancel immediately on the very first turn for a limit of 1, allowing zero turns
+  of actual work — not the intended "allow up to N" semantics.)
+- **Token threshold:** checked in the `assistant.usage` case, against `runUsage.totalTokens`
+  (accumulated from every `assistant.usage` event's `inputTokens`/`outputTokens` for the run) —
+  real-time, since `assistant.usage` streams mid-run, one event per turn. **Input + output only:**
+  `assistant.usage` (dispatched in `agentService.ts`) never carries cache-token fields — those are
+  only available on the terminal `result` message alongside `total_cost_usd` (see **Dollar
+  threshold** below) — so a threshold based on cache usage isn't achievable in real time without
+  the same "cost only known after the run" limitation. The counter and the settings copy both
+  reflect input+output only rather than implying cache tokens are tracked.
+- **Dollar threshold — informational only, not real-time cancellation:** the Agent SDK only
+  reports `total_cost_usd` on the terminal `result` message of a `send()` call (see
+  `agent-service.md` "Run cost reporting"), i.e. after every turn of that run has already
+  executed — there is nothing left to abort by the time the cost is known. Rather than fake a
+  per-turn cost estimate, `loopCostThresholdUsd` is checked in the new `assistant.run_result`
+  event handler: if the run's actual cost meets or exceeds the threshold, an info message
+  reports the cost and explains it couldn't be stopped in-flight, pointing at the turn/token
+  limits for real-time enforcement. This is a deliberate, documented limitation, not a bug —
+  see `agent-service.md`'s invariant against fabricated cost estimates.
+
 ## Search panel
 
 Both modes send a shared prompt (`buildSearchPrompt()`) that instructs tool-driven exploration
