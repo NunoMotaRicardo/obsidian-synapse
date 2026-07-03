@@ -1,5 +1,5 @@
 import type {Component} from 'obsidian';
-import type {Session} from '../agentService';
+import type {Session, TodoItem} from '../agentService';
 import type {ChatMessage} from '../types';
 
 /** State for a session that may be running in the background while the user views another session. */
@@ -28,4 +28,11 @@ export interface BackgroundSession {
 	toolCallsContainer: HTMLElement | null;
 	reasoningEl: HTMLDetailsElement | null;
 	reasoningBodyEl: HTMLElement | null;
+	/** Current plan's sub-tasks from the most recent `TodoWrite` call this turn, if any. */
+	currentTodos: TodoItem[] | null;
+	taskPanelEl: HTMLElement | null;
+	/** Incrementally-built plan from `TaskCreate`/`TaskUpdate` calls this turn (taskId -> item). */
+	taskPlan: Map<string, TodoItem>;
+	/** `TaskCreate` calls awaiting their result (which carries the assigned task id). */
+	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}>;
 }

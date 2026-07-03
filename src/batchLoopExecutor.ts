@@ -7,9 +7,10 @@
  * `src/triggerExecutor.ts`'s model-routing and report-writing pattern. This is
  * the foundational slice (#73) of the Tier-2 batch-loops feature (#66).
  * Budget caps and true in-flight cancellation (#74) build on the extension
- * points (`onProgress`, `BatchLoopHandle`) that #73 left in place for them. A
- * richer progress UI (replacing the plain per-file `Notice`s) is tracked
- * separately (#75).
+ * points (`onProgress`, `BatchLoopHandle`) that #73 left in place for them.
+ * The plain per-file `Notice`s from #73/#74 have been replaced by a dedicated
+ * progress modal (`BatchLoopProgressModal`, #75) that shows live progress and
+ * elapsed budget for the duration of the run.
  */
 
 import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
@@ -17,10 +18,12 @@ import type SynapsePlugin from './main';
 import type {SDKResultMessage} from './agentService';
 import {SYNAPSE_FOLDER} from './settings';
 import {ensureFolder} from './configWriter';
-import {VaultScopeModal} from './modals/vaultScopeModal';
-import {UserInputModal} from './modals/userInputModal';
 import type {Budget, BudgetUsage} from './budget';
 import {parseBudgetInput as parseBudgetInputShared, describeBudget, budgetExceeded} from './budget';
+import {lockManager} from './lockManager';
+import {BatchLoopProgressModal} from './modals/batchLoopProgressModal';
+import {VaultScopeModal} from './modals/vaultScopeModal';
+import {UserInputModal} from './modals/userInputModal';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -156,23 +159,35 @@ function todayString(): string {
  * Uses vault.read()/vault.modify() (not `adapter.read`/`write`) so the
  * Obsidian cache and internal file queue stay consistent — same rationale as
  * the trigger executor's `appendToReport()`.
+ *
+ * The whole read-modify-write is wrapped in `lockManager.withLock` on the
+ * report path so a batch loop's per-file/run-summary appends can't interleave
+ * with another plugin-initiated write to the same day's report (e.g. a
+ * trigger reporting to the same file, or another batch-loop run). A
+ * `LockAcquisitionError` (wedged holder) propagates to the caller — batch
+ * loop per-file errors are already caught and reported per-file by
+ * `runBatchLoop()`'s loop body, so a lock timeout here surfaces the same way
+ * an ordinary write failure would.
  */
 async function appendBlockToReport(plugin: SynapsePlugin, block: string): Promise<void> {
 	const app = plugin.app;
-	await ensureFolder(app, REPORTS_FOLDER);
 
 	const today = todayString();
 	const reportPath = normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`);
 	const heading = `# ${REPORT_NAME} — ${today}`;
 
-	const exists = await app.vault.adapter.exists(reportPath);
-	if (!exists) {
-		await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
-	} else {
-		const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
-		const current = await app.vault.read(tfile);
-		await app.vault.modify(tfile, `${current}\n${block}\n`);
-	}
+	await lockManager.withLock(reportPath, async () => {
+		await ensureFolder(app, REPORTS_FOLDER);
+
+		const exists = await app.vault.adapter.exists(reportPath);
+		if (!exists) {
+			await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
+		} else {
+			const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
+			const current = await app.vault.read(tfile);
+			await app.vault.modify(tfile, `${current}\n${block}\n`);
+		}
+	});
 }
 
 /**
@@ -287,7 +302,23 @@ export interface BatchLoopProgress {
 	total: number;
 	/** Vault-relative path of the file currently being processed. */
 	filePath: string;
+	/**
+	 * Whether this call marks the file *starting* (usage does not yet include
+	 * it) or *done* (usage includes its result) — lets a live UI distinguish
+	 * "N-1/total processed, now starting N" from "N/total processed".
+	 */
+	phase: 'starting' | 'done';
 }
+
+/**
+ * Cumulative usage-so-far, passed alongside each `onProgress` call so a
+ * caller (e.g. #75's `BatchLoopProgressModal`) can show elapsed budget live
+ * without re-deriving it from individual `SDKResultMessage`s itself.
+ * `onProgress` fires twice per file: once with `phase: 'starting'`, where
+ * usage does not yet include the in-flight file, and again with
+ * `phase: 'done'`, where usage includes that file's own result.
+ */
+export type BatchLoopOnProgress = (progress: BatchLoopProgress, usage: BatchLoopUsage) => void;
 
 /** Why a batch loop run ended before processing every file in scope. */
 export type BatchLoopStopReason = 'completed' | 'cancelled' | 'budget-exceeded' | 'scope-too-large';
@@ -355,8 +386,10 @@ async function appendRunSummary(
  * - When the run stops early (budget exhaustion or cancellation), a run
  *   summary is appended to the report recording files processed vs. skipped
  *   and why (#74/AC-3, AC-5), in addition to the `Notice`.
- * - Progress is reported via `Notice` after each file and forwarded to the
- *   optional `onProgress` hook for callers that want richer UI (#75).
+ * - Progress is forwarded to the optional `onProgress` hook (paired with
+ *   cumulative usage-so-far) after each file starts *and* again once that
+ *   file's result comes back, so a live progress UI (#75) can show elapsed
+ *   budget without re-deriving it from `SDKResultMessage`s itself.
  * - Errors for an individual file are caught, logged, and appended to the
  *   report under an `### Error` heading — one failing file does not abort
  *   the rest of the run.
@@ -366,7 +399,7 @@ export async function runBatchLoop(
 	filePaths: string[],
 	instruction: string,
 	handle: BatchLoopHandle,
-	onProgress?: (progress: BatchLoopProgress) => void,
+	onProgress?: BatchLoopOnProgress,
 	budget?: BatchLoopBudget,
 ): Promise<BatchLoopResult> {
 	if (filePaths.length > BATCH_LOOP_MAX_FILES) {
@@ -408,8 +441,7 @@ export async function runBatchLoop(
 		const filePath = filePaths[i]!;
 		const index = i + 1;
 
-		new Notice(`Synapse: processing ${index}/${total}: ${filePath}`);
-		onProgress?.({index, total, filePath});
+		onProgress?.({index, total, filePath, phase: 'starting'}, {...usage});
 
 		const fileController = new AbortController();
 		handle.setActiveController(fileController);
@@ -422,6 +454,9 @@ export async function runBatchLoop(
 			await appendToReport(plugin, filePath, result);
 			processed++;
 			console.log(`[synapse] Batch loop processed ${filePath} (${index}/${total})`);
+			// Report again with post-file usage so a live UI reflects this
+			// file's cost/tokens without waiting for the next file to start.
+			onProgress?.({index, total, filePath, phase: 'done'}, {...usage});
 		} catch (e) {
 			if (handle.cancelled) {
 				// Aborted by handle.stop() mid-file — treat as cancellation, not a
@@ -456,29 +491,11 @@ export async function runBatchLoop(
 // ---------------------------------------------------------------------------
 
 /**
- * Show a persistent `Notice` with a "Stop" action button that, when clicked,
- * requests cancellation via `handle.stop()`. The notice is dismissed once the
- * loop finishes (caller is responsible for hiding it).
- */
-function showStopNotice(handle: BatchLoopHandle): Notice {
-	const fragment = createFragment((el: DocumentFragment) => {
-		el.createSpan({text: 'Synapse: batch loop running… '});
-		const btn = el.createEl('button', {text: 'Stop'});
-		btn.addEventListener('click', () => {
-			handle.stop();
-			btn.disabled = true;
-			btn.setText('Stopping…');
-		});
-	});
-	// Duration 0 keeps the notice (and its Stop button) visible until the
-	// loop completes and explicitly hides it.
-	return new Notice(fragment, 0);
-}
-
-/**
  * Launch a batch loop from the command palette: open `VaultScopeModal` to
  * pick target files/folders, then `UserInputModal` for the per-file
- * instruction, then run the loop with a "Stop" notice for cancellation.
+ * instruction, then run the loop behind a `BatchLoopProgressModal` (#75) that
+ * shows live progress/budget and wires its "Cancel" button to
+ * `handle.stop()`.
  *
  * Exported separately from the command registration (in `main.ts`) so the
  * launch flow's own logic (scope resolution, empty-scope guard) stays here
@@ -512,12 +529,15 @@ export function launchBatchLoop(plugin: SynapsePlugin): void {
 			const budget = await promptForBudget(plugin);
 
 			const handle = new BatchLoopHandle();
-			const stopNotice = showStopNotice(handle);
-			try {
-				await runBatchLoop(plugin, filePaths, answer, handle, undefined, budget);
-			} finally {
-				stopNotice.hide();
-			}
+			const progressModal = new BatchLoopProgressModal(plugin.app, handle, filePaths.length, budget);
+			progressModal.open();
+
+			let lastUsage: BatchLoopUsage = {totalTokens: 0, totalCostUsd: 0};
+			const result = await runBatchLoop(plugin, filePaths, answer, handle, (progress, usage) => {
+				lastUsage = usage;
+				progressModal.updateProgress(progress, usage);
+			}, budget);
+			progressModal.showCompletion(result, lastUsage);
 		})();
 	}).open();
 }

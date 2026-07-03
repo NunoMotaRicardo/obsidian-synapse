@@ -1201,6 +1201,86 @@
 	color: var(--text-muted);
 }
 
+/* ── Task/plan tracking panel (TodoWrite) ────────────────────── */
+
+.synapse-task-panel {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-smaller);
+	padding: 6px 8px;
+}
+
+.synapse-task-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.synapse-task-panel-title {
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-size: var(--font-ui-smaller);
+}
+
+.synapse-task-panel-elapsed {
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.synapse-task-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.synapse-task-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+	color: var(--text-muted);
+}
+
+.synapse-task-item-icon {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.synapse-task-item-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+.synapse-task-item.is-pending .synapse-task-item-icon {
+	color: var(--text-faint);
+}
+
+.synapse-task-item.is-completed {
+	color: var(--text-faint);
+}
+
+.synapse-task-item.is-completed .synapse-task-item-label {
+	text-decoration: line-through;
+}
+
+.synapse-task-item.is-completed .synapse-task-item-icon {
+	color: var(--text-success);
+}
+
+.synapse-task-item.is-in_progress {
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+}
+
+.synapse-task-item.is-in_progress .synapse-task-item-icon {
+	color: var(--text-accent);
+	animation: synapse-spin 1s linear infinite;
+}
+
 .synapse-toolbar-group {
 	display: flex;
 	align-items: center;
@@ -1425,6 +1505,41 @@
 	gap: 8px;
 	justify-content: flex-end;
 	margin-top: 10px;
+}
+
+/* ── Batch loop progress modal ────────────────────────────────── */
+
+.synapse-batch-progress-modal h3 {
+	margin-top: 0;
+	margin-bottom: 12px;
+}
+
+.synapse-batch-progress-status {
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.synapse-batch-progress-file {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	word-break: break-all;
+}
+
+.synapse-batch-progress-file h4 {
+	margin: 8px 0 6px;
+}
+
+.synapse-batch-progress-budget {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 16px;
+}
+
+.synapse-batch-progress-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
 }
 
 /* ── Settings page models list ────────────────────────────────── */

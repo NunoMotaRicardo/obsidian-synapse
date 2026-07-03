@@ -14,6 +14,7 @@ import {parseFrontmatter, modifyArtifact} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
 import {vaultTools} from './vaultTools';
 import {McpBridgeSession} from './mcpBridge';
+import {lockManager, LockAcquisitionError} from './lockManager';
 
 // ---------------------------------------------------------------------------
 // Template substitution
@@ -74,6 +75,13 @@ async function ensureReportsFolder(app: App): Promise<void> {
  * Uses vault.read() + vault.modify() (not adapter.read/write) so the
  * Obsidian cache stays consistent and concurrent appends go through
  * Obsidian's internal file queue.
+ *
+ * The whole read-modify-write is wrapped in `lockManager.withLock` so a
+ * trigger's report append can't interleave with another plugin-initiated
+ * write to the same report file (another trigger firing for the same name/
+ * day, or a batch loop). If the lock times out (a wedged holder), this
+ * degrades gracefully — logs a warning and returns without throwing, rather
+ * than blocking `executeTrigger` forever.
  */
 async function appendToReport(
 	app: App,
@@ -81,24 +89,34 @@ async function appendToReport(
 	result: string,
 	isError = false,
 ): Promise<void> {
-	await ensureReportsFolder(app);
-
 	const today = todayString();
 	const fileName = normalizePath(`${REPORTS_FOLDER}/${triggerName}-${today}.md`);
 
 	const heading = `# ${triggerName} — ${today}`;
 	const block = isError ? `## Error\n\n${result}` : result;
 
-	const exists = await app.vault.adapter.exists(fileName);
-	if (!exists) {
-		await app.vault.create(fileName, `${heading}\n\n${block}\n`);
-	} else {
-		// FIX (BLOCKING 2): use vault.read() + vault.modify() instead of
-		// adapter.read/write to go through Obsidian's cache and avoid
-		// concurrent-write clobbering.
-		const tfile = app.vault.getAbstractFileByPath(fileName) as TFile;
-		const current = await app.vault.read(tfile);
-		await app.vault.modify(tfile, `${current}\n${block}\n`);
+	try {
+		await lockManager.withLock(fileName, async () => {
+			await ensureReportsFolder(app);
+
+			const exists = await app.vault.adapter.exists(fileName);
+			if (!exists) {
+				await app.vault.create(fileName, `${heading}\n\n${block}\n`);
+			} else {
+				// FIX (BLOCKING 2): use vault.read() + vault.modify() instead of
+				// adapter.read/write to go through Obsidian's cache and avoid
+				// concurrent-write clobbering.
+				const tfile = app.vault.getAbstractFileByPath(fileName) as TFile;
+				const current = await app.vault.read(tfile);
+				await app.vault.modify(tfile, `${current}\n${block}\n`);
+			}
+		});
+	} catch (e) {
+		if (e instanceof LockAcquisitionError) {
+			console.warn(`[synapse] Trigger "${triggerName}": could not acquire report lock, dropping this report entry:`, e.message);
+			return;
+		}
+		throw e;
 	}
 }
 
@@ -234,10 +252,26 @@ async function applyWriteMode(
 			return;
 		}
 		// Full write: replace file content
-		const file = app.vault.getAbstractFileByPath(normalizePath(filePath));
-		if (file instanceof TFile) {
-			await app.vault.modify(file, result);
-		} else {
+		const normalized = normalizePath(filePath);
+		let fileFound = false;
+		try {
+			await lockManager.withLock(normalized, async () => {
+				const file = app.vault.getAbstractFileByPath(normalized);
+				if (!(file instanceof TFile)) {
+					return;
+				}
+				fileFound = true;
+				await app.vault.modify(file, result);
+			});
+		} catch (e) {
+			if (e instanceof LockAcquisitionError) {
+				console.warn(`[synapse] Trigger "${trigger.name}": could not acquire lock for write-back, appending to report instead:`, e.message);
+				await appendToReport(app, trigger.name, result);
+				return;
+			}
+			throw e;
+		}
+		if (!fileFound) {
 			// File doesn't exist (e.g. it was deleted) — fall back to report
 			console.warn(`[synapse] Trigger "${trigger.name}": file not found for write-back, appending to report instead`);
 			await appendToReport(app, trigger.name, result);
@@ -261,8 +295,19 @@ async function applyWriteMode(
 		const {meta: newMeta} = parseFrontmatter(`---\n${result}\n---\n`);
 
 		// modifyArtifact merges newMeta into existing frontmatter and serializes
-		// values via serializeFmField (quotes values containing colons).
-		await modifyArtifact(app, normalizePath(filePath), newMeta as Record<string, string | string[] | boolean | undefined>);
+		// values via serializeFmField (quotes values containing colons). It
+		// acquires the lock on `filePath` internally; degrade gracefully here
+		// if that acquisition times out rather than throwing out of executeTrigger.
+		try {
+			await modifyArtifact(app, normalizePath(filePath), newMeta as Record<string, string | string[] | boolean | undefined>);
+		} catch (e) {
+			if (e instanceof LockAcquisitionError) {
+				console.warn(`[synapse] Trigger "${trigger.name}": could not acquire lock for frontmatter merge, appending to report instead:`, e.message);
+				await appendToReport(app, trigger.name, result);
+				return;
+			}
+			throw e;
+		}
 		return;
 	}
 

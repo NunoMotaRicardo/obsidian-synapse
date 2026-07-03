@@ -1,6 +1,7 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo, TriggerConfig, TriggerEvent} from './types';
 import {SYNAPSE_FOLDER} from './settings';
+import {lockManager} from './lockManager';
 
 /** Module-level compiled regex for frontmatter detection. */
 export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -281,7 +282,7 @@ export async function writeAgent(
 		['skills', config.skills],
 	];
 	const content = buildMarkdown(fields, config.instructions);
-	await app.vault.create(filePath, content);
+	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
 	return filePath;
 }
 
@@ -310,7 +311,7 @@ export async function writeTrigger(
 		['enabled', config.enabled === false ? 'false' : undefined],
 	];
 	const content = buildMarkdown(fields, config.body);
-	await app.vault.create(filePath, content);
+	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
 	return filePath;
 }
 
@@ -334,7 +335,7 @@ export async function writeSkill(
 		['description', config.description],
 	];
 	const content = buildMarkdown(fields, config.content);
-	await app.vault.create(filePath, content);
+	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
 	return filePath;
 }
 
@@ -353,35 +354,38 @@ export async function modifyArtifact(
 	updates: Record<string, string | string[] | boolean | undefined> & {body?: string},
 ): Promise<void> {
 	const normalized = normalizePath(filePath);
-	const file = app.vault.getAbstractFileByPath(normalized);
-	if (!(file instanceof TFile)) {
-		throw new Error(`Artifact not found: ${normalized}`);
-	}
 
-	const raw = await app.vault.read(file);
-	const {meta, body} = parseFrontmatter(raw);
+	await lockManager.withLock(normalized, async () => {
+		const file = app.vault.getAbstractFileByPath(normalized);
+		if (!(file instanceof TFile)) {
+			throw new Error(`Artifact not found: ${normalized}`);
+		}
 
-	// Merge frontmatter updates
-	const merged: Record<string, string | string[] | boolean> = {};
-	for (const [k, v] of Object.entries(meta)) {
-		merged[k] = v;
-	}
-	for (const [k, v] of Object.entries(updates)) {
-		if (k === 'body') continue;
-		if (v === undefined) {
-			delete merged[k];
-		} else {
+		const raw = await app.vault.read(file);
+		const {meta, body} = parseFrontmatter(raw);
+
+		// Merge frontmatter updates
+		const merged: Record<string, string | string[] | boolean> = {};
+		for (const [k, v] of Object.entries(meta)) {
 			merged[k] = v;
 		}
-	}
+		for (const [k, v] of Object.entries(updates)) {
+			if (k === 'body') continue;
+			if (v === undefined) {
+				delete merged[k];
+			} else {
+				merged[k] = v;
+			}
+		}
 
-	const newBody = updates.body !== undefined ? updates.body : body.trim();
-	const fields: [string, string | string[] | boolean][] = Object.entries(merged);
-	const content = buildMarkdown(
-		fields.map(([k, v]) => [k, v] as [string, string | string[] | boolean | undefined]),
-		newBody,
-	);
-	await app.vault.modify(file, content);
+		const newBody = updates.body !== undefined ? updates.body : body.trim();
+		const fields: [string, string | string[] | boolean][] = Object.entries(merged);
+		const content = buildMarkdown(
+			fields.map(([k, v]) => [k, v] as [string, string | string[] | boolean | undefined]),
+			newBody,
+		);
+		await app.vault.modify(file, content);
+	});
 }
 
 /**
@@ -389,11 +393,13 @@ export async function modifyArtifact(
  */
 export async function deleteArtifact(app: App, filePath: string): Promise<void> {
 	const normalized = normalizePath(filePath);
-	const file = app.vault.getAbstractFileByPath(normalized);
-	if (!(file instanceof TFile)) {
-		throw new Error(`Artifact not found: ${normalized}`);
-	}
-	await app.vault.trash(file, false);
+	await lockManager.withLock(normalized, async () => {
+		const file = app.vault.getAbstractFileByPath(normalized);
+		if (!(file instanceof TFile)) {
+			throw new Error(`Artifact not found: ${normalized}`);
+		}
+		await app.vault.trash(file, false);
+	});
 }
 
 // ---------------------------------------------------------------------------

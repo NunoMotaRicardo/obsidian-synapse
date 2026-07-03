@@ -198,6 +198,56 @@ data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` �
 consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
 surface a friendlier chat message — see `chat-view.md`.
 
+## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate` (issue #87)
+
+Claude Code surfaces its running plan through a tool call rather than a dedicated SDK event —
+but the *tool name and payload shape used depend on the CLI version/session*: the SDK's own
+`sdk-tools.d.ts` declares both a legacy `TodoWriteInput` (one call carries the entire plan) and a
+newer `TaskCreateInput`/`TaskUpdateInput`/`TaskGetInput`/`TaskListInput` family (a task graph
+built incrementally, one call per task/patch, with dependency tracking via
+`addBlocks`/`addBlockedBy`). **Verified against the installed CLI (2.1.195) during issue #87's
+deploy-test: the model used `TaskCreate`/`TaskUpdate` exclusively and never emitted `TodoWrite`**
+— so both are supported; `TodoWrite` support is kept for forward/backward CLI compatibility per
+the SDK's declared type even though it wasn't observed live. Rather than adding a new
+`SessionEvent` variant for either, the view branches on `toolName` in the existing
+`tool.execution_start`/`tool.execution_complete` handlers; `AgentService` stays the sole
+SDK-access point by owning the *parsing*, not a new event type.
+
+**`TodoWrite`** — `parseTodoWritePayload(input: unknown): TodoItem[] | null` (exported alongside
+the `TodoItem` type) normalizes an `input` value into a todo list:
+
+- Returns `null` when `input` doesn't look like a `TodoWrite` payload at all (not an object, or
+  no `todos` array) — callers fall back to generic tool-call rendering for that case.
+- Returns `[]` for a valid-shaped but empty todo list (a legitimate "plan cleared" state).
+- Parsed defensively, not schema-validated: the exact `{todos: [{content, status, activeForm?}]}`
+  shape mirrors the SDK's `TodoWriteInput` type but isn't re-validated against it (a hand-rolled
+  mirror can still drift across CLI versions). Each todo entry needs a non-empty string
+  `content`; `status` falls back to `'pending'` for any missing/unrecognized value (only
+  `'in_progress'` and `'completed'` are recognized otherwise); `activeForm` (the present-tense
+  form shown while a task is in progress, e.g. "Running tests") is included only when present as
+  a non-empty string. Non-object entries in `todos` are skipped.
+
+**`TaskCreate`/`TaskUpdate`** — no single call carries the full plan, so the view accumulates a
+`TaskPlan` (`Map<string, TodoItem>`, keyed by the server-assigned task id) across calls in a
+turn:
+
+- `parseTaskCreateInput(input): {subject, activeForm?} | null` parses the fields available at
+  call time — the id isn't known yet (it's server-assigned and only appears in the result), so
+  the view stashes the parsed fields keyed by `toolCallId` (a `pendingTaskCreates` map) until the
+  matching `tool.execution_complete` arrives.
+- `parseTaskCreateResultId(resultText): string | null` extracts the id from the `TaskCreate`
+  result's flattened text content. The CLI's `TaskCreateOutput` type is structured
+  (`{task: {id, subject}}`), but `tool_result` content already arrives at the view as plain text
+  (`convertToSessionEvent()` flattens it) — observed format:
+  `"Task #<id> created successfully: <subject>"`. On a successful `TaskCreate` completion with a
+  parseable id, the view adds `{content: subject, status: 'pending', activeForm}` to `TaskPlan`.
+- `parseTaskUpdateInput(input): {taskId, status?, subject?, activeForm?} | null` parses a patch;
+  `status` additionally recognizes `'deleted'` (not a valid `TodoItem` status — the view removes
+  the entry from `TaskPlan` instead of rendering a fourth status). Dependency fields
+  (`addBlocks`/`addBlockedBy`) aren't part of the return value — the panel tracks status, not the
+  dependency graph. The view only applies an update if `taskId` already exists in `TaskPlan`
+  (ignores updates to unknown/untracked ids rather than fabricating a placeholder entry).
+
 ## BYOK local provider injection
 
 When a local provider is configured (Ollama, Foundry Local, or other OpenAI-compatible endpoint),
