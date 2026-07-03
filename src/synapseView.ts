@@ -638,7 +638,14 @@ export class SynapseView extends ItemView {
 			if (e instanceof Error) {
 				console.error('[synapse] Stack:', e.stack);
 			}
-			this.addInfoMessage(this.formatErrorForChat(String(e)));
+			// A guardrail-triggered abort (checkLoopThresholds() -> handleAbort()) rejects
+			// this send() call — that rejection is an expected consequence of the abort, not
+			// a second failure. The guardrail's specific reason was already shown; don't
+			// re-report it here as a generic "Error: Operation aborted". Same rationale as
+			// the session.error handler above.
+			if (!this.runAutoCancelled) {
+				this.addInfoMessage(this.formatErrorForChat(String(e)));
+			}
 		}
 	}
 
@@ -670,6 +677,13 @@ export class SynapseView extends ItemView {
 	 * dollar cost is only known after a run finishes (see
 	 * `assistant.run_result` handling above / specs/agent-service.md), so it
 	 * can't drive in-flight cancellation and is surfaced separately.
+	 *
+	 * Turn check is `>` (not `>=`): `runTurnCount` is incremented on
+	 * `assistant.turn_start` *before* this runs, so by the time turn N is seen
+	 * the model has already completed N turns of work. `>` lets the run
+	 * complete up to `turnLimit` turns and only cancels once it tries to go
+	 * beyond that — `>=` would cancel on the very first turn for a limit of 1,
+	 * allowing zero turns of actual work.
 	 */
 	checkLoopThresholds(): void {
 		if (this.runAutoCancelled || !this.isStreaming) return;
@@ -678,7 +692,7 @@ export class SynapseView extends ItemView {
 		const tokenLimit = this.plugin.settings.loopTokenThreshold;
 
 		let reason: string | null = null;
-		if (turnLimit > 0 && this.runTurnCount >= turnLimit) {
+		if (turnLimit > 0 && this.runTurnCount > turnLimit) {
 			reason = `Synapse: run auto-cancelled — reached the turn limit of ${turnLimit.toLocaleString()} (Settings → Capabilities → Turn limit).`;
 		} else if (tokenLimit > 0 && this.runUsage.totalTokens >= tokenLimit) {
 			reason = `Synapse: run auto-cancelled — reached the token budget of ${tokenLimit.toLocaleString()} tokens (Settings → Capabilities → Token budget).`;
@@ -823,7 +837,10 @@ export class SynapseView extends ItemView {
 					this.turnUsage.cacheWriteTokens += d.cacheWriteTokens ?? 0;
 					if (d.model) this.turnUsage.model = d.model;
 				}
-				this.runUsage.totalTokens += (d.inputTokens ?? 0) + (d.outputTokens ?? 0) + (d.cacheReadTokens ?? 0) + (d.cacheWriteTokens ?? 0);
+				// input + output only — `assistant.usage` (dispatched in agentService.ts)
+				// never carries cache token fields, so summing them here would always add 0
+				// while implying cache usage is tracked. See specs/chat-view.md.
+				this.runUsage.totalTokens += (d.inputTokens ?? 0) + (d.outputTokens ?? 0);
 				this.checkLoopThresholds();
 				break;
 			}
@@ -853,7 +870,12 @@ export class SynapseView extends ItemView {
 					try { void this.currentSession.abort(); } catch { /* ignore */ }
 				}
 				this.finalizeStreamingMessage();
-				this.addInfoMessage(this.formatErrorForChat(errMsg));
+				// checkLoopThresholds() already reported the specific guardrail reason and
+				// triggered this abort — the resulting session.error is an expected
+				// consequence of that cancellation, not a second failure to report.
+				if (!this.runAutoCancelled) {
+					this.addInfoMessage(this.formatErrorForChat(errMsg));
+				}
 				break;
 			}
 			case 'tool.execution_start':

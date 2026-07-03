@@ -823,8 +823,11 @@ export class SynapseSettingTab extends PluginSettingTab {
 				text.inputEl.style.width = '60px';
 				text.setValue(String(this.plugin.settings.loopTurnThreshold))
 					.onChange(async (value) => {
-						const num = parseInt(value, 10);
-						if (!isNaN(num) && num >= 0 && num <= 200) {
+						// Number() (not parseInt()) so scientific notation ("1e2") parses to its
+						// actual value instead of being truncated at the "e", and Number.isInteger()
+						// rejects fractional input outright rather than silently flooring it.
+						const num = Number(value);
+						if (Number.isInteger(num) && num >= 0 && num <= 200) {
 							this.plugin.settings.loopTurnThreshold = num;
 							await this.plugin.saveSettings();
 						}
@@ -833,15 +836,15 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(capPanel)
 			.setName('Token budget')
-			.setDesc('Auto-cancel a chat run once its cumulative token usage (input + output + cache) reaches this amount. 0 = off (no limit).')
+			.setDesc('Auto-cancel a chat run once its cumulative token usage (input + output) reaches this amount. 0 = off (no limit).')
 			.addText(text => {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '0';
 				text.inputEl.style.width = '90px';
 				text.setValue(String(this.plugin.settings.loopTokenThreshold))
 					.onChange(async (value) => {
-						const num = parseInt(value, 10);
-						if (!isNaN(num) && num >= 0) {
+						const num = Number(value);
+						if (Number.isInteger(num) && num >= 0) {
 							this.plugin.settings.loopTokenThreshold = num;
 							await this.plugin.saveSettings();
 						}
