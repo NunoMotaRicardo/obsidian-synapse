@@ -20,6 +20,7 @@ import {SYNAPSE_FOLDER} from './settings';
 import {ensureFolder} from './configWriter';
 import {VaultScopeModal} from './modals/vaultScopeModal';
 import {UserInputModal} from './modals/userInputModal';
+import {lockManager} from './lockManager';
 import {BatchLoopProgressModal} from './modals/batchLoopProgressModal';
 
 // ---------------------------------------------------------------------------
@@ -201,23 +202,35 @@ function todayString(): string {
  * Uses vault.read()/vault.modify() (not `adapter.read`/`write`) so the
  * Obsidian cache and internal file queue stay consistent — same rationale as
  * the trigger executor's `appendToReport()`.
+ *
+ * The whole read-modify-write is wrapped in `lockManager.withLock` on the
+ * report path so a batch loop's per-file/run-summary appends can't interleave
+ * with another plugin-initiated write to the same day's report (e.g. a
+ * trigger reporting to the same file, or another batch-loop run). A
+ * `LockAcquisitionError` (wedged holder) propagates to the caller — batch
+ * loop per-file errors are already caught and reported per-file by
+ * `runBatchLoop()`'s loop body, so a lock timeout here surfaces the same way
+ * an ordinary write failure would.
  */
 async function appendBlockToReport(plugin: SynapsePlugin, block: string): Promise<void> {
 	const app = plugin.app;
-	await ensureFolder(app, REPORTS_FOLDER);
 
 	const today = todayString();
 	const reportPath = normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`);
 	const heading = `# ${REPORT_NAME} — ${today}`;
 
-	const exists = await app.vault.adapter.exists(reportPath);
-	if (!exists) {
-		await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
-	} else {
-		const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
-		const current = await app.vault.read(tfile);
-		await app.vault.modify(tfile, `${current}\n${block}\n`);
-	}
+	await lockManager.withLock(reportPath, async () => {
+		await ensureFolder(app, REPORTS_FOLDER);
+
+		const exists = await app.vault.adapter.exists(reportPath);
+		if (!exists) {
+			await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
+		} else {
+			const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
+			const current = await app.vault.read(tfile);
+			await app.vault.modify(tfile, `${current}\n${block}\n`);
+		}
+	});
 }
 
 /**

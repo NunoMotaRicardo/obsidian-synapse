@@ -160,6 +160,14 @@ The `_synapse/reports/` folder is created automatically if missing.
 **Error handling:** errors are logged to console (`console.error`) and appended to the report
 file under an `## Error` heading (so failures are visible in the vault).
 
+**Concurrent writes:** `applyWriteMode()` (both the `true` full-file replace and the
+`'frontmatter'` merge) and `appendToReport()` acquire the per-path advisory lock from
+[lock-manager.md](lock-manager.md) around their vault mutation, so two triggers (or a trigger and
+a batch loop) that target the same file or report can't interleave `vault.read()`/`vault.modify()`
+and clobber each other. If the lock times out on a wedged holder (`LockAcquisitionError`), the
+executor degrades gracefully — `console.warn` and (where possible) falls back to appending a note
+to the report — rather than throwing out of `executeTrigger()`.
+
 **After execution:** `plugin.settings.triggerLastFired[trigger.name] = Date.now()` is set and
 `plugin.saveSettings()` is called to persist the timestamp.
 

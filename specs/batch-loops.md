@@ -202,6 +202,11 @@ Appends use `vault.read()` + `vault.modify()` (not `adapter.read`/`write`) so th
 and internal file queue stay consistent — same rationale as `triggerExecutor.ts`'s
 `appendToReport()`.
 
+The whole read-modify-write in `appendBlockToReport()` is wrapped in the per-path advisory lock
+from [lock-manager.md](lock-manager.md), keyed on the report path, so two batch-loop runs (or a
+batch loop and a trigger) appending to the same day's report can't interleave and clobber each
+other.
+
 This report format is deliberately close to (but distinct from) the trigger executor's: triggers
 key their report file by trigger name (`<trigger-name>-YYYY-MM-DD.md`) with one heading per day
 and one result block per firing; batch loops key by the fixed name `batch-loop` and add a
