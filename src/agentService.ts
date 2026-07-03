@@ -1125,6 +1125,18 @@ export class Session {
 			}
 			case 'result': {
 				const resultMsg = msg as SDKResultMessage;
+				// Surface the run's total dollar cost, once known (issue #88). Anthropic
+				// only reports total_cost_usd on this terminal message — after every turn
+				// of the run has already completed — so this cannot drive true in-flight
+				// auto-cancellation (see specs/agent-service.md "Run cost reporting").
+				// Dispatched for both success and error results, since a failed/aborted
+				// run can still have accrued cost.
+				if (typeof resultMsg.total_cost_usd === 'number') {
+					this.dispatch({
+						type: 'assistant.run_result',
+						data: {totalCostUsd: resultMsg.total_cost_usd, numTurns: resultMsg.num_turns},
+					});
+				}
 				if (resultMsg.is_error) {
 					const raw = (resultMsg as {result?: string}).result;
 					const subtype = (resultMsg as {subtype?: string}).subtype;

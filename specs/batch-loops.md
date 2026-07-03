@@ -109,6 +109,15 @@ type BatchLoopBudget =
 An optional, user-configured cap on total spend for a single run — `undefined` means unlimited
 (the original #73 behavior, unchanged when no budget is set).
 
+`BatchLoopBudget`/`BatchLoopUsage` and the `parseBudgetInput`/`describeBudget`/`budgetExceeded`
+helpers were extracted into `src/budget.ts` (as `Budget`/`BudgetUsage`) in issue #88 so the
+interactive chat view's loop turn/cost thresholds (`specs/chat-view.md`) could reuse the same
+free-text budget parsing rather than duplicating it — `batchLoopExecutor.ts` re-exports the
+`BatchLoopBudget`/`BatchLoopUsage` names as type aliases for source compatibility, no behavior
+change. Note the chat-view thresholds themselves are plain persisted numeric settings, not a
+`parseBudgetInput()`-parsed free-text prompt (see `specs/chat-view.md`) — only the shared
+type/helpers are reused, not the batch loop's prompt-based UX.
+
 - **Usage source:** each file's `SDKResultMessage.usage` (input, output, cache-creation, and
   cache-read token fields, summed) and `total_cost_usd` are accumulated into a running
   `BatchLoopUsage` (`{totalTokens, totalCostUsd}`) as results come back from `runOnFile()`'s

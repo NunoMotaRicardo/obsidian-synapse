@@ -98,6 +98,26 @@ export interface SynapseSettings {
 	providerRequestTimeout?: number;
 	/** Timestamps (epoch ms) of the last time each trigger fired, keyed by trigger name. */
 	triggerLastFired: Record<string, number>;
+
+	/**
+	 * Interactive Tier-1 loop guardrails (issue #88): opt-in per-run turn/cost
+	 * thresholds, distinct from the SDK's raw `maxTurns`, that auto-cancel the
+	 * in-flight chat session via `Session.abort()` and surface why. `0` means
+	 * "no threshold" for both.
+	 */
+	/** Max turns (assistant.turn_start events) per chat run before auto-cancelling. 0 = off. */
+	loopTurnThreshold: number;
+	/** Max cumulative tokens (input+output+cache) per chat run before auto-cancelling. 0 = off. */
+	loopTokenThreshold: number;
+	/**
+	 * Max cumulative dollar cost per chat run. 0 = off. Unlike the turn/token
+	 * thresholds, this cannot drive true in-flight cancellation — the SDK only
+	 * reports `total_cost_usd` on the terminal `result` message, after the run
+	 * has already finished (see specs/agent-service.md). When set, an exceeded
+	 * run surfaces an informational "over budget" chat message after the fact
+	 * rather than a false "cancelled" claim.
+	 */
+	loopCostThresholdUsd: number;
 }
 
 /** Persisted preferences for the Edit modal form. */
@@ -161,6 +181,9 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	telegramDefaultAgent: '',
 	providerRequestTimeout: 0,
 	triggerLastFired: {},
+	loopTurnThreshold: 0,
+	loopTokenThreshold: 0,
+	loopCostThresholdUsd: 0,
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
@@ -783,6 +806,61 @@ export class SynapseSettingTab extends PluginSettingTab {
 						const num = parseInt(value, 10);
 						if (!isNaN(num) && num >= 1 && num <= 20) {
 							this.plugin.settings.maxNoteImages = num;
+							await this.plugin.saveSettings();
+						}
+					});
+			});
+
+		new Setting(capPanel).setName('Chat run guardrails').setHeading();
+
+		new Setting(capPanel)
+			.setName('Turn limit')
+			.setDesc('Auto-cancel a chat run once it reaches this many agent turns (tool-use steps), showing why. Distinct from the raw SDK turn cap. 0 = off (no limit).')
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = '0';
+				text.inputEl.max = '200';
+				text.inputEl.style.width = '60px';
+				text.setValue(String(this.plugin.settings.loopTurnThreshold))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num >= 0 && num <= 200) {
+							this.plugin.settings.loopTurnThreshold = num;
+							await this.plugin.saveSettings();
+						}
+					});
+			});
+
+		new Setting(capPanel)
+			.setName('Token budget')
+			.setDesc('Auto-cancel a chat run once its cumulative token usage (input + output + cache) reaches this amount. 0 = off (no limit).')
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = '0';
+				text.inputEl.style.width = '90px';
+				text.setValue(String(this.plugin.settings.loopTokenThreshold))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num >= 0) {
+							this.plugin.settings.loopTokenThreshold = num;
+							await this.plugin.saveSettings();
+						}
+					});
+			});
+
+		new Setting(capPanel)
+			.setName('Dollar budget (USD)')
+			.setDesc('Flag a chat run once its cost reaches this amount. Cost is only reported by the SDK after a run finishes, so this cannot stop a run in-flight — it surfaces an "over budget" notice once the total is known. Use the turn or token limit above for real-time auto-cancellation. 0 = off (no limit).')
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = '0';
+				text.inputEl.step = '0.01';
+				text.inputEl.style.width = '90px';
+				text.setValue(String(this.plugin.settings.loopCostThresholdUsd))
+					.onChange(async (value) => {
+						const num = parseFloat(value);
+						if (!isNaN(num) && num >= 0) {
+							this.plugin.settings.loopCostThresholdUsd = num;
 							await this.plugin.saveSettings();
 						}
 					});
