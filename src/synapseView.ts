@@ -823,17 +823,25 @@ export class SynapseView extends ItemView {
 				} else if (toolName === 'TaskUpdate') {
 					const parsed = parseTaskUpdateInput(toolInput);
 					if (parsed && this.taskPlan.has(parsed.taskId)) {
-						if (parsed.status === 'deleted') {
-							this.taskPlan.delete(parsed.taskId);
-						} else {
-							const existing = this.taskPlan.get(parsed.taskId)!;
-							this.taskPlan.set(parsed.taskId, {
-								content: parsed.subject ?? existing.content,
-								status: parsed.status ?? existing.status,
-								activeForm: parsed.activeForm ?? existing.activeForm,
-							});
+						// The CLI also emits TaskUpdate calls that only touch untracked fields
+						// (e.g. dependencies) — parsed.status/subject/activeForm are all
+						// undefined in that case. Skip the map mutation and DOM rebuild when
+						// nothing displayable actually changed, rather than churning the panel
+						// on every dependency-only update during an agentic loop.
+						const hasVisibleChange = parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined;
+						if (hasVisibleChange) {
+							if (parsed.status === 'deleted') {
+								this.taskPlan.delete(parsed.taskId);
+							} else {
+								const existing = this.taskPlan.get(parsed.taskId)!;
+								this.taskPlan.set(parsed.taskId, {
+									content: parsed.subject ?? existing.content,
+									status: parsed.status ?? existing.status,
+									activeForm: parsed.activeForm ?? existing.activeForm,
+								});
+							}
+							this.renderTaskPanel([...this.taskPlan.values()]);
 						}
-						this.renderTaskPanel([...this.taskPlan.values()]);
 						break;
 					}
 				}

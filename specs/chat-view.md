@@ -61,9 +61,10 @@ vault scope, folder tree.
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
   are supported. `handleSessionEvent()`'s `tool.execution_start`/`tool.execution_complete` cases
   branch on `toolName`:
-  - `TodoWrite`: parses `data.input` with `AgentService.parseTodoWritePayload()` and, when it
-    returns a non-null list, calls `renderTaskPanel(todos)` directly (the call is authoritative —
-    it fully replaces prior plan state).
+  - `TodoWrite`: parses `data.input` with `parseTodoWritePayload()` (a standalone function
+    exported from `agentService.ts`, imported directly — not an `AgentService` method) and, when
+    it returns a non-null list, calls `renderTaskPanel(todos)` directly (the call is authoritative
+    — it fully replaces prior plan state).
   - `TaskCreate`: `tool.execution_start` parses the input with `parseTaskCreateInput()` and
     stashes `{subject, activeForm}` in a `pendingTaskCreates` map keyed by `toolCallId` (the task
     id isn't known until the result arrives). `tool.execution_complete` extracts the id with
@@ -71,7 +72,10 @@ vault scope, folder tree.
     (`Map<taskId, TodoItem>`), and calls `renderTaskPanel([...taskPlan.values()])`.
   - `TaskUpdate`: `tool.execution_start` parses the input with `parseTaskUpdateInput()` and, if
     `taskId` is already tracked in `taskPlan`, patches that entry (`status: 'deleted'` removes it
-    instead) and re-renders.
+    instead) and re-renders — but only when the parsed update actually carries a displayable field
+    (`status`/`subject`/`activeForm`). The CLI also emits `TaskUpdate` calls that only touch
+    untracked fields (e.g. dependencies); those are absorbed without a map mutation or panel
+    rebuild, since nothing shown in the panel would change.
   - A malformed/unrecognized payload for any of these three tool names, or a `TaskUpdate` for an
     untracked `taskId`, falls back to the generic `addToolCallBlock()` rendering rather than being
     silently dropped.

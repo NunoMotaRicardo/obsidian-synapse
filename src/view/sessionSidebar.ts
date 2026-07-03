@@ -650,7 +650,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 					if (parsed) bg.pendingTaskCreates.set(event.data.toolCallId as string, parsed);
 				} else if (toolName === 'TaskUpdate') {
 					const parsed = parseTaskUpdateInput(toolInput);
-					if (parsed && bg.taskPlan.has(parsed.taskId)) {
+					// Same untracked-field guard as the foreground path in synapseView.ts —
+					// skip the mutation entirely for dependency-only updates.
+					const hasVisibleChange = parsed !== null && (parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined);
+					if (parsed && hasVisibleChange && bg.taskPlan.has(parsed.taskId)) {
 						if (parsed.status === 'deleted') {
 							bg.taskPlan.delete(parsed.taskId);
 						} else {
