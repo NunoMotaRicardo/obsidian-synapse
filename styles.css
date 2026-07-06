@@ -1110,6 +1110,55 @@
 	stroke: var(--text-on-accent);
 }
 
+/* ── Slash-command skill popup ───────────────────────────────── */
+
+.synapse-skill-popup {
+	position: absolute;
+	bottom: 100%;
+	left: 8px;
+	right: 8px;
+	margin-bottom: 4px;
+	max-height: 220px;
+	overflow-y: auto;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	z-index: 20;
+}
+
+.synapse-skill-popup.is-hidden {
+	display: none;
+}
+
+.synapse-skill-popup-item {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 6px 10px;
+	cursor: pointer;
+}
+
+.synapse-skill-popup-item.is-selected,
+.synapse-skill-popup-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.synapse-skill-popup-name {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	color: var(--text-accent);
+	flex-shrink: 0;
+}
+
+.synapse-skill-popup-desc {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* ── Config toolbar ───────────────────────────────────────────── */
 
 .synapse-toolbar {
