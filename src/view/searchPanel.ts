@@ -28,9 +28,7 @@ declare module '../synapseView' {
 		updateSearchAdvancedVisibility(): void;
 		updateSearchConfigUI(): void;
 		applySearchAgentToolsAndSkills(agent?: AgentConfig): void;
-		openSearchSkillsMenu(e: MouseEvent): void;
 		openSearchToolsMenu(e: MouseEvent): void;
-		updateSearchSkillsBadge(): void;
 		updateSearchToolsBadge(): void;
 		openSearchScopePicker(): void;
 		updateSearchCwdButton(): void;
@@ -97,11 +95,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchModelSelect.addEventListener('change', () => {
 			this.searchModel = this.searchModelSelect.value;
 		});
-
-		// Skills button
-		this.searchSkillsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Skills'}});
-		setIcon(this.searchSkillsBtnEl, 'wand-2');
-		this.searchSkillsBtnEl.addEventListener('click', (e) => this.openSearchSkillsMenu(e));
 
 		// Tools button
 		this.searchToolsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
@@ -215,7 +208,11 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applySearchAgentToolsAndSkills = function (this: SynapseView, agent?: AgentConfig): void {
-		// Skills: undefined = enable all, [] = disable all, [...] = enable listed
+		// Skills: undefined = enable all, [] = disable all, [...] = enable listed.
+		// This is the agent-declared restriction (AgentConfig.skills), independent
+		// from any manual toolbar toggle — all discovered skills are always
+		// available unless the selected agent explicitly restricts the set
+		// (mirrors applyAgentToolsAndSkills() in configToolbar.ts for chat).
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
 			this.searchEnabledSkills = new Set(
@@ -225,43 +222,13 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			this.searchEnabledSkills = new Set(this.skills.map(s => s.name));
 		}
 
-		this.updateSearchSkillsBadge();
 		this.updateSearchToolsBadge();
-	};
-
-	proto.openSearchSkillsMenu = function (this: SynapseView, e: MouseEvent): void {
-		const menu = new Menu();
-		if (this.skills.length === 0) {
-			menu.addItem(item => item.setTitle('No skills configured').setDisabled(true));
-		} else {
-			for (const skill of this.skills) {
-				menu.addItem(item => {
-					item.setTitle(skill.name)
-						.setChecked(this.searchEnabledSkills.has(skill.name))
-						.onClick(() => {
-							if (this.searchEnabledSkills.has(skill.name)) {
-								this.searchEnabledSkills.delete(skill.name);
-							} else {
-								this.searchEnabledSkills.add(skill.name);
-							}
-							this.updateSearchSkillsBadge();
-						});
-				});
-			}
-		}
-		menu.showAtMouseEvent(e);
 	};
 
 	proto.openSearchToolsMenu = function (this: SynapseView, e: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
 		menu.showAtMouseEvent(e);
-	};
-
-	proto.updateSearchSkillsBadge = function (this: SynapseView): void {
-		const count = this.searchEnabledSkills.size;
-		this.searchSkillsBtnEl.toggleClass('is-active', count > 0);
-		this.searchSkillsBtnEl.setAttribute('title', count > 0 ? `Skills (${count} active)` : 'Skills');
 	};
 
 	proto.updateSearchToolsBadge = function (this: SynapseView): void {
