@@ -49,10 +49,10 @@ vault scope, folder tree.
     `searchEnabledSkills` defaults to every discovered skill name, narrowed only by the selected
     search agent's `skills:` frontmatter restriction via `applySearchAgentToolsAndSkills()` (same
     `undefined`/`[]`/`[...]` semantics as `applyAgentToolsAndSkills()`). There is no manual
-    per-skill toggle in the search toolbar either — the search tab never had a slash-command popup
-    to make one redundant against; search is a one-shot `inlineChat()` per query rather than a
-    persistent multi-turn session, so there's no `configDirty`/session-continuity motivation for
-    keeping a toggle, and this is purely a consistency fix with the chat tab.
+    per-skill toggle in the search toolbar; unlike chat, search never had a slash-command popup, and
+    search runs a one-shot `inlineChat()` per query rather than a persistent multi-turn session, so
+    there's no `configDirty`/session-continuity motivation for keeping a toggle. This is purely a
+    consistency fix with the chat tab.
 - Streaming: sessions are created with `streaming: true`; renderer accumulates
   `assistant.message_delta` / `assistant.reasoning_delta`, finalizes on `assistant.message`.
 - Reasoning menu (brain icon) shows only when the selected model reports
