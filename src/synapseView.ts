@@ -60,6 +60,15 @@ export class SynapseView extends ItemView {
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
 
+	// ── Slash-command skill popup state ──────────────────────────
+	skillPopupEl: HTMLElement | null = null;
+	/** Filtered skill list currently shown in the popup, in display order. */
+	skillPopupMatches: SkillInfo[] = [];
+	/** Index into `skillPopupMatches` of the highlighted row. */
+	skillPopupSelectedIndex = 0;
+	/** Start offset (in `inputEl.value`) of the `/` that triggered the popup. */
+	skillPopupSlashIndex = -1;
+
 	isStreaming = false;
 	configDirty = true;
 	streamingContent = '';
@@ -155,7 +164,6 @@ export class SynapseView extends ItemView {
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;
 	modelIconEl!: HTMLSpanElement;
-	skillsBtnEl!: HTMLButtonElement;
 	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
 	debugBtnEl!: HTMLElement;

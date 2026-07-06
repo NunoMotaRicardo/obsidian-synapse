@@ -56,11 +56,9 @@ declare module '../synapseView' {
 		updateReasoningBadge(): void;
 		applyReasoningToSession(): void;
 		setReasoningSummary(mode: string): void;
-		openSkillsMenu(e: MouseEvent): void;
 		openToolsMenu(e: MouseEvent): void;
 		selectAgent(agentName: string): void;
 		applyAgentToolsAndSkills(agent?: AgentConfig): void;
-		updateSkillsBadge(): void;
 		updateToolsBadge(): void;
 		openCwdPicker(): void;
 		updateCwdButton(): void;
@@ -103,11 +101,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.updateReasoningBadge();
 			this.applyReasoningToSession();
 		});
-
-		// Skills button
-		this.skillsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Skills'}});
-		setIcon(this.skillsBtnEl, 'wand-2');
-		this.skillsBtnEl.addEventListener('click', (e) => this.openSkillsMenu(e));
 
 		// Tools button
 		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
@@ -294,30 +287,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 	};
 
-	proto.openSkillsMenu = function(e: MouseEvent): void {
-		const menu = new Menu();
-		if (this.skills.length === 0) {
-			menu.addItem(item => item.setTitle('No skills configured').setDisabled(true));
-		} else {
-			for (const skill of this.skills) {
-				menu.addItem(item => {
-					item.setTitle(skill.name)
-						.setChecked(this.enabledSkills.has(skill.name))
-						.onClick(() => {
-							if (this.enabledSkills.has(skill.name)) {
-								this.enabledSkills.delete(skill.name);
-							} else {
-								this.enabledSkills.add(skill.name);
-							}
-							this.configDirty = true;
-							this.updateSkillsBadge();
-						});
-				});
-			}
-		}
-		menu.showAtMouseEvent(e);
-	};
-
 	proto.openToolsMenu = function(e: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
@@ -383,7 +352,10 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applyAgentToolsAndSkills = function(agent?: AgentConfig): void {
-		// Skills: undefined = enable all, [] = disable all, [...] = enable listed
+		// Skills: undefined = enable all, [] = disable all, [...] = enable listed.
+		// This is the agent-declared restriction (AgentConfig.skills), independent
+		// from the removed manual toolbar toggle — all discovered skills are always
+		// available unless the selected agent explicitly restricts the set.
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
 			this.enabledSkills = new Set(
@@ -393,14 +365,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
 		}
 
-		this.updateSkillsBadge();
 		this.updateToolsBadge();
-	};
-
-	proto.updateSkillsBadge = function(): void {
-		const count = this.enabledSkills.size;
-		this.skillsBtnEl.toggleClass('is-active', count > 0);
-		this.skillsBtnEl.setAttribute('title', count > 0 ? `Skills (${count} active)` : 'Skills');
 	};
 
 	proto.updateToolsBadge = function(): void {

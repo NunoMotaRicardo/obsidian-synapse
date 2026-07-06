@@ -23,8 +23,18 @@ declare module '../synapseView' {
 		setWorkingDir(folderPath: string): void;
 		setPromptText(text: string): void;
 		addSelectionAttachment(text: string, info: SelectionInfo): void;
+
+		// Slash-command skill popup
+		handleInputKeydownForSkillPopup(e: KeyboardEvent): boolean;
+		updateSkillPopup(): void;
+		renderSkillPopup(): void;
+		closeSkillPopup(): void;
+		selectSkillPopupMatch(index: number): void;
 	}
 }
+
+/** Skill-name characters accepted while typing a `/name` filter (no spaces). */
+const SKILL_NAME_CHAR = /[A-Za-z0-9_-]/;
 
 export function installInputArea(ViewClass: {prototype: unknown}): void {
 	const proto = ViewClass.prototype as SynapseView;
@@ -60,16 +70,35 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			attr: {placeholder: 'Ask or paste something to work on...', rows: '1'},
 		});
 
-		// Auto-resize
+		// Auto-resize + slash-command skill popup filtering
 		this.inputEl.addEventListener('input', () => {
 			this.inputEl.setCssProps({'--input-height': 'auto'});
 			this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
+			this.updateSkillPopup();
+		});
+
+		// Caret can move without an `input` event (arrow keys, Home/End, mouse click) —
+		// refresh the popup so it closes once the caret leaves the `/name` token.
+		this.inputEl.addEventListener('mouseup', () => this.updateSkillPopup());
+		this.inputEl.addEventListener('keyup', (e: KeyboardEvent) => {
+			if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+				this.updateSkillPopup();
+			}
+		});
+
+		// Reposition/close the popup if focus leaves the textarea (e.g. clicking elsewhere).
+		this.inputEl.addEventListener('blur', () => {
+			// Defer so a click on a popup row (which also blurs the textarea) can still register.
+			window.setTimeout(() => this.closeSkillPopup(), 150);
 		});
 
 		// Ctrl+Enter or Enter (without Shift) to send
 		// Register on window in capture phase — earliest interception before Obsidian's hotkey system
 		const keyHandler = (e: KeyboardEvent) => {
 			if (document.activeElement !== this.inputEl) return;
+
+			// Slash-command popup gets first crack at navigation keys while open.
+			if (this.handleInputKeydownForSkillPopup(e)) return;
 
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
@@ -581,5 +610,147 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		});
 		this.renderAttachments();
 		this.renderActiveNoteBar();
+	};
+
+	// ── Slash-command skill popup ───────────────────────────────
+
+	/**
+	 * Recompute the skill popup's open/closed state and filtered matches from the
+	 * current caret position in `inputEl`. Called on every `input` event.
+	 *
+	 * Trigger rule: a `/` is a trigger candidate only when preceded by start-of-message
+	 * or whitespace (so `and/or`, `3/4`, `path/to/x` never open the popup). The popup
+	 * stays open while the caret is inside a contiguous run of skill-name characters
+	 * immediately after that `/`; a space or any other boundary closes it.
+	 */
+	proto.updateSkillPopup = function (): void {
+		const value = this.inputEl.value;
+		const caret = this.inputEl.selectionStart ?? value.length;
+
+		// Scan left from the caret for a `/` starting a valid trigger, stopping at
+		// the first character that isn't a valid skill-name character.
+		let i = caret - 1;
+		while (i >= 0 && SKILL_NAME_CHAR.test(value[i]!)) i--;
+		if (i < 0 || value[i] !== '/') {
+			this.closeSkillPopup();
+			return;
+		}
+		const precedingChar = i > 0 ? value[i - 1] : undefined;
+		const isValidTrigger = i === 0 || precedingChar === undefined || /\s/.test(precedingChar);
+		if (!isValidTrigger) {
+			this.closeSkillPopup();
+			return;
+		}
+
+		const query = value.slice(i + 1, caret).toLowerCase();
+		// Only suggest skills actually loaded into this session — an agent's `skills:`
+		// restriction narrows `enabledSkills` below the full discovered `this.skills` set.
+		const matches = this.skills.filter(s => this.enabledSkills.has(s.name) && s.name.toLowerCase().startsWith(query));
+		if (matches.length === 0) {
+			this.closeSkillPopup();
+			return;
+		}
+
+		this.skillPopupSlashIndex = i;
+		this.skillPopupMatches = matches;
+		this.skillPopupSelectedIndex = Math.min(this.skillPopupSelectedIndex, matches.length - 1);
+		if (this.skillPopupSelectedIndex < 0) this.skillPopupSelectedIndex = 0;
+		this.renderSkillPopup();
+	};
+
+	/** (Re)render the popup dropdown from `skillPopupMatches`, creating it lazily. */
+	proto.renderSkillPopup = function (): void {
+		if (!this.skillPopupEl) {
+			const inputArea = this.inputEl.closest('.synapse-input-area') as HTMLElement | null;
+			if (!inputArea) return;
+			this.skillPopupEl = inputArea.createDiv({cls: 'synapse-skill-popup'});
+		}
+		const popup = this.skillPopupEl;
+		popup.empty();
+		popup.removeClass('is-hidden');
+
+		for (let idx = 0; idx < this.skillPopupMatches.length; idx++) {
+			const skill = this.skillPopupMatches[idx]!;
+			const row = popup.createDiv({cls: 'synapse-skill-popup-item'});
+			row.toggleClass('is-selected', idx === this.skillPopupSelectedIndex);
+			row.createSpan({text: `/${skill.name}`, cls: 'synapse-skill-popup-name'});
+			if (skill.description) {
+				row.createSpan({text: skill.description, cls: 'synapse-skill-popup-desc'});
+			}
+			// mousedown (not click) fires before the textarea's blur handler closes the popup.
+			row.addEventListener('mousedown', (e) => {
+				e.preventDefault();
+				this.selectSkillPopupMatch(idx);
+			});
+		}
+	};
+
+	/** Close and remove the popup, resetting its filter state. */
+	proto.closeSkillPopup = function (): void {
+		this.skillPopupMatches = [];
+		this.skillPopupSelectedIndex = 0;
+		this.skillPopupSlashIndex = -1;
+		if (this.skillPopupEl) {
+			this.skillPopupEl.remove();
+			this.skillPopupEl = null;
+		}
+	};
+
+	/** Complete the textarea's `/`-token with the chosen skill's name (no send, no stripping). */
+	proto.selectSkillPopupMatch = function (index: number): void {
+		const skill = this.skillPopupMatches[index];
+		if (!skill || this.skillPopupSlashIndex < 0) return;
+		const value = this.inputEl.value;
+		const caret = this.inputEl.selectionStart ?? value.length;
+		const before = value.slice(0, this.skillPopupSlashIndex);
+		// Replace through the end of the contiguous skill-name run, not just to the
+		// caret — the caret may sit mid-token (e.g. after ArrowLeft), and stopping at
+		// it would leave the token's trailing characters behind as stray text.
+		let end = caret;
+		while (end < value.length && SKILL_NAME_CHAR.test(value[end]!)) end++;
+		const after = value.slice(end);
+		const inserted = `/${skill.name} `;
+		this.inputEl.value = before + inserted + after;
+		const newCaret = before.length + inserted.length;
+		this.inputEl.setSelectionRange(newCaret, newCaret);
+		this.inputEl.focus();
+		this.inputEl.setCssProps({'--input-height': 'auto'});
+		this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
+		this.closeSkillPopup();
+	};
+
+	/**
+	 * Intercept navigation/selection keys while the popup is open, ahead of the
+	 * normal Enter-to-send handling. Returns true when the key was consumed by the
+	 * popup (caller should not process it further).
+	 */
+	proto.handleInputKeydownForSkillPopup = function (e: KeyboardEvent): boolean {
+		if (this.skillPopupMatches.length === 0) return false;
+
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			this.skillPopupSelectedIndex = (this.skillPopupSelectedIndex + 1) % this.skillPopupMatches.length;
+			this.renderSkillPopup();
+			return true;
+		}
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			this.skillPopupSelectedIndex = (this.skillPopupSelectedIndex - 1 + this.skillPopupMatches.length) % this.skillPopupMatches.length;
+			this.renderSkillPopup();
+			return true;
+		}
+		if (e.key === 'Tab' || e.key === 'Enter') {
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			this.selectSkillPopupMatch(this.skillPopupSelectedIndex);
+			return true;
+		}
+		if (e.key === 'Escape' || e.key === ' ') {
+			this.closeSkillPopup();
+			// Space is not consumed — it should still be typed into the textarea.
+			return e.key === 'Escape';
+		}
+		return false;
 	};
 }

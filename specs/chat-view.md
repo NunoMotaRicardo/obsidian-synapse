@@ -5,8 +5,8 @@ Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErro
 
 | File | Role |
 |---|---|
-| `configToolbar.ts` | Agent / model / reasoning-effort / skills / tools / working-dir / debug controls |
-| `inputArea.ts` | Message input, slash-command prompts, attachments, vault scope button |
+| `configToolbar.ts` | Agent / model / reasoning-effort / tools / working-dir / debug controls |
+| `inputArea.ts` | Message input, slash-command skill popup, attachments, vault scope button |
 | `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
 | `sessionSidebar.ts` | Session list, restore (cold resume via `getEvents()`), rename/delete, background sessions |
 | `searchPanel.ts` | AI vault search tab (basic/advanced) |
@@ -17,6 +17,33 @@ vault scope, folder tree.
 
 ## Behavior contracts
 
+- **Slash-command skill invocation (issue #91):** the Claude Agent SDK natively recognizes and
+  invokes registered skills whenever a literal `/skillname` appears anywhere in the prompt text
+  (mid-sentence or not), for every skill loaded into the session — no plugin-side parsing,
+  stripping, or invocation routing is involved; the prompt text is sent to the SDK unmodified. All
+  discovered vault skills (`_synapse/skills/*/SKILL.md`, scanned by `scanSkills()` in
+  `configWriter.ts`) are always loaded for every session (`buildSessionConfig()` in
+  `synapseView.ts` passes `skills: Array.from(this.enabledSkills)`, and `enabledSkills` defaults to
+  every discovered skill name). The only thing that narrows the loaded set is an explicit
+  `skills:` restriction in the selected agent's frontmatter (`AgentConfig.skills` — `undefined` =
+  all, `[]` = none, `[...]` = only those listed; applied by `applyAgentToolsAndSkills()` in
+  `configToolbar.ts`, whenever the agent selection changes). There is no manual per-session
+  toggle — the old toolbar "Skills" checkbox menu was removed, since it's redundant with (and
+  overridden by) whatever a `/name` mention in the prompt actually invokes; removing it also means
+  invoking a skill via `/name` never needs to mark `configDirty` or force a new session, since the
+  effective skill list no longer changes turn-to-turn from user action.
+  - **Discovery popup** (`inputArea.ts`): typing `/` in the chat textarea, when preceded by
+    start-of-message or whitespace (so `and/or`, `3/4`, `path/to/x` never trigger it), opens a
+    small inline dropdown anchored above the textarea (`.synapse-skill-popup`, a plain absolutely
+    positioned div, not a modal) listing vault skills whose name prefix-matches everything typed
+    since the `/` (case-insensitive). Up/Down arrows move the highlighted row; Tab or Enter
+    completes the highlighted skill's name into the textarea (inserting `/name ` and closing the
+    popup) without sending the message — the normal Enter-to-send handling is suppressed while the
+    popup is open. Escape closes the popup outright; Space closes it too but is not consumed (it's
+    still typed normally), since a trailing space after the name is the natural way to end a
+    `/name` mention. Selecting a match only ever inserts text — it never sends the message and
+    never strips the `/name` token afterward, since the SDK needs to see the literal text to
+    invoke the skill.
 - Streaming: sessions are created with `streaming: true`; renderer accumulates
   `assistant.message_delta` / `assistant.reasoning_delta`, finalizes on `assistant.message`.
 - Reasoning menu (brain icon) shows only when the selected model reports
