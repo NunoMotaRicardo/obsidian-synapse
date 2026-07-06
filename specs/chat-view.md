@@ -44,6 +44,15 @@ vault scope, folder tree.
     `/name` mention. Selecting a match only ever inserts text — it never sends the message and
     never strips the `/name` token afterward, since the SDK needs to see the literal text to
     invoke the skill.
+  - **Search tab (issue #96):** `searchPanel.ts` mirrors the same always-loaded model —
+    `buildSearchSessionConfig()` passes `skills: Array.from(this.searchEnabledSkills)`, and
+    `searchEnabledSkills` defaults to every discovered skill name, narrowed only by the selected
+    search agent's `skills:` frontmatter restriction via `applySearchAgentToolsAndSkills()` (same
+    `undefined`/`[]`/`[...]` semantics as `applyAgentToolsAndSkills()`). There is no manual
+    per-skill toggle in the search toolbar either — the search tab never had a slash-command popup
+    to make one redundant against; search is a one-shot `inlineChat()` per query rather than a
+    persistent multi-turn session, so there's no `configDirty`/session-continuity motivation for
+    keeping a toggle, and this is purely a consistency fix with the chat tab.
 - Streaming: sessions are created with `streaming: true`; renderer accumulates
   `assistant.message_delta` / `assistant.reasoning_delta`, finalizes on `assistant.message`.
 - Reasoning menu (brain icon) shows only when the selected model reports

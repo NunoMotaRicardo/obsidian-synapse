@@ -136,7 +136,6 @@ export class SynapseView extends ItemView {
 	searchEnabledSkills: Set<string> = new Set();
 	searchAgentSelect!: HTMLSelectElement;
 	searchModelSelect!: HTMLSelectElement;
-	searchSkillsBtnEl!: HTMLButtonElement;
 	searchToolsBtnEl!: HTMLButtonElement;
 	searchCwdBtnEl!: HTMLButtonElement;
 	searchInputEl!: HTMLTextAreaElement;
