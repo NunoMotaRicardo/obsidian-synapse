@@ -77,6 +77,15 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.updateSkillPopup();
 		});
 
+		// Caret can move without an `input` event (arrow keys, Home/End, mouse click) —
+		// refresh the popup so it closes once the caret leaves the `/name` token.
+		this.inputEl.addEventListener('mouseup', () => this.updateSkillPopup());
+		this.inputEl.addEventListener('keyup', (e: KeyboardEvent) => {
+			if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+				this.updateSkillPopup();
+			}
+		});
+
 		// Reposition/close the popup if focus leaves the textarea (e.g. clicking elsewhere).
 		this.inputEl.addEventListener('blur', () => {
 			// Defer so a click on a popup row (which also blurs the textarea) can still register.
@@ -634,7 +643,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		}
 
 		const query = value.slice(i + 1, caret).toLowerCase();
-		const matches = this.skills.filter(s => s.name.toLowerCase().startsWith(query));
+		// Only suggest skills actually loaded into this session — an agent's `skills:`
+		// restriction narrows `enabledSkills` below the full discovered `this.skills` set.
+		const matches = this.skills.filter(s => this.enabledSkills.has(s.name) && s.name.toLowerCase().startsWith(query));
 		if (matches.length === 0) {
 			this.closeSkillPopup();
 			return;
@@ -692,7 +703,12 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		const value = this.inputEl.value;
 		const caret = this.inputEl.selectionStart ?? value.length;
 		const before = value.slice(0, this.skillPopupSlashIndex);
-		const after = value.slice(caret);
+		// Replace through the end of the contiguous skill-name run, not just to the
+		// caret — the caret may sit mid-token (e.g. after ArrowLeft), and stopping at
+		// it would leave the token's trailing characters behind as stray text.
+		let end = caret;
+		while (end < value.length && SKILL_NAME_CHAR.test(value[end]!)) end++;
+		const after = value.slice(end);
 		const inserted = `/${skill.name} `;
 		this.inputEl.value = before + inserted + after;
 		const newCaret = before.length + inserted.length;
