@@ -172,7 +172,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	infiniteSessionsEnabled: true,
 	searchAgent: '',
 	searchMode: 'basic',
-	autoUpdateWorkingDirectory: false,
+	autoUpdateWorkingDirectory: true,
 	autoIncludeNoteImages: true,
 	maxNoteImages: 3,
 	telegramBotId: '',
