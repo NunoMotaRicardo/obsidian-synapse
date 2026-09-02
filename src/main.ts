@@ -228,7 +228,7 @@ export default class SynapsePlugin extends Plugin {
 			},
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
-				console.log(`Synapse: Claude CLI v${info.version}${info.protocolVersion ? ` (protocol ${info.protocolVersion})` : ''} at ${info.path}`);
+				console.log(`Synapse: Claude CLI v${info.version} at ${info.path}`);
 			},
 		});
 		if (s.providerBaseUrl) {
