@@ -112,13 +112,18 @@ AI-powered semantic search across your vault. Toggle between **basic** mode (qui
 
 The right edge of the panel lists your conversation sessions.
 
-- **Click** a session to restore it.
+- **Click** a session to restore it — its full message history is replayed from disk, so
+  conversations survive restarting Obsidian.
 - **Right-click** to rename or delete.
 - **Filter** sessions with the search box.
 - A **green dot** means a session is actively streaming.
 - Search sessions run in the background and are tagged accordingly.
 
 Sessions are auto-named as `<Agent>: <first message>`.
+
+> [!NOTE]
+> A restored conversation replays messages and reasoning, but not the collapsible tool-call blocks
+> from the original turns. Those are only rendered live.
 
 ---
 
