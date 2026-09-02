@@ -194,8 +194,10 @@ const SECURE_PREFIX = 'synapse-secure-';
 
 /** Load a secure field from vault-specific local storage. */
 export function loadSecureField(app: App, key: string): string {
-	const stored = app.loadLocalStorage(SECURE_PREFIX + key);
-	return stored != null ? String(stored) : '';
+	// loadLocalStorage() is typed `any | null` in obsidian.d.ts; narrow to unknown.
+	// saveSecureField() below only ever stores a string or null, so this is safe.
+	const stored: unknown = app.loadLocalStorage(SECURE_PREFIX + key);
+	return typeof stored === 'string' ? stored : '';
 }
 
 /** Save a secure field to vault-specific local storage. */
@@ -941,7 +943,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				updateStatusDisplay(`Connected as @${this.plugin.telegramBot!.botUsername}`);
 				headingSetting.addButton(button => button
 					.setButtonText('Disconnect')
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						button.setDisabled(true);
 						button.setButtonText('Disconnecting…');

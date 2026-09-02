@@ -601,7 +601,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				if (bg.turnStartTime === 0) bg.turnStartTime = Date.now();
 			}),
 			session.on('assistant.reasoning_delta', (event) => {
-				bg.streamingReasoning += event.data.deltaContent;
+				// event.data is Record<string, unknown> (SessionEvent); the producer
+				// (agentService.ts) always sets deltaContent to a string.
+				if (typeof event.data.deltaContent === 'string') {
+					bg.streamingReasoning += event.data.deltaContent;
+				}
 				bg.reasoningComplete = false;
 			}),
 			session.on('assistant.reasoning', (event) => {

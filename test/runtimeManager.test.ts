@@ -25,7 +25,7 @@ vi.mock('node:fs/promises', () => ({
 import {resolveDefaultCliPath} from '../src/runtimeManager';
 import * as fsMock from 'node:fs/promises';
 
-const mockedAccess = fsMock.access as ReturnType<typeof vi.fn>;
+const mockedAccess = fsMock.access as unknown as ReturnType<typeof vi.fn<typeof fsMock.access>>;
 
 describe('resolveDefaultCliPath', () => {
 	const originalEnv = {...process.env};
