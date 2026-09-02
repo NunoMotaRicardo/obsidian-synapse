@@ -183,6 +183,26 @@ vault scope, folder tree.
   directory is not changed automatically (it defaults to the vault root unless overridden manually). The active
   note's folder can also be overridden manually in the toolbar at any time — an auto-update on the
   next note switch will still overwrite that manual pick, same as before this default flipped.
+  - **Deferred while a conversation is in progress (issue #108 / #93):** applying this auto-update
+    unconditionally used to force `ensureSession()` (`synapseView.ts`) to tear down the live
+    `Session` and rebuild it with an empty `_sessionId` on every folder-crossing note switch —
+    `Session.send()` only passes `resume` when `_sessionId` is truthy, so the very next message
+    silently started a brand-new CLI session with no history. Since users switch notes constantly
+    *between* turns, this was the likely root cause of #93 ("chat is losing context of the
+    conversation in each turn"). `updateActiveNote()` (`inputArea.ts`) now calls the pure
+    `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`) with whether a conversation is
+    currently in progress (`currentSession !== null && messages.length > 0`, true for both live
+    and cold-resumed/replayed sessions): if so, the directory change is **deferred** —
+    `SynapseView.pendingWorkingDir` records the new folder, `workingDir`/`configDirty` are left
+    untouched, and the live session (and its transcript) survives the note switch. The deferred
+    directory is applied — `workingDir` updated, cwd button refreshed — the next time a
+    conversation is not in progress, currently only `newConversation()` (which is about to mark
+    `configDirty` and rebuild the session anyway, so applying it there costs nothing extra). A
+    session reset genuinely tied to a *manual* working-directory override
+    (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) is a deliberate
+    user action, not a silent side effect of navigation, and is unaffected by this change — as is
+    the unrelated `configDirty`-on-toolbar-toggle pattern (agent/model/reasoning/tools), tracked
+    separately in issue #104.
   To anchor path resolution, the session is configured with standard system instructions containing
   the absolute vault root, active note path, and working directory, preventing the LLM from constructing
   incorrect absolute paths (e.g., nesting file paths under attached image subfolders).

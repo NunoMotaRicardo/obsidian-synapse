@@ -57,6 +57,12 @@ export class SynapseView extends ItemView {
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
 	workingDir = '';
+	/**
+	 * A working-directory change deferred by `decideWorkingDirAutoUpdate()` (issue #108)
+	 * because a conversation was in progress when the active note switched folders.
+	 * Applied the next time a conversation is not in progress — see `newConversation()`.
+	 */
+	pendingWorkingDir: string | null = null;
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
 
@@ -1096,6 +1102,13 @@ export class SynapseView extends ItemView {
 		this.isStreaming = false;
 		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
 		this.selectedModel = '';
+		// Apply any working-directory change deferred while the previous conversation
+		// was in progress (issue #108) — safe now that there's no session to orphan.
+		if (this.pendingWorkingDir !== null) {
+			this.workingDir = this.pendingWorkingDir;
+			this.pendingWorkingDir = null;
+			this.updateCwdButton();
+		}
 		this.updateConfigUI();
 		this.configDirty = true;
 		this.attachments = [];

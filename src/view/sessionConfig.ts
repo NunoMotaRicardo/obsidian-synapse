@@ -495,3 +495,42 @@ export function buildSelfImproveHint(agentName: string): string {
 		' State what you would create (type and summary), then ask permission before writing.' +
 		` Current agent: ${agentName}.`;
 }
+
+/** Result of {@link decideWorkingDirAutoUpdate}. */
+export interface WorkingDirAutoUpdateDecision {
+	/** Whether `workingDir` should be updated (and the session config marked dirty) right now. */
+	applyNow: boolean;
+	/**
+	 * The directory that should become pending — applied once the conversation ends —
+	 * when `applyNow` is false and the note actually moved to a different folder.
+	 * `null` when there is nothing to defer (directory unchanged, or applied now).
+	 */
+	pendingDir: string | null;
+}
+
+/**
+ * Decide whether an active-note-driven working-directory change (issue #108) should be
+ * applied immediately or deferred.
+ *
+ * Applying a `cwd` change mid-conversation forces `ensureSession()` to tear down the
+ * live `Session` and build a replacement whose `_sessionId` starts empty — `Session.send()`
+ * only passes `resume` when `_sessionId` is truthy, so the next turn silently starts a
+ * fresh CLI session with no history (issue #108, likely root cause of #93). Since users
+ * switch notes constantly *between* turns, this fires on nearly every follow-up message.
+ *
+ * When a conversation is already in progress, the directory change is deferred instead of
+ * applied — the working-directory button doesn't move and no session rebuild happens, so
+ * the live session (and its transcript) survives. The deferred `pendingDir` is applied the
+ * next time a conversation is *not* in progress (e.g. once `newConversation()` runs, or the
+ * next note switch after the session has otherwise ended).
+ */
+export function decideWorkingDirAutoUpdate(params: {
+	newDir: string;
+	currentWorkingDir: string;
+	conversationInProgress: boolean;
+}): WorkingDirAutoUpdateDecision {
+	const {newDir, currentWorkingDir, conversationInProgress} = params;
+	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null};
+	if (conversationInProgress) return {applyNow: false, pendingDir: newDir};
+	return {applyNow: true, pendingDir: null};
+}
