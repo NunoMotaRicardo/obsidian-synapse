@@ -153,7 +153,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const model = this.getSelectedModelInfo();
 		// The SDK narrows supportedReasoningEfforts to its ReasoningEffort union, but
 		// models report values beyond it (e.g. 'max', 'none'); treat them as strings.
-		const supported = model?.capabilities?.supportedReasoningEfforts as string[] | undefined;
+		const supported = model?.capabilities?.supportedReasoningEfforts;
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && !!supported && supported.length > 0;
 		const menu = new Menu();
 
@@ -161,7 +161,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			menu.addItem(item => item.setTitle('Default model (capabilities unknown)').setDisabled(true));
 		} else if (supportsReasoning) {
 			const current = this.plugin.settings.reasoningEffort;
-			for (const level of supported!) {
+			for (const level of supported) {
 				menu.addItem(item => {
 					item.setTitle(effortLabel(level))
 						.setChecked(level === current)
@@ -260,7 +260,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 
 		const model = this.getSelectedModelInfo();
-		const supported = model?.capabilities?.supportedReasoningEfforts as string[] | undefined;
+		const supported = model?.capabilities?.supportedReasoningEfforts;
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
 		// Reset if current level isn't supported by the new model
 		if (level !== '' && supportsReasoning && supported && !supported.includes(level)) {

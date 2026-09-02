@@ -173,7 +173,7 @@ export class McpBridgeSession {
 			env,
 			stdio: ['pipe', 'pipe', 'pipe'],
 			shell: false,
-		}) as ChildProcessWithoutNullStreams;
+		});
 
 		const handle: ServerHandle = {
 			name,
@@ -246,7 +246,7 @@ export class McpBridgeSession {
 			const id = this.nextId++;
 			const req: JsonRpcRequest = {jsonrpc: '2.0', id, method, params};
 
-			const timeout = setTimeout(() => {
+			const timeout = window.setTimeout(() => {
 				if (handle.pending.has(id)) {
 					handle.pending.delete(id);
 					reject(new Error(`MCP request "${method}" (id: ${id}) timed out after ${timeoutMs}ms`));
@@ -255,11 +255,11 @@ export class McpBridgeSession {
 
 			handle.pending.set(id, {
 				resolve: (r) => {
-					clearTimeout(timeout);
+					window.clearTimeout(timeout);
 					resolve(r);
 				},
 				reject: (e) => {
-					clearTimeout(timeout);
+					window.clearTimeout(timeout);
 					reject(e);
 				},
 			});
@@ -267,7 +267,7 @@ export class McpBridgeSession {
 			const line = JSON.stringify(req) + '\n';
 			handle.process.stdin.write(line, (err) => {
 				if (err) {
-					clearTimeout(timeout);
+					window.clearTimeout(timeout);
 					handle.pending.delete(id);
 					reject(err);
 				}

@@ -414,7 +414,7 @@ export function scanVaultStructure(
 	app: App,
 ): {name: string; fileCount: number}[] {
 	const root = app.vault.getRoot();
-	const excluded = new Set([normalizePath(SYNAPSE_FOLDER), '.obsidian', '.trash']);
+	const excluded = new Set([normalizePath(SYNAPSE_FOLDER), app.vault.configDir, '.trash']);
 
 	return root.children
 		.filter((child): child is TFolder =>

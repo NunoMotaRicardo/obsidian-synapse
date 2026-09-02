@@ -76,7 +76,7 @@ export class UserInputModal extends Modal {
 			});
 
 			// Auto-focus the textarea
-			setTimeout(() => input.focus(), 50);
+			window.setTimeout(() => input.focus(), 50);
 		}
 	}
 

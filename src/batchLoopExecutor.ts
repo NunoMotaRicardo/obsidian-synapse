@@ -21,6 +21,7 @@ import {ensureFolder} from './configWriter';
 import type {Budget, BudgetUsage} from './budget';
 import {parseBudgetInput as parseBudgetInputShared, describeBudget, budgetExceeded} from './budget';
 import {lockManager} from './lockManager';
+import {debugTrace} from './debug';
 import {BatchLoopProgressModal} from './modals/batchLoopProgressModal';
 import {VaultScopeModal} from './modals/vaultScopeModal';
 import {UserInputModal} from './modals/userInputModal';
@@ -183,7 +184,10 @@ async function appendBlockToReport(plugin: SynapsePlugin, block: string): Promis
 		if (!exists) {
 			await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
 		} else {
-			const tfile = app.vault.getAbstractFileByPath(reportPath) as TFile;
+			const tfile = app.vault.getAbstractFileByPath(reportPath);
+			if (!(tfile instanceof TFile)) {
+				throw new Error(`[synapse] Batch loop report path is not a file: ${reportPath}`);
+			}
 			const current = await app.vault.read(tfile);
 			await app.vault.modify(tfile, `${current}\n${block}\n`);
 		}
@@ -253,7 +257,7 @@ async function runOnFile(
 		abortController,
 		onEvent: onResult ? (msg) => {
 			if (msg.type === 'result') {
-				onResult(msg as SDKResultMessage);
+				onResult(msg);
 			}
 		} : undefined,
 	});
@@ -453,7 +457,7 @@ export async function runBatchLoop(
 			});
 			await appendToReport(plugin, filePath, result);
 			processed++;
-			console.log(`[synapse] Batch loop processed ${filePath} (${index}/${total})`);
+			debugTrace(`[synapse] Batch loop processed ${filePath} (${index}/${total})`);
 			// Report again with post-file usage so a live UI reflects this
 			// file's cost/tokens without waiting for the next file to start.
 			onProgress?.({index, total, filePath, phase: 'done'}, {...usage});
@@ -511,7 +515,7 @@ export function launchBatchLoop(plugin: SynapsePlugin): void {
 
 			const filePaths = resolveScopeToFiles(plugin.app, paths);
 			if (filePaths.length === 0) {
-				new Notice('Synapse: selected scope contains no markdown files.');
+				new Notice('Synapse: selected scope contains no Markdown files.');
 				return;
 			}
 

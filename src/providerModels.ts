@@ -20,7 +20,11 @@ export interface LocalTool {
 export type ProviderPreset = 'openai' | 'azure' | 'anthropic' | 'ollama' | 'foundry-local' | 'other-openai';
 
 export interface ProviderConfigOptions {
-	preset: ProviderPreset | string;
+	// `(string & {})` (not bare `string`) keeps editor autocomplete for the known
+	// ProviderPreset literals while still accepting arbitrary strings — a bare
+	// `string` union collapses the literals and loses that (and trips
+	// @typescript-eslint/no-redundant-type-constituents).
+	preset: ProviderPreset | (string & {});
 	baseUrl: string;
 	apiKey?: string;
 	bearerToken?: string;
@@ -169,11 +173,12 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 			if (!res.ok) {
 				return {ok: false, error: `HTTP ${res.status} ${res.statusText}`};
 			}
-			const data = (await res.json()) as {
-				data?: Array<{id?: string; name?: string}>;
-			};
+			type ModelListItem = {id?: string; name?: string};
+			const data = (await res.json()) as {data?: ModelListItem[]} | ModelListItem[];
 
-			const rawModels = Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+			const rawModels: ModelListItem[] = !Array.isArray(data) && Array.isArray(data.data)
+				? data.data
+				: Array.isArray(data) ? data : [];
 			const models: ModelInfo[] = [];
 
 			for (const item of rawModels) {
@@ -428,7 +433,7 @@ export async function executeLocalProviderQuery(
 						console.error(`Synapse: failed to parse arguments for tool ${toolName}:`, e);
 					}
 				} else if (typeof rawArgs === 'object' && rawArgs !== null) {
-					args = rawArgs as Record<string, unknown>;
+					args = rawArgs;
 				}
 
 				let result: string;

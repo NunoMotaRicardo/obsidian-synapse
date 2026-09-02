@@ -442,7 +442,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.unsubscribeEvents();
 
 		// Save chat DOM into a DocumentFragment for fast restore
-		const fragment = document.createDocumentFragment();
+		const fragment = createFragment();
 		while (this.chatContainer.firstChild) {
 			fragment.appendChild(this.chatContainer.firstChild);
 		}
@@ -482,7 +482,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.activeSessions.set(this.currentSessionId, bg);
 
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		this.lastFullRenderLen = 0;
@@ -601,7 +601,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				if (bg.turnStartTime === 0) bg.turnStartTime = Date.now();
 			}),
 			session.on('assistant.reasoning_delta', (event) => {
-				bg.streamingReasoning += event.data.deltaContent;
+				// event.data is Record<string, unknown> (SessionEvent); the producer
+				// (agentService.ts) always sets deltaContent to a string.
+				if (typeof event.data.deltaContent === 'string') {
+					bg.streamingReasoning += event.data.deltaContent;
+				}
 				bg.reasoningComplete = false;
 			}),
 			session.on('assistant.reasoning', (event) => {
@@ -774,7 +778,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// Clear UI for the new session
 		this.messages = [];
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		this.streamingContent = '';

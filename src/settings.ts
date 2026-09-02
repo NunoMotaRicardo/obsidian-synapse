@@ -194,8 +194,10 @@ const SECURE_PREFIX = 'synapse-secure-';
 
 /** Load a secure field from vault-specific local storage. */
 export function loadSecureField(app: App, key: string): string {
-	const stored = app.loadLocalStorage(SECURE_PREFIX + key);
-	return stored != null ? String(stored) : '';
+	// loadLocalStorage() is typed `any | null` in obsidian.d.ts; narrow to unknown.
+	// saveSecureField() below only ever stores a string or null, so this is safe.
+	const stored: unknown = app.loadLocalStorage(SECURE_PREFIX + key);
+	return typeof stored === 'string' ? stored : '';
 }
 
 /** Save a secure field to vault-specific local storage. */
@@ -430,7 +432,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(claudePanel)
 			.setName('Claude CLI location')
-			.setDesc('Custom path to the claude CLI binary. Leave blank to auto-detect.')
+			.setDesc('Custom path to the Claude CLI binary. Leave blank to auto-detect.')
 			.addText(text => text
 				.setPlaceholder('Auto-detect')
 				.setValue(this.plugin.settings.claudeLocation)
@@ -703,7 +705,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 						.setName(`Agent: ${agent.name}`)
 						.setDesc(`${agent.description || 'Custom vault agent'} (${agent.filePath})`)
 						.addText(text => text
-							.setPlaceholder('e.g. sonnet')
+							.setPlaceholder('e.g. Sonnet')
 							.setValue(agent.model || '')
 							.onChange(async (val) => {
 								await updateAgentModelFile(this.app, agent.filePath, val);
@@ -941,7 +943,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				updateStatusDisplay(`Connected as @${this.plugin.telegramBot!.botUsername}`);
 				headingSetting.addButton(button => button
 					.setButtonText('Disconnect')
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						button.setDisabled(true);
 						button.setButtonText('Disconnecting…');
@@ -1065,7 +1067,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				}));
 
 		panel.createEl('p', {
-			text: 'Triggers fire automatically in response to vault events or on a schedule. Each trigger is a markdown file in _synapse/triggers/.',
+			text: 'Triggers fire automatically in response to vault events or on a schedule. Each trigger is a Markdown file in _synapse/triggers/.',
 			cls: 'setting-item-description',
 		});
 

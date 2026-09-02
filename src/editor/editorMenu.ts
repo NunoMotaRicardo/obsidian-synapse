@@ -362,8 +362,11 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 
 		// Validate that content is valid JSON with nodes array
 		try {
-			const parsed = JSON.parse(content);
-			if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+			const parsed: unknown = JSON.parse(content);
+			if (
+				typeof parsed !== 'object' || parsed === null ||
+				!('nodes' in parsed) || !Array.isArray((parsed as {nodes?: unknown}).nodes)
+			) {
 				throw new Error('Missing nodes array');
 			}
 			content = JSON.stringify(parsed, null, '\t');
@@ -572,7 +575,7 @@ function buildEditorImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile, em
 			.onClick(() => void extractAndInsertBelow(plugin, file, embed)),
 	);
 	menu.addItem((item) =>
-		item.setTitle('Convert to mermaid below')
+		item.setTitle('Convert to Mermaid below')
 			.setIcon('git-fork')
 			.onClick(() => void convertToMermaidBelow(plugin, file, embed)),
 	);
@@ -670,7 +673,7 @@ function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 				.onClick(() => void extractAndReplace(plugin, file)),
 		);
 		submenu.addItem((si) =>
-			si.setTitle('Convert to mermaid diagram below')
+			si.setTitle('Convert to Mermaid diagram below')
 				.setIcon('git-fork')
 				.onClick(() => void convertToMermaidBelow(plugin, file)),
 		);

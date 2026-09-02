@@ -11,9 +11,13 @@
 // Electron's global AbortSignal does not inherit from Node's internal EventTarget/EventEmitter,
 // causing events.setMaxListeners(n, signal) inside the Agent SDK to throw ERR_INVALID_ARG_TYPE.
 try {
-	const nodeReq = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+	const nodeReq = typeof window.require === 'function' ? window.require : undefined;
 	const events = nodeReq?.('node:events') as typeof import('node:events') | undefined;
 	if (events && typeof events.setMaxListeners === 'function') {
+		// Intentionally extracted so the wrapper below can call it via `.apply(this,
+		// ...)`, which re-binds `this` to whatever `events.setMaxListeners(...)` is
+		// called on — the rule can't verify that manual rebinding.
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- see comment above
 		const origSetMaxListeners = events.setMaxListeners;
 		events.setMaxListeners = function(n: number, ...eventTargets: unknown[]) {
 			try {
@@ -55,13 +59,17 @@ import type {
 	EffortLevel,
 	ModelInfo as SDKModelInfo,
 } from '@anthropic-ai/claude-agent-sdk';
+// zod is a transitive dependency of @anthropic-ai/claude-agent-sdk; declaring it
+// directly in package.json is a dependency-manifest change out of scope for this
+// lint-only fix. Follow-up: add zod as an explicit devDependency/dependency (#115).
+// eslint-disable-next-line import/no-extraneous-dependencies -- see comment above
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel} from './providerModels';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
-const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
 
 /** Local SDK plugin configuration for discovery. */
 export interface SdkPluginConfig {
@@ -214,10 +222,10 @@ export async function sendAndWaitWithAbort<T>(
 		}
 	}
 
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 	let timedOut = false;
 	if (options?.timeoutMs && options.timeoutMs > 0) {
-		timer = setTimeout(() => {
+		timer = window.setTimeout(() => {
 			timedOut = true;
 			controller.abort();
 		}, options.timeoutMs);
@@ -234,7 +242,7 @@ export async function sendAndWaitWithAbort<T>(
 		throw e;
 	} finally {
 		if (timer) {
-			clearTimeout(timer);
+			window.clearTimeout(timer);
 		}
 		if (options?.signal && onExternalAbort) {
 			options.signal.removeEventListener('abort', onExternalAbort);
@@ -612,7 +620,7 @@ export class AgentService {
 						env: this.buildEnv(),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						abortController: controller,
-					} as Options),
+					}),
 				});
 
 				const text = await this.collectText(stream);
@@ -702,14 +710,14 @@ export class AgentService {
 						...(options.resume ? {resume: options.resume} : {}),
 						...(options.cwd ? {cwd: options.cwd} : {}),
 						abortController: controller,
-					} as Options),
+					}),
 				});
 
 				let sessionId = '';
 				const textParts: string[] = [];
 
 				for await (const msg of stream) {
-					const sdkMsg = msg as SDKMessage;
+					const sdkMsg = msg;
 
 					// Capture session ID from any message that has one
 					if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string') {
@@ -723,7 +731,7 @@ export class AgentService {
 
 					// Collect text from assistant messages
 					if (sdkMsg.type === 'assistant') {
-						const assistantMsg = sdkMsg as SDKAssistantMessage;
+						const assistantMsg = sdkMsg;
 						for (const block of assistantMsg.message.content) {
 							if (block.type === 'text') {
 								textParts.push(block.text);
@@ -808,9 +816,9 @@ export class AgentService {
 		const textParts: string[] = [];
 
 		for await (const msg of stream) {
-			const sdkMsg = msg as SDKMessage;
+			const sdkMsg = msg;
 			if (sdkMsg.type === 'assistant') {
-				const assistantMsg = sdkMsg as SDKAssistantMessage;
+				const assistantMsg = sdkMsg;
 				for (const block of assistantMsg.message.content) {
 					if (block.type === 'text') {
 						textParts.push(block.text);
@@ -1077,7 +1085,7 @@ export class Session {
 				});
 
 				for await (const msg of stream) {
-					const sdkMsg = msg as SDKMessage;
+					const sdkMsg = msg;
 
 					// Capture session ID — announce it the first time so the view can
 					// name the session and update the sidebar (the id is unknown at
@@ -1147,7 +1155,7 @@ export class Session {
 	private convertToSessionEvent(msg: SDKMessage): SessionEvent | null {
 		switch (msg.type) {
 			case 'assistant': {
-				const assistantMsg = msg as SDKAssistantMessage;
+				const assistantMsg = msg;
 				// Emit turn_start
 				this.dispatch({type: 'assistant.turn_start', data: {}});
 				// Emit text content as message events
@@ -1222,7 +1230,7 @@ export class Session {
 				return null;
 			}
 			case 'result': {
-				const resultMsg = msg as SDKResultMessage;
+				const resultMsg = msg;
 				// Surface the run's total dollar cost, once known (issue #88). Anthropic
 				// only reports total_cost_usd on this terminal message — after every turn
 				// of the run has already completed — so this cannot drive true in-flight

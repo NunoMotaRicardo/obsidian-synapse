@@ -1,6 +1,6 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {SessionConfig, SessionMetadata} from '../agentService';
+import type {SessionConfig} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
@@ -388,7 +388,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 				sessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as SessionMetadata);
+			});
 		}
 		this.renderSessionList();
 
@@ -403,9 +403,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		try {
 			// Strip markdown fences if present
 			const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-			const parsed = JSON.parse(cleaned);
+			const parsed: unknown = JSON.parse(cleaned);
 			// Handle both single object and array responses
-			results = Array.isArray(parsed) ? parsed : [parsed];
+			results = (Array.isArray(parsed) ? parsed : [parsed]) as typeof results;
 		} catch {
 			// If not valid JSON, show the raw response
 			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: content || 'No results found.'});

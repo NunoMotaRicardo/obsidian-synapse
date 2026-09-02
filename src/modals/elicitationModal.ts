@@ -57,7 +57,7 @@ export class ElicitationModal extends Modal {
 			const required = new Set(schema.required ?? []);
 
 			for (const [key, field] of Object.entries(schema.properties)) {
-				this.renderField(formEl, key, field as ElicitationSchemaField, required.has(key));
+				this.renderField(formEl, key, field, required.has(key));
 			}
 		}
 
@@ -228,7 +228,7 @@ export class ElicitationModal extends Modal {
 			const row = list.createDiv({cls: 'synapse-elicitation-check-row'});
 			const cb = row.createEl('input', {type: 'checkbox'});
 			cb.checked = defaults.has(opt.value);
-			row.createEl('span', {text: opt.label});
+			row.createSpan({text: opt.label});
 			cb.addEventListener('change', () => {
 				if (cb.checked) selected.add(opt.value);
 				else selected.delete(opt.value);

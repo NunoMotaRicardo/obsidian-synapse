@@ -10,6 +10,7 @@ import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
 import {TriggerWatcher, TriggerScheduler} from './triggers';
 import {launchBatchLoop} from './batchLoopExecutor';
+import {debugTrace} from './debug';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -228,7 +229,7 @@ export default class SynapsePlugin extends Plugin {
 			},
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
-				console.log(`Synapse: Claude CLI v${info.version} at ${info.path}`);
+				debugTrace(`Synapse: Claude CLI v${info.version} at ${info.path}`);
 			},
 		});
 		if (s.providerBaseUrl) {
@@ -276,9 +277,10 @@ export default class SynapsePlugin extends Plugin {
 			}
 
 			for (const suffix of suffixes) {
-				const oldValue = this.app.loadLocalStorage(oldPrefix + suffix);
+				// loadLocalStorage() is typed `any | null` in obsidian.d.ts; narrow to unknown.
+				const oldValue: unknown = this.app.loadLocalStorage(oldPrefix + suffix);
 				if (oldValue != null) {
-					const existing = this.app.loadLocalStorage(newPrefix + suffix);
+					const existing: unknown = this.app.loadLocalStorage(newPrefix + suffix);
 					if (existing == null) {
 						this.app.saveLocalStorage(newPrefix + suffix, oldValue);
 					}

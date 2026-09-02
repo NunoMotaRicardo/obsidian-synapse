@@ -1,10 +1,11 @@
 import tseslint from 'typescript-eslint';
 import globals from "globals";
 import { globalIgnores } from "eslint/config";
+import obsidianmd from "eslint-plugin-obsidianmd";
 
 /** Known brand names / acronyms that should NOT be lowercased. */
 const ALLOWED_UPPERCASE = new Set([
-	'Sidekick', 'Copilot', 'Claude', 'Brain', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
+	'Claude', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
 	'MCP', 'CLI', 'JSON', 'YAML', 'HTML', 'CSS', 'UI', 'ID',
 	'Settings', 'Community', 'Enter', 'Ollama', 'OpenAI', 'BYOK',
 ]);
@@ -53,7 +54,27 @@ function isSentenceCase(text: string): boolean {
 }
 
 export default tseslint.config(
-	...tseslint.configs.recommended,
+	// obsidianmd's recommended config already includes eslint core recommended
+	// and typescript-eslint's type-checked recommended rules, so we don't add
+	// tseslint.configs.recommended separately (per the plugin's README).
+	...obsidianmd.configs.recommended,
+	{
+		// obsidianmd's recommended config enables type-checked rules for every
+		// *.{ts,mts,...} file, including this config file itself — give the
+		// parser project-service info here too (not just under src/**/*.ts).
+		languageOptions: {
+			parserOptions: {
+				projectService: {
+					allowDefaultProject: [
+						'eslint.config.mts',
+						'manifest.json',
+						'vitest.config.ts',
+					],
+				},
+				tsconfigRootDir: import.meta.dirname,
+			},
+		},
+	},
 	{
 		files: ['src/**/*.ts'],
 		plugins: {
@@ -76,7 +97,7 @@ export default tseslint.config(
 							/** Report a Literal node if its value is not sentence case. */
 							function checkLiteral(node: { type?: string; value?: unknown }) {
 								if (node?.type === 'Literal' && typeof node.value === 'string' && !isSentenceCase(node.value)) {
-									context.report({ node: node as unknown as never, messageId: 'notSentenceCase', data: { text: node.value } });
+									context.report({ node: node, messageId: 'notSentenceCase', data: { text: node.value } });
 								}
 							}
 
@@ -160,6 +181,67 @@ export default tseslint.config(
 		rules: {
 			'synapse-custom/ui-sentence-case': 'error',
 			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+			// obsidianmd's own sentence-case rule doesn't know the plugin's own name and
+			// flags correctly-capitalized "Synapse" in UI copy ("Chat with Synapse", "Open
+			// Synapse") as a violation. `brands`/`acronyms` *replace* the rule's own default
+			// lists rather than extend them (confirmed against its source), so these are
+			// copies of eslint-plugin-obsidianmd@0.4.2's DEFAULT_BRANDS/DEFAULT_ACRONYMS
+			// (src/lib/rules/ui/brands.ts, acronyms.ts) plus this plugin's own terms
+			// ('Synapse', 'Ollama', 'Sonnet', 'BYOK', 'USD'). Only proper nouns belong in
+			// `brands` — generic words like "Agent"/"Enter"/"Settings" (from our own
+			// ALLOWED_UPPERCASE list above) caused false positives mid-sentence when tried.
+			'obsidianmd/ui/sentence-case': ['warn', {
+				enforceCamelCaseLower: true,
+				brands: [
+					'iOS', 'iPadOS', 'macOS', 'Windows', 'Android', 'Linux',
+					'Obsidian', 'Obsidian Sync', 'Obsidian Publish',
+					'Google', 'Gemini', 'Vertex AI', 'OpenAI', 'GPT', 'Anthropic', 'Claude', 'Cursor', 'Microsoft',
+					'Google Drive', 'Dropbox', 'OneDrive', 'iCloud Drive',
+					'YouTube', 'Slack', 'Discord', 'Telegram', 'WhatsApp', 'Twitter', 'X',
+					'Readwise', 'Zotero',
+					'Excalidraw', 'Mermaid',
+					'Markdown', 'LaTeX', 'JavaScript', 'TypeScript', 'Node.js',
+					'npm', 'pnpm', 'Yarn', 'Git', 'GitHub', 'GitLab',
+					'Anki', 'CalDAV', 'CardDAV', 'Evernote', 'IntelliJ IDEA', 'Jekyll', 'Logseq', 'Notion',
+					'PyCharm', 'React', 'Reddit', 'Roam Research', 'Svelte', 'VS Code', 'Visual Studio Code',
+					'WebDAV', 'WebStorm',
+					// Synapse-specific additions:
+					'Synapse', 'Ollama', 'Sonnet',
+				],
+				acronyms: [
+					'API', 'HTTP', 'HTTPS', 'URL', 'DNS', 'TCP', 'IP', 'SSH', 'TLS', 'SSL', 'FTP', 'SFTP', 'SMTP',
+					'JSON', 'XML', 'HTML', 'CSS', 'PDF', 'CSV', 'YAML', 'SQL', 'PNG', 'JPG', 'JPEG', 'GIF', 'SVG',
+					'2FA', 'MFA', 'OAuth', 'JWT', 'LDAP', 'SAML',
+					'SDK', 'IDE', 'CLI', 'GUI', 'CRUD', 'SOAP',
+					'CPU', 'GPU', 'RAM', 'SSD', 'USB',
+					'UI', 'OK',
+					'RSS', 'S3',
+					'ID',
+					'UUID', 'GUID', 'SHA', 'MD5', 'ASCII', 'UTF-8', 'UTF-16', 'DOM', 'CDN', 'FAQ', 'AI', 'ML', 'LLM',
+					// Synapse-specific additions:
+					'BYOK', 'USD', 'MCP',
+				],
+				// Whole strings to exempt entirely — these contain literal, case-sensitive
+				// shell commands / key-format placeholders, not prose, so sentence case
+				// doesn't apply (obsidianmd/* rules can't be disabled via inline comments —
+				// see eslint-comments/no-restricted-disable in its recommended config).
+				ignoreRegex: [
+					'sk-ant-', // Anthropic API key placeholder format
+					'claude login', // literal CLI command
+					'ollama serve', // literal CLI command
+					'ollama pull', // literal CLI command
+					'^Feature -> Agent map$', // setting name — "Agent" is this plugin's own
+					// domain term (matches synapse-custom/ui-sentence-case's ALLOWED_UPPERCASE
+					// above), not a word the rule's brand dictionary knows about
+					'^e\\.g\\.', // lowercase "e.g." lead-in — matches our own hand-rolled
+					// synapse-custom/ui-sentence-case rule's convention above
+					'^Custom request timeout in seconds\\. 0 ', // "0 uses…" — a numeral can't
+					// itself be capitalized, and forcing the next word up ("0 Uses…") reads
+					// worse than natural lowercase continuation
+					'_synapse/triggers/', // literal (lowercase) vault folder path, not prose —
+					// the rule's suggested fix would incorrectly capitalize it to "_Synapse/…"
+				],
+			}],
 		},
 		languageOptions: {
 			globals: {
@@ -168,13 +250,88 @@ export default tseslint.config(
 			parserOptions: {
 				projectService: {
 					allowDefaultProject: [
-						'eslint.config.js',
-						'manifest.json'
+						'eslint.config.mts',
+						'manifest.json',
+						'vitest.config.ts',
 					]
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.json']
 			},
+		},
+	},
+	{
+		// test/** runs under vitest's `node` environment (see vitest.config.ts), not
+		// inside Obsidian's Electron renderer — `window` doesn't exist there, so the
+		// obsidianmd rules that assume a browser/popout-window context don't apply.
+		files: ['test/**/*.ts'],
+		rules: {
+			'obsidianmd/prefer-window-timers': 'off',
+			'obsidianmd/no-global-this': 'off',
+		},
+	},
+	{
+		// test/setup.ts is a vi.mock() scaffold reproducing the shape of the Obsidian API
+		// (App/Plugin/Setting/Modal/etc.) purely for test wiring — `any` here is the
+		// correct, deliberate type for constructor args/callbacks that mirror Obsidian's
+		// own loosely-typed surface, not a mistake to fix. (@typescript-eslint/no-explicit-any
+		// can't be disabled via inline comment — see eslint-comments/no-restricted-disable.)
+		files: ['test/setup.ts'],
+		rules: {
+			'@typescript-eslint/no-explicit-any': 'off',
+			'@typescript-eslint/no-unsafe-assignment': 'off',
+		},
+	},
+	{
+		files: ['src/main.ts'],
+		rules: {
+			// Renaming command IDs (drop the "synapse-"/plugin-id prefix) needs a migration
+			// path — CLAUDE.md: "Don't rename command IDs ... without a migration path"
+			// (existing hotkey bindings and any automation keyed on the id would break).
+			// Renaming command *names* and removing default hotkeys are real user-facing
+			// UX changes (a previously-set keybinding would silently stop existing), not
+			// mechanical lint fixes. All three need a deliberate product decision — left
+			// as-is here; see #115 for follow-up.
+			'obsidianmd/commands/no-plugin-id-in-command-id': 'off',
+			'obsidianmd/commands/no-plugin-name-in-command-name': 'off',
+			'obsidianmd/commands/no-default-hotkeys': 'off',
+		},
+	},
+	{
+		files: ['src/settings.ts'],
+		rules: {
+			// 7 findings here, each a fixed-pixel inline style (narrow numeric input
+			// widths, description-text margins) that would need matching CSS classes
+			// added to styles.css. settings.ts is being actively restructured on a
+			// concurrent branch (removing dead UI controls) — a broad multi-line/
+			// multi-file styling refactor here risks a merge collision for no safety
+			// benefit (these are static, not user-controlled, values). Left as-is;
+			// see #115 for follow-up.
+			'obsidianmd/no-static-styles-assignment': 'off',
+		},
+	},
+	{
+		files: ['src/providerModels.ts'],
+		rules: {
+			// This module's fetch() calls talk to user-configured local/BYOK provider base
+			// URLs (Ollama, OpenAI-compatible endpoints, Azure, Anthropic-compatible) —
+			// requestUrl() has different semantics (buffers the whole response instead of
+			// streaming, different error/CORS behavior) that would need real verification
+			// against each provider shape, not a blind lint-driven swap. Left as-is here;
+			// see #115 for follow-up.
+			'no-restricted-globals': 'off',
+		},
+	},
+	{
+		files: ['src/configWriter.ts'],
+		rules: {
+			// deleteArtifact() intentionally always uses Obsidian's local .trash folder
+			// (vault.trash(file, false)), not the user's system trash preference — this is
+			// the plugin deleting its own generated artifact files (not user notes), and
+			// switching to FileManager.trashFile() would change that behavior (deferring to
+			// the "Deleted files" setting instead). Needs its own design/verification pass,
+			// not a blind lint-driven swap — left as-is here; see #115 for follow-up.
+			'obsidianmd/prefer-file-manager-trash-file': 'off',
 		},
 	},
 	globalIgnores([
