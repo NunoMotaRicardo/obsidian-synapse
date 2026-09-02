@@ -1070,6 +1070,14 @@ export class Session {
 	private abortController: AbortController | null = null;
 	/** The in-flight query's `Query` handle, tracked so `abort()` can try a graceful `interrupt()` first. */
 	private currentQuery: Query | null = null;
+	/**
+	 * Set once `abort()`'s `Query.interrupt()` call resolves for the in-flight `send()`. The CLI
+	 * doesn't always end an interrupted turn with a clean, silent abort the way a hard
+	 * `AbortController.abort()` does — it can surface the interruption as a thrown "error result"
+	 * from the stream (`Claude Code returned an error result`). `send()`'s catch treats that the
+	 * same as the `AbortError` case (expected, not a failure to report) whenever this is set.
+	 */
+	private userInterruptRequested = false;
 	private handlers: Map<string, SessionEventHandler[]> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
@@ -1141,6 +1149,7 @@ export class Session {
 	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
+		this.userInterruptRequested = false;
 
 		try {
 			await sendAndWaitWithAbort(async (ctrl) => {
@@ -1221,10 +1230,17 @@ export class Session {
 				// User aborted — this is expected
 				return;
 			}
+			if (this.userInterruptRequested) {
+				// The CLI surfaced the graceful interrupt() as a thrown "error result" rather
+				// than a clean AbortError — still an expected, user-initiated stop, not a
+				// failure to report (see the field comment on userInterruptRequested).
+				return;
+			}
 			this.dispatch({type: 'session.error', data: {error: e instanceof Error ? e.message : String(e)}});
 			throw e;
 		} finally {
 			this.abortController = null;
+			this.userInterruptRequested = false;
 		}
 	}
 
@@ -1249,6 +1265,7 @@ export class Session {
 		if (query) {
 			try {
 				await query.interrupt();
+				this.userInterruptRequested = true;
 				return;
 			} catch {
 				// Fall through to the forced abort below.

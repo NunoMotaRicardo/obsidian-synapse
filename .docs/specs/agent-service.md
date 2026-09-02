@@ -292,6 +292,15 @@ partial-message sends, zero `TypeError` on mid-stream interrupts via the gracefu
 `TypeError` with `globalThis.setTimeout` confirmed patched-then-restored when `interrupt()` is
 forced to fail (exercising the fallback).
 
+**`userInterruptRequested`:** unlike a hard `AbortController.abort()` — which the SDK always
+surfaces to `send()`'s `for await` loop as a clean `AbortError` — a graceful `Query.interrupt()`
+doesn't guarantee the interrupted turn ends silently; the CLI can end it with a thrown "error
+result" (`Claude Code returned an error result`) instead. Session tracks
+`userInterruptRequested` (set when `abort()`'s `interrupt()` call resolves, cleared at the start/end
+of each `send()`) so that case is treated the same as `AbortError` in `send()`'s catch — an
+expected, user-initiated stop, not a `session.error` to dispatch or rethrow. Verified: interrupting
+mid-stream no longer surfaces a `[synapse] Send error` console message or an in-chat error bubble.
+
 ## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate` (issue #87)
 
 Claude Code surfaces its running plan through a tool call rather than a dedicated SDK event —
