@@ -22,6 +22,12 @@ declare const process: {
 	cwd(): string;
 };
 
+// Baked in at build time by esbuild.config.mjs from the installed
+// `@anthropic-ai/claude-agent-sdk` package.json — see the comment there.
+// Not defined outside the esbuild bundle (e.g. under vitest), hence the
+// `typeof` guard rather than a bare reference.
+declare const __SYNAPSE_SDK_VERSION__: string;
+
 /** Which step of the resolution chain produced the resolved binary path. */
 export type CliPathSource =
 	| 'settings'
@@ -34,7 +40,51 @@ export interface ResolvedCliPath {
 	path: string;
 	source: CliPathSource;
 	version?: string;
-	protocolVersion?: string;
+}
+
+/**
+ * Version of `@anthropic-ai/claude-agent-sdk` this build was bundled against.
+ * Compared against the resolved CLI's own `--version` output to detect skew —
+ * see `getVersionSkewWarning()`. Falls back to `'unknown'` when the define
+ * isn't present (e.g. running under vitest instead of the esbuild bundle).
+ */
+export const BUNDLED_SDK_VERSION: string =
+	typeof __SYNAPSE_SDK_VERSION__ !== 'undefined' ? __SYNAPSE_SDK_VERSION__ : 'unknown';
+
+/**
+ * Extract the trailing numeric component of a dotted version string, e.g.
+ * "2.1.258" -> 258. The `claude` CLI (`@anthropic-ai/claude-code`, currently
+ * a `2.x` line) and the `@anthropic-ai/claude-agent-sdk` JS package (a `0.3.x`
+ * line) are released from the same pipeline and share this trailing build
+ * number even though their major.minor differ — it's the only part of the
+ * two version schemes that's meaningfully comparable.
+ */
+function trailingBuildNumber(version: string): number | null {
+	const parts = version.trim().split('.');
+	const last = parts[parts.length - 1];
+	if (!last) return null;
+	const n = Number.parseInt(last, 10);
+	return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Compare the resolved CLI's version against the bundled SDK version and
+ * return a non-blocking, human-readable skew warning, or `null` when they're
+ * in sync (or a version couldn't be parsed). A newer CLI is normal — the
+ * binary self-updates independently of the plugin — so this never blocks
+ * anything, it's purely informational for the settings UI.
+ */
+export function getVersionSkewWarning(cliVersion: string, sdkVersion: string = BUNDLED_SDK_VERSION): string | null {
+	if (cliVersion === 'unknown' || sdkVersion === 'unknown') return null;
+	const cliBuild = trailingBuildNumber(cliVersion);
+	const sdkBuild = trailingBuildNumber(sdkVersion);
+	if (cliBuild === null || sdkBuild === null) return null;
+	const diff = cliBuild - sdkBuild;
+	if (diff === 0) return null;
+	if (diff > 0) {
+		return `CLI (${cliVersion}) is ${diff} release${diff === 1 ? '' : 's'} ahead of the bundled SDK (${sdkVersion}). This is expected — the CLI self-updates — but newer CLI capabilities may not be exposed yet.`;
+	}
+	return `Bundled SDK (${sdkVersion}) is ${-diff} release${diff === -1 ? '' : 's'} ahead of the installed CLI (${cliVersion}). Consider updating the Claude CLI.`;
 }
 
 /**
@@ -179,7 +229,7 @@ function isSafeBinaryPath(binaryPath: string): boolean {
  * Security: `binaryPath` is validated by `isSafeBinaryPath` before execution.
  * Only absolute paths with expected binary extensions are accepted.
  */
-export async function getCliVersion(binaryPath: string): Promise<{version: string; protocolVersion?: string}> {
+export async function getCliVersion(binaryPath: string): Promise<{version: string}> {
 	// Validate the path before executing to guard against user-controlled input
 	// (claudeLocation setting) being passed to a subprocess.
 	if (!isSafeBinaryPath(binaryPath)) {
@@ -196,10 +246,7 @@ export async function getCliVersion(binaryPath: string): Promise<{version: strin
 			// E.g. "2.1.195 (Claude Code)" -> "2.1.195"
 			const match = trimmed.match(/(\d+\.\d+\.\d+)/);
 			const version = match ? match[1]! : trimmed;
-			// Protocol version is a fixed constant for Claude Agent SDK (protocol 1).
-			// The claude CLI --version output does not include a protocol version;
-			// this value should be updated if the SDK protocol changes.
-			resolve({version, protocolVersion: '1'});
+			resolve({version});
 		});
 	});
 }

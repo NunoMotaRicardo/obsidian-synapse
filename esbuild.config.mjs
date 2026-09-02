@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const banner =
 `/*
@@ -11,6 +13,14 @@ var __import_meta_url__ = typeof __filename !== 'undefined' ? require('url').pat
 `;
 
 const prod = (process.argv[2] === "production");
+
+// The bundled SDK version is baked in at build time (as opposed to read from
+// node_modules at runtime) because only main.js/manifest.json/styles.css are
+// deployed to the vault -- node_modules never ships with the plugin. This is
+// compared against the resolved CLI's own --version output to surface a
+// non-blocking skew warning in Settings -> Claude (see src/runtimeManager.ts).
+const sdkPkgPath = fileURLToPath(new URL('./node_modules/@anthropic-ai/claude-agent-sdk/package.json', import.meta.url));
+const sdkVersion = JSON.parse(readFileSync(sdkPkgPath, 'utf8')).version;
 
 const context = await esbuild.context({
 	banner: {
@@ -23,6 +33,7 @@ const context = await esbuild.context({
 		// `__import_meta_url__` to `pathToFileURL(__filename).href` so the polyfill
 		// works correctly. This define must stay paired with the banner shim.
 		'import.meta.url': '__import_meta_url__',
+		'__SYNAPSE_SDK_VERSION__': JSON.stringify(sdkVersion),
 	},
 	entryPoints: ["src/main.ts"],
 	bundle: true,

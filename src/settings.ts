@@ -3,6 +3,7 @@ import SynapsePlugin from "./main";
 import type {ContextTier} from "./agentService";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
+import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 
 /** Hardcoded vault folder for Synapse customization artifacts. */
 export const SYNAPSE_FOLDER = '_synapse';
@@ -442,8 +443,11 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		const cliStatusEl = claudePanel.createDiv({cls: 'setting-item-description'});
 		cliStatusEl.style.marginTop = '8px';
+		const cliSkewEl = claudePanel.createDiv({cls: 'setting-item-description mod-warning'});
+		cliSkewEl.style.marginTop = '4px';
 		const renderCliStatus = async () => {
 			cliStatusEl.empty();
+			cliSkewEl.empty();
 			if (this.plugin.agentService) {
 				try {
 					const resolved = await this.plugin.agentService.getVersionInfo();
@@ -456,9 +460,13 @@ export class SynapseSettingTab extends PluginSettingTab {
 					const sourceStr = sourceLabels[resolved.source] ?? resolved.source;
 					let infoStr = `Resolved CLI: ${resolved.path} (from ${sourceStr})`;
 					if (resolved.version) {
-						infoStr += ` \u2014 v${resolved.version}${resolved.protocolVersion ? `, protocol ${resolved.protocolVersion}` : ''}`;
+						infoStr += ` \u2014 v${resolved.version} (SDK v${BUNDLED_SDK_VERSION})`;
 					}
 					cliStatusEl.setText(infoStr);
+					if (resolved.version) {
+						const warning = getVersionSkewWarning(resolved.version);
+						if (warning) cliSkewEl.setText(`\u26a0 ${warning}`);
+					}
 				} catch {
 					cliStatusEl.setText('Resolved CLI: not found');
 				}

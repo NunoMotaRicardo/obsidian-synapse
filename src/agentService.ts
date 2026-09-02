@@ -191,7 +191,7 @@ export interface AuthConfig {
 	apiKey?: string;
 }
 
-export type VersionInfoCallback = (info: {version: string; protocolVersion?: string; path: string}) => void;
+export type VersionInfoCallback = (info: {version: string; path: string}) => void;
 
 /**
  * Executes a query/stream operation with active cancellation and optional timeout.
@@ -349,11 +349,9 @@ export class AgentService {
 			// Fire-and-forget version check to populate version info and trigger callback
 			void getCliVersion(resolved.path).then(v => {
 				resolved.version = v.version;
-				resolved.protocolVersion = v.protocolVersion;
 				if (this.onVersionInfo) {
 					this.onVersionInfo({
 						version: v.version,
-						protocolVersion: v.protocolVersion,
 						path: resolved.path,
 					});
 				}
@@ -373,9 +371,9 @@ export class AgentService {
 
 	/**
 	 * Resolve the CLI path and await its version info. Returns the resolved
-	 * path (with version/protocolVersion populated) after the version check
-	 * completes. Safe to call from the settings UI to get a stable, consistent
-	 * snapshot rather than relying on the fire-and-forget mutation in
+	 * path (with version populated) after the version check completes. Safe
+	 * to call from the settings UI to get a stable, consistent snapshot
+	 * rather than relying on the fire-and-forget mutation in
 	 * ensureConnected().
 	 *
 	 * Returns undefined in remote-only mode (not used by this plugin currently).
@@ -387,7 +385,6 @@ export class AgentService {
 		// Otherwise run the version check now and populate the shared object.
 		const v = await getCliVersion(resolved.path);
 		resolved.version = v.version;
-		resolved.protocolVersion = v.protocolVersion;
 		return resolved;
 	}
 
