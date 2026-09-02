@@ -1,10 +1,11 @@
 import tseslint from 'typescript-eslint';
 import globals from "globals";
 import { globalIgnores } from "eslint/config";
+import obsidianmd from "eslint-plugin-obsidianmd";
 
 /** Known brand names / acronyms that should NOT be lowercased. */
 const ALLOWED_UPPERCASE = new Set([
-	'Sidekick', 'Copilot', 'Claude', 'Brain', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
+	'Claude', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
 	'MCP', 'CLI', 'JSON', 'YAML', 'HTML', 'CSS', 'UI', 'ID',
 	'Settings', 'Community', 'Enter', 'Ollama', 'OpenAI', 'BYOK',
 ]);
@@ -53,7 +54,27 @@ function isSentenceCase(text: string): boolean {
 }
 
 export default tseslint.config(
-	...tseslint.configs.recommended,
+	// obsidianmd's recommended config already includes eslint core recommended
+	// and typescript-eslint's type-checked recommended rules, so we don't add
+	// tseslint.configs.recommended separately (per the plugin's README).
+	...obsidianmd.configs.recommended,
+	{
+		// obsidianmd's recommended config enables type-checked rules for every
+		// *.{ts,mts,...} file, including this config file itself — give the
+		// parser project-service info here too (not just under src/**/*.ts).
+		languageOptions: {
+			parserOptions: {
+				projectService: {
+					allowDefaultProject: [
+						'eslint.config.mts',
+						'manifest.json',
+						'vitest.config.ts',
+					],
+				},
+				tsconfigRootDir: import.meta.dirname,
+			},
+		},
+	},
 	{
 		files: ['src/**/*.ts'],
 		plugins: {
@@ -168,7 +189,7 @@ export default tseslint.config(
 			parserOptions: {
 				projectService: {
 					allowDefaultProject: [
-						'eslint.config.js',
+						'eslint.config.mts',
 						'manifest.json'
 					]
 				},
