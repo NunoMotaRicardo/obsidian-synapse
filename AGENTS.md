@@ -14,7 +14,7 @@ triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed
 
 ## Architecture
 
-Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
+Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules:
 
 - **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
   SDK types only via its re-exports.
@@ -29,7 +29,7 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
   list/view/create/edit`); `in-progress` label marks active work. Run `/synapse-build <#N |
   "description">` for the full plan→code→review→PR cycle, or `/synapse-lite "description"` for
   a quick one-pass change (still build/lint/deploy-test, opens a draft PR). See
-  `wiki/decisions/2026-06-14-github-issue-workflow.md`.
+  `.docs/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\` → reload
   (`obsidian plugin:reload id=synapse`). That vault is the user's real vault — deploy only
@@ -41,11 +41,11 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
 `.claude/agents/synapse-*.md` are Claude Code dev-workflow agents for *building* this
 plugin, orchestrated by `/synapse-build` and `/synapse-lite`:
 
-- **synapse-analyst** — synthesizes `grill-me` sessions and librarian work into `wiki/`
-  (decision records, guides). Hands functional intent to the planner.
-- **synapse-technical-planner** — entry point of `/synapse-build`: audits `specs/`/`src/`
+- **synapse-analyst** — synthesizes `grill-me` sessions and librarian work into `.docs/decisions/`
+  (decision records) and `wiki/` (guides). Hands functional intent to the planner.
+- **synapse-technical-planner** — entry point of `/synapse-build`: audits `.docs/specs/`/`src/`
   against the request, creates or scopes a GitHub issue, and splits oversized work into
-  sub-issues. Owns `specs/<module>.md` updates.
+  sub-issues. Owns `.docs/specs/<module>.md` updates.
 - **synapse-coder** — implements one issue (full mode) or one description (lite mode) at a
   time in small, verified increments (build + lint + deploy-test), on a `claude/<slug>` branch.
 - **synapse-reviewer** — diff-only quality + security gate (`/code-review` +
@@ -57,7 +57,7 @@ write it up.
 > **Don't confuse with the plugin's own feature:** the vault-local `synapse/` folder
 > (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
 > customization model parsed by `src/configLoader.ts` — documented in
-> `wiki/ai-customization-guide.md`. The `.claude/agents/synapse-*.md` files above are
+> `wiki/Customization.md`. The `.claude/agents/synapse-*.md` files above are
 > developer tooling for working on this repo.
 
 ## Conventions

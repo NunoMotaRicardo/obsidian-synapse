@@ -120,18 +120,18 @@ An optional, user-configured cap on total spend for a single run — `undefined`
 
 `BatchLoopBudget`/`BatchLoopUsage` and the `parseBudgetInput`/`describeBudget`/`budgetExceeded`
 helpers were extracted into `src/budget.ts` (as `Budget`/`BudgetUsage`) in issue #88 so the
-interactive chat view's loop turn/cost thresholds (`specs/chat-view.md`) could reuse the same
+interactive chat view's loop turn/cost thresholds (`.docs/specs/chat-view.md`) could reuse the same
 free-text budget parsing rather than duplicating it — `batchLoopExecutor.ts` re-exports the
 `BatchLoopBudget`/`BatchLoopUsage` names as type aliases for source compatibility, no behavior
 change. Note the chat-view thresholds themselves are plain persisted numeric settings, not a
-`parseBudgetInput()`-parsed free-text prompt (see `specs/chat-view.md`) — only the shared
+`parseBudgetInput()`-parsed free-text prompt (see `.docs/specs/chat-view.md`) — only the shared
 type/helpers are reused, not the batch loop's prompt-based UX.
 
 - **Usage source:** each file's `SDKResultMessage.usage` (input, output, cache-creation, and
   cache-read token fields, summed) and `total_cost_usd` are accumulated into a running
   `BatchLoopUsage` (`{totalTokens, totalCostUsd}`) as results come back from `runOnFile()`'s
   `onEvent` forwarding — the same usage/cost data `AgentService` already surfaces for session
-  tracking (`specs/agent-service.md`), not a separate estimate.
+  tracking (`.docs/specs/agent-service.md`), not a separate estimate.
 - **Check timing:** the budget is checked once per loop iteration, immediately after the
   cancellation check and *before* the next file starts (`budgetExceeded(usage, budget)`). A
   budget check never truncates a file mid-flight — the file whose result pushed cumulative usage
@@ -155,7 +155,7 @@ class BatchLoopHandle {
 `stop()` sets `cancelled = true` **and** aborts whichever `AbortController` the loop most recently
 registered via `setActiveController()` — the loop creates one `AbortController` per file, passes
 it to `runOnFile()` → `AgentService.inlineChat()` (which threads it into the SDK's
-`sendAndWaitWithAbort()`, per `specs/agent-service.md` — no new cancellation mechanism was
+`sendAndWaitWithAbort()`, per `.docs/specs/agent-service.md` — no new cancellation mechanism was
 introduced), and clears the registration once that file's call settles. So clicking "Stop":
 - Between files: caught by the top-of-loop `handle.cancelled` check, same as before.
 - While a file's `inlineChat()` call is in flight: aborts that call immediately via the SDK's

@@ -110,5 +110,5 @@ The local ReAct loop is designed to fail gracefully without hanging Obsidian:
 
 ## 6. Suggested Reading
 
-- [AI Customization Guide](file:///d:/nmr-obsidian/obsidian-claude-brain/wiki/ai-customization-guide.md) — How customization plugins, agents, and triggers are laid out.
-- [MCP Bridge Specification](file:///d:/nmr-obsidian/obsidian-claude-brain/specs/mcp-bridge.md) — Detailed technical specs of the JSON-RPC handshake and process lifecycle.
+- [AI Customization Guide](file:///d:/nmr-obsidian/obsidian-claude-brain/wiki/Customization.md) — How customization plugins, agents, and triggers are laid out.
+- [MCP Bridge Specification](file:///d:/nmr-obsidian/obsidian-claude-brain/.docs/specs/mcp-bridge.md) — Detailed technical specs of the JSON-RPC handshake and process lifecycle.

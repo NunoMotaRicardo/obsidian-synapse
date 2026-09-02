@@ -7,7 +7,7 @@ description: Full build cycle for a GitHub issue or feature description — plan
 
 Orchestrates the full plan → implement → review → PR cycle for one GitHub issue on
 `NunoMotaRicardo/obsidian-claude-brain` (the repo that `origin` points to). See
-`wiki/decisions/2026-06-14-github-issue-workflow.md` for the design rationale.
+`.docs/decisions/2026-06-14-github-issue-workflow.md` for the design rationale.
 
 Planning and review run **in the main thread** (the `synapse-technical-planner` and `synapse-reviewer`
 skills); only implementation is delegated to the **synapse-coder** agent, for context isolation

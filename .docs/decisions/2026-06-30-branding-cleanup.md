@@ -14,7 +14,7 @@ This includes:
 - Renaming custom ESLint rules and plugin identifiers in `eslint.config.mts` from `sidekick-custom` to `synapse-custom`.
 - Updating developer guides under `.github/` to refer to Synapse.
 - Updating all documentation guides in `wiki/` to use the Synapse name and the correct `_synapse/` configuration folder path.
-- Standardizing architecture and feature specifications in `specs/`.
+- Standardizing architecture and feature specifications in `.docs/specs/`.
 
 ## Rationale
 
@@ -30,6 +30,6 @@ None.
 
 ## Hand-off Notes for the Technical Planner
 
-1. Update the specifications in `specs/` (e.g., `specs/chat-view.md`) to use Synapse terminology and paths.
+1. Update the specifications in `.docs/specs/` (e.g., `.docs/specs/chat-view.md`) to use Synapse terminology and paths.
 2. Update custom ESLint rule references in `eslint.config.mts`.
 3. Update `README.md` and the rest of the documentation.

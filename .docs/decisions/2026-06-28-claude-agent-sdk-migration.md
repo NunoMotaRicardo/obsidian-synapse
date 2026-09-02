@@ -167,7 +167,7 @@ Migrate for **capability** and **positioning**, not for operational pain or raw 
 
 ## Hand-off Notes for the Technical Planner
 
-Functional intent to turn into `specs/` updates and GitHub issues (no technical design above —
+Functional intent to turn into `.docs/specs/` updates and GitHub issues (no technical design above —
 module names, file paths, and API shapes are the planner's job):
 
 1. **Introduce a model-routing abstraction** in the orchestration layer (evolves from
@@ -189,7 +189,7 @@ module names, file paths, and API shapes are the planner's job):
    harder later.
 8. **Keep loop design out of the first plan** — flag the two loop concepts (above) as their own
    future work items.
-9. Update the matching `specs/<module>.md` files in lockstep with each change, per CLAUDE.md.
+9. Update the matching `.docs/specs/<module>.md` files in lockstep with each change, per CLAUDE.md.
 
 ## Related
 

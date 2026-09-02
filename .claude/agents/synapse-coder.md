@@ -5,8 +5,8 @@ description: >
   (works from a GitHub issue, on a claude/<slug> branch, may be re-invoked with reviewer feedback
   for up to 3 rounds) and lite (works from a plain description, single pass, no issue). Builds,
   lints, and deploy-tests in the real vault before handing off. Commits its work but never pushes
-  or opens a PR — the orchestrating skill does that. Does not touch wiki/, and only touches specs/
-  for the spec update required by its own change.
+  or opens a PR — the orchestrating skill does that. Does not touch wiki/, and only touches
+  .docs/specs/ for the spec update required by its own change.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
 ---
@@ -27,7 +27,7 @@ in the main thread (the `synapse-technical-planner` and `synapse-reviewer` skill
 ## Before writing anything
 1. (Round 1 only) Create/checkout the branch: `git checkout -b claude/<slug>` from `main`.
    Later rounds reuse the existing branch.
-2. Read the relevant `specs/<module>.md` files (start from `specs/00-architecture.md`'s module
+2. Read the relevant `.docs/specs/<module>.md` files (start from `.docs/architecture.md`'s module
    table) and any contracts called out in the issue's "Technical Notes" — match them exactly.
 3. Read existing code in the affected area of `src/` and follow its patterns (Conventions below;
    `.claude/skills/claude-agent-sdk-reference/` for SDK shapes).
@@ -58,7 +58,7 @@ that after review.
 - Tabs for indentation, single quotes, no trailing-semicolon omission — match existing files.
 - **All SDK access goes through the single service in `src/copilot.ts`** (today
   `CopilotService` / `@github/copilot-sdk`; becoming `AgentService` / `@anthropic-ai/claude-agent-sdk`
-  per the migration — `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`). Other modules
+  per the migration — `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`). Other modules
   import SDK types only via its re-exports.
 - `src/main.ts` stays lifecycle-only. UI in `src/view/*` + `src/modals/*`, editor features in
   `src/editor/*`, vault config parsing in `src/configLoader.ts`, session config assembly in
@@ -73,12 +73,12 @@ that after review.
   migration path.
 - New network access, remote execution, or third-party integration must be user-visible,
   justified, and documented (settings UI + README/spec).
-- Update the matching `specs/<module>.md` in the same change that alters module behavior, and
-  update `README.md` if the change affects setup, providers, or customization behavior.
+- Update the matching `.docs/specs/<module>.md` in the same change that alters module behavior,
+  and update `README.md` if the change affects setup, providers, or customization behavior.
 
 ## Rules
-- Stay on the `claude/<slug>` branch; never touch `wiki/` or any `specs/<module>.md` beyond the
-  update required by your own change.
+- Stay on the `claude/<slug>` branch; never touch `wiki/` or any `.docs/specs/<module>.md` beyond
+  the update required by your own change.
 - Confirm `npm run build` and `npm run lint` are clean, and deploy-test the behavior, before
   handing off.
 - End your message with: branch name, files changed, build/lint result, what was verified in the

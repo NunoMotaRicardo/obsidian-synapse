@@ -307,7 +307,7 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
   doesn't match what the user typed. `src/budget.ts` (extracted from `batchLoopExecutor.ts` in
   this same change) still backs the batch-loop launch flow's free-text budget; it wasn't reused
   verbatim for these settings-backed thresholds since the input shape differs (persisted numeric
-  setting vs. one-off free-text prompt) — see `specs/batch-loops.md`.
+  setting vs. one-off free-text prompt) — see `.docs/specs/batch-loops.md`.
 - **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
   distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
   `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`

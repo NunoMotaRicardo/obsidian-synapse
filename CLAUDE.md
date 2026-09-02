@@ -2,7 +2,7 @@
 
 Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
 triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed to
-**Synapse** — see `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`.
+**Synapse** — see `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`.
 
 ## Stack & build
 
@@ -15,7 +15,7 @@ triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed
 
 ## Architecture
 
-Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
+Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules:
 
 - **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
   SDK types only via its re-exports.
@@ -30,7 +30,7 @@ Read `specs/00-architecture.md` first; one spec per module in `specs/`. Rules:
   points to; `gh issue list/view/create/edit`); `in-progress` label marks active work. Run
   `/synapse-build <#N | "description">` for the full plan→code→review→PR cycle, or
   `/synapse-lite "description"` for a quick one-pass change (still build/lint/deploy-test, opens a
-  draft PR). See `wiki/decisions/2026-06-14-github-issue-workflow.md`.
+  draft PR). See `.docs/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\` → reload
   (`obsidian plugin:reload id=synapse`). That vault is the user's real vault — deploy only
@@ -45,13 +45,13 @@ remains; the rest are **skills** run in the main thread (warm context, no cold-s
 - **synapse-coder** (`.claude/agents/synapse-coder.md`) — the one spawned agent. Implements one issue
   (full mode) or one description (lite mode) in small, verified increments (build + lint +
   deploy-test), on a `claude/<slug>` branch. Isolated because implementation is long and noisy.
-- **synapse-technical-planner** (skill) — audits `specs/`/`src/` against a request, creates/scopes a
-  GitHub issue, splits oversized work. Owns `specs/<module>.md`. Heavy audits → spawn a generic
+- **synapse-technical-planner** (skill) — audits `.docs/specs/`/`src/` against a request, creates/scopes a
+  GitHub issue, splits oversized work. Owns `.docs/specs/<module>.md`. Heavy audits → spawn a generic
   `Explore` agent for the read-only sweep.
 - **synapse-reviewer** (skill) — diff-only quality + security gate (`/code-review` +
   `/security-review`), verdict + PR description draft.
 - **synapse-analyst** (skill) — synthesizes `grill-me`/`brainstorm` sessions and librarian work into
-  `wiki/` (decision records, guides). Hands functional intent to the planner.
+  `.docs/decisions/` (decision records) and `wiki/` (guides). Hands functional intent to the planner.
 
 Orchestrated by `/synapse-build` (planner skill → synapse-coder agent → reviewer skill loop → PR) and
 `/synapse-lite` (coder agent only, draft PR). Live elicitation runs in the main thread; use the
@@ -64,7 +64,7 @@ playbooks via `@{...}`, so nothing is duplicated. See `GEMINI.md`.
 > **Don't confuse with the plugin's own feature:** the vault-local `synapse/` folder
 > (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
 > customization model parsed by `src/configLoader.ts` — documented in
-> `wiki/ai-customization-guide.md`. The `.claude/` dev tooling above is unrelated tooling for
+> `wiki/Customization.md`. The `.claude/` dev tooling above is unrelated tooling for
 > working on this repo.
 
 ## Conventions
