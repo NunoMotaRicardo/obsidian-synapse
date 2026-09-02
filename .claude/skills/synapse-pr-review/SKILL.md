@@ -38,7 +38,7 @@ combining review, feedback, and targeted fixes, run directly in the main thread.
    Perform a deep code review of the diff, evaluating against:
    - **Originating Issue**: Are all Acceptance Criteria (ACs) and technical notes fully met?
    - **Inconsistencies**: Internal logic inconsistencies, redundant checks, double-formatting
-     bugs, or mismatch with the specifications (`specs/*.md`)?
+     bugs, or mismatch with the specifications (`.docs/specs/*.md`)?
    - **Security**: SAST issues, secrets, RCE, network safety (gated by Obsidian plugin constraints).
    - **Code Quality**: Strict type safety, clean control flow, no duplicates, repository styles
      (tabs, single quotes, etc.).

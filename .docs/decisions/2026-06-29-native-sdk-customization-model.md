@@ -157,7 +157,7 @@ the new `_synapse/` layout.
 
 ## Hand-off Notes for the Technical Planner
 
-Functional intent to turn into `specs/` updates and GitHub issues:
+Functional intent to turn into `.docs/specs/` updates and GitHub issues:
 
 1. **Register `_synapse/` as an SDK local plugin** — pass `plugins: [{type: 'local', path}]` in
    every session `Options`. Remove `skipMcpDiscovery` (MCP goes native too). Rename
@@ -180,9 +180,9 @@ Functional intent to turn into `specs/` updates and GitHub issues:
    install (if not present).
 9. **Hardcode folder name** — replace `settings.synapseFolder` with `'_synapse'` constant.
    Remove the setting from the settings tab.
-10. **Update specs** — rewrite `specs/config-loader.md` (now covers config-writer + plugin
-    registration), update `specs/bots-triggers.md` (triggers section removed),
-    `specs/chat-view.md` (self-improve hint, toolbar changes), `specs/copilot-service.md`
+10. **Update specs** — rewrite `.docs/specs/config-writer.md` (now covers config-writer + plugin
+    registration), update `.docs/specs/bots-triggers.md` (triggers section removed),
+    `.docs/specs/chat-view.md` (self-improve hint, toolbar changes), `.docs/specs/copilot-service.md`
     (plugin registration in Options).
 11. **Update `wiki/ai-customization-guide.md`** — rewrite to reflect the native SDK model
     (`_synapse/` layout, no prompts/triggers, SDK-native formats).

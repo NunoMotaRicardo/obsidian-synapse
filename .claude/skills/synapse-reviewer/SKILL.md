@@ -16,7 +16,7 @@ git diff main
 Cross-reference against:
 - the GitHub issue (`gh issue view <N>`) — were all ACs met, and does the coder's summary describe
   a real deploy-test (reload + behavior check), not just "build passes"?
-- `specs/00-architecture.md` + relevant `specs/<module>.md` — does the code match documented
+- `.docs/architecture.md` + relevant `.docs/specs/<module>.md` — does the code match documented
   module boundaries and contracts?
 - existing `src/` patterns and CLAUDE.md conventions.
 
@@ -31,7 +31,7 @@ Cross-reference against:
 **Correctness** — all ACs implemented; edge/failure paths handled (CLI not installed, SDK
 disconnect, missing settings); happy path correct.
 
-**Specs & module boundaries** — matches the relevant `specs/<module>.md`; SDK access stays behind
+**Specs & module boundaries** — matches the relevant `.docs/specs/<module>.md`; SDK access stays behind
 the single service module (`src/copilot.ts`) — no module imports the agent SDK directly except
 type-only imports; `src/main.ts` stays lifecycle-only; vault customization parsing stays in
 `src/configLoader.ts` / `src/view/sessionConfig.ts`.

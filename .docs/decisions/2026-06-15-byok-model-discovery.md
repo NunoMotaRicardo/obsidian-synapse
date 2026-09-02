@@ -13,7 +13,7 @@ Today, **Test** only proves the provider connection works: it calls
 user which models are actually available, and **Model name** is a free-text field the user
 must fill in by hand — they have to already know the exact model ID the provider expects
 (e.g. `Phi-4-cuda-gpu:1`, not the friendly alias `phi-4`), as documented in
-[`wiki/foundry-local-setup.md`](../foundry-local-setup.md).
+[`wiki/Local-Models-Foundry.md`](../../wiki/Local-Models-Foundry.md).
 
 Separately, `src/main.ts` already contains a `buildOnListModels()` helper that, for BYOK
 presets with a base URL, fetches the model list from `GET /v1/models` (OpenAI-compatible:
@@ -140,12 +140,12 @@ grilling/planning round when it's picked up.
 - Exact Notice wording is fixed above ("Connected — found N model(s).", "Connected, but the
   provider reported no available models.", "Test failed: \<error\>") — no open question there,
   but the planner should preserve these strings verbatim for consistency with
-  `wiki/foundry-local-setup.md`'s existing walkthrough (which will need a follow-up edit once
+  `wiki/Local-Models-Foundry.md`'s existing walkthrough (which will need a follow-up edit once
   Phase 1 ships — see cross-links below).
 
 ## Hand-off Notes for the Technical Planner
 
-The functional decisions above are final (pending the usual planner audit against `specs/`).
+The functional decisions above are final (pending the usual planner audit against `.docs/specs/`).
 The following are **implementation notes carried over from the elicitation** — flag them,
 don't treat them as decided product scope unless the user is asked separately:
 
@@ -182,13 +182,13 @@ don't treat them as decided product scope unless the user is asked separately:
 
 ## Related wiki docs
 
-- [`wiki/foundry-local-setup.md`](../foundry-local-setup.md) — documents today's manual flow
+- [`wiki/Local-Models-Foundry.md`](../../wiki/Local-Models-Foundry.md) — documents today's manual flow
   (set Base URL / Model name by hand, Test = connectivity-only, then pick the model in the
   sidebar dropdown, which currently just echoes the configured **Model name**). Once Phase 1
   ships, Step 3's "Click Test to verify" and the Model name guidance should be updated to
   describe the new "Test lists models, pick from the datalist" flow — light-touch edit,
   deferred to Phase 1 implementation rather than done here.
-- [`wiki/ai-customization-guide.md`](../ai-customization-guide.md) section 7.7 ("Foundry Local
+- [`wiki/Customization.md`](../../wiki/Customization.md) section 7.7 ("Foundry Local
   and offline knowledge work") — describes Foundry Local as a use case for private/offline
   work; unaffected by this decision but worth a glance if Phase 1's UI copy changes affect the
   setup narrative referenced there.

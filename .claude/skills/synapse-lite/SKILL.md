@@ -7,7 +7,7 @@ description: Quick one-pass implementation for a small change — no GitHub issu
 
 A lighter-weight version of `/synapse-build` for small, low-risk changes. Skips the GitHub issue,
 the `synapse-technical-planner`, and the `synapse-reviewer` — but **not** verification. See
-`wiki/decisions/2026-06-14-github-issue-workflow.md`.
+`.docs/decisions/2026-06-14-github-issue-workflow.md`.
 
 Only run this cycle when the user explicitly asks for "lite" — default to `/synapse-build`.
 
@@ -18,7 +18,7 @@ Only run this cycle when the user explicitly asks for "lite" — default to `/sy
    - implements in a single pass
    - builds, lints, and deploy-tests (`.claude/skills/deploy-test/`) — required even in lite mode,
      only the issue/reviewer ceremony is skipped
-   - updates `specs/<module>.md` if behavior changed
+   - updates `.docs/specs/<module>.md` if behavior changed
    - commits its work
 
 2. Push and open a **draft** PR:

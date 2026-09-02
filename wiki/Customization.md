@@ -7,8 +7,8 @@ first-class SDK primitives, not a custom format layered on top.
 
 > This guide reflects the **Claude Agent SDK** codebase (post June 2026 migration). For the
 > history of the migration and the decisions behind it, see:
-> [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md)
-> and [`decisions/2026-06-29-native-sdk-customization-model.md`](decisions/2026-06-29-native-sdk-customization-model.md).
+> [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md)
+> and [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md).
 
 ---
 
@@ -341,14 +341,14 @@ configurations between machines.
 
 ## 10. Suggested reading
 
-- [`local-model-react-guide.md`](local-model-react-guide.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
-- [`decisions/2026-06-29-native-sdk-customization-model.md`](decisions/2026-06-29-native-sdk-customization-model.md) —
+- [`Local-Models-ReAct.md`](Local-Models-ReAct.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
+- [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md) —
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.
-- [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md) —
+- [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md) —
   the migration decision that introduced the agent-first routing model.
-- [`../specs/bots-triggers.md`](../specs/bots-triggers.md) — technical spec for the trigger
+- [`.docs/specs/bots-triggers.md`](../.docs/specs/bots-triggers.md) — technical spec for the trigger
   system (parse rules, glob matching, cron format, write modes).
-- [`../specs/config-loader.md`](../specs/config-loader.md) — technical spec for config-writer
+- [`.docs/specs/config-writer.md`](../.docs/specs/config-writer.md) — technical spec for config-writer
   (`writeAgent`, `writeSkill`, `writeTrigger`, etc.).
 - [Claude Agent SDK documentation](https://docs.anthropic.com/en/docs/claude-code/sdk) —
   authoritative reference for `AgentDefinition` fields, `Options`, MCP config, and skills.

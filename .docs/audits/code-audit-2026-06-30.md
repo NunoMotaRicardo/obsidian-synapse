@@ -1,7 +1,7 @@
 # Code Audit — Synapse Plugin (2026-06-30)
 
-> Produced by synapse-analyst + synapse-technical-planner after a full review of `src/`, `specs/`,
-> `wiki/`, and GitHub issues on `NunoMotaRicardo/obsidian-claude-brain`. Scope: consistency
+> Produced by synapse-analyst + synapse-technical-planner after a full review of `src/`, `specs/`
+> (now `.docs/specs/`), `wiki/`, and GitHub issues on `NunoMotaRicardo/obsidian-claude-brain`. Scope: consistency
 > check, completeness assessment, and prioritised recommendations.
 
 ---
@@ -52,7 +52,7 @@ core feature sub-issues are closed:
 
 ### 2.1 Spec inconsistencies
 
-#### `specs/copilot-service.md` — stale language throughout
+#### `.docs/specs/copilot-service.md` — stale language throughout
 
 The spec still uses Copilot SDK terminology in several sections even though the codebase has
 fully migrated to `@anthropic-ai/claude-agent-sdk`. Specific issues:
@@ -75,12 +75,12 @@ fully migrated to `@anthropic-ai/claude-agent-sdk`. Specific issues:
 - **§ "Invariants"** — says "No other module imports `@github/copilot-sdk` directly" — should
   read `@anthropic-ai/claude-agent-sdk`.
 
-#### `specs/chat-view.md` — wrong source file name
+#### `.docs/specs/chat-view.md` — wrong source file name
 
 The header lists `src/sidekickView.ts` as the panel shell source. The file is now
 `src/synapseView.ts`.
 
-#### `specs/settings.md` — minor staleness
+#### `.docs/specs/settings.md` — minor staleness
 
 - § "Feature Map & Agents (Issue #6)" says "shipped default agents in `claude-brain/agents/`"
   — should be `_synapse/agents/`.
@@ -211,7 +211,7 @@ before the first public release.
 
 ### 4.1 `src/ollamaErrors.ts` referenced in spec but absent from codebase
 
-`specs/copilot-service.md` §"Ollama UX polish (#30)" references `src/ollamaErrors.ts`
+`.docs/specs/copilot-service.md` §"Ollama UX polish (#30)" references `src/ollamaErrors.ts`
 providing `friendlyOllamaError()`, `isToolUseError()`, etc. This file does not appear in the
 current `src/` directory. Ollama error handling is most likely implemented inline inside
 `synapseView.ts` (36KB).
@@ -219,7 +219,7 @@ current `src/` directory. Ollama error handling is most likely implemented inlin
 **Recommendation:** Confirm. If inline, update the spec to name the actual file. If missing,
 remove the section from the spec.
 
-### 4.2 `specs/copilot-service.md` describes Copilot SDK architecture, not Agent SDK
+### 4.2 `.docs/specs/copilot-service.md` describes Copilot SDK architecture, not Agent SDK
 
 This is the most stale spec in the codebase. The Agent SDK's `query()` model (stateless
 per-query, no persistent connection, `pathToClaudeCodeExecutable`, no `ping()`) differs
@@ -257,7 +257,7 @@ Vitest with zero extra infrastructure.
 `src/tasks.ts` (TASKS constant) have no spec entries. `vaultTools.ts` is a user-facing
 capability surface; users need to know what tools local models have access to.
 
-**Recommendation:** Document vault tools in `specs/bots-triggers.md` (extend the "Trigger
+**Recommendation:** Document vault tools in `.docs/specs/bots-triggers.md` (extend the "Trigger
 executor" section) or in the new `wiki/local-model-react-guide.md`.
 
 ### 4.6 `debug.ts` is a micro-module with no spec coverage
@@ -273,7 +273,7 @@ note to the architecture table. If it is dead code, delete it.
 |---|---|---|
 | 🔴 High | Rewrite `wiki/technical-implementation-guide.md` (Synapse / Agent SDK) | 1–2 h |
 | 🔴 High | Rewrite `wiki/ai-customization-guide.md` (`_synapse/` native model) | 2 h |
-| 🔴 High | Update `specs/copilot-service.md` to reflect `AgentService` / Agent SDK | 1 h |
+| 🔴 High | Update `.docs/specs/copilot-service.md` to reflect `AgentService` / Agent SDK | 1 h |
 | 🟡 Med | Add `wiki/local-model-react-guide.md` (MCP bridge + vault tools) | 1 h |
 | 🟡 Med | Audit #47 vs trigger executor + MCP bridge; close or narrow scope | 30 m |
 | 🟡 Med | Update `buildSelfImproveHint()` to mention "trigger" as artifact type | 30 m |
@@ -297,15 +297,15 @@ note to the architecture table. If it is dead code, delete it.
 | `src/mcpBridge.ts` | ✅ Good — matches mcp-bridge spec |
 | `src/vaultTools.ts` | ⚠️ No spec coverage — document |
 | `src/debug.ts` | ⚠️ No spec coverage — verify it's alive |
-| `specs/00-architecture.md` | ✅ Good — accurate module table |
-| `specs/copilot-service.md` | ❌ Stale — Copilot SDK language, wrong module name |
-| `specs/chat-view.md` | ⚠️ Minor — wrong source filename (`sidekickView.ts` → `synapseView.ts`) |
-| `specs/settings.md` | ⚠️ Minor — `github` preset section outdated, stale path reference |
-| `specs/bots-triggers.md` | ✅ Good — trigger status section current |
-| `specs/runtime-manager.md` | ✅ Good — accurate |
-| `specs/config-loader.md` | ✅ Good — accurately reflects config-writer role |
-| `specs/mcp-bridge.md` | ✅ Good — accurate |
-| `specs/editor.md` | ✅ Good — accurate |
+| `.docs/architecture.md` | ✅ Good — accurate module table |
+| `.docs/specs/copilot-service.md` | ❌ Stale — Copilot SDK language, wrong module name |
+| `.docs/specs/chat-view.md` | ⚠️ Minor — wrong source filename (`sidekickView.ts` → `synapseView.ts`) |
+| `.docs/specs/settings.md` | ⚠️ Minor — `github` preset section outdated, stale path reference |
+| `.docs/specs/bots-triggers.md` | ✅ Good — trigger status section current |
+| `.docs/specs/runtime-manager.md` | ✅ Good — accurate |
+| `.docs/specs/config-writer.md` | ✅ Good — accurately reflects config-writer role |
+| `.docs/specs/mcp-bridge.md` | ✅ Good — accurate |
+| `.docs/specs/editor.md` | ✅ Good — accurate |
 | `wiki/technical-implementation-guide.md` | ❌ Severely stale — pre-migration content |
 | `wiki/ai-customization-guide.md` | ❌ Severely stale — Copilot SDK framing throughout |
 | `wiki/competitor-landscape.md` | ✅ Good — current |

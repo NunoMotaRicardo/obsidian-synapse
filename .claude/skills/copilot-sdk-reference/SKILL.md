@@ -7,7 +7,7 @@ description: Reference for the @github/copilot-sdk 1.x TypeScript API used by th
 
 > **Transitional / being superseded.** The plugin is migrating to the Claude Agent SDK — see
 > `.claude/skills/claude-agent-sdk-reference/` and
-> `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`. This reference documents the
+> `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`. This reference documents the
 > **current** Copilot-SDK code and stays useful only until the engine-swap issue removes it.
 
 Authoritative source: `node_modules/@github/copilot-sdk/dist/*.d.ts` — especially `types.d.ts`
@@ -53,7 +53,7 @@ getLastSessionId/listModels/getAuthStatus`, `sendAndWait`, `approveAll`, `reason
 - Client `mode: "copilot-cli" | "empty"` — keep the default `"copilot-cli"` for this plugin.
 - SDK package now depends on `@github/copilot` (bundled runtime) — irrelevant at Obsidian
   runtime since only `main.js` ships; the plugin resolves a system CLI (see
-  `specs/runtime-manager.md`).
+  `.docs/specs/runtime-manager.md`).
 
 ## Gotchas
 

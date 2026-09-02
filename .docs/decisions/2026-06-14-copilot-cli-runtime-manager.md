@@ -39,7 +39,7 @@ tracked by GitHub issue **#2** (the runtime manager) and its three sub-issues **
 
 The *how* — the exact resolution-chain order, the download URL scheme, build-time version
 pinning, and the safety invariants — lives in the technical spec and is not duplicated here:
-see [`specs/runtime-manager.md`](../../specs/runtime-manager.md).
+see [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md).
 
 ## Rationale
 
@@ -106,7 +106,7 @@ the foundation is proven.
 ## Hand-off Notes for the Technical Planner
 
 - The functional intent is captured above and in issues #2 / #13 / #14 / #15; the technical
-  design already lives in [`specs/runtime-manager.md`](../../specs/runtime-manager.md) (status:
+  design already lives in [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md) (status:
   planned). Keep that spec the single home for resolution-chain order, URL scheme, version
   pinning, invariants, and non-goals — this record intentionally does not restate them.
 - The one functional guarantee worth enforcing across all three slices: **a system-installed
@@ -117,9 +117,9 @@ the foundation is proven.
 
 ## Related wiki docs
 
-- [`wiki/technical-implementation-guide.md`](../technical-implementation-guide.md) — section 8
+- [`.docs/research/technical-implementation-guide.md`](../research/technical-implementation-guide.md) — section 8
   ("Copilot CLI") describes the CLI as a first-class runtime input; this decision explains how
   Sidekick will find or supply it.
 - The runtime manager is unrelated to the vault-local `sidekick/` customization model
-  documented in [`wiki/ai-customization-guide.md`](../ai-customization-guide.md) — that's a
+  documented in [`wiki/Customization.md`](../../wiki/Customization.md) — that's a
   product feature parsed at runtime, not the CLI-delivery mechanism.

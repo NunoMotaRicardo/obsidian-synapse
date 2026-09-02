@@ -1,6 +1,6 @@
 # Synapse
 
-![Obsidian Synapse](./docs/images/banner.png)
+![Obsidian Synapse](./wiki/images/banner.png)
 
 Your Claude-native AI assistant inside Obsidian. Chat with agents, run tools, search your vault with AI, and transform text — all without leaving your notes.
 
@@ -12,7 +12,7 @@ Synapse connects to Claude (via the Anthropic API or OAuth) or your own local AI
 
 The Synapse panel sits in the right sidebar alongside your notes. Pick an agent, toggle skills and tools, then chat — responses stream in with full Markdown rendering and collapsible tool-call details.
 
-![Obsidian Synapse Screenshot](./docs/images/screenshot.png)
+![Obsidian Synapse Screenshot](./wiki/images/screenshot.png)
 
 **What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions and search all work from the same panel.
 
@@ -27,7 +27,7 @@ The Synapse panel sits in the right sidebar alongside your notes. Pick an agent,
 > Synapse requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) and talks to the Claude CLI via `@anthropic-ai/claude-agent-sdk`.
 
 1. **Install** — Either:
-   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add `https://github.com/NunoMotaRicardo/obsidian-synapse` as a beta plugin. BRAT handles downloads and updates automatically.
+   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add this repository as a beta plugin. BRAT handles downloads and updates automatically.
    - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the latest release into `<YourVault>/.obsidian/plugins/synapse/`. Then reload Obsidian and enable **Synapse** in **Settings → Community plugins**.
 2. **Configure API / CLI** — Open **Settings → Synapse**. Configure your **Anthropic API Key** or use **OAuth** (Claude Subscription), or configure a local model provider like **Ollama**.
 3. **Initialize** — Under **Synapse settings** (Capabilities tab), click **Initialize** to scaffold the config structure under the hardcoded `_synapse/` folder:
@@ -38,6 +38,8 @@ The Synapse panel sits in the right sidebar alongside your notes. Pick an agent,
      .mcp.json  ← MCP server config
    ```
 4. **Open Synapse** — Click the **brain** icon in the ribbon, or run **Open Synapse** from the command palette.
+
+More detail, including troubleshooting: [Installation](wiki/Installation.md).
 
 You're ready. Start chatting, or read on to unlock every feature.
 
@@ -330,6 +332,8 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
+
+Full reference, including every tab: [Configuration](wiki/Configuration.md).
 
 ---
 

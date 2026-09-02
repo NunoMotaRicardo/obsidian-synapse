@@ -3,7 +3,7 @@
 ## Why this exists
 
 The rebuild of this plugin into a Claude-native agent (see
-[`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md))
+[`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../decisions/2026-06-28-claude-agent-sdk-migration.md))
 enters a space that already has notable Claude + Obsidian projects. This note captures the two
 most relevant as of **2026-06-28**, what we can learn from them, and where the open niche is.
 It is a living guide — update it as the landscape shifts.
@@ -103,4 +103,4 @@ chat/edit as table stakes.
 - [deivid11/obsidian-claude-code-plugin](https://github.com/deivid11/obsidian-claude-code-plugin).
 - [Karpathy's LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — the pattern behind claude-obsidian.
 - [Anthropic: Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval) — the retrieval approach claude-obsidian uses.
-- [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md) — our migration decision this scan informs.
+- [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../decisions/2026-06-28-claude-agent-sdk-migration.md) — our migration decision this scan informs.

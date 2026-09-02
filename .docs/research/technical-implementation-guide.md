@@ -6,7 +6,7 @@ architecture. It reflects the **Claude Agent SDK** codebase as of 2026-06-30.
 
 > Previous versions of this guide described the upstream `@github/copilot-sdk` (Sidekick)
 > codebase. That SDK was fully replaced in the migration documented at
-> [`decisions/2026-06-28-claude-agent-sdk-migration.md`](decisions/2026-06-28-claude-agent-sdk-migration.md).
+> [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../decisions/2026-06-28-claude-agent-sdk-migration.md).
 
 ---
 
@@ -251,8 +251,8 @@ CLI must be installed on the system (via `npm install -g @anthropic-ai/claude-co
 the Claude desktop app). Runtime-manager (`src/runtimeManager.ts`) resolves the binary; if none
 is found, a platform-specific installation Notice is shown.
 
-See [`decisions/2026-06-14-copilot-cli-runtime-manager.md`](decisions/2026-06-14-copilot-cli-runtime-manager.md)
-for the history of the resolution approach, and [`../specs/runtime-manager.md`](../specs/runtime-manager.md)
+See [`.docs/decisions/2026-06-14-copilot-cli-runtime-manager.md`](../decisions/2026-06-14-copilot-cli-runtime-manager.md)
+for the history of the resolution approach, and [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md)
 for the current spec.
 
 ### Local models (Ollama, Foundry Local, or any OpenAI-compatible endpoint)

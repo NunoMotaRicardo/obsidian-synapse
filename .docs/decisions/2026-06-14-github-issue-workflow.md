@@ -54,6 +54,6 @@ opened.
   `NunoMotaRicardo/obsidian-copilot`.
 - Reuse the repo's existing labels (`bug`, `enhancement`, `documentation`, ...) for type; add
   `in-progress` (create via `gh label create` if it doesn't exist) for active work.
-- Issue body: Summary, Acceptance Criteria, Technical Notes (link `specs/<module>.md`),
+- Issue body: Summary, Acceptance Criteria, Technical Notes (link `.docs/specs/<module>.md`),
   `Depends on` / `Part of #N` for slices.
 - Branch naming stays `claude/<slug>` (matches existing PR history, e.g. PRs #9-#12).
