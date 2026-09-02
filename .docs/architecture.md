@@ -66,7 +66,7 @@ dropdowns (display-only). See [config-loader.md](config-loader.md) for details.
 
 - Specs in `.docs/specs/` describe target behavior per module. Update the spec in the same change
   that alters behavior.
-- Work items are tracked as GitHub issues on `NunoMotaRicardo/obsidian-claude-brain` (`gh issue
+- Work items are tracked as GitHub issues on `NunoMotaRicardo/obsidian-synapse` (`gh issue
   list/view/create/edit`); `in-progress` marks active work.
 - Build: `npm run build` (tsc typecheck + esbuild bundle). Deploy/verify: see
   `.claude/skills/deploy-test/`.

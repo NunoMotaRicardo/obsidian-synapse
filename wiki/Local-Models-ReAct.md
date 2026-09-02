@@ -12,7 +12,7 @@ When you select a local model provider preset (such as **Ollama**, **Foundry Loc
 - **Loop Limits**: The loop executes up to **5 turns** (`maxTurns = 5`) to prevent runaway API requests.
 - **No Streaming for Tool Calls**: Streaming is disabled when sending tool-invocation requests to Ollama to ensure structural JSON integrity.
 
-The loop sequence is managed by [executeLocalProviderQuery()](file:///d:/nmr-obsidian/obsidian-claude-brain/src/providerModels.ts#L238-L248) inside [providerModels.ts](file:///d:/nmr-obsidian/obsidian-claude-brain/src/providerModels.ts):
+The loop sequence is managed by [executeLocalProviderQuery()](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/src/providerModels.ts#L238-L248) inside [providerModels.ts](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/src/providerModels.ts):
 1. **Thought & Call**: The model returns text reasoning (if supported) followed by tool-call intents.
 2. **Execution**: Synapse executes the requested tools (either built-in vault tools or MCP tools) locally.
 3. **Observation**: Results are returned to the model in the conversation history as observations.
@@ -39,7 +39,7 @@ Not all local models can participate in a ReAct loop. Tool-calling requires nati
 
 ## 3. Built-In Vault Tools
 
-When a local model runs in a ReAct loop, Synapse automatically equips it with the following built-in Obsidian vault tools, defined in [vaultTools.ts](file:///d:/nmr-obsidian/obsidian-claude-brain/src/vaultTools.ts):
+When a local model runs in a ReAct loop, Synapse automatically equips it with the following built-in Obsidian vault tools, defined in [vaultTools.ts](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/src/vaultTools.ts):
 
 ### `read_note`
 Reads the full plain-text content of any note/file inside your vault.
@@ -110,5 +110,5 @@ The local ReAct loop is designed to fail gracefully without hanging Obsidian:
 
 ## 6. Suggested Reading
 
-- [AI Customization Guide](file:///d:/nmr-obsidian/obsidian-claude-brain/wiki/Customization.md) — How customization plugins, agents, and triggers are laid out.
-- [MCP Bridge Specification](file:///d:/nmr-obsidian/obsidian-claude-brain/.docs/specs/mcp-bridge.md) — Detailed technical specs of the JSON-RPC handshake and process lifecycle.
+- [AI Customization Guide](Customization.md) — How customization plugins, agents, and triggers are laid out.
+- [MCP Bridge Specification](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/.docs/specs/mcp-bridge.md) — Detailed technical specs of the JSON-RPC handshake and process lifecycle.
