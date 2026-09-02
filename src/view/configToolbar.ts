@@ -1,50 +1,16 @@
 import {Menu, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {ModelInfo, ReasoningEffort, ReasoningSummary, ContextTier} from '../agentService';
-import type {SynapseSettings} from '../settings';
+import type {ModelInfo} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
 import {resolveModelForAgent} from './sessionConfig';
 
-/** Selectable reasoning-summary modes (excludes '' = model default). */
-const REASONING_SUMMARY_MODES = ['none', 'concise', 'detailed'] as const;
-
 /** Human label for a reasoning-effort level. 'none' reads as "Off". */
 function effortLabel(level: string): string {
 	if (level === 'none') return 'Off';
 	return level.charAt(0).toUpperCase() + level.slice(1);
-}
-
-/** Human label for a reasoning-summary mode. */
-function summaryLabel(mode: string): string {
-	return mode.charAt(0).toUpperCase() + mode.slice(1);
-}
-
-/**
- * Build the options for a mid-session `session.setModel()` call from settings.
- *
- * Reasoning effort/summary are gated on `supportsReasoning` and validated against
- * the model's reported `supportedReasoningEfforts` (a persisted effort not in
- * `supported` is dropped). Context tier is included whenever it's non-default —
- * there is no per-model support signal in the SDK, so it's always passed and the
- * SDK silently ignores it for models that don't support the long-context tier.
- *
- * The SDK narrows `reasoningEffort`/`reasoningSummary` to unions that lag the
- * values models actually report, so the cast is localized here (see issue 7).
- * Returns `undefined` when nothing applies, so model defaults take over.
- */
-function _buildSetModelOptions(settings: SynapseSettings, supported: string[] | undefined, supportsReasoning: boolean): {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} | undefined {
-	const opts: {reasoningEffort?: ReasoningEffort; reasoningSummary?: ReasoningSummary; contextTier?: ContextTier} = {};
-	if (supportsReasoning) {
-		if (settings.reasoningEffort && (supported?.includes(settings.reasoningEffort) ?? false)) {
-			opts.reasoningEffort = settings.reasoningEffort as ReasoningEffort;
-		}
-		if (settings.reasoningSummary) opts.reasoningSummary = settings.reasoningSummary as ReasoningSummary;
-	}
-	if (settings.contextTier !== 'default') opts.contextTier = settings.contextTier;
-	return Object.keys(opts).length > 0 ? opts : undefined;
 }
 
 declare module '../synapseView' {
@@ -55,7 +21,6 @@ declare module '../synapseView' {
 		openReasoningMenu(e: MouseEvent): void;
 		updateReasoningBadge(): void;
 		applyReasoningToSession(): void;
-		setReasoningSummary(mode: string): void;
 		openToolsMenu(e: MouseEvent): void;
 		selectAgent(agentName: string): void;
 		applyAgentToolsAndSkills(agent?: AgentConfig): void;
@@ -174,43 +139,12 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 						});
 				});
 			}
-
-			// Reasoning summary submenu (gated on the same reasoning capability).
-			menu.addSeparator();
-			const currentSummary = this.plugin.settings.reasoningSummary;
-			menu.addItem(item => {
-				item.setTitle('Reasoning summary');
-				const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
-				sub.addItem(si => si
-					.setTitle('Model default')
-					.setChecked(currentSummary === '')
-					.onClick(() => this.setReasoningSummary('')));
-				for (const mode of REASONING_SUMMARY_MODES) {
-					sub.addItem(si => si
-						.setTitle(summaryLabel(mode))
-						.setChecked(currentSummary === mode)
-						.onClick(() => this.setReasoningSummary(mode)));
-				}
-			});
 		} else {
 			menu.addItem(item => item.setTitle('Model does not support reasoning effort').setDisabled(true));
 		}
 
-		// Long-context toggle — always shown. There is no per-model support signal in
-		// the SDK, so it can't be gated; the SDK ignores it for unsupported models.
-		menu.addSeparator();
-		menu.addItem(item => {
-			item.setTitle('Long context')
-				.setChecked(this.plugin.settings.contextTier === 'long_context')
-				.onClick(() => {
-					this.plugin.settings.contextTier = this.plugin.settings.contextTier === 'long_context' ? 'default' : 'long_context';
-					void this.plugin.saveSettings();
-					this.applyReasoningToSession();
-					this.updateReasoningBadge();
-				});
-		});
-
 		// Infinite sessions toggle — controls automatic context compaction.
+		menu.addSeparator();
 		menu.addItem(item => {
 			item.setTitle('Infinite sessions')
 				.setChecked(this.plugin.settings.infiniteSessionsEnabled)
@@ -233,27 +167,16 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 	};
 
-	proto.setReasoningSummary = function(mode: string): void {
-		this.plugin.settings.reasoningSummary = mode;
-		void this.plugin.saveSettings();
-		this.applyReasoningToSession();
-		this.updateReasoningBadge();
-	};
-
 	proto.updateReasoningBadge = function(): void {
 		const level = this.plugin.settings.reasoningEffort;
-		const summary = this.plugin.settings.reasoningSummary;
-		const longContext = this.plugin.settings.contextTier === 'long_context';
 		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
 
 		if (this.selectedModel === '') {
-			const active = (level !== '' || summary !== '') || longContext || !infiniteSessions;
+			const active = level !== '' || !infiniteSessions;
 			this.modelIconEl.toggleClass('is-active', active);
 			this.modelIconEl.toggleClass('is-non-interactive', false);
 			const parts: string[] = [];
 			if (level !== '') parts.push(`effort ${effortLabel(level).toLowerCase()}`);
-			if (summary !== '') parts.push(`summary ${summaryLabel(summary).toLowerCase()}`);
-			if (longContext) parts.push('long context');
 			if (!infiniteSessions) parts.push('infinite sessions off');
 			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context (default model)');
 			return;
@@ -269,18 +192,14 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 		const current = this.plugin.settings.reasoningEffort;
 		// The icon stays interactive even without reasoning support, because the menu
-		// always offers the long-context and infinite-sessions toggles.
-		const active = ((current !== '' || summary !== '') && supportsReasoning) || longContext || !infiniteSessions;
+		// always offers the infinite-sessions toggle.
+		const active = (current !== '' && supportsReasoning) || !infiniteSessions;
 		this.modelIconEl.toggleClass('is-active', active);
 		this.modelIconEl.toggleClass('is-non-interactive', false);
 		const parts: string[] = [];
-		if (supportsReasoning) {
-			if (current !== '') parts.push(`effort ${effortLabel(current).toLowerCase()}`);
-			if (summary !== '') parts.push(`summary ${summaryLabel(summary).toLowerCase()}`);
-		}
-		if (longContext) parts.push('long context');
+		if (supportsReasoning && current !== '') parts.push(`effort ${effortLabel(current).toLowerCase()}`);
 		if (!infiniteSessions) parts.push('infinite sessions off');
-		if (!supportsReasoning && !longContext && infiniteSessions) {
+		if (!supportsReasoning && infiniteSessions) {
 			this.modelIconEl.setAttribute('title', 'Reasoning & context (model does not support reasoning effort)');
 		} else {
 			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
