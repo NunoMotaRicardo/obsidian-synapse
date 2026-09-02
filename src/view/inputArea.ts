@@ -2,6 +2,7 @@ import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import {IMAGE_EXTS, isImageAttachment, type SelectionInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
+import {decideWorkingDirAutoUpdate} from './sessionConfig';
 
 declare module '../synapseView' {
 	interface SynapseView {
@@ -400,14 +401,25 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.activeSelection = null;
 		this.renderActiveNoteBar();
 
-		// Update working directory to the parent folder of the active note
+		// Update working directory to the parent folder of the active note — deferred
+		// while a conversation is in progress so switching notes mid-conversation
+		// doesn't orphan the live session's id (issue #108 / #93).
 		if (file && this.plugin.settings.autoUpdateWorkingDirectory) {
 			const lastSlash = file.path.lastIndexOf('/');
 			const newDir = lastSlash > 0 ? file.path.substring(0, lastSlash) : '';
-			if (newDir !== this.workingDir) {
+			const conversationInProgress = this.currentSession !== null && this.messages.length > 0;
+			const decision = decideWorkingDirAutoUpdate({
+				newDir,
+				currentWorkingDir: this.workingDir,
+				conversationInProgress,
+			});
+			if (decision.applyNow) {
 				this.workingDir = newDir;
 				this.updateCwdButton();
 				this.configDirty = true;
+				this.pendingWorkingDir = null;
+			} else if (decision.pendingDir !== null) {
+				this.pendingWorkingDir = decision.pendingDir;
 			}
 		}
 	};
