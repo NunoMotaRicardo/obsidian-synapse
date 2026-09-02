@@ -26,7 +26,20 @@ The Synapse panel sits in the right sidebar alongside your notes. Pick an agent,
 > [!IMPORTANT]
 > Synapse requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) and talks to the Claude CLI via `@anthropic-ai/claude-agent-sdk`.
 
-Install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) or manually from the latest release, then configure your API key/CLI and initialize the `_synapse/` config folder. Full steps: see [Installation](https://github.com/NunoMotaRicardo/obsidian-synapse/wiki/Installation) on the wiki.
+1. **Install** — Either:
+   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add this repository as a beta plugin. BRAT handles downloads and updates automatically.
+   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the latest release into `<YourVault>/.obsidian/plugins/synapse/`. Then reload Obsidian and enable **Synapse** in **Settings → Community plugins**.
+2. **Configure API / CLI** — Open **Settings → Synapse**. Configure your **Anthropic API Key** or use **OAuth** (Claude Subscription), or configure a local model provider like **Ollama**.
+3. **Initialize** — Under **Synapse settings** (Capabilities tab), click **Initialize** to scaffold the config structure under the hardcoded `_synapse/` folder:
+   ```
+   _synapse/
+     agents/    ← *.md agent/persona files
+     skills/    ← subfolder per skill with SKILL.md
+     .mcp.json  ← MCP server config
+   ```
+4. **Open Synapse** — Click the **brain** icon in the ribbon, or run **Open Synapse** from the command palette.
+
+More detail, including troubleshooting: [Installation](wiki/Installation.md).
 
 You're ready. Start chatting, or read on to unlock every feature.
 
@@ -301,7 +314,26 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 
 ## Settings reference
 
-**Settings → Synapse** — provider, model, tools-approval, reasoning-effort, and search-mode settings. Full reference: see [Configuration](https://github.com/NunoMotaRicardo/obsidian-synapse/wiki/Configuration) on the wiki.
+**Settings → Synapse**
+
+### Models
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Provider** | Anthropic | Anthropic, Ollama, MS Foundry Local, or Other |
+| **Model name** | *(empty)* | Model ID (e.g. `claude-3-5-sonnet-latest`, `llama3`) |
+| **API key / Token** | *(empty)* | Credentials for the chosen provider |
+
+### Synapse settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Inline operations model** | Default | Model for context-menu actions |
+| **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
+| **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
+| **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
+
+Full reference, including every tab: [Configuration](wiki/Configuration.md).
 
 ---
 
