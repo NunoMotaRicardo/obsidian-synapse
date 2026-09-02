@@ -19,7 +19,7 @@
 | **Microsoft Foundry Local** | `openai` | Local Foundry model server |
 | **Other OpenAI-compatible** | `openai` | Any compatible endpoint |
 
-See [Local-Models-Ollama](Local-Models-Ollama) and [Local-Models-Foundry](Local-Models-Foundry) for provider-specific setup.
+See [Local-Models-Ollama](Local-Models-Ollama.md) and [Local-Models-Foundry](Local-Models-Foundry.md) for provider-specific setup.
 
 ### Synapse settings
 

@@ -1,13 +1,13 @@
-**[Home](Home)**
+**[Home](Home.md)**
 
 **Getting started**
-- [Installation](Installation)
-- [Configuration](Configuration)
+- [Installation](Installation.md)
+- [Configuration](Configuration.md)
 
 **Customization**
-- [Customization](Customization)
+- [Customization](Customization.md)
 
 **Local models**
-- [Ollama](Local-Models-Ollama)
-- [Foundry Local](Local-Models-Foundry)
-- [ReAct](Local-Models-ReAct)
+- [Ollama](Local-Models-Ollama.md)
+- [Foundry Local](Local-Models-Foundry.md)
+- [ReAct](Local-Models-ReAct.md)

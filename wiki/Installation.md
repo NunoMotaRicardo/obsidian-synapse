@@ -16,4 +16,4 @@
    ```
 4. **Open Synapse** — Click the **brain** icon in the ribbon, or run **Open Synapse** from the command palette.
 
-You're ready. Start chatting, or see [Configuration](Configuration) and [Customization](Customization) to unlock every feature.
+You're ready. Start chatting, or see [Configuration](Configuration.md) and [Customization](Customization.md) to unlock every feature.

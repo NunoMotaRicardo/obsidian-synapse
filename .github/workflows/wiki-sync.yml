@@ -1,0 +1,67 @@
+# Mirrors the in-repo wiki/ directory to this repository's GitHub Wiki tab, one-way,
+# on every push to main that touches wiki/. wiki/ in the main repo is the source of
+# truth: edits made directly through the Wiki tab UI are silently overwritten on the
+# next sync (see wiki/Home.md).
+#
+# One-time manual step: <owner>/<repo>.wiki.git does not exist until at least one page
+# has been created through the Wiki tab UI. Before this workflow can push anything,
+# open the repo's Wiki tab and create an initial "Home" page (any content — the next
+# sync run will overwrite it with wiki/Home.md). Until that's done, runs of this
+# workflow fail fast with an actionable error instead of a raw git clone error.
+name: Wiki sync
+
+on:
+    push:
+        branches: [main]
+        paths: ["wiki/**"]
+
+permissions:
+    contents: write
+
+# Two pushes to main in quick succession would otherwise race: the second
+# job's push is rejected as non-fast-forward against a wiki repo the first
+# just advanced. Serialize instead, and never cancel a run mid-push.
+concurrency:
+    group: wiki-sync
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout main repo
+              uses: actions/checkout@v4
+              with:
+                  path: repo
+
+            - name: Clone wiki repo
+              id: clone
+              run: |
+                  set -uo pipefail
+                  wiki_url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git"
+                  if ! git clone --depth 1 "$wiki_url" wiki-repo 2>clone.err; then
+                    echo "::error::Could not clone the wiki repository for ${{ github.repository }}."
+                    echo "::error::This is expected if the GitHub Wiki has never been initialized: <repo>.wiki.git is not created until at least one page exists."
+                    echo "::error::Fix: open the repo's Wiki tab on GitHub and create an initial 'Home' page (any content), then re-run this workflow. The next sync will overwrite it with wiki/Home.md."
+                    cat clone.err
+                    exit 1
+                  fi
+
+            - name: Sync wiki/ into the wiki repo
+              run: |
+                  set -euo pipefail
+                  rsync -a --delete --exclude='.git/' repo/wiki/ wiki-repo/
+
+            - name: Commit and push if changed
+              working-directory: wiki-repo
+              run: |
+                  set -euo pipefail
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git add -A
+                  if git diff --cached --quiet; then
+                    echo "No wiki changes to publish."
+                    exit 0
+                  fi
+                  git commit -m "Sync wiki from ${{ github.repository }}@${{ github.sha }}"
+                  git push
