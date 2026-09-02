@@ -30,7 +30,7 @@ try {
 	// ignore polyfill errors
 }
 
-import {query, listSessions, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
+import {query, listSessions, getSessionMessages, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
 	Query,
@@ -39,6 +39,8 @@ import type {
 	SDKResultMessage,
 	SDKSessionInfo,
 	ListSessionsOptions,
+	SessionMessage,
+	GetSessionMessagesOptions,
 	McpServerConfig,
 	McpStdioServerConfig,
 	McpHttpServerConfig,
@@ -76,6 +78,8 @@ export type {
 	SDKResultMessage,
 	SDKSessionInfo as SessionMetadata,
 	ListSessionsOptions as SessionListFilter,
+	SessionMessage,
+	GetSessionMessagesOptions as SessionMessagesOptions,
 	McpServerConfig as MCPServerConfig,
 	McpStdioServerConfig as MCPStdioServerConfig,
 	McpHttpServerConfig as MCPHTTPServerConfig,
@@ -541,6 +545,11 @@ export class AgentService {
 	/** List persisted sessions. */
 	async listSessions(filter?: ListSessionsOptions): Promise<SDKSessionInfo[]> {
 		return await listSessions(filter);
+	}
+
+	/** Read a persisted session's transcript (for cold-load history replay). */
+	async getSessionMessages(sessionId: string, options?: GetSessionMessagesOptions): Promise<SessionMessage[]> {
+		return await getSessionMessages(sessionId, options);
 	}
 
 	/** Delete a session. */
