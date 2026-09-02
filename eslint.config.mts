@@ -181,6 +181,67 @@ export default tseslint.config(
 		rules: {
 			'synapse-custom/ui-sentence-case': 'error',
 			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+			// obsidianmd's own sentence-case rule doesn't know the plugin's own name and
+			// flags correctly-capitalized "Synapse" in UI copy ("Chat with Synapse", "Open
+			// Synapse") as a violation. `brands`/`acronyms` *replace* the rule's own default
+			// lists rather than extend them (confirmed against its source), so these are
+			// copies of eslint-plugin-obsidianmd@0.4.2's DEFAULT_BRANDS/DEFAULT_ACRONYMS
+			// (src/lib/rules/ui/brands.ts, acronyms.ts) plus this plugin's own terms
+			// ('Synapse', 'Ollama', 'Sonnet', 'BYOK', 'USD'). Only proper nouns belong in
+			// `brands` — generic words like "Agent"/"Enter"/"Settings" (from our own
+			// ALLOWED_UPPERCASE list above) caused false positives mid-sentence when tried.
+			'obsidianmd/ui/sentence-case': ['warn', {
+				enforceCamelCaseLower: true,
+				brands: [
+					'iOS', 'iPadOS', 'macOS', 'Windows', 'Android', 'Linux',
+					'Obsidian', 'Obsidian Sync', 'Obsidian Publish',
+					'Google', 'Gemini', 'Vertex AI', 'OpenAI', 'GPT', 'Anthropic', 'Claude', 'Cursor', 'Microsoft',
+					'Google Drive', 'Dropbox', 'OneDrive', 'iCloud Drive',
+					'YouTube', 'Slack', 'Discord', 'Telegram', 'WhatsApp', 'Twitter', 'X',
+					'Readwise', 'Zotero',
+					'Excalidraw', 'Mermaid',
+					'Markdown', 'LaTeX', 'JavaScript', 'TypeScript', 'Node.js',
+					'npm', 'pnpm', 'Yarn', 'Git', 'GitHub', 'GitLab',
+					'Anki', 'CalDAV', 'CardDAV', 'Evernote', 'IntelliJ IDEA', 'Jekyll', 'Logseq', 'Notion',
+					'PyCharm', 'React', 'Reddit', 'Roam Research', 'Svelte', 'VS Code', 'Visual Studio Code',
+					'WebDAV', 'WebStorm',
+					// Synapse-specific additions:
+					'Synapse', 'Ollama', 'Sonnet',
+				],
+				acronyms: [
+					'API', 'HTTP', 'HTTPS', 'URL', 'DNS', 'TCP', 'IP', 'SSH', 'TLS', 'SSL', 'FTP', 'SFTP', 'SMTP',
+					'JSON', 'XML', 'HTML', 'CSS', 'PDF', 'CSV', 'YAML', 'SQL', 'PNG', 'JPG', 'JPEG', 'GIF', 'SVG',
+					'2FA', 'MFA', 'OAuth', 'JWT', 'LDAP', 'SAML',
+					'SDK', 'IDE', 'CLI', 'GUI', 'CRUD', 'SOAP',
+					'CPU', 'GPU', 'RAM', 'SSD', 'USB',
+					'UI', 'OK',
+					'RSS', 'S3',
+					'ID',
+					'UUID', 'GUID', 'SHA', 'MD5', 'ASCII', 'UTF-8', 'UTF-16', 'DOM', 'CDN', 'FAQ', 'AI', 'ML', 'LLM',
+					// Synapse-specific additions:
+					'BYOK', 'USD', 'MCP',
+				],
+				// Whole strings to exempt entirely — these contain literal, case-sensitive
+				// shell commands / key-format placeholders, not prose, so sentence case
+				// doesn't apply (obsidianmd/* rules can't be disabled via inline comments —
+				// see eslint-comments/no-restricted-disable in its recommended config).
+				ignoreRegex: [
+					'sk-ant-', // Anthropic API key placeholder format
+					'claude login', // literal CLI command
+					'ollama serve', // literal CLI command
+					'ollama pull', // literal CLI command
+					'^Feature -> Agent map$', // setting name — "Agent" is this plugin's own
+					// domain term (matches synapse-custom/ui-sentence-case's ALLOWED_UPPERCASE
+					// above), not a word the rule's brand dictionary knows about
+					'^e\\.g\\.', // lowercase "e.g." lead-in — matches our own hand-rolled
+					// synapse-custom/ui-sentence-case rule's convention above
+					'^Custom request timeout in seconds\\. 0 ', // "0 uses…" — a numeral can't
+					// itself be capitalized, and forcing the next word up ("0 Uses…") reads
+					// worse than natural lowercase continuation
+					'_synapse/triggers/', // literal (lowercase) vault folder path, not prose —
+					// the rule's suggested fix would incorrectly capitalize it to "_Synapse/…"
+				],
+			}],
 		},
 		languageOptions: {
 			globals: {

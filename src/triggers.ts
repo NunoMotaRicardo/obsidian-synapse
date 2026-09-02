@@ -4,11 +4,15 @@ import type {TriggerConfig, TriggerEvent} from './types';
 import {scanTriggers} from './configWriter';
 import {SYNAPSE_FOLDER} from './settings';
 import {executeTrigger} from './triggerExecutor';
+import {debugTrace} from './debug';
 
 // ---------------------------------------------------------------------------
 // Glob matching
 // ---------------------------------------------------------------------------
 
+/* eslint-disable no-irregular-whitespace -- the doc example below has a zero-width
+   space between `**` and `/notes` so `**​/` doesn't get parsed as the end of this
+   JSDoc comment (`*​/`); it's a deliberate escape, not stray whitespace. */
 /**
  * Simple glob matcher for vault-relative paths.
  *
@@ -18,6 +22,7 @@ import {executeTrigger} from './triggerExecutor';
  * - Literal path prefixes (e.g. `inbox/` matches `inbox/note.md`)
  * - Combination patterns like `inbox/*.md` or `projects/**​/notes/*.md`
  */
+/* eslint-enable no-irregular-whitespace -- re-enable after the doc comment above */
 export function matchGlob(pattern: string, path: string): boolean {
 	// Normalize both sides: trim, forward slashes, no leading/trailing slash
 	const p = pattern.replace(/\\/g, '/').replace(/^\/|\/$/g, '');
@@ -299,7 +304,7 @@ export class TriggerWatcher {
 			})
 		);
 
-		console.log(`[synapse] TriggerWatcher started — ${this.triggers.length} trigger(s) loaded`);
+		debugTrace(`[synapse] TriggerWatcher started — ${this.triggers.length} trigger(s) loaded`);
 	}
 
 	/** Clean up debounce timers. Vault event listeners are cleaned up by Obsidian. */
@@ -313,7 +318,7 @@ export class TriggerWatcher {
 			window.clearTimeout(this.configReloadTimer);
 			this.configReloadTimer = null;
 		}
-		console.log('[synapse] TriggerWatcher stopped');
+		debugTrace('[synapse] TriggerWatcher stopped');
 	}
 
 	/** Load (or reload) trigger configs from `_synapse/triggers/`. */
@@ -321,7 +326,7 @@ export class TriggerWatcher {
 		try {
 			const folder = normalizePath(`${SYNAPSE_FOLDER}/triggers`);
 			this.triggers = await scanTriggers(this.plugin.app, folder);
-			console.log(`[synapse] Loaded ${this.triggers.length} trigger(s)`);
+			debugTrace(`[synapse] Loaded ${this.triggers.length} trigger(s)`);
 		} catch (e) {
 			console.error('[synapse] Failed to load triggers:', e);
 			this.triggers = [];
@@ -419,7 +424,7 @@ export class TriggerScheduler {
 
 		this.plugin.registerInterval(window.setInterval(() => this.tick(), 60_000));
 
-		console.log(`[synapse] TriggerScheduler started — ${this.triggers.length} scheduled trigger(s) loaded`);
+		debugTrace(`[synapse] TriggerScheduler started — ${this.triggers.length} scheduled trigger(s) loaded`);
 	}
 
 	/** Called every 60 seconds to evaluate scheduled triggers. */

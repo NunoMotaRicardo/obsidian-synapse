@@ -15,6 +15,7 @@ import {executeLocalProviderQuery} from './providerModels';
 import {vaultTools} from './vaultTools';
 import {McpBridgeSession} from './mcpBridge';
 import {lockManager, LockAcquisitionError} from './lockManager';
+import {debugTrace} from './debug';
 
 // ---------------------------------------------------------------------------
 // Template substitution
@@ -106,7 +107,10 @@ async function appendToReport(
 				// FIX (BLOCKING 2): use vault.read() + vault.modify() instead of
 				// adapter.read/write to go through Obsidian's cache and avoid
 				// concurrent-write clobbering.
-				const tfile = app.vault.getAbstractFileByPath(fileName) as TFile;
+				const tfile = app.vault.getAbstractFileByPath(fileName);
+				if (!(tfile instanceof TFile)) {
+					throw new Error(`[synapse] Trigger report path is not a file: ${fileName}`);
+				}
 				const current = await app.vault.read(tfile);
 				await app.vault.modify(tfile, `${current}\n${block}\n`);
 			}
@@ -351,7 +355,7 @@ export async function executeTrigger(
 
 		await applyWriteMode(plugin, trigger, filePath, result);
 
-		console.log(`[synapse] Trigger "${trigger.name}" executed successfully for ${filePath}`);
+		debugTrace(`[synapse] Trigger "${trigger.name}" executed successfully for ${filePath}`);
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
 		console.error(`[synapse] Trigger "${trigger.name}" execution failed:`, e);

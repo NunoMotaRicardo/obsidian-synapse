@@ -572,7 +572,7 @@ function buildEditorImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile, em
 			.onClick(() => void extractAndInsertBelow(plugin, file, embed)),
 	);
 	menu.addItem((item) =>
-		item.setTitle('Convert to mermaid below')
+		item.setTitle('Convert to Mermaid below')
 			.setIcon('git-fork')
 			.onClick(() => void convertToMermaidBelow(plugin, file, embed)),
 	);
@@ -670,7 +670,7 @@ function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 				.onClick(() => void extractAndReplace(plugin, file)),
 		);
 		submenu.addItem((si) =>
-			si.setTitle('Convert to mermaid diagram below')
+			si.setTitle('Convert to Mermaid diagram below')
 				.setIcon('git-fork')
 				.onClick(() => void convertToMermaidBelow(plugin, file)),
 		);

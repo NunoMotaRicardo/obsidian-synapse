@@ -10,6 +10,7 @@ import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
 import {TriggerWatcher, TriggerScheduler} from './triggers';
 import {launchBatchLoop} from './batchLoopExecutor';
+import {debugTrace} from './debug';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -228,7 +229,7 @@ export default class SynapsePlugin extends Plugin {
 			},
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
-				console.log(`Synapse: Claude CLI v${info.version} at ${info.path}`);
+				debugTrace(`Synapse: Claude CLI v${info.version} at ${info.path}`);
 			},
 		});
 		if (s.providerBaseUrl) {
