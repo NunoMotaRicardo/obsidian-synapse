@@ -108,7 +108,10 @@ Both `chat()` and `inlineChat()` use `sendAndWaitWithAbort(fn, options)`:
   rethrowing. A `timedOut` flag distinguishes timeout aborts from user-initiated ones.
 
 `Session.abort()` is used by `synapseView.ts` to cancel in-flight work when a `session.error`
-event is received, and also by the interactive loop turn/token guardrails (see below).
+event is received, and also by the interactive loop turn/token guardrails (see below). It prefers
+a graceful `Query.interrupt()` control request over hard-aborting the `AbortController`, falling
+back to the latter only when there's no in-flight query or `interrupt()` fails — see "Electron
+`.unref()` compatibility (issue #116)" below for why.
 
 ## Run cost reporting (issue #88)
 
@@ -203,6 +206,91 @@ data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` �
 `!tool_result.is_error`, and `error` is included only when `is_error` is true. `synapseView.ts`
 consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
 surface a friendlier chat message — see `chat-view.md`.
+
+## Partial message streaming (issue #103)
+
+The interactive chat panel's `SessionConfig` (`SynapseView.buildSessionConfig()`) sets
+`includePartialMessages: true`. Only the chat panel does this — `chat()`, `inlineChat()`, and
+every unattended caller that goes through them (search, editor text actions, triggers, the
+Telegram bot, batch loops) collect full text via `collectText()`/their own accumulation loop and
+never read `includePartialMessages`, so they get no extra `stream_event` volume.
+
+When enabled, the CLI additionally emits `SDKPartialAssistantMessage` (`type: 'stream_event'`)
+messages carrying one Anthropic Messages API `BetaRawMessageStreamEvent` each
+(`message_start`/`content_block_start`/`content_block_delta`/`content_block_stop`/`message_delta`/
+`message_stop`) *before* the turn's complete `assistant` message arrives. `BetaRawMessageStreamEvent`
+is re-exported from `agentService.ts` as `SDKPartialAssistantMessage['event']` (not imported
+directly from `@anthropic-ai/sdk`) so this module stays the sole point of contact with SDK package
+internals.
+
+`Session.convertToSessionEvent()`'s `'stream_event'` case only acts on `content_block_delta`:
+`text_delta` → `assistant.message_delta`, `thinking_delta` → `assistant.reasoning_delta`, both with
+`{content, deltaContent}` equal to just that chunk's text — these are genuine incremental deltas,
+unlike the old behavior described below. `ttft_ms` (present only on the turn's first non-ping
+stream event) rides along as an optional `ttftMs` field on whichever delta carries it, rather than
+getting a dedicated event type for one optional number.
+
+**No double-render:** the turn's complete `assistant` SDKMessage still arrives after the deltas
+(same as before partial streaming existed). `Session` tracks `partialMessagesEnabled` (from
+`config.includePartialMessages`) and the `'assistant'` case's per-block loop skips the
+`assistant.message_delta`/`assistant.reasoning_delta` redispatch from `text`/`thinking` content
+blocks when it's true — those blocks' text already streamed incrementally via `'stream_event'`.
+`tool_use` handling (`tool.execution_start`), `assistant.usage`, and the whole-message
+`assistant.message` reconciliation dispatch are unaffected and always fire; `assistant.message`
+is a no-op on the view side unless the accumulated streamed text actually differs from the
+complete message's text (`chat-view.md`'s streaming section), so it never re-renders a second
+copy of a turn that streamed correctly.
+
+**Without** `includePartialMessages` (every non-chat-panel caller), the `'assistant'` case's
+per-block loop is the *only* source of `assistant.message_delta`/`assistant.reasoning_delta` —
+each dispatched once, with the whole finished block's text, exactly as before this issue. This is
+still called `_delta` even though it isn't incremental in that mode; `chat-view.md`'s renderer
+handles both cases identically (`appendDelta`/`appendReasoningDelta` just accumulate whatever
+arrives), so this asymmetry is invisible to consumers.
+
+**Electron `.unref()` compatibility (issue #116):** the Agent SDK's `ProcessTransport.close()`
+(`sdk.mjs`) schedules a SIGTERM→SIGKILL escalation timer whenever `close()` runs while the CLI
+subprocess is still alive, and calls `.unref()` on it unconditionally. Electron's renderer keeps
+the browser/Chromium `setTimeout`, which returns a plain number with no `.unref()` — this throws
+`TypeError: setTimeout(...).unref is not a function`.
+
+An earlier version of this fix (landed alongside `includePartialMessages` above, before #116)
+patched `globalThis.setTimeout` unconditionally at module load for the plugin's entire lifetime.
+That blast radius was rejected: #116 established, by reading the SDK's teardown code and by
+empirical testing (several partial-message sends produced zero console errors with no shim
+installed at all), that **ordinary query completion never reaches the broken branch** —
+`ProcessTransport.readMessages()` always `await`s `waitForExit()` before its generator finishes,
+so by the time the SDK's own cleanup calls `transport.close()` the subprocess has already exited
+and the escalation branch is skipped. This holds regardless of `includePartialMessages`.
+
+The branch **is** reached when a query is aborted mid-stream: `Session.send()`'s
+`AbortController.abort()` synchronously fires an `abort` listener the SDK registers directly on
+the controller's signal, which calls `transport.close()` immediately — outside the SDK's own
+try/catch — typically while the subprocess is still running. This can throw the `TypeError` twice
+per abort: once synchronously (the outer escalation timer), and again roughly 2s later on win32
+if the process still hasn't exited by then (a nested SIGKILL timer scheduled from inside that same
+callback).
+
+`Session.abort()` now:
+
+1. Prefers `Query.interrupt()` — the SDK's graceful control-protocol stop, which asks the CLI to
+   end the current turn and exit through its own normal completion path (the one confirmed safe
+   above). No shim involved; this handles the common "user clicked stop" case cleanly.
+2. Falls back to hard-aborting `AbortController` only if there is no in-flight query to interrupt,
+   or `interrupt()` itself throws (older CLI, unresponsive process). This path forces the kill
+   while the subprocess may still be alive, so `agentService.ts` installs a temporary, refcounted
+   `setTimeout` shim (`installSetTimeoutShim()`/`uninstallSetTimeoutShim()`) — identical wrapper
+   technique as the old module-load version (wraps the numeric id in a `Number` object with no-op
+   `unref`/`ref`, still coercing to the same id for `clearTimeout()` via `valueOf()`) — only around
+   this call, for `ABORT_SHIM_GRACE_MS` (8s, comfortably past the SDK's own ~7s worst case of
+   escalation timers), then restores the original. Refcounted so overlapping aborts across
+   sessions don't restore early. `AgentService.stop()` (plugin unload) force-restores immediately
+   regardless of the grace-period timer, so the shim never outlives the plugin.
+
+Both paths were verified with the Obsidian dev console: zero `TypeError` on repeated
+partial-message sends, zero `TypeError` on mid-stream interrupts via the graceful path, and zero
+`TypeError` with `globalThis.setTimeout` confirmed patched-then-restored when `interrupt()` is
+forced to fail (exercising the fallback).
 
 ## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate` (issue #87)
 

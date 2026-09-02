@@ -54,12 +54,23 @@ vault scope, folder tree.
     one-shot `inlineChat()` per query rather than a persistent multi-turn session, so there's no
     `configDirty`/session-continuity motivation for keeping a toggle. Removing it here is purely a
     consistency fix with the chat tab, not a response to either of those specific gaps.
-- Streaming: sessions are created with `streaming: true`; renderer accumulates
-  `assistant.message_delta` / `assistant.reasoning_delta`, finalizes on `assistant.message`.
+- Streaming: `buildSessionConfig()` sets `includePartialMessages: true` (issue #103), so the chat
+  panel — and only the chat panel; search/triggers/Telegram/batch loops stay one-shot — gets
+  genuine token-level `assistant.message_delta`/`assistant.reasoning_delta` events as the model
+  generates, not one lump per turn. The renderer doesn't care which mode produced a given delta:
+  `appendDelta()`/`appendReasoningDelta()` just accumulate whatever arrives into
+  `streamingContent`/`streamingReasoning` (see "Turn/session-switch lifecycle" below), and the
+  final `assistant.message` event only overwrites `streamingContent` if it differs from what
+  streamed — a no-op when the accumulated deltas already equal the complete text, so a turn is
+  never rendered twice. See `agent-service.md`'s "Partial message streaming" for the
+  `Session.convertToSessionEvent()` mapping and why the double-render can't happen.
 - **Waiting/thinking indicator (issue #99):** the `.synapse-thinking` dot-animation (built by the
   shared `createThinkingIndicator()` helper in `chatRenderer.ts`) is honest about what state the
   turn is actually in — it never claims "Thinking" unless a reasoning block is actually
-  streaming:
+  streaming. Partial-message streaming (#103) makes this signal more accurate, not less: the
+  first `assistant.reasoning_delta` now arrives from a real `thinking_delta` stream chunk as
+  reasoning is actually being generated, rather than from a `thinking` block that had already
+  finished generating by the time the complete `assistant` message showed up.
   - `addAssistantPlaceholder()` paints it with "Waiting for response…" immediately after send,
     before any content (reasoning or answer) has arrived.
   - The first `assistant.reasoning_delta` (`appendReasoningDelta` → `startReasoningBlock`) removes

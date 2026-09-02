@@ -34,6 +34,85 @@ try {
 	// ignore polyfill errors
 }
 
+// Scoped, refcounted compatibility shim for Electron desktop environment (issue #103/#116).
+//
+// Electron's renderer keeps the browser/Chromium `setTimeout`, whose return value is a plain
+// number — not a Node `Timeout` with `.unref()`. The Agent SDK's `ProcessTransport.close()`
+// (node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs) calls `.unref()` unconditionally on a
+// SIGTERM→SIGKILL escalation timer whenever `close()` runs while the CLI subprocess is still
+// alive, throwing `TypeError: setTimeout(...).unref is not a function`.
+//
+// Investigation for #116 established that this branch is NOT reached by ordinary query
+// completion: `ProcessTransport.readMessages()` always `await`s `waitForExit()` before its
+// generator finishes, so by the time the SDK's own cleanup path calls `transport.close()`
+// the process has already exited and the escalation branch is skipped — confirmed empirically
+// (several partial-message chat sends produced zero console errors without any shim at all).
+//
+// The branch IS reached when a query is aborted mid-stream: `AbortController.abort()`
+// synchronously fires an internal `abort` listener that calls `transport.close()` directly,
+// outside the SDK's own try/catch, while the process is typically still running — hitting the
+// crash once immediately (the outer escalation timer) and, on win32, potentially again ~2s
+// later (the nested SIGKILL timer scheduled by that same escalation callback). See
+// `Session.abort()`, which installs this shim only around that forced-kill window.
+//
+// Refcounted so overlapping aborts (e.g. two sessions racing to stop) don't restore the
+// original `setTimeout` while another abort is still relying on the shim.
+let setTimeoutShimRefCount = 0;
+let originalSetTimeout: typeof globalThis.setTimeout | null = null;
+
+function installSetTimeoutShim(): void {
+	setTimeoutShimRefCount++;
+	if (setTimeoutShimRefCount > 1) return;
+	try {
+		originalSetTimeout = globalThis.setTimeout;
+		if (typeof originalSetTimeout !== 'function') return;
+		const original = originalSetTimeout;
+		globalThis.setTimeout = ((...args: Parameters<typeof original>) => {
+			const id: unknown = original(...args);
+			if (id === null || (typeof id !== 'number' && typeof id !== 'bigint')) return id;
+			// `Object(id)` still coerces to the same numeric id via `valueOf()` for
+			// `clearTimeout()` (per the WebIDL `long` conversion both use), so no existing
+			// `setTimeout`/`clearTimeout` caller elsewhere in the plugin (or Obsidian
+			// itself) is affected while the shim is installed.
+			const handle = Object(id) as {unref?: () => unknown; ref?: () => unknown};
+			handle.unref = () => handle;
+			handle.ref = () => handle;
+			return handle;
+		}) as typeof original;
+	} catch {
+		// ignore polyfill errors
+	}
+}
+
+function uninstallSetTimeoutShim(): void {
+	setTimeoutShimRefCount = Math.max(0, setTimeoutShimRefCount - 1);
+	if (setTimeoutShimRefCount === 0 && originalSetTimeout) {
+		globalThis.setTimeout = originalSetTimeout;
+		originalSetTimeout = null;
+	}
+}
+
+/**
+ * Force-restore `globalThis.setTimeout` immediately, regardless of outstanding refcount.
+ * Called from `AgentService.stop()` (plugin unload path) so an in-flight abort's shim never
+ * outlives the plugin — see the register/unload conventions in CLAUDE.md.
+ */
+function forceRestoreSetTimeoutShim(): void {
+	setTimeoutShimRefCount = 0;
+	if (originalSetTimeout) {
+		globalThis.setTimeout = originalSetTimeout;
+		originalSetTimeout = null;
+	}
+}
+
+/**
+ * Milliseconds the shim must stay installed after an abort to outlive the SDK's own
+ * escalation timers: a 2s outer check, plus (on win32, if the process still hasn't exited)
+ * a further 5s SIGKILL timer scheduled from inside that same callback. A little headroom is
+ * added on top of the 7s worst case.
+ */
+const ABORT_SHIM_GRACE_MS = 8000;
+
 import {query, listSessions, getSessionMessages, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
@@ -41,6 +120,7 @@ import type {
 	SDKMessage,
 	SDKAssistantMessage,
 	SDKResultMessage,
+	SDKPartialAssistantMessage,
 	SDKSessionInfo,
 	ListSessionsOptions,
 	SessionMessage,
@@ -84,6 +164,7 @@ export type {
 	SDKMessage,
 	SDKAssistantMessage,
 	SDKResultMessage,
+	SDKPartialAssistantMessage,
 	SDKSessionInfo as SessionMetadata,
 	ListSessionsOptions as SessionListFilter,
 	SessionMessage,
@@ -108,6 +189,15 @@ export type SessionConfig = Options & {
 	plugins?: SdkPluginConfig[];
 	skills?: string[];
 };
+
+/**
+ * One Anthropic Messages API streaming event carried by `SDKPartialAssistantMessage.event`
+ * (`message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`,
+ * `message_delta`, `message_stop`). Derived from the SDK's own field rather than imported
+ * from `@anthropic-ai/sdk` directly, so this module stays the only place that reaches into
+ * SDK package internals (architecture rule from CLAUDE.md).
+ */
+export type BetaRawMessageStreamEvent = SDKPartialAssistantMessage['event'];
 
 // Note: Session and SessionEvent are exported as classes/interfaces below.
 
@@ -848,9 +938,15 @@ export class AgentService {
 	/**
 	 * Stop the service. For the Agent SDK, there is no persistent client
 	 * to tear down — queries manage their own subprocess lifecycle.
+	 *
+	 * Also force-restores `globalThis.setTimeout` if `Session.abort()`'s scoped shim (#116)
+	 * happens to still be installed — e.g. the plugin is unloaded a few seconds after a user
+	 * clicked stop, before the shim's own grace-period timer got to it — so the plugin never
+	 * leaves the global patched past its own lifecycle.
 	 */
 	async stop(): Promise<void> {
 		this.state = 'disconnected';
+		forceRestoreSetTimeoutShim();
 	}
 }
 
@@ -972,10 +1068,22 @@ export class Session {
 	private config: Options;
 	private _sessionId = '';
 	private abortController: AbortController | null = null;
+	/** The in-flight query's `Query` handle, tracked so `abort()` can try a graceful `interrupt()` first. */
+	private currentQuery: Query | null = null;
 	private handlers: Map<string, SessionEventHandler[]> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
 	private pendingToolCalls: Map<string, string> = new Map();
+	/**
+	 * Whether this session's queries request `SDKPartialAssistantMessage` (`stream_event`)
+	 * events. When true, `convertToSessionEvent()` dispatches genuine incremental
+	 * `assistant.message_delta`/`assistant.reasoning_delta` from `content_block_delta` events
+	 * as they arrive, and suppresses the whole-block redispatch it would otherwise do from the
+	 * terminal `assistant` message's content blocks — that message still arrives and is used
+	 * for reconciliation only (`assistant.message`, tool_use, usage), never a second text dump.
+	 * See specs/agent-service.md "Partial message streaming".
+	 */
+	private readonly partialMessagesEnabled: boolean;
 	/** Expose the RPC-like interface (stubbed — Agent SDK handles agent selection via options). */
 	readonly rpc = {
 		agent: {
@@ -995,6 +1103,7 @@ export class Session {
 		this.service = service;
 		this.config = config;
 		this.onEventCallback = onEvent ?? null;
+		this.partialMessagesEnabled = config.includePartialMessages === true;
 	}
 
 	get sessionId(): string {
@@ -1077,26 +1186,31 @@ export class Session {
 					prompt: options.prompt,
 					queryOptions: queryOpts,
 				});
+				this.currentQuery = stream;
 
-				for await (const msg of stream) {
-					const sdkMsg = msg;
+				try {
+					for await (const msg of stream) {
+						const sdkMsg = msg;
 
-					// Capture session ID — announce it the first time so the view can
-					// name the session and update the sidebar (the id is unknown at
-					// Session construction time; it only arrives with the first message).
-					if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
-						const isNew = this._sessionId !== sdkMsg.session_id;
-						this._sessionId = sdkMsg.session_id;
-						if (isNew) {
-							this.dispatch({type: 'session.init', data: {sessionId: this._sessionId}});
+						// Capture session ID — announce it the first time so the view can
+						// name the session and update the sidebar (the id is unknown at
+						// Session construction time; it only arrives with the first message).
+						if ('session_id' in sdkMsg && typeof sdkMsg.session_id === 'string' && sdkMsg.session_id) {
+							const isNew = this._sessionId !== sdkMsg.session_id;
+							this._sessionId = sdkMsg.session_id;
+							if (isNew) {
+								this.dispatch({type: 'session.init', data: {sessionId: this._sessionId}});
+							}
+						}
+
+						// Convert SDKMessage to SessionEvent and dispatch
+						const event = this.convertToSessionEvent(sdkMsg);
+						if (event) {
+							this.dispatch(event);
 						}
 					}
-
-					// Convert SDKMessage to SessionEvent and dispatch
-					const event = this.convertToSessionEvent(sdkMsg);
-					if (event) {
-						this.dispatch(event);
-					}
+				} finally {
+					this.currentQuery = null;
 				}
 
 				// Dispatch session.idle when the stream ends
@@ -1116,16 +1230,44 @@ export class Session {
 
 	/**
 	 * Abort the current query.
+	 *
+	 * Prefers the SDK's graceful `Query.interrupt()` control request, which asks the CLI to
+	 * stop the current turn and exit through its own normal completion path — the one path
+	 * confirmed (see the comment above `installSetTimeoutShim` in this file, #116) never hits
+	 * the SDK's broken `.unref()` teardown, because the SDK always awaits process exit before
+	 * considering a query done.
+	 *
+	 * Falls back to hard-aborting the query's `AbortController` when there is no in-flight
+	 * query to interrupt, or when `interrupt()` itself fails (e.g. an older CLI without
+	 * control-protocol support, or a CLI that's already gone unresponsive). That path forces
+	 * the SDK to kill the subprocess while it may still be running, which *does* hit the
+	 * broken teardown — so a temporary, refcounted `setTimeout` shim is installed only for
+	 * this call, for long enough to outlive the SDK's own escalation timers, then restored.
 	 */
 	async abort(): Promise<void> {
-		this.abortController?.abort();
+		const query = this.currentQuery;
+		if (query) {
+			try {
+				await query.interrupt();
+				return;
+			} catch {
+				// Fall through to the forced abort below.
+			}
+		}
+		if (!this.abortController) return;
+		installSetTimeoutShim();
+		try {
+			this.abortController.abort();
+		} finally {
+			window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
+		}
 	}
 
 	/**
 	 * Disconnect the session (cleanup).
 	 */
 	async disconnect(): Promise<void> {
-		this.abortController?.abort();
+		await this.abort();
 		this.handlers.clear();
 		this.onEventCallback = null;
 	}
@@ -1152,18 +1294,27 @@ export class Session {
 				const assistantMsg = msg;
 				// Emit turn_start
 				this.dispatch({type: 'assistant.turn_start', data: {}});
-				// Emit text content as message events
+				// Emit text content as message events. When partial streaming is on, the
+				// real incremental deltas already went out from the 'stream_event' case as
+				// they arrived — redispatching the now-complete block here would render the
+				// whole turn's text a second time. Skip the block-level delta and fall
+				// through to the reconciliation `assistant.message` dispatch below, which is
+				// a no-op unless the accumulated streamed text actually differs.
 				for (const block of assistantMsg.message.content) {
 					if (block.type === 'text') {
-						this.dispatch({
-							type: 'assistant.message_delta',
-							data: {content: block.text, deltaContent: block.text},
-						});
+						if (!this.partialMessagesEnabled) {
+							this.dispatch({
+								type: 'assistant.message_delta',
+								data: {content: block.text, deltaContent: block.text},
+							});
+						}
 					} else if (block.type === 'thinking') {
-						this.dispatch({
-							type: 'assistant.reasoning_delta',
-							data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
-						});
+						if (!this.partialMessagesEnabled) {
+							this.dispatch({
+								type: 'assistant.reasoning_delta',
+								data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
+							});
+						}
 					} else if (block.type === 'tool_use') {
 						const toolBlock = block as {id: string; name: string; input: unknown};
 						this.pendingToolCalls.set(toolBlock.id, toolBlock.name);
@@ -1189,6 +1340,33 @@ export class Session {
 					type: 'assistant.message',
 					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
 				});
+				return null;
+			}
+			case 'stream_event': {
+				// Genuine incremental streaming (issue #103) — only emitted when the session
+				// was created with `includePartialMessages: true` (the interactive chat
+				// panel). The complete `assistant` message for this turn still follows; see
+				// the 'assistant' case above for why it doesn't redispatch these deltas.
+				const partial = msg;
+				const streamEvent = partial.event;
+				if (streamEvent.type === 'content_block_delta') {
+					const delta = streamEvent.delta;
+					// ttft_ms only rides the turn's first non-ping stream event — surface it
+					// alongside whichever delta happens to carry it rather than adding a
+					// dedicated event type for a single optional field.
+					const ttft = typeof partial.ttft_ms === 'number' ? {ttftMs: partial.ttft_ms} : {};
+					if (delta.type === 'text_delta') {
+						this.dispatch({
+							type: 'assistant.message_delta',
+							data: {content: delta.text, deltaContent: delta.text, ...ttft},
+						});
+					} else if (delta.type === 'thinking_delta') {
+						this.dispatch({
+							type: 'assistant.reasoning_delta',
+							data: {content: delta.thinking, deltaContent: delta.thinking, ...ttft},
+						});
+					}
+				}
 				return null;
 			}
 			case 'user': {
