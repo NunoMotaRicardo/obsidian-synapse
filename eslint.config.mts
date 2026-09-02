@@ -285,52 +285,42 @@ export default tseslint.config(
 	{
 		files: ['src/main.ts'],
 		rules: {
-			// Renaming command IDs (drop the "synapse-"/plugin-id prefix) needs a migration
-			// path — CLAUDE.md: "Don't rename command IDs ... without a migration path"
-			// (existing hotkey bindings and any automation keyed on the id would break).
-			// Renaming command *names* and removing default hotkeys are real user-facing
-			// UX changes (a previously-set keybinding would silently stop existing), not
-			// mechanical lint fixes. All three need a deliberate product decision — left
-			// as-is here; see #115 for follow-up.
+			// Permanently disabled (investigated under #115, settled here):
+			//
+			// no-plugin-id-in-command-id — Obsidian already namespaces every registered
+			// command as `<plugin-id>:<command-id>` (see obsidian.d.ts Plugin.addCommand),
+			// so the rule's stated premise ("avoid conflicts with other plugins") doesn't
+			// apply — the id can never collide across plugins regardless of this prefix.
+			// What does apply is CLAUDE.md's "don't rename command IDs without a migration
+			// path": Obsidian's hotkey store keys a user's custom binding to the full
+			// `synapse:<command-id>` string, and the plugin API exposes no rename/alias
+			// primitive (only addCommand/removeCommand) — changing an id makes Obsidian
+			// treat it as a brand-new command, silently orphaning any binding the user set.
+			// No safe migration exists, so this stays off for good.
+			//
+			// no-default-hotkeys — shipping default hotkeys (Mod+Shift+K/L/E) for this
+			// plugin's most-used commands is a deliberate, longstanding UX choice, not an
+			// oversight. Removing them would silently strip a working keybinding for every
+			// existing user with no prompt or replacement — a real regression, not a
+			// lint fix. Kept as-is.
 			'obsidianmd/commands/no-plugin-id-in-command-id': 'off',
-			'obsidianmd/commands/no-plugin-name-in-command-name': 'off',
 			'obsidianmd/commands/no-default-hotkeys': 'off',
-		},
-	},
-	{
-		files: ['src/settings.ts'],
-		rules: {
-			// 7 findings here, each a fixed-pixel inline style (narrow numeric input
-			// widths, description-text margins) that would need matching CSS classes
-			// added to styles.css. settings.ts is being actively restructured on a
-			// concurrent branch (removing dead UI controls) — a broad multi-line/
-			// multi-file styling refactor here risks a merge collision for no safety
-			// benefit (these are static, not user-controlled, values). Left as-is;
-			// see #115 for follow-up.
-			'obsidianmd/no-static-styles-assignment': 'off',
-		},
-	},
-	{
-		files: ['src/providerModels.ts'],
-		rules: {
-			// This module's fetch() calls talk to user-configured local/BYOK provider base
-			// URLs (Ollama, OpenAI-compatible endpoints, Azure, Anthropic-compatible) —
-			// requestUrl() has different semantics (buffers the whole response instead of
-			// streaming, different error/CORS behavior) that would need real verification
-			// against each provider shape, not a blind lint-driven swap. Left as-is here;
-			// see #115 for follow-up.
-			'no-restricted-globals': 'off',
 		},
 	},
 	{
 		files: ['src/configWriter.ts'],
 		rules: {
-			// deleteArtifact() intentionally always uses Obsidian's local .trash folder
-			// (vault.trash(file, false)), not the user's system trash preference — this is
-			// the plugin deleting its own generated artifact files (not user notes), and
-			// switching to FileManager.trashFile() would change that behavior (deferring to
-			// the "Deleted files" setting instead). Needs its own design/verification pass,
-			// not a blind lint-driven swap — left as-is here; see #115 for follow-up.
+			// Permanently disabled (investigated under #115, settled here): deleteArtifact()
+			// intentionally always uses Obsidian's local .trash folder (vault.trash(file,
+			// false)), not FileManager.trashFile() / the user's "Deleted files" preference.
+			// These are `_synapse/{agents,skills,triggers}` customization artifacts, not user
+			// notes — and deleteArtifact() exists for artifact-management flows an agent can
+			// drive semi-autonomously (self-improve conversations), where an unintended
+			// deletion needs a guaranteed, in-vault undo path. If "Deleted files" is set to
+			// "Permanently delete", switching to trashFile() would make such deletions
+			// unrecoverable; local .trash always keeps them recoverable regardless of that
+			// setting. That's the safer default for agent-initiated file operations, so this
+			// stays off.
 			'obsidianmd/prefer-file-manager-trash-file': 'off',
 		},
 	},

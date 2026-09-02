@@ -1,4 +1,4 @@
-import type {App} from 'obsidian';
+import {requestUrl, type App} from 'obsidian';
 import type {ModelInfo} from './agentService';
 
 export interface LocalToolCall {
@@ -62,11 +62,11 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 		}
 
 		try {
-			const res = await fetch(tagsUrl, {headers});
-			if (!res.ok) {
-				return {ok: false, error: `HTTP ${res.status} ${res.statusText}`};
+			const res = await requestUrl({url: tagsUrl, headers, throw: false});
+			if (res.status >= 400) {
+				return {ok: false, error: `HTTP ${res.status}`};
 			}
-			const data = (await res.json()) as {
+			const data = res.json as {
 				models?: Array<{
 					name?: string;
 					model?: string;
@@ -103,16 +103,18 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 				} else {
 					try {
 						const showUrl = `${baseUrl}/api/show`;
-						const showRes = await fetch(showUrl, {
+						const showRes = await requestUrl({
+							url: showUrl,
 							method: 'POST',
 							headers: {
 								'Content-Type': 'application/json',
 								...headers
 							},
-							body: JSON.stringify({model: id})
+							body: JSON.stringify({model: id}),
+							throw: false,
 						});
-						if (showRes.ok) {
-							const showData = (await showRes.json()) as {
+						if (showRes.status < 400) {
+							const showData = showRes.json as {
 								capabilities?: string[];
 							};
 							const caps = showData.capabilities || [];
@@ -169,12 +171,12 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 		}
 
 		try {
-			const res = await fetch(modelsUrl, {headers});
-			if (!res.ok) {
-				return {ok: false, error: `HTTP ${res.status} ${res.statusText}`};
+			const res = await requestUrl({url: modelsUrl, headers, throw: false});
+			if (res.status >= 400) {
+				return {ok: false, error: `HTTP ${res.status}`};
 			}
 			type ModelListItem = {id?: string; name?: string};
-			const data = (await res.json()) as {data?: ModelListItem[]} | ModelListItem[];
+			const data = res.json as {data?: ModelListItem[]} | ModelListItem[];
 
 			const rawModels: ModelListItem[] = !Array.isArray(data) && Array.isArray(data.data)
 				? data.data
@@ -360,15 +362,17 @@ export async function executeLocalProviderQuery(
 				const tempBase = baseUrl.replace(/\/+$/, '');
 				const cleanBase = tempBase.endsWith('/v1') ? tempBase.slice(0, -3).replace(/\/+$/, '') : tempBase;
 				const chatUrl = `${cleanBase}/api/chat`;
-				const res = await fetch(chatUrl, {
+				const res = await requestUrl({
+					url: chatUrl,
 					method: 'POST',
 					headers,
 					body: JSON.stringify(requestBody),
+					throw: false,
 				});
-				if (!res.ok) {
-					return {ok: false, error: `Ollama error: HTTP ${res.status} ${res.statusText}`};
+				if (res.status >= 400) {
+					return {ok: false, error: `Ollama error: HTTP ${res.status}`};
 				}
-				const data = (await res.json()) as {
+				const data = res.json as {
 					message?: {
 						role?: string;
 						content?: string;
@@ -380,15 +384,17 @@ export async function executeLocalProviderQuery(
 			} else {
 				const tempBase = baseUrl.replace(/\/+$/, '');
 				const chatUrl = tempBase.endsWith('/v1') ? `${tempBase}/chat/completions` : `${tempBase}/v1/chat/completions`;
-				const res = await fetch(chatUrl, {
+				const res = await requestUrl({
+					url: chatUrl,
 					method: 'POST',
 					headers,
 					body: JSON.stringify(requestBody),
+					throw: false,
 				});
-				if (!res.ok) {
-					return {ok: false, error: `Provider error: HTTP ${res.status} ${res.statusText}`};
+				if (res.status >= 400) {
+					return {ok: false, error: `Provider error: HTTP ${res.status}`};
 				}
-				const data = (await res.json()) as {
+				const data = res.json as {
 					choices?: Array<{
 						message?: {
 							role?: string;

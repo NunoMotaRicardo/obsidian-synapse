@@ -36,6 +36,14 @@ For every BYOK preset (`openai`, `azure`, `anthropic`, `ollama`, `foundry-local`
   `https://...openai.azure.com/openai/v1/`), appends only `/models` to avoid a doubled
   `/v1/v1/models` path.
 
+All HTTP calls in `src/providerModels.ts` (`fetchProviderModels()` and
+`executeLocalProviderQuery()`) use Obsidian's `requestUrl()`, not the browser `fetch()` —
+none of them stream a response body (all read a single parsed JSON payload), and
+`requestUrl()` runs outside the renderer's CORS sandbox, which matters for local providers
+(e.g. Ollama) that don't send CORS headers. `requestUrl()` is called with `throw: false`
+so a non-2xx status is inspected via `res.status` rather than thrown; error messages report
+`HTTP ${status}` only (no `statusText`, which `requestUrl()` doesn't expose).
+
 `fetchProviderModels()` returns a discriminated result (`ok` + `models: ModelInfo[]`, or an
 error) rather than swallowing failures into `[]`, so the Test handler can distinguish the
 three outcomes:

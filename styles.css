@@ -2178,4 +2178,26 @@ body.synapse-no-select {
 	word-break: break-all;
 }
 
+/* ── Settings tab: numeric inputs & description spacing ───────── */
+
+.synapse-settings-cli-status {
+	margin-top: 8px;
+}
+
+.synapse-settings-cli-skew {
+	margin-top: 4px;
+}
+
+.synapse-settings-provider-desc {
+	margin-bottom: 12px;
+}
+
+.synapse-settings-input-narrow {
+	width: 60px;
+}
+
+.synapse-settings-input-medium {
+	width: 90px;
+}
+
 
