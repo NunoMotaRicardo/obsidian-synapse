@@ -8,7 +8,7 @@ Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErro
 | `configToolbar.ts` | Agent / model / reasoning-effort / tools / working-dir / debug controls |
 | `inputArea.ts` | Message input, slash-command skill popup, attachments, vault scope button |
 | `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
-| `sessionSidebar.ts` | Session list, restore (cold resume via `getEvents()`), rename/delete, background sessions |
+| `sessionSidebar.ts` | Session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
 | `searchPanel.ts` | AI vault search tab (basic/advanced) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
 
@@ -159,8 +159,15 @@ vault scope, folder tree.
   removed, and the summary content. These are handled in `handleSessionEvent()` alongside
   existing event types.
 - Session restore: resume by id with the full current session config, re-select agent via
-  `session.rpc.agent.select`, replay history from `session.getEvents()`
-  (`user.message`, `assistant.reasoning`, `assistant.message`).
+  `session.rpc.agent.select`, replay history from `AgentService.getSessionMessages()` (wraps the
+  SDK's `getSessionMessages()`, called with no `dir` filter so it searches all project
+  directories — sessions are listed unscoped (`loadSessions()` → `listSessions()`), and a
+  session's original working directory can differ from the current one since
+  `autoUpdateWorkingDirectory` changes it on note switch; scoping to the current `dir` would make
+  the lookup miss the session and reproduce an empty backlog). Replay walks each transcript
+  message's content blocks for `text` (user/assistant) and `thinking` (assistant); `tool_use`/
+  `tool_result` blocks are skipped — tool-call replay is a separate follow-up. An unreadable or
+  missing transcript degrades to the welcome screen rather than throwing.
 - The active note is attached as context. When `settings.autoUpdateWorkingDirectory` is enabled (default `true`),
   the working directory auto-updates to the active note's parent folder on note switch. When disabled, the working
   directory is not changed automatically (it defaults to the vault root unless overridden manually). The active

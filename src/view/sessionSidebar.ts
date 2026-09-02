@@ -1,6 +1,6 @@
 import type {SynapseView} from '../synapseView';
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
-import type {SessionMetadata} from '../agentService';
+import type {SessionMetadata, SessionMessage} from '../agentService';
 import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
@@ -37,6 +37,67 @@ declare module '../synapseView' {
 		getDisplayedSessions(): SessionMetadata[];
 		deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void>;
 	}
+}
+
+/** A single content block from an Anthropic API message (subset used for replay). */
+type AnthropicContentBlock = {
+	type: string;
+	text?: string;
+	thinking?: string;
+};
+
+/** Shape of `SessionMessage.message` — an Anthropic API message body. */
+type AnthropicMessageBody = {
+	content?: string | AnthropicContentBlock[];
+};
+
+/**
+ * Detect transcript text that is entirely a synthetic wrapper (system-reminder
+ * injection, slash-command wrapper, local-command output) rather than genuine
+ * user-typed content. `getSessionMessages()` exposes no meta flag to filter on
+ * (`SessionMessage` only carries `{type, uuid, session_id, message,
+ * parent_tool_use_id}`), so this is a defensive string check as a safety net —
+ * verified against real multi-turn Synapse session transcripts (including
+ * tool-using ones) where every text-bearing `user` entry was a genuine prompt.
+ */
+function isSyntheticWrapperText(text: string): boolean {
+	const trimmed = text.trim();
+	return /^<(system-reminder|command-name|command-message|command-args|local-command-stdout|local-command-stderr)>/.test(trimmed);
+}
+
+/**
+ * Extract plain text from a transcript message's `content`, which may be a
+ * plain string (simple prompts) or an array of content blocks. Non-text
+ * blocks (images, tool_use, tool_result — replay of those is out of scope)
+ * are skipped.
+ */
+function extractMessageText(message: unknown): string {
+	const body = message as AnthropicMessageBody | undefined;
+	if (!body || typeof body !== 'object') return '';
+	if (typeof body.content === 'string') return body.content;
+	if (Array.isArray(body.content)) {
+		return body.content
+			.filter(block => block.type === 'text' && typeof block.text === 'string')
+			.map(block => block.text as string)
+			.join('');
+	}
+	return '';
+}
+
+/**
+ * Extract text and thinking content from an assistant transcript message.
+ * `tool_use` blocks are skipped — tool-call replay is out of scope.
+ */
+function extractAssistantContent(message: unknown): {text: string; thinking: string} {
+	const text = extractMessageText(message);
+	const body = message as AnthropicMessageBody | undefined;
+	const thinking = body && typeof body === 'object' && Array.isArray(body.content)
+		? body.content
+			.filter(block => block.type === 'thinking' && typeof block.thinking === 'string')
+			.map(block => block.thinking as string)
+			.join('')
+		: '';
+	return {text, thinking};
 }
 
 export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
@@ -765,40 +826,61 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				}
 			}
 
-			// Load message history — Agent SDK doesn't expose getEvents();
-			// Session history replay is a follow-up (issue #4).
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const events: {type: string; id: string; data: Record<string, any>; timestamp: string}[] = [];
+			// Load message history from the persisted transcript (cold load).
+			const sessionMeta = this.sessionList.find(s => s.sessionId === sessionId);
+			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
+
+			// Deliberately omit `dir`: sessions are listed across all project
+			// directories (loadSessions() calls listSessions() unscoped), and the
+			// working directory can change between when a session was created and
+			// when it's cold-restored (autoUpdateWorkingDirectory). Passing a `dir`
+			// that doesn't match the session's original project directory makes the
+			// SDK search only that one directory and return `[]` — reproducing the
+			// empty-chat bug this change fixes. Omitting `dir` searches all projects.
+			let sessionMessages: SessionMessage[] = [];
+			try {
+				sessionMessages = await this.plugin.agentService!.getSessionMessages(sessionId);
+			} catch (e) {
+				console.warn('[synapse] Failed to read session transcript for replay:', e);
+			}
+
 			const renderPromises: Promise<void>[] = [];
 			let pendingReasoning: string | undefined;
-			for (const event of events) {
-				if (event.type === 'user.message') {
+			for (const sm of sessionMessages) {
+				// The declared SessionMessage type omits `timestamp`, but the runtime
+				// object carries the ISO string from the transcript entry.
+				const rawTimestamp = (sm as {timestamp?: string}).timestamp;
+				const timestamp = rawTimestamp ? new Date(rawTimestamp).getTime() : fallbackTimestamp;
+
+				if (sm.type === 'user') {
+					const text = extractMessageText(sm.message);
+					if (!text || isSyntheticWrapperText(text)) continue;
 					const msg: ChatMessage = {
-						id: event.id,
+						id: sm.uuid,
 						role: 'user',
-						content: event.data.content,
-						timestamp: new Date(event.timestamp).getTime(),
+						content: text,
+						timestamp,
 					};
 					this.messages.push(msg);
 					renderPromises.push(this.renderMessageBubble(msg));
 					pendingReasoning = undefined;
-				} else if (event.type === 'assistant.reasoning') {
-					pendingReasoning = event.data.content || pendingReasoning;
-				} else if (event.type === 'assistant.message') {
-					const reasoning = typeof event.data.reasoningText === 'string' && event.data.reasoningText.length > 0
-						? event.data.reasoningText
-						: pendingReasoning;
+				} else if (sm.type === 'assistant') {
+					const {text, thinking} = extractAssistantContent(sm.message);
+					if (thinking) pendingReasoning = thinking;
+					if (!text) continue;
 					const msg: ChatMessage = {
-						id: event.id,
+						id: sm.uuid,
 						role: 'assistant',
-						content: event.data.content,
-						reasoning,
-						timestamp: new Date(event.timestamp).getTime(),
+						content: text,
+						reasoning: pendingReasoning,
+						timestamp,
 					};
 					this.messages.push(msg);
 					renderPromises.push(this.renderMessageBubble(msg));
 					pendingReasoning = undefined;
 				}
+				// 'system' messages (compact boundaries etc.) are not requested
+				// (includeSystemMessages defaults to false) and are skipped if seen.
 			}
 			await Promise.all(renderPromises);
 
