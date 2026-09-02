@@ -324,6 +324,18 @@ export default tseslint.config(
 			'obsidianmd/prefer-file-manager-trash-file': 'off',
 		},
 	},
+	{
+		files: ['src/agentService.ts'],
+		rules: {
+			// The scoped setTimeout shim (#116) must patch the exact global binding the
+			// Agent SDK's own module closure resolves `setTimeout` from, which is
+			// `globalThis`. Rewriting these to `window`/`activeWindow` would either be a
+			// no-op (same object in the main renderer) or patch the wrong window and let
+			// the SDK's unguarded `.unref()` throw again. The rule's popout-window
+			// rationale does not apply to a deliberate global patch.
+			'obsidianmd/no-global-this': 'off',
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",
