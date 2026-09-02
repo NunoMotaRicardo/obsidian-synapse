@@ -27,6 +27,12 @@ jobs:
                   cache: "npm"
 
             - run: npm ci
+
+            # Gate the release on the same checks main is held to. A tag push
+            # publishes to users, so a red build/lint/test must stop it here
+            # rather than shipping.
+            - run: npm run lint
+            - run: npm run test
             - run: npm run build
 
             - name: Verify manifest version matches tag
