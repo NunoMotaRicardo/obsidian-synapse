@@ -69,6 +69,17 @@ The panel lives in the right sidebar and has two tabs: **Chat** and **Search**.
 
 A streaming AI conversation with full Markdown rendering. Type a message and press **Enter** to send (**Shift+Enter** for newlines).
 
+**While a response is in flight**, the status indicator tells you which stage the turn is at:
+
+| Indicator | Meaning |
+|---------|-------------|
+| **Waiting for response…** | Sent — nothing has streamed back yet |
+| **Thinking…** (in a collapsible block) | The model is streaming its reasoning; expand the block to read it live |
+| **Processing…** | A tool call is running mid-turn |
+
+Models that don't produce reasoning go straight from **Waiting for response…** to the answer — no
+reasoning block appears, because there is none to show.
+
 **Toolbar:**
 
 | Control | What it does |
