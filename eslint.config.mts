@@ -339,6 +339,9 @@ export default tseslint.config(
 		"dist",
 		".claude",
 		".gemini",
+		// Standalone build/CI scripts — not plugin source, and outside the TS project
+		// service, so the typed linter cannot parse them.
+		".github",
 		"esbuild.config.mjs",
 		"eslint.config.js",
 		"version-bump.mjs",
