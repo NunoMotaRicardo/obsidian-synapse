@@ -19,6 +19,10 @@ This wiki covers **installing, configuring, and customizing** the plugin. For an
 - [Local-Models-Foundry](Local-Models-Foundry) — Microsoft Foundry Local setup
 - [Local-Models-ReAct](Local-Models-ReAct) — using local models with ReAct-style tool calling
 
+## About this wiki
+
+This wiki is generated from the `wiki/` directory in the [main repo](https://github.com/NunoMotaRicardo/obsidian-synapse) and synced here on every push to `main`. Edits made through this Wiki UI are not preserved — make changes to `wiki/` in the repo instead.
+
 ## Something missing?
 
 [Open an issue](https://github.com/NunoMotaRicardo/obsidian-synapse/issues) — feedback and bug reports are welcome.
