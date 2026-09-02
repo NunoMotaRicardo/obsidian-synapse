@@ -427,10 +427,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 					await renderCliStatus();
 				}));
 
-		const cliStatusEl = claudePanel.createDiv({cls: 'setting-item-description'});
-		cliStatusEl.style.marginTop = '8px';
-		const cliSkewEl = claudePanel.createDiv({cls: 'setting-item-description mod-warning'});
-		cliSkewEl.style.marginTop = '4px';
+		const cliStatusEl = claudePanel.createDiv({cls: 'setting-item-description synapse-settings-cli-status'});
+		const cliSkewEl = claudePanel.createDiv({cls: 'setting-item-description mod-warning synapse-settings-cli-skew'});
 		const renderCliStatus = async () => {
 			cliStatusEl.empty();
 			cliSkewEl.empty();
@@ -465,8 +463,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			.setName('Local & custom providers')
 			.setHeading();
 
-		const providerDescEl = claudePanel.createDiv({cls: 'setting-item-description'});
-		providerDescEl.style.marginBottom = '12px';
+		const providerDescEl = claudePanel.createDiv({cls: 'setting-item-description synapse-settings-provider-desc'});
 
 		const updateProviderDesc = () => {
 			if (this.plugin.settings.providerPreset === 'ollama') {
@@ -776,7 +773,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '0';
 				text.inputEl.max = '600';
-				text.inputEl.style.width = '60px';
+				text.inputEl.addClass('synapse-settings-input-narrow');
 				text.setValue(String(this.plugin.settings.providerRequestTimeout ?? 0))
 					.onChange(async (value) => {
 						const num = parseInt(value, 10);
@@ -794,7 +791,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '1';
 				text.inputEl.max = '20';
-				text.inputEl.style.width = '60px';
+				text.inputEl.addClass('synapse-settings-input-narrow');
 				text.setValue(String(this.plugin.settings.maxNoteImages))
 					.onChange(async (value) => {
 						const num = parseInt(value, 10);
@@ -814,7 +811,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '0';
 				text.inputEl.max = '200';
-				text.inputEl.style.width = '60px';
+				text.inputEl.addClass('synapse-settings-input-narrow');
 				text.setValue(String(this.plugin.settings.loopTurnThreshold))
 					.onChange(async (value) => {
 						// Number() (not parseInt()) so scientific notation ("1e2") parses to its
@@ -834,7 +831,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			.addText(text => {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '0';
-				text.inputEl.style.width = '90px';
+				text.inputEl.addClass('synapse-settings-input-medium');
 				text.setValue(String(this.plugin.settings.loopTokenThreshold))
 					.onChange(async (value) => {
 						const num = Number(value);
@@ -852,7 +849,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '0';
 				text.inputEl.step = '0.01';
-				text.inputEl.style.width = '90px';
+				text.inputEl.addClass('synapse-settings-input-medium');
 				text.setValue(String(this.plugin.settings.loopCostThresholdUsd))
 					.onChange(async (value) => {
 						const num = parseFloat(value);

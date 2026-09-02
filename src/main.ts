@@ -65,7 +65,7 @@ export default class SynapsePlugin extends Plugin {
 		// Command: Chat with Synapse (send selection or open chat)
 		this.addCommand({
 			id: 'chat-with-synapse',
-			name: 'Chat with Synapse',
+			name: 'Chat with selection',
 			hotkeys: [{modifiers: ['Mod', 'Shift'], key: 'l'}],
 			callback: () => {
 				const cmView = getEditorView();
