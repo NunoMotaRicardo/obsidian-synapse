@@ -50,18 +50,16 @@ no `npm test`). Work in small, independently-verifiable increments:
 
 **Must not:** implement anything beyond the acceptance criteria / description (mention it as a
 follow-up instead); bypass the single SDK service for SDK access; reimplement logic that
-`src/configLoader.ts` / `src/view/sessionConfig.ts` already owns; add a test framework or mocks
+`src/configWriter.ts` / `src/view/sessionConfig.ts` already owns; add a test framework or mocks
 unilaterally (ask first); push the branch or run `gh pr create` — the orchestrating skill does
 that after review.
 
 ## Conventions
 - Tabs for indentation, single quotes, no trailing-semicolon omission — match existing files.
-- **All SDK access goes through the single service in `src/copilot.ts`** (today
-  `CopilotService` / `@github/copilot-sdk`; becoming `AgentService` / `@anthropic-ai/claude-agent-sdk`
-  per the migration — `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`). Other modules
-  import SDK types only via its re-exports.
+- **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService` /
+  `@anthropic-ai/claude-agent-sdk`). Other modules import SDK types only via its re-exports.
 - `src/main.ts` stays lifecycle-only. UI in `src/view/*` + `src/modals/*`, editor features in
-  `src/editor/*`, vault config parsing in `src/configLoader.ts`, session config assembly in
+  `src/editor/*`, vault config writing in `src/configWriter.ts`, session config assembly in
   `src/view/sessionConfig.ts`, settings/secrets in `src/settings.ts`.
 - Register all listeners/intervals/timers via Obsidian `register*` helpers — no leaks across
   reload/unload.

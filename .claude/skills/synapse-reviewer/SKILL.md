@@ -32,9 +32,9 @@ Cross-reference against:
 disconnect, missing settings); happy path correct.
 
 **Specs & module boundaries** — matches the relevant `.docs/specs/<module>.md`; SDK access stays behind
-the single service module (`src/copilot.ts`) — no module imports the agent SDK directly except
-type-only imports; `src/main.ts` stays lifecycle-only; vault customization parsing stays in
-`src/configLoader.ts` / `src/view/sessionConfig.ts`.
+the single service module (`src/agentService.ts`) — no module imports the agent SDK directly except
+type-only imports; `src/main.ts` stays lifecycle-only; vault customization writing stays in
+`src/configWriter.ts` / `src/view/sessionConfig.ts`.
 
 **Verification** — `npm run build` and `npm run lint` clean; the coder's summary describes an actual
 deploy-test (reload + behavior check), not just "build passes."

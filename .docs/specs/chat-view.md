@@ -101,8 +101,8 @@ vault scope, folder tree.
     `session.setModel()` call (`{reasoningEffort, reasoningSummary, contextTier}`) so toggling
     it doesn't reset reasoning, is omitted from session config when 'default' (matching the
     reasoning omit-when-empty pattern), and flows into new/resumed sessions via buildSessionConfig
-    and into the Telegram bot via TelegramBotService.buildBotSessionConfig. `ContextTier` is imported from `../copilot`
-    (CopilotService's SDK re-export). Orthogonal to infinite sessions (issue #5): context tier
+    and into the Telegram bot via TelegramBotService.buildBotSessionConfig. `ContextTier` is imported from `../agentService`
+    (AgentService's SDK re-export). Orthogonal to infinite sessions (issue #5): context tier
     sets the window size, infinite sessions controls auto-compaction — they compose.
   - An **Infinite sessions** toggle in the same model-icon menu controls the SDK's
     auto-compaction behavior (`settings.infiniteSessionsEnabled`, default `true` — the SDK

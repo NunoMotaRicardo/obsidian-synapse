@@ -16,7 +16,7 @@ Tracked by #4.
 - `getCliVersion(binaryPath: string): Promise<{version: string; protocolVersion?: string}>` — validates `binaryPath` (absolute, allowlisted extension) then spawns `binaryPath --version` to extract CLI version. Protocol version is a fixed constant (`'1'`) for Claude Agent SDK — not parsed from CLI output.
 - `cleanEnv(): Record<string, string>` — allowlisted subprocess environment.
 
-`AgentService` (`src/copilot.ts`) is the only `@anthropic-ai/claude-agent-sdk` consumer: it calls
+`AgentService` (`src/agentService.ts`) is the only `@anthropic-ai/claude-agent-sdk` consumer: it calls
 `resolveDefaultCliPath` when no explicit `claudeLocation` is set, caches the
 `ResolvedCliPath`, performs an `fs.access` check to throw early when the binary is missing,
 passes `pathToClaudeCodeExecutable` to query options, and exposes:

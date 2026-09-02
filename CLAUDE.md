@@ -20,7 +20,7 @@ Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules
 - **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
   SDK types only via its re-exports.
 - `src/main.ts` stays lifecycle-only. UI in `src/view/*` + `src/modals/*`, editor features in
-  `src/editor/*`, vault config parsing in `src/configLoader.ts`, session config assembly in
+  `src/editor/*`, vault config writing in `src/configWriter.ts`, session config assembly in
   `src/view/sessionConfig.ts`, settings/secrets in `src/settings.ts`.
 - Update the matching spec in the same change that alters module behavior.
 
@@ -61,9 +61,9 @@ Orchestrated by `/synapse-build` (planner skill → synapse-coder agent → revi
 and `.gemini/commands/*` — thin TOML wrappers that inject the canonical `.claude/skills/`
 playbooks via `@{...}`, so nothing is duplicated. See `GEMINI.md`.
 
-> **Don't confuse with the plugin's own feature:** the vault-local `synapse/` folder
-> (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
-> customization model parsed by `src/configLoader.ts` — documented in
+> **Don't confuse with the plugin's own feature:** the vault-local `_synapse/` folder
+> (`agents/*.md`, `skills/*/SKILL.md`, `.mcp.json`) is a runtime customization model the
+> SDK discovers natively as a local plugin — documented in
 > `wiki/Customization.md`. The `.claude/` dev tooling above is unrelated tooling for
 > working on this repo.
 
