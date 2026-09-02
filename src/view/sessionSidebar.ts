@@ -52,6 +52,20 @@ type AnthropicMessageBody = {
 };
 
 /**
+ * Detect transcript text that is entirely a synthetic wrapper (system-reminder
+ * injection, slash-command wrapper, local-command output) rather than genuine
+ * user-typed content. `getSessionMessages()` exposes no meta flag to filter on
+ * (`SessionMessage` only carries `{type, uuid, session_id, message,
+ * parent_tool_use_id}`), so this is a defensive string check as a safety net —
+ * verified against real multi-turn Synapse session transcripts (including
+ * tool-using ones) where every text-bearing `user` entry was a genuine prompt.
+ */
+function isSyntheticWrapperText(text: string): boolean {
+	const trimmed = text.trim();
+	return /^<(system-reminder|command-name|command-message|command-args|local-command-stdout|local-command-stderr)>/.test(trimmed);
+}
+
+/**
  * Extract plain text from a transcript message's `content`, which may be a
  * plain string (simple prompts) or an array of content blocks. Non-text
  * blocks (images, tool_use, tool_result — replay of those is out of scope)
@@ -75,18 +89,14 @@ function extractMessageText(message: unknown): string {
  * `tool_use` blocks are skipped — tool-call replay is out of scope.
  */
 function extractAssistantContent(message: unknown): {text: string; thinking: string} {
+	const text = extractMessageText(message);
 	const body = message as AnthropicMessageBody | undefined;
-	if (!body || typeof body !== 'object' || !Array.isArray(body.content)) {
-		return {text: typeof body?.content === 'string' ? body.content : '', thinking: ''};
-	}
-	const text = body.content
-		.filter(block => block.type === 'text' && typeof block.text === 'string')
-		.map(block => block.text as string)
-		.join('');
-	const thinking = body.content
-		.filter(block => block.type === 'thinking' && typeof block.thinking === 'string')
-		.map(block => block.thinking as string)
-		.join('');
+	const thinking = body && typeof body === 'object' && Array.isArray(body.content)
+		? body.content
+			.filter(block => block.type === 'thinking' && typeof block.thinking === 'string')
+			.map(block => block.thinking as string)
+			.join('')
+		: '';
 	return {text, thinking};
 }
 
@@ -820,11 +830,16 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			const sessionMeta = this.sessionList.find(s => s.sessionId === sessionId);
 			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
 
+			// Deliberately omit `dir`: sessions are listed across all project
+			// directories (loadSessions() calls listSessions() unscoped), and the
+			// working directory can change between when a session was created and
+			// when it's cold-restored (autoUpdateWorkingDirectory). Passing a `dir`
+			// that doesn't match the session's original project directory makes the
+			// SDK search only that one directory and return `[]` — reproducing the
+			// empty-chat bug this change fixes. Omitting `dir` searches all projects.
 			let sessionMessages: SessionMessage[] = [];
 			try {
-				sessionMessages = await this.plugin.agentService!.getSessionMessages(sessionId, {
-					dir: this.getWorkingDirectory(),
-				});
+				sessionMessages = await this.plugin.agentService!.getSessionMessages(sessionId);
 			} catch (e) {
 				console.warn('[synapse] Failed to read session transcript for replay:', e);
 			}
@@ -839,7 +854,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 				if (sm.type === 'user') {
 					const text = extractMessageText(sm.message);
-					if (!text) continue;
+					if (!text || isSyntheticWrapperText(text)) continue;
 					const msg: ChatMessage = {
 						id: sm.uuid,
 						role: 'user',

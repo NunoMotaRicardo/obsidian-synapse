@@ -170,10 +170,14 @@ dynamically based on the number of files in scope:
 
 `AgentService` wraps `listSessions()`, `deleteSession()`, `renameSession()` from the SDK for
 the session sidebar. Session history replay (cold-loading a session's backlog) uses
-`AgentService.getSessionMessages(sessionId, {dir})`, which wraps the SDK's `getSessionMessages()`
-— it parses the JSONL transcript and returns `SessionMessage[]` (`{type, uuid, session_id,
-message, parent_tool_use_id}`) in chronological order. Callers narrow `message` (an Anthropic API
-message) and walk its content blocks; `tool_use`/`tool_result` replay is out of scope.
+`AgentService.getSessionMessages(sessionId)`, which wraps the SDK's `getSessionMessages()` — it
+parses the JSONL transcript and returns `SessionMessage[]` (`{type, uuid, session_id, message,
+parent_tool_use_id}`) in chronological order. Callers narrow `message` (an Anthropic API message)
+and walk its content blocks; `tool_use`/`tool_result` replay is out of scope. The `dir` option is
+deliberately **not** passed by the sidebar caller: `listSessions()` (used to populate the
+sidebar) is called unscoped across all project directories, and a session's original working
+directory can differ from the view's current one (`autoUpdateWorkingDirectory` changes it on note
+switch) — passing a mismatched `dir` makes the SDK search only that one project and return `[]`.
 
 A new `Session`'s id is unknown until the first `send()` streams a message. When the wrapper
 first captures a `session_id` (also when it changes on resume), it dispatches a
