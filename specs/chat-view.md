@@ -82,36 +82,27 @@ vault scope, folder tree.
     (`settings.reasoningEffort`), because models report values beyond the SDK's
     `ReasoningEffort` union (e.g. `max`, `none`). `none` is labelled "Off"; `''` = model
     default. Re-selecting the active level toggles back to `''`.
-  - A **Reasoning summary** submenu (gated on the same capability) sets
-    `settings.reasoningSummary` to `''` (model default), `none`, `concise`, or `detailed`.
-    `none` suppresses reasoning output, so no reasoning block is rendered (the block is only
-    ever created from reasoning events).
-  - Both values are passed together on every mid-session `session.setModel()` call so neither
-    resets, and flow into new sessions via `sessionConfig` in `synapseView.ts` and
-    `bots/telegramBot.ts`. The SDK-boundary cast to `ReasoningEffort`/`ReasoningSummary` is
-    localized (the unions lag the values models actually report).
-  - A **Long context** toggle in the same menu pins the session to the SDK's
-    `long_context` context-window tier (`settings.contextTier`, `'default' | 'long_context'`,
-    default `'default'`). Unlike reasoning effort there is **no per-model support signal** —
-    `ModelCapabilities.supports` exposes only `vision` and `reasoningEffort`, and `ModelInfo`
-    has no long-context flag (only `limits.max_context_window_tokens`). The toggle is
-    therefore always shown (the menu shows it even for models that don't support reasoning
-    effort, so the model icon stays interactive); the SDK silently ignores `contextTier` for
-    models that don't support the tier. `contextTier` rides along on the same mid-session
-    `session.setModel()` call (`{reasoningEffort, reasoningSummary, contextTier}`) so toggling
-    it doesn't reset reasoning, is omitted from session config when 'default' (matching the
-    reasoning omit-when-empty pattern), and flows into new/resumed sessions via buildSessionConfig
-    and into the Telegram bot via TelegramBotService.buildBotSessionConfig. `ContextTier` is imported from `../copilot`
-    (CopilotService's SDK re-export). Orthogonal to infinite sessions (issue #5): context tier
-    sets the window size, infinite sessions controls auto-compaction — they compose.
+  - (issue #106) The menu previously also offered a **Reasoning summary** submenu
+    (`settings.reasoningSummary`) and a **Long context** toggle (`settings.contextTier`).
+    Both were Copilot-SDK-era controls that were never actually passed to `query()` — they
+    persisted a setting and updated the badge, but had zero effect on the session. They were
+    removed rather than wired up: the Agent SDK's long-context equivalent is already covered by
+    picking a `[1m]` model id from the existing model list (`sdkModelId()` in `agentService.ts`
+    surfaces e.g. `sonnet[1m]`), and nothing depended on a reasoning-summary display mode. The
+    settings keys (`contextTier`, `reasoningSummary`) are intentionally left off `SynapseSettings`
+    but tolerated on load — existing `data.json` files carrying the stale keys still load via the
+    `Object.assign({}, DEFAULT_SETTINGS, raw)` merge in `main.ts#loadSettings`; the keys ride along
+    as harmless untyped properties on the in-memory settings object and are silently dropped from
+    subsequent saves (they're not part of the typed shape written back out).
   - An **Infinite sessions** toggle in the same model-icon menu controls the SDK's
     auto-compaction behavior (`settings.infiniteSessionsEnabled`, default `true` — the SDK
     default). When enabled, the SDK compacts the conversation at ~80% context utilization
     (background) and blocks at ~95% (buffer exhaustion). When disabled, sessions hit the
-    context limit and stop. The toggle follows the same patterns as Long context: always shown,
-    sets a persisted setting, marks config dirty, omitted from session config when `true`
-    (matching the SDK default). `infiniteSessions: { enabled: false }` is passed only when
-    the user explicitly disables it. Planned: issue #5.
+    context limit and stop. The toggle is always shown (even for models that don't support
+    reasoning effort, so the model icon stays interactive), sets a persisted setting, marks
+    config dirty, and is omitted from session config when `true` (matching the SDK default).
+    `infiniteSessions: { enabled: false }` is passed only when the user explicitly disables it.
+    Planned: issue #5.
 - **Task/plan tracking panel** (issue #87): Claude Code surfaces its running plan via a tool
   call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both

@@ -104,8 +104,15 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
 ## Invariants
 
 - Secrets (tokens, password inputs) never land in `data.json`.
-- `reasoningEffort: ''` / `reasoningSummary: ''` mean "model default" — never send the empty
-  string to the SDK; the field is omitted from the session config instead.
+- `reasoningEffort: ''` means "model default" — never send the empty string to the SDK; the
+  field is omitted from the session config instead.
+- (issue #106) `reasoningSummary` and `contextTier` were removed from `SynapseSettings` — they
+  were Copilot-SDK-era controls that were never actually passed to `query()` (persisted a
+  setting and updated a toolbar badge with no effect on the session). They are intentionally
+  **not** re-added to the type, but old `data.json` files carrying those keys still load without
+  error: `main.ts#loadSettings` merges persisted data over `DEFAULT_SETTINGS` via
+  `Object.assign({}, DEFAULT_SETTINGS, raw)`, so the stale keys just ride along as harmless
+  untyped properties rather than causing a load failure or wiping unrelated settings.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
 - All BYOK provider HTTP calls (Test, `onListModels`) go through `fetchProviderModels()`

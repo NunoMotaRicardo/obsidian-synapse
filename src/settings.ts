@@ -1,6 +1,5 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
-import type {ContextTier} from "./agentService";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
@@ -55,19 +54,6 @@ export interface SynapseSettings {
 	 * `model.supportedReasoningEfforts` at render time.
 	 */
 	reasoningEffort: string;
-	/**
-	 * Reasoning summary mode. '' = model default; otherwise 'none' | 'concise' |
-	 * 'detailed' (SDK `ReasoningSummary`). 'none' suppresses reasoning output.
-	 */
-	reasoningSummary: string;
-	/**
-	 * Context-window tier for the session. 'default' = model default; 'long_context'
-	 * pins the session to the long-context tier when the selected model supports it
-	 * (the SDK silently ignores it otherwise). Omitted from session config when 'default',
-	 * matching the reasoning omit-when-empty pattern. There is no per-model support signal
-	 * in the SDK, so the toggle is always shown.
-	 */
-	contextTier: ContextTier;
 	/**
 	 * Whether infinite sessions (automatic context compaction) are enabled.
 	 * true (default) = SDK default behavior (omit from session config).
@@ -168,8 +154,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	},
 
 	reasoningEffort: '',
-	reasoningSummary: '',
-	contextTier: 'default',
 	infiniteSessionsEnabled: true,
 	searchAgent: '',
 	searchMode: 'basic',

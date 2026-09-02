@@ -181,12 +181,6 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
  */
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
-/** Reasoning summary — kept as a string union for settings compatibility. */
-export type ReasoningSummary = 'none' | 'concise' | 'detailed';
-
-/** Context tier — kept for settings compatibility. */
-export type ContextTier = 'default' | 'long_context';
-
 /**
  * Connection state tracked by AgentService.
  * The Agent SDK spawns the CLI per-query, so 'connected' means 'ready to query'.
