@@ -1,0 +1,57 @@
+name: Release
+
+# BRAT and Obsidian's community-plugin installer both resolve a plugin from
+# its GitHub releases, and require the release tag to exactly equal
+# manifest.json's version (no "v" prefix), with main.js, manifest.json, and
+# styles.css attached as individual assets. This workflow builds those
+# assets and publishes the release whenever a matching tag is pushed, so the
+# release skill only needs to bump the version and push the tag.
+on:
+    push:
+        tags:
+            - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Use Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22.x
+                  cache: "npm"
+
+            - run: npm ci
+
+            # Gate the release on the same checks main is held to. A tag push
+            # publishes to users, so a red build/lint/test must stop it here
+            # rather than shipping.
+            - run: npm run lint
+            - run: npm run test
+            - run: npm run build
+
+            - name: Verify manifest version matches tag
+              run: |
+                  TAG="${GITHUB_REF_NAME}"
+                  MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+                  if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+                    echo "Tag $TAG does not match manifest.json version $MANIFEST_VERSION"
+                    exit 1
+                  fi
+
+            - name: Extract release notes from CHANGELOG.md
+              run: node .github/scripts/extract-changelog.mjs "${GITHUB_REF_NAME}" > release-notes.md
+
+            - name: Create GitHub release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create "${GITHUB_REF_NAME}" \
+                    main.js manifest.json styles.css \
+                    --title "${GITHUB_REF_NAME}" \
+                    --notes-file release-notes.md
