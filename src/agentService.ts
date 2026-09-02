@@ -34,6 +34,31 @@ try {
 	// ignore polyfill errors
 }
 
+// Compatibility shim for Electron desktop environment (issue #103).
+// Electron's renderer keeps the browser/Chromium `setTimeout`, whose return value is a plain
+// number — not a Node `Timeout` with `.unref()`. The Agent SDK's subprocess-close teardown
+// (SIGTERM→SIGKILL escalation, only reachable once `includePartialMessages` keeps the CLI
+// process alive across a query's own close()) calls `.unref()` unconditionally on its handle,
+// throwing `TypeError: setTimeout(...).unref is not a function`. Wrap the returned id in a
+// `Number` object with no-op `unref`/`ref` methods — it still coerces to the same numeric id via
+// `valueOf()` for `clearTimeout()` (per the WebIDL `long` conversion both use), so no existing
+// `setTimeout`/`clearTimeout` caller elsewhere in the plugin (or Obsidian itself) is affected.
+try {
+	const origSetTimeout = globalThis.setTimeout;
+	if (typeof origSetTimeout === 'function') {
+		globalThis.setTimeout = ((...args: Parameters<typeof origSetTimeout>) => {
+			const id: unknown = origSetTimeout(...args);
+			if (id === null || (typeof id !== 'number' && typeof id !== 'bigint')) return id;
+			const handle = Object(id) as {unref?: () => unknown; ref?: () => unknown};
+			handle.unref = () => handle;
+			handle.ref = () => handle;
+			return handle;
+		}) as typeof origSetTimeout;
+	}
+} catch {
+	// ignore polyfill errors
+}
+
 import {query, listSessions, getSessionMessages, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
@@ -41,6 +66,7 @@ import type {
 	SDKMessage,
 	SDKAssistantMessage,
 	SDKResultMessage,
+	SDKPartialAssistantMessage,
 	SDKSessionInfo,
 	ListSessionsOptions,
 	SessionMessage,
@@ -84,6 +110,7 @@ export type {
 	SDKMessage,
 	SDKAssistantMessage,
 	SDKResultMessage,
+	SDKPartialAssistantMessage,
 	SDKSessionInfo as SessionMetadata,
 	ListSessionsOptions as SessionListFilter,
 	SessionMessage,
@@ -108,6 +135,15 @@ export type SessionConfig = Options & {
 	plugins?: SdkPluginConfig[];
 	skills?: string[];
 };
+
+/**
+ * One Anthropic Messages API streaming event carried by `SDKPartialAssistantMessage.event`
+ * (`message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`,
+ * `message_delta`, `message_stop`). Derived from the SDK's own field rather than imported
+ * from `@anthropic-ai/sdk` directly, so this module stays the only place that reaches into
+ * SDK package internals (architecture rule from CLAUDE.md).
+ */
+export type BetaRawMessageStreamEvent = SDKPartialAssistantMessage['event'];
 
 // Note: Session and SessionEvent are exported as classes/interfaces below.
 
@@ -976,6 +1012,16 @@ export class Session {
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
 	private pendingToolCalls: Map<string, string> = new Map();
+	/**
+	 * Whether this session's queries request `SDKPartialAssistantMessage` (`stream_event`)
+	 * events. When true, `convertToSessionEvent()` dispatches genuine incremental
+	 * `assistant.message_delta`/`assistant.reasoning_delta` from `content_block_delta` events
+	 * as they arrive, and suppresses the whole-block redispatch it would otherwise do from the
+	 * terminal `assistant` message's content blocks — that message still arrives and is used
+	 * for reconciliation only (`assistant.message`, tool_use, usage), never a second text dump.
+	 * See specs/agent-service.md "Partial message streaming".
+	 */
+	private readonly partialMessagesEnabled: boolean;
 	/** Expose the RPC-like interface (stubbed — Agent SDK handles agent selection via options). */
 	readonly rpc = {
 		agent: {
@@ -995,6 +1041,7 @@ export class Session {
 		this.service = service;
 		this.config = config;
 		this.onEventCallback = onEvent ?? null;
+		this.partialMessagesEnabled = config.includePartialMessages === true;
 	}
 
 	get sessionId(): string {
@@ -1152,18 +1199,27 @@ export class Session {
 				const assistantMsg = msg;
 				// Emit turn_start
 				this.dispatch({type: 'assistant.turn_start', data: {}});
-				// Emit text content as message events
+				// Emit text content as message events. When partial streaming is on, the
+				// real incremental deltas already went out from the 'stream_event' case as
+				// they arrived — redispatching the now-complete block here would render the
+				// whole turn's text a second time. Skip the block-level delta and fall
+				// through to the reconciliation `assistant.message` dispatch below, which is
+				// a no-op unless the accumulated streamed text actually differs.
 				for (const block of assistantMsg.message.content) {
 					if (block.type === 'text') {
-						this.dispatch({
-							type: 'assistant.message_delta',
-							data: {content: block.text, deltaContent: block.text},
-						});
+						if (!this.partialMessagesEnabled) {
+							this.dispatch({
+								type: 'assistant.message_delta',
+								data: {content: block.text, deltaContent: block.text},
+							});
+						}
 					} else if (block.type === 'thinking') {
-						this.dispatch({
-							type: 'assistant.reasoning_delta',
-							data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
-						});
+						if (!this.partialMessagesEnabled) {
+							this.dispatch({
+								type: 'assistant.reasoning_delta',
+								data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
+							});
+						}
 					} else if (block.type === 'tool_use') {
 						const toolBlock = block as {id: string; name: string; input: unknown};
 						this.pendingToolCalls.set(toolBlock.id, toolBlock.name);
@@ -1189,6 +1245,33 @@ export class Session {
 					type: 'assistant.message',
 					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
 				});
+				return null;
+			}
+			case 'stream_event': {
+				// Genuine incremental streaming (issue #103) — only emitted when the session
+				// was created with `includePartialMessages: true` (the interactive chat
+				// panel). The complete `assistant` message for this turn still follows; see
+				// the 'assistant' case above for why it doesn't redispatch these deltas.
+				const partial = msg as SDKPartialAssistantMessage;
+				const streamEvent = partial.event;
+				if (streamEvent.type === 'content_block_delta') {
+					const delta = streamEvent.delta;
+					// ttft_ms only rides the turn's first non-ping stream event — surface it
+					// alongside whichever delta happens to carry it rather than adding a
+					// dedicated event type for a single optional field.
+					const ttft = typeof partial.ttft_ms === 'number' ? {ttftMs: partial.ttft_ms} : {};
+					if (delta.type === 'text_delta') {
+						this.dispatch({
+							type: 'assistant.message_delta',
+							data: {content: delta.text, deltaContent: delta.text, ...ttft},
+						});
+					} else if (delta.type === 'thinking_delta') {
+						this.dispatch({
+							type: 'assistant.reasoning_delta',
+							data: {content: delta.thinking, deltaContent: delta.thinking, ...ttft},
+						});
+					}
+				}
 				return null;
 			}
 			case 'user': {

@@ -204,6 +204,60 @@ data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` �
 consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
 surface a friendlier chat message — see `chat-view.md`.
 
+## Partial message streaming (issue #103)
+
+The interactive chat panel's `SessionConfig` (`SynapseView.buildSessionConfig()`) sets
+`includePartialMessages: true`. Only the chat panel does this — `chat()`, `inlineChat()`, and
+every unattended caller that goes through them (search, editor text actions, triggers, the
+Telegram bot, batch loops) collect full text via `collectText()`/their own accumulation loop and
+never read `includePartialMessages`, so they get no extra `stream_event` volume.
+
+When enabled, the CLI additionally emits `SDKPartialAssistantMessage` (`type: 'stream_event'`)
+messages carrying one Anthropic Messages API `BetaRawMessageStreamEvent` each
+(`message_start`/`content_block_start`/`content_block_delta`/`content_block_stop`/`message_delta`/
+`message_stop`) *before* the turn's complete `assistant` message arrives. `BetaRawMessageStreamEvent`
+is re-exported from `agentService.ts` as `SDKPartialAssistantMessage['event']` (not imported
+directly from `@anthropic-ai/sdk`) so this module stays the sole point of contact with SDK package
+internals.
+
+`Session.convertToSessionEvent()`'s `'stream_event'` case only acts on `content_block_delta`:
+`text_delta` → `assistant.message_delta`, `thinking_delta` → `assistant.reasoning_delta`, both with
+`{content, deltaContent}` equal to just that chunk's text — these are genuine incremental deltas,
+unlike the old behavior described below. `ttft_ms` (present only on the turn's first non-ping
+stream event) rides along as an optional `ttftMs` field on whichever delta carries it, rather than
+getting a dedicated event type for one optional number.
+
+**No double-render:** the turn's complete `assistant` SDKMessage still arrives after the deltas
+(same as before partial streaming existed). `Session` tracks `partialMessagesEnabled` (from
+`config.includePartialMessages`) and the `'assistant'` case's per-block loop skips the
+`assistant.message_delta`/`assistant.reasoning_delta` redispatch from `text`/`thinking` content
+blocks when it's true — those blocks' text already streamed incrementally via `'stream_event'`.
+`tool_use` handling (`tool.execution_start`), `assistant.usage`, and the whole-message
+`assistant.message` reconciliation dispatch are unaffected and always fire; `assistant.message`
+is a no-op on the view side unless the accumulated streamed text actually differs from the
+complete message's text (`chat-view.md`'s streaming section), so it never re-renders a second
+copy of a turn that streamed correctly.
+
+**Without** `includePartialMessages` (every non-chat-panel caller), the `'assistant'` case's
+per-block loop is the *only* source of `assistant.message_delta`/`assistant.reasoning_delta` —
+each dispatched once, with the whole finished block's text, exactly as before this issue. This is
+still called `_delta` even though it isn't incremental in that mode; `chat-view.md`'s renderer
+handles both cases identically (`appendDelta`/`appendReasoningDelta` just accumulate whatever
+arrives), so this asymmetry is invisible to consumers.
+
+**Electron compatibility shim:** enabling `includePartialMessages` keeps the CLI subprocess alive
+past a query's own `close()` (a bidirectional stream, unlike the one-shot request/response of
+complete-message mode), which reaches an SDK subprocess-teardown path
+(SIGTERM→SIGKILL escalation) that calls `.unref()` unconditionally on a `setTimeout()` handle.
+Electron's renderer keeps the browser/Chromium `setTimeout`, which returns a plain number with no
+`.unref()` — this reliably throws `TypeError: setTimeout(...).unref is not a function` (verified:
+absent without `includePartialMessages`, present with it) with no chat-panel functional impact,
+but as an uncaught error on every send. `agentService.ts` patches `globalThis.setTimeout` at
+module load (alongside the pre-existing `events.setMaxListeners` shim for the same Electron/Node
+gap category) to wrap its numeric return in a `Number` object with no-op `unref`/`ref` methods —
+it still coerces back to the same numeric id for `clearTimeout()` everywhere else in the plugin
+(and Obsidian itself), since both use the WebIDL `long` conversion via `valueOf()`.
+
 ## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate` (issue #87)
 
 Claude Code surfaces its running plan through a tool call rather than a dedicated SDK event —

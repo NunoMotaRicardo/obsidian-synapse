@@ -1186,6 +1186,11 @@ export class SynapseView extends ItemView {
 
 		const config: SessionConfig = {
 			model: opts.model,
+			// Interactive chat panel only (issue #103) — real token-level streaming instead
+			// of one lump per turn. One-shot helpers (chat/inlineChat) and unattended paths
+			// (search, triggers, Telegram, batch loops) don't go through buildSessionConfig
+			// and gain nothing from the extra stream_event volume.
+			includePartialMessages: true,
 			canUseTool: permissionHandler,
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),
