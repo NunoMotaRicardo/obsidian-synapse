@@ -5,69 +5,36 @@ description: Review a GitHub pull request for inconsistencies, security, code qu
 
 # /synapse-pr-review <#N>
 
-Checks out, reviews, and updates an existing GitHub pull request on
-`NunoMotaRicardo/obsidian-claude-brain` (the repo `origin` points to). This is a unified workflow
-combining review, feedback, and targeted fixes, run directly in the main thread.
+Reviews, and optionally fixes, an existing GitHub pull request on the repo `origin` points to.
+Run directly in the main thread. Shares its checkout/verify/commit/push steps with
+`synapse-pr-comments` — see `.claude/skills/pr-workflow-shared.md` — differing only in what
+drives the fixes: this skill reviews the PR's **diff**; `synapse-pr-comments` addresses
+**unresolved review threads**.
 
 ## Steps
 
-1. **Checkout the PR** — Fetch and switch to the PR branch using the GitHub CLI:
+1. **Checkout the PR** — see "Checkout" in `.claude/skills/pr-workflow-shared.md`.
+
+2. **Find the originating issue** — `gh pr view <#N>`. Identify the closing issue number (e.g.
+   `Closes #37`) from the description or title. If found, `gh issue view <Issue-Number>`.
+
+3. **Review the diff** — `git diff main...HEAD`. Run **`/code-review`** and **`/security-review`**
+   on it, the same built-ins `synapse-reviewer` uses — don't hand-maintain a second copy of that
+   rubric. Cross-reference the findings against the originating issue's Acceptance Criteria and
+   `.docs/specs/*.md`.
+
+4. **Write the review** — save it to a file in the session scratchpad directory (see your system
+   prompt for the path), structured: Inconsistencies & UX Gaps, Security Review, Code Quality &
+   Maintenance, Proposed Fixes.
+
+5. **Post review comments** — post the findings as a comment on the GitHub PR:
    ```bash
-   gh pr checkout <#N>
-   ```
-   Verify the local working tree is clean.
-
-2. **Find the Originating Issue** — View the PR details:
-   ```bash
-   gh pr view <#N>
-   ```
-   Identify the closing issue number (e.g., `Closes #37`) from the description or title. If found,
-   fetch its requirements:
-   ```bash
-   gh issue view <Issue-Number>
+   gh pr comment <#N> -F "<scratchpad-file>"
    ```
 
-3. **Static Checks** — Verify the PR currently compiles and lints cleanly:
-   - Lint check: `npm run lint`
-   - Build check: `npm run build`
-
-4. **Review the PR** — Retrieve the PR's code diff:
-   ```bash
-   git diff main...HEAD
-   ```
-   Perform a deep code review of the diff, evaluating against:
-   - **Originating Issue**: Are all Acceptance Criteria (ACs) and technical notes fully met?
-   - **Inconsistencies**: Internal logic inconsistencies, redundant checks, double-formatting
-     bugs, or mismatch with the specifications (`.docs/specs/*.md`)?
-   - **Security**: SAST issues, secrets, RCE, network safety (gated by Obsidian plugin constraints).
-   - **Code Quality**: Strict type safety, clean control flow, no duplicates, repository styles
-     (tabs, single quotes, etc.).
-
-5. **Generate Review Report** — Write a comprehensive review report to a local markdown artifact:
-   - Path: `<appDataDir>/brain/<conversation-id>/pr_<#N>_review.md`
-   - Structure: Inconsistencies & UX Gaps, Security Review, Code Quality & Maintenance, Proposed Fixes.
-
-6. **Post Review Comments** — Post a summary of the findings as a comment on the GitHub PR:
-   - Create a scratch comment file at `<appDataDir>/brain/<conversation-id>/scratch/pr_<#N>_comment.md`.
-   - Post it using:
-     ```bash
-     gh pr comment <#N> -F "<scratch-comment-filepath>"
-     ```
-
-7. **Implement & Verify Fixes** (If requested or needed):
-   - Implement target refactoring and fixes locally on the checked-out PR branch.
-   - Run `npm run lint` and `npm run build` to ensure they compile clean.
-   - Run `deploy-test` (`.claude/skills/deploy-test/`) to verify in the actual Obsidian vault.
-   - Stage and commit the fixes:
-     ```bash
-     git add <modified-files>
-     git commit -m "<clean, descriptive message>"
-     ```
-   - Push to the remote branch:
-     ```bash
-     git push origin HEAD
-     ```
-   - Post a follow-up comment on the PR detailing the pushed fixes.
+6. **Implement & verify fixes** (if requested or needed) — see "Verify, commit, push" in
+   `.claude/skills/pr-workflow-shared.md`, then post a follow-up comment on the PR detailing the
+   pushed fixes.
 
 ## Rules
 - **No new agent needed**: this workflow is orchestrated directly in the main thread (it needs a

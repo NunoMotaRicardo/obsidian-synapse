@@ -1,13 +1,13 @@
 ---
 name: synapse-technical-planner
-description: Translate functional intent (.docs/decisions/) into authoritative technical specs in .docs/specs/ and GitHub issues on NunoMotaRicardo/obsidian-claude-brain. Use to audit a request (an existing issue or a feature description), decide whether it fits one coding cycle or must be split, and own .docs/specs/<module>.md updates. Requires gh CLI auth.
+description: Translate functional intent (.docs/decisions/) into authoritative technical specs in .docs/specs/ and GitHub issues on the repo origin points to. Use to audit a request (an existing issue or a feature description), decide whether it fits one coding cycle or must be split, and own .docs/specs/<module>.md updates. Requires gh CLI auth.
 ---
 
 # synapse-technical-planner — specs + GitHub issues
 
 Use this skill (in the main thread) to bridge functional intent and implementation. It owns
-`.docs/specs/` and the repository's **GitHub issues** on `NunoMotaRicardo/obsidian-claude-brain` —
-there is no local `issues/` folder; GitHub is the single source of truth (see
+`.docs/specs/` and the repository's **GitHub issues** on the repo `origin` points to — there is
+no local `issues/` folder; GitHub is the single source of truth (see
 `.docs/decisions/2026-06-14-github-issue-workflow.md`). For a heavy audit across many
 `.docs/specs/`/`src/` files, spawn a generic `Explore` agent for the read-only sweep, then plan
 here with its findings.
@@ -89,7 +89,8 @@ issue demonstrable after merge; make shared-foundation issues first. Prefer smal
 
 ## After an issue is implemented
 The merged PR's `Closes #N` closes it automatically. `synapse-coder` updates the relevant
-`.docs/specs/<module>.md` as part of its diff. If you notice a stale spec later, update it.
+`.docs/specs/<module>.md` as part of its diff — run the **deploy-test** skill after merge to
+confirm the change is demonstrable. If you notice a stale spec later, update it.
 
 ## Rules
 - Always audit existing code before planning — never plan work that already exists.

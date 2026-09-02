@@ -16,8 +16,8 @@ Only run this cycle when the user explicitly asks for "lite" — default to `/sy
 1. Spawn the **synapse-coder** agent (foreground, lite mode) with the plain-text description. It:
    - creates/checks out `claude/<slug>`
    - implements in a single pass
-   - builds, lints, and deploy-tests (`.claude/skills/deploy-test/`) — required even in lite mode,
-     only the issue/reviewer ceremony is skipped
+   - builds, lints, and runs the **deploy-test** skill — required even in lite mode, only the
+     issue/reviewer ceremony is skipped
    - updates `.docs/specs/<module>.md` if behavior changed
    - commits its work
 

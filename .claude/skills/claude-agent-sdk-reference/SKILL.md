@@ -6,8 +6,8 @@ description: Reference for the Claude Agent SDK (@anthropic-ai/claude-agent-sdk)
 # claude-agent-sdk-reference
 
 The plugin is migrating from `@github/copilot-sdk` to the **Claude Agent SDK**. Decision + plan:
-`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` (epic + issues on
-`NunoMotaRicardo/obsidian-claude-brain`).
+`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` (epic + issues on this repo's GitHub
+issue tracker).
 
 ## What it is
 - TypeScript package: `@anthropic-ai/claude-agent-sdk`. Like the Copilot SDK, it drives a CLI
