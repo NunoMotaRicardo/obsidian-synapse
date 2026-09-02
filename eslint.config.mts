@@ -308,18 +308,6 @@ export default tseslint.config(
 		},
 	},
 	{
-		files: ['src/providerModels.ts'],
-		rules: {
-			// This module's fetch() calls talk to user-configured local/BYOK provider base
-			// URLs (Ollama, OpenAI-compatible endpoints, Azure, Anthropic-compatible) —
-			// requestUrl() has different semantics (buffers the whole response instead of
-			// streaming, different error/CORS behavior) that would need real verification
-			// against each provider shape, not a blind lint-driven swap. Left as-is here;
-			// see #115 for follow-up.
-			'no-restricted-globals': 'off',
-		},
-	},
-	{
 		files: ['src/configWriter.ts'],
 		rules: {
 			// deleteArtifact() intentionally always uses Obsidian's local .trash folder
