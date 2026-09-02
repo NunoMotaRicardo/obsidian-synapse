@@ -12,7 +12,7 @@ This repository is the source for Synapse, an Obsidian Community Plugin that emb
 ## Architectural boundaries
 
 - Keep `src/main.ts` small and focused on plugin lifecycle, settings bootstrapping, view registration, and top-level command wiring.
-- Put Claude Agent SDK interactions, CLI binary resolution, session bridge behavior, and environment configuration in `src/copilot.ts` (`AgentService`) and `src/runtimeManager.ts`.
+- Put Claude Agent SDK interactions, CLI binary resolution, session bridge behavior, and environment configuration in `src/agentService.ts` (`AgentService`) and `src/runtimeManager.ts`.
 - Keep vault-local customization writers in `src/configWriter.ts`.
 - Keep translation from Obsidian state into SDK session config, attachments, and model details in `src/view/sessionConfig.ts`.
 - Keep persisted plugin settings and secret handling in `src/settings.ts`.

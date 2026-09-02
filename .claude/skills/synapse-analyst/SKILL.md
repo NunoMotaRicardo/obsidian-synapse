@@ -14,9 +14,9 @@ skill is the **writing/synthesis** that follows. For a heavy read-only sweep of 
 synthesize its findings here.
 
 > **Naming note:** `.docs/` and `wiki/` are plugin-repo documentation for *developing* and *using*
-> the plugin, respectively. Don't confuse either with the vault-local `sidekick/` customization
-> folder (`agents/`, `prompts/`, `skills/`, `tools/`, `triggers/`) that `src/configLoader.ts` loads
-> at runtime — that's a product feature, documented in `wiki/Customization.md`, not this knowledge
+> the plugin, respectively. Don't confuse either with the vault-local `_synapse/` customization
+> folder (`agents/*.md`, `skills/*/SKILL.md`, `.mcp.json`), which the SDK discovers natively as a
+> local plugin at runtime — that's a product feature, documented in `wiki/Customization.md`, not this knowledge
 > base.
 
 ## Folder ownership
@@ -66,7 +66,7 @@ link it from the decision record.
 
 ## Mode B — Librarian
 
-- Keep `wiki/*.md` guides accurate as the plugin evolves: when `src/configLoader.ts`, the
+- Keep `wiki/*.md` guides accurate as the plugin evolves: when `src/configWriter.ts`, the
   customization model, or setup steps change, update the relevant guides.
 - For new topics (an Obsidian API change, an SDK feature, a provider quirk), write/update a guide:
   what it is, why it matters for this fork, and links to authoritative sources.

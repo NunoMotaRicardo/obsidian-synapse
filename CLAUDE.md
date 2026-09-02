@@ -20,22 +20,22 @@ Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules
 - **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
   SDK types only via its re-exports.
 - `src/main.ts` stays lifecycle-only. UI in `src/view/*` + `src/modals/*`, editor features in
-  `src/editor/*`, vault config parsing in `src/configLoader.ts`, session config assembly in
+  `src/editor/*`, vault config writing in `src/configWriter.ts`, session config assembly in
   `src/view/sessionConfig.ts`, settings/secrets in `src/settings.ts`.
 - Update the matching spec in the same change that alters module behavior.
 
 ## Workflow
 
-- Work items are GitHub issues on `NunoMotaRicardo/obsidian-claude-brain` (the repo `origin`
-  points to; `gh issue list/view/create/edit`); `in-progress` label marks active work. Run
-  `/synapse-build <#N | "description">` for the full plan→code→review→PR cycle, or
-  `/synapse-lite "description"` for a quick one-pass change (still build/lint/deploy-test, opens a
-  draft PR). See `.docs/decisions/2026-06-14-github-issue-workflow.md`.
-- Verify changes with `.claude/skills/deploy-test/`: build → copy artifacts to
+- Work items are GitHub issues on the repo `origin` points to (`gh issue list/view/create/edit`);
+  `in-progress` label marks active work. Run `/synapse-build <#N | "description">` for the full
+  plan→code→review→PR cycle, or `/synapse-lite "description"` for a quick one-pass change (still
+  build/lint/deploy-test, opens a draft PR). See
+  `.docs/decisions/2026-06-14-github-issue-workflow.md`.
+- Verify changes with the **deploy-test** skill: build → copy artifacts to
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\` → reload
   (`obsidian plugin:reload id=synapse`). That vault is the user's real vault — deploy only
   builds that compile clean.
-- Releases (BRAT): `.claude/skills/release/`. Tag = `manifest.json` version, no `v` prefix.
+- Releases (BRAT): the **release** skill. Tag = `manifest.json` version, no `v` prefix.
 
 ## Dev workflow: agents & skills
 
@@ -61,9 +61,9 @@ Orchestrated by `/synapse-build` (planner skill → synapse-coder agent → revi
 and `.gemini/commands/*` — thin TOML wrappers that inject the canonical `.claude/skills/`
 playbooks via `@{...}`, so nothing is duplicated. See `GEMINI.md`.
 
-> **Don't confuse with the plugin's own feature:** the vault-local `synapse/` folder
-> (`agents/*.agent.md`, `prompts/`, `skills/`, `tools/`, `triggers/`) is a runtime
-> customization model parsed by `src/configLoader.ts` — documented in
+> **Don't confuse with the plugin's own feature:** the vault-local `_synapse/` folder
+> (`agents/*.md`, `skills/*/SKILL.md`, `.mcp.json`) is a runtime customization model the
+> SDK discovers natively as a local plugin — documented in
 > `wiki/Customization.md`. The `.claude/` dev tooling above is unrelated tooling for
 > working on this repo.
 

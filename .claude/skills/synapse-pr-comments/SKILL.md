@@ -5,34 +5,31 @@ description: Retrieve, analyze, and implement fixes for review comments on an ac
 
 # /synapse-pr-comments <#N>
 
-Checks out an existing GitHub pull request, fetches its review comments and discussion threads, analyzes and plans code fixes, implements the changes, commits/pushes them, posts replies, and resolves the threads. This is a unified workflow run directly in the main thread.
+Addresses unresolved review-thread comments on an existing GitHub pull request on the repo
+`origin` points to. Run directly in the main thread. Shares its checkout/verify/commit/push
+steps with `synapse-pr-review` — see `.claude/skills/pr-workflow-shared.md` — differing only in
+what drives the fixes: this skill addresses **unresolved review threads**; `synapse-pr-review`
+reviews the PR's **diff**.
 
 ## Steps
 
-1. **Checkout the PR** — Fetch and switch to the PR branch using the GitHub CLI:
-   ```bash
-   gh pr checkout <#N>
-   ```
-   Verify that the local working tree is clean.
+1. **Checkout the PR** — see "Checkout" in `.claude/skills/pr-workflow-shared.md`.
 
-2. **Fetch Review Comments** — Query unresolved review threads and comment details using the GraphQL API:
+2. **Fetch review comments** — query unresolved review threads via the GraphQL API. Derive the
+   repo owner/name at runtime rather than hardcoding them:
    ```bash
-   gh api graphql -f query='
-   query {
-     repository(owner: "NunoMotaRicardo", name: "obsidian-claude-brain") {
+   owner="$(gh repo view --json owner -q .owner.login)"
+   name="$(gh repo view --json name -q .name)"
+   gh api graphql -f owner="$owner" -f name="$name" -f query='
+   query($owner: String!, $name: String!) {
+     repository(owner: $owner, name: $name) {
        pullRequest(number: <#N>) {
          reviewThreads(first: 50) {
            nodes {
              id
              isResolved
              comments(first: 50) {
-               nodes {
-                 id
-                 databaseId
-                 body
-                 path
-                 line
-               }
+               nodes { id databaseId body path line }
              }
            }
          }
@@ -40,40 +37,26 @@ Checks out an existing GitHub pull request, fetches its review comments and disc
      }
    }'
    ```
-   Note the `id` of each unresolved thread (starts with `PRRT_`) and the `databaseId` of the top-level comments (which is needed to reply).
+   Note the `id` of each unresolved thread (starts with `PRRT_`) and the `databaseId` of the
+   top-level comments (needed to reply).
 
-3. **Analyze & Plan Fixes** — For each unresolved thread:
+3. **Analyze & plan fixes** — for each unresolved thread:
    - Locate the target file (`path`) and lines (`line`) in the codebase.
    - Plan code modifications that address the reviewer's feedback.
    - Present the implementation plan to the user for feedback and approval.
 
-4. **Implement & Verify Fixes** — Once approved:
-   - Edit the target files to apply the fixes.
-   - Run compilation and lint checks:
-     - `npm run lint`
-     - `npm run build`
-   - Deploy-test locally in the Obsidian vault (refer to `deploy-test` skill) to verify correctness.
+4. **Implement & verify fixes** — once approved, see "Verify, commit, push" in
+   `.claude/skills/pr-workflow-shared.md`.
 
-5. **Stage, Commit, & Push**:
-   - Stage and commit the fixes:
-     ```bash
-     git add <modified-files>
-     git commit -m "fix(pr-<#N>): address reviewer feedback..."
-     ```
-   - Push to the remote branch:
-     ```bash
-     git push origin HEAD
-     ```
+5. **Post reply comments** — reply to each review comment thread. `gh api`'s `{owner}/{repo}`
+   placeholders resolve against `origin` automatically, so no literal slug is needed:
+   ```bash
+   gh api -X POST "repos/{owner}/{repo}/pulls/<#N>/comments" \
+     -f body="Fixed: <explanation of fix>" \
+     -F in_reply_to=<comment_database_id>
+   ```
 
-6. **Post Reply Comments** — Reply to each review comment thread using the REST API:
-   - Construct the JSON payload for the reply (or use `gh api -f body="..." -F in_reply_to=<databaseId>`):
-     ```bash
-     gh api -X POST /repos/NunoMotaRicardo/obsidian-claude-brain/pulls/<#N>/comments \
-       -f body="Fixed: <explanation of fix>" \
-       -F in_reply_to=<comment_database_id>
-     ```
-
-7. **Resolve Threads** — Mark the review threads as resolved via the GraphQL mutation:
+6. **Resolve threads** — mark the review threads as resolved via the GraphQL mutation:
    ```bash
    gh api graphql -F threadId="<THREAD_NODE_ID>" -f query='
      mutation($threadId: ID!) {
@@ -88,5 +71,7 @@ Checks out an existing GitHub pull request, fetches its review comments and disc
 
 ## Rules
 - **Verify before pushing**: Never commit or push changes if linting or compilation fails.
-- **Top-level comments only**: When replying using `in_reply_to`, always reference the database ID of the top-level comment in the thread.
-- **GraphQL for resolution**: Always use `resolveReviewThread` GraphQL mutation to mark threads as resolved, as it is not supported in the REST API.
+- **Top-level comments only**: When replying using `in_reply_to`, always reference the database ID of
+  the top-level comment in the thread.
+- **GraphQL for resolution**: Always use `resolveReviewThread` GraphQL mutation to mark threads as
+  resolved, as it is not supported in the REST API.

@@ -64,7 +64,7 @@ The `github` BYOK preset was removed as part of the Claude Agent SDK migration (
 presets remain; all use the `fetchProviderModels()` path described above.
 
 `fetchProviderModels()` is also the basis for `buildOnListModels()`'s `onListModels` callback
-(used by `CopilotService` for the inline-operations model dropdown today; the sidebar BYOK
+(used by `AgentService` for the inline-operations model dropdown today; the sidebar BYOK
 model picker wiring is Phase 2, not yet built — `populateModelSelect()` in
 `src/view/configToolbar.ts` still echoes the free-text **Model name** for BYOK).
 
