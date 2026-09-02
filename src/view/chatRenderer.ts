@@ -12,8 +12,25 @@ import {SYNAPSE_ICON_ID} from '../main';
 import {isImageAttachment, type ChatMessage, type ChatAttachment} from '../types';
 import {renderMarkdownSafe} from './utils';
 import type {TodoItem} from '../agentService';
+import {debugTrace} from '../debug';
 
 const MAX_DEBUG_DISPLAY_LEN = 5000;
+
+/**
+ * Create a `.synapse-thinking` waiting/status indicator with the given label and animated dots.
+ * Used both for the pre-content waiting placeholder and the mid-turn "Processing" indicator —
+ * the label is the only thing that varies, so callers should not claim "Thinking" unless
+ * reasoning is actually underway (see `addAssistantPlaceholder` / `finalizeReasoning`).
+ */
+function createThinkingIndicator(parent: HTMLElement, label: string): HTMLElement {
+	const indicator = parent.createDiv({cls: 'synapse-thinking'});
+	indicator.createSpan({text: label});
+	const dots = indicator.createSpan({cls: 'synapse-thinking-dots'});
+	dots.createSpan({cls: 'synapse-dot', text: '.'});
+	dots.createSpan({cls: 'synapse-dot', text: '.'});
+	dots.createSpan({cls: 'synapse-dot', text: '.'});
+	return indicator;
+}
 
 declare module '../synapseView' {
 	interface SynapseView {
@@ -259,12 +276,9 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		this.toolCallsContainer = bodyWrapper.createDiv({cls: 'synapse-tool-calls'});
 
 		const body = bodyWrapper.createDiv({cls: 'synapse-msg-body'});
-		const thinking = body.createDiv({cls: 'synapse-thinking'});
-		thinking.createSpan({text: 'Thinking'});
-		const dots = thinking.createSpan({cls: 'synapse-thinking-dots'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		// Honest default copy: no reasoning has streamed yet, so don't claim "Thinking" —
+		// that label is reserved for the reasoning block once it actually starts (startReasoningBlock).
+		createThinkingIndicator(body, 'Waiting for response…');
 
 		// Clean up any previous streaming component
 		if (this.streamingComponent) {
@@ -283,12 +297,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		// Remove any existing thinking/processing indicator
 		const existing = this.streamingBodyEl.querySelector('.synapse-thinking');
 		if (existing) existing.remove();
-		const processing = this.streamingBodyEl.createDiv({cls: 'synapse-thinking'});
-		processing.createSpan({text: 'Processing'});
-		const dots = processing.createSpan({cls: 'synapse-thinking-dots'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
-		dots.createSpan({cls: 'synapse-dot', text: '.'});
+		createThinkingIndicator(this.streamingBodyEl, 'Processing');
 	};
 
 	proto.removeProcessingIndicator = function (): void {
@@ -319,7 +328,11 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			this.reasoningEl = null;
 			this.reasoningBodyEl = null;
 		}
-		if (!this.streamingWrapperEl || !this.streamingBodyEl || this.reasoningEl) return;
+		if (this.reasoningEl) return;
+		if (!this.streamingWrapperEl || !this.streamingBodyEl) {
+			debugTrace('Synapse: startReasoningBlock called with no streaming wrapper/body — reasoning deltas will accumulate without rendering.');
+			return;
+		}
 
 		// Remove the thinking placeholder from the answer body
 		const thinking = this.streamingBodyEl?.querySelector('.synapse-thinking');
@@ -409,14 +422,11 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			}
 		}
 
-		// Restore the thinking indicator in the answer body if no answer content has arrived yet
+		// Reasoning is complete but no answer text has arrived yet — show a waiting indicator
+		// consistent with the pre-reasoning placeholder (reasoning itself already reported its
+		// own "Thinking…" state above; this is just "still waiting for the answer").
 		if (!this.streamingContent && this.streamingBodyEl) {
-			const thinking = this.streamingBodyEl.createDiv({cls: 'synapse-thinking'});
-			thinking.createSpan({text: 'Thinking'});
-			const dots = thinking.createSpan({cls: 'synapse-thinking-dots'});
-			dots.createSpan({cls: 'synapse-dot', text: '.'});
-			dots.createSpan({cls: 'synapse-dot', text: '.'});
-			dots.createSpan({cls: 'synapse-dot', text: '.'});
+			createThinkingIndicator(this.streamingBodyEl, 'Waiting for response…');
 		}
 	};
 

@@ -56,6 +56,25 @@ vault scope, folder tree.
     consistency fix with the chat tab, not a response to either of those specific gaps.
 - Streaming: sessions are created with `streaming: true`; renderer accumulates
   `assistant.message_delta` / `assistant.reasoning_delta`, finalizes on `assistant.message`.
+- **Waiting/thinking indicator (issue #99):** the `.synapse-thinking` dot-animation (built by the
+  shared `createThinkingIndicator()` helper in `chatRenderer.ts`) is honest about what state the
+  turn is actually in — it never claims "Thinking" unless a reasoning block is actually
+  streaming:
+  - `addAssistantPlaceholder()` paints it with "Waiting for response…" immediately after send,
+    before any content (reasoning or answer) has arrived.
+  - The first `assistant.reasoning_delta` (`appendReasoningDelta` → `startReasoningBlock`) removes
+    that placeholder and inserts the `<details class="synapse-reasoning">` block instead, whose own
+    summary reads "Thinking…" with a spinner while open — that is the only place "Thinking" copy
+    appears, and only while reasoning is actually streaming.
+  - `showProcessingIndicator()` reuses the same helper with "Processing" while tool calls run
+    mid-turn; `appendDelta()` removes it once answer text starts streaming.
+  - `finalizeReasoning()` (called once a reasoning block completes) re-shows the "Waiting for
+    response…" indicator in the answer body if no answer text has arrived yet — never "Thinking",
+    since reasoning is done at that point.
+  - `startReasoningBlock()`'s guard (`streamingWrapperEl`/`streamingBodyEl` missing, e.g. the turn
+    was already finalized/torn down when a stray reasoning delta arrives) still returns early
+    without rendering, but now emits a `debugTrace` so silently-dropped reasoning is diagnosable
+    instead of just accumulating invisibly in `streamingReasoning`.
 - Reasoning menu (brain icon) shows only when the selected model reports
   `capabilities.supports.reasoningEffort` and a non-empty `supportedReasoningEfforts`; an
   unsupported persisted level resets to `''`.
