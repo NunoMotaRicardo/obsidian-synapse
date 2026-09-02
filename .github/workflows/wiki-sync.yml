@@ -18,6 +18,13 @@ on:
 permissions:
     contents: write
 
+# Two pushes to main in quick succession would otherwise race: the second
+# job's push is rejected as non-fast-forward against a wiki repo the first
+# just advanced. Serialize instead, and never cancel a run mid-push.
+concurrency:
+    group: wiki-sync
+    cancel-in-progress: false
+
 jobs:
     sync:
         runs-on: ubuntu-latest

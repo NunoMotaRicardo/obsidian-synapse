@@ -6,18 +6,18 @@ This wiki covers **installing, configuring, and customizing** the plugin. For an
 
 ## Getting started
 
-- [Installation](Installation) — install via BRAT or manually, configure your API/CLI, initialize `_synapse/`
-- [Configuration](Configuration) — the full **Settings → Synapse** reference
+- [Installation](Installation.md) — install via BRAT or manually, configure your API/CLI, initialize `_synapse/`
+- [Configuration](Configuration.md) — the full **Settings → Synapse** reference
 
 ## Customization
 
-- [Customization](Customization) — agents, skills, prompts, and MCP tools under `_synapse/`
+- [Customization](Customization.md) — agents, skills, prompts, and MCP tools under `_synapse/`
 
 ## Local models
 
-- [Local-Models-Ollama](Local-Models-Ollama) — Ollama Cloud models and context-window tuning
-- [Local-Models-Foundry](Local-Models-Foundry) — Microsoft Foundry Local setup
-- [Local-Models-ReAct](Local-Models-ReAct) — using local models with ReAct-style tool calling
+- [Local-Models-Ollama](Local-Models-Ollama.md) — Ollama Cloud models and context-window tuning
+- [Local-Models-Foundry](Local-Models-Foundry.md) — Microsoft Foundry Local setup
+- [Local-Models-ReAct](Local-Models-ReAct.md) — using local models with ReAct-style tool calling
 
 ## About this wiki
 
