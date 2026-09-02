@@ -388,7 +388,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 				sessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as SessionMetadata);
+			});
 		}
 		this.renderSessionList();
 

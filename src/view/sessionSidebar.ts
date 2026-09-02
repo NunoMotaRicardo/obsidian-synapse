@@ -442,7 +442,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.unsubscribeEvents();
 
 		// Save chat DOM into a DocumentFragment for fast restore
-		const fragment = document.createDocumentFragment();
+		const fragment = createFragment();
 		while (this.chatContainer.firstChild) {
 			fragment.appendChild(this.chatContainer.firstChild);
 		}
@@ -482,7 +482,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.activeSessions.set(this.currentSessionId, bg);
 
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		this.lastFullRenderLen = 0;
@@ -774,7 +774,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// Clear UI for the new session
 		this.messages = [];
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		this.streamingContent = '';

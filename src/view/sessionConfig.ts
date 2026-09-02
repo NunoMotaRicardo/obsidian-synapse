@@ -7,7 +7,7 @@ import {IMAGE_EXTS} from '../types';
 
 // Lazy-loaded Node built-ins (same pattern as agentService.ts / runtimeManager.ts) —
 // used only for writing clipboard/blob attachments to temp files.
-const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
 
 /**
  * Resolve a model ID from an agent's preferred model name / partial match.

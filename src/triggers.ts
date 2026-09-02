@@ -220,8 +220,8 @@ const CONFIG_RELOAD_MS = 1000;
 export class TriggerWatcher {
 	private plugin: SynapsePlugin;
 	private triggers: TriggerConfig[] = [];
-	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-	private configReloadTimer: ReturnType<typeof setTimeout> | null = null;
+	private debounceTimers: Map<string, number> = new Map();
+	private configReloadTimer: number | null = null;
 	private started = false;
 
 	constructor(plugin: SynapsePlugin) {
@@ -306,11 +306,11 @@ export class TriggerWatcher {
 	stop(): void {
 		this.started = false;
 		for (const timer of this.debounceTimers.values()) {
-			clearTimeout(timer);
+			window.clearTimeout(timer);
 		}
 		this.debounceTimers.clear();
 		if (this.configReloadTimer) {
-			clearTimeout(this.configReloadTimer);
+			window.clearTimeout(this.configReloadTimer);
 			this.configReloadTimer = null;
 		}
 		console.log('[synapse] TriggerWatcher stopped');
@@ -331,9 +331,9 @@ export class TriggerWatcher {
 	/** Schedule a debounced reload of trigger configs. */
 	private scheduleConfigReload(): void {
 		if (this.configReloadTimer) {
-			clearTimeout(this.configReloadTimer);
+			window.clearTimeout(this.configReloadTimer);
 		}
-		this.configReloadTimer = setTimeout(() => {
+		this.configReloadTimer = window.setTimeout(() => {
 			this.configReloadTimer = null;
 			void this.loadTriggers();
 			if (this.plugin.triggerScheduler) {
@@ -350,9 +350,9 @@ export class TriggerWatcher {
 	private debounce(filePath: string, action: () => void): void {
 		const existing = this.debounceTimers.get(filePath);
 		if (existing) {
-			clearTimeout(existing);
+			window.clearTimeout(existing);
 		}
-		const timer = setTimeout(() => {
+		const timer = window.setTimeout(() => {
 			this.debounceTimers.delete(filePath);
 			action();
 		}, DEBOUNCE_MS);

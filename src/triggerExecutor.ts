@@ -299,7 +299,7 @@ async function applyWriteMode(
 		// acquires the lock on `filePath` internally; degrade gracefully here
 		// if that acquisition times out rather than throwing out of executeTrigger.
 		try {
-			await modifyArtifact(app, normalizePath(filePath), newMeta as Record<string, string | string[] | boolean | undefined>);
+			await modifyArtifact(app, normalizePath(filePath), newMeta);
 		} catch (e) {
 			if (e instanceof LockAcquisitionError) {
 				console.warn(`[synapse] Trigger "${trigger.name}": could not acquire lock for frontmatter merge, appending to report instead:`, e.message);

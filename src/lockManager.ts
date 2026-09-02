@@ -100,14 +100,14 @@ class LockManager {
 
 	/** Wait for `previousTail` to settle, or reject with `LockAcquisitionError` after the timeout. */
 	private async waitTurn(previousTail: Promise<void>, key: string): Promise<void> {
-		let timeoutHandle: ReturnType<typeof setTimeout>;
+		let timeoutHandle: number;
 		const timeout = new Promise<never>((_, reject) => {
-			timeoutHandle = setTimeout(() => reject(new LockAcquisitionError(key)), LOCK_TIMEOUT_MS);
+			timeoutHandle = window.setTimeout(() => reject(new LockAcquisitionError(key)), LOCK_TIMEOUT_MS);
 		});
 		try {
 			await Promise.race([previousTail, timeout]);
 		} finally {
-			clearTimeout(timeoutHandle!);
+			window.clearTimeout(timeoutHandle!);
 		}
 	}
 }

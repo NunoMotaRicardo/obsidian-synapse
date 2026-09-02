@@ -144,7 +144,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 								new Notice('Cannot open file: path contains directory traversal.');
 								return;
 							}
-							const {shell} = globalThis.require('electron') as {shell: {openPath: (p: string) => Promise<string>}};
+							const {shell} = window.require('electron') as {shell: {openPath: (p: string) => Promise<string>}};
 							void shell.openPath(filePath);
 						} catch (e) {
 							new Notice(`Failed to open file: ${String(e)}`);
@@ -161,7 +161,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 								new Notice('Cannot open image: path escapes the vault.');
 								return;
 							}
-							const {shell} = globalThis.require('electron') as {shell: {openPath: (p: string) => Promise<string>}};
+							const {shell} = window.require('electron') as {shell: {openPath: (p: string) => Promise<string>}};
 							const absPath = this.getVaultBasePath() + '/' + vaultPath;
 							void shell.openPath(absPath);
 						} catch (e) {
@@ -244,7 +244,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			copyBtn.addEventListener('click', () => {
 				void navigator.clipboard.writeText(msg.content);
 				setIcon(copyBtn, 'check');
-				setTimeout(() => setIcon(copyBtn, 'copy'), 1500);
+				window.setTimeout(() => setIcon(copyBtn, 'copy'), 1500);
 			});
 		}
 		return Promise.resolve();
@@ -338,19 +338,19 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const thinking = this.streamingBodyEl?.querySelector('.synapse-thinking');
 		if (thinking) thinking.remove();
 
-		const details = document.createElement('details') as HTMLDetailsElement;
+		const details = createEl('details');
 		details.className = 'synapse-reasoning';
 		details.open = true;
 
-		const summary = document.createElement('summary');
+		const summary = createEl('summary');
 		summary.className = 'synapse-reasoning-summary';
-		const spinner = document.createElement('span');
+		const spinner = createSpan();
 		spinner.className = 'synapse-reasoning-spinner';
 		summary.appendChild(spinner);
 		summary.appendChild(document.createTextNode('Thinking\u2026'));
 		details.appendChild(summary);
 
-		const body = document.createElement('div');
+		const body = createDiv();
 		body.className = 'synapse-reasoning-body';
 		details.appendChild(body);
 
@@ -370,7 +370,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			this.reasoningBodyEl.appendText(delta);
 		}
 		if (!this.fullReasoningRenderTimer) {
-			this.fullReasoningRenderTimer = setTimeout(() => {
+			this.fullReasoningRenderTimer = window.setTimeout(() => {
 				this.fullReasoningRenderTimer = null;
 				void this.doFullReasoningRender();
 			}, 300);
@@ -385,7 +385,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		}
 		this.streamingReasoning = content;
 		if (this.fullReasoningRenderTimer) {
-			clearTimeout(this.fullReasoningRenderTimer);
+			window.clearTimeout(this.fullReasoningRenderTimer);
 			this.fullReasoningRenderTimer = null;
 		}
 		void this.doFullReasoningRender();
@@ -404,7 +404,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Cancel pending incremental render and do a final full render
 		if (this.fullReasoningRenderTimer) {
-			clearTimeout(this.fullReasoningRenderTimer);
+			window.clearTimeout(this.fullReasoningRenderTimer);
 			this.fullReasoningRenderTimer = null;
 		}
 		void this.doFullReasoningRender();
@@ -432,7 +432,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	proto.clearReasoningState = function (): void {
 		if (this.fullReasoningRenderTimer) {
-			clearTimeout(this.fullReasoningRenderTimer);
+			window.clearTimeout(this.fullReasoningRenderTimer);
 			this.fullReasoningRenderTimer = null;
 		}
 		this.streamingReasoning = '';
@@ -458,7 +458,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Schedule a periodic full re-render if not already scheduled
 		if (!this.fullRenderTimer) {
-			this.fullRenderTimer = setTimeout(() => {
+			this.fullRenderTimer = window.setTimeout(() => {
 				this.fullRenderTimer = null;
 				void this.doFullStreamingRender();
 			}, 300);
@@ -503,7 +503,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Clean up incremental render timer and do final full render
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		if (this.streamingBodyEl && this.streamingContent) {
@@ -634,7 +634,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		setIcon(spinner, 'loader');
 
 		// Input section
-		if (args && Object.keys(args as Record<string, unknown>).length > 0) {
+		if (args && Object.keys(args).length > 0) {
 			const inputSection = details.createDiv({cls: 'synapse-tool-call-section'});
 			inputSection.createDiv({cls: 'synapse-tool-call-label', text: 'Input'});
 			const pre = inputSection.createEl('pre', {cls: 'synapse-tool-call-code'});

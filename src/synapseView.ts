@@ -75,14 +75,14 @@ export class SynapseView extends ItemView {
 	renderScheduled = false;
 	showDebugInfo = false;
 	lastFullRenderLen = 0;
-	fullRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	fullRenderTimer: number | null = null;
 
 	// ── Reasoning streaming state ──────────────────────────────
 	streamingReasoning = '';
 	reasoningEl: HTMLDetailsElement | null = null;
 	reasoningBodyEl: HTMLElement | null = null;
 	reasoningComplete = false;
-	fullReasoningRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	fullReasoningRenderTimer: number | null = null;
 
 	// ── Turn-level metadata ────────────────────────────────────
 	turnStartTime = 0;
@@ -170,7 +170,7 @@ export class SynapseView extends ItemView {
 	streamingWrapperEl: HTMLElement | null = null;
 
 	// ── Config file watcher ──────────────────────────────────────
-	configRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+	configRefreshTimer: number | null = null;
 	configLoading = false;
 	configLoadedAt = 0;
 
@@ -220,7 +220,7 @@ export class SynapseView extends ItemView {
 				sessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as import('./agentService').SessionMetadata);
+			});
 		}
 
 		if (this.sidebarListEl) {
@@ -260,8 +260,8 @@ export class SynapseView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		if (this.selectionPollTimer) { clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
-		if (this.configRefreshTimer) clearTimeout(this.configRefreshTimer);
+		if (this.selectionPollTimer) { window.clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
+		if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
 		if (this.basicSearchSession) {
 			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
 			this.basicSearchSession = null;
@@ -410,8 +410,8 @@ export class SynapseView extends ItemView {
 			if (!filePath.startsWith(base + '/')) return;
 			if (this.configLoading || (Date.now() - this.configLoadedAt < 2_000)) return;
 			debugTrace(`Synapse: config file changed: ${filePath}`);
-			if (this.configRefreshTimer) clearTimeout(this.configRefreshTimer);
-			this.configRefreshTimer = setTimeout(() => {
+			if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
+			this.configRefreshTimer = window.setTimeout(() => {
 				this.configRefreshTimer = null;
 				void this.loadAllConfigs({silent: true});
 			}, DEBOUNCE_MS);
@@ -535,6 +535,11 @@ export class SynapseView extends ItemView {
 
 					// Determine effective cap: min of plugin setting and SDK model limit
 					const selectedModelInfo = this.models.find(m => m.id === this.selectedModel);
+					// `limits` is typed as `{max_context_window_tokens?: number}` with no index
+					// signature, so indexing by 'vision' needs it widened to Record<string,
+					// unknown> first — the rule's autofix strips this cast, but that's a false
+					// positive: removing it is a tsc compile error.
+					// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- see comment above
 					const sdkLimit = (selectedModelInfo?.capabilities?.limits as Record<string, unknown> | undefined)?.['vision'] as {max_prompt_images?: number} | undefined;
 					const maxPromptImages = sdkLimit?.max_prompt_images;
 					const configuredCap = Math.max(1, Math.min(20, this.plugin.settings.maxNoteImages));
@@ -777,7 +782,7 @@ export class SynapseView extends ItemView {
 				sessionId: this.currentSessionId,
 				summary: '',
 				lastModified: now.getTime(),
-			} as import('./agentService').SessionMetadata);
+			});
 		}
 		this.renderSessionList();
 	}
@@ -785,7 +790,7 @@ export class SynapseView extends ItemView {
 	/** Central event dispatcher — used by both onEvent (early) and typed handlers. */
 	handleSessionEvent(event: SessionEvent): void {
 		const type = event.type;
-		const data = event.data as Record<string, unknown>;
+		const data = event.data;
 		switch (type) {
 			case 'session.init': {
 				// First message of a new session delivered its id — adopt it, name the
@@ -804,7 +809,7 @@ export class SynapseView extends ItemView {
 						sessionId,
 						summary: '',
 						lastModified: Date.now(),
-					} as import('./agentService').SessionMetadata);
+					});
 				}
 				this.renderSessionList();
 				break;
@@ -979,7 +984,7 @@ export class SynapseView extends ItemView {
 				this.turnSkillsUsed.push(data.name as string);
 				break;
 			case 'session.compaction_start':
-				this.addCompactionStartBlock(data as {conversationTokens?: number; systemTokens?: number; toolDefinitionsTokens?: number});
+				this.addCompactionStartBlock(data);
 				break;
 			case 'session.compaction_complete':
 				this.addCompactionCompleteBlock(data as {
@@ -1073,7 +1078,7 @@ export class SynapseView extends ItemView {
 		this.pendingSessionLabel = null;
 		this.messages = [];
 		if (this.fullRenderTimer) {
-			clearTimeout(this.fullRenderTimer);
+			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
 		}
 		this.streamingContent = '';

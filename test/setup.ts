@@ -1,5 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {vi} from 'vitest';
+
+// vitest.config.ts runs tests under the `node` environment (no DOM), but src/ code
+// increasingly calls `window.setTimeout`/`window.clearTimeout`/`window.require` etc.
+// (obsidianmd/prefer-window-timers — needed for popout-window compatibility inside
+// Obsidian's Electron renderer, where `window === globalThis`). Alias `window` to
+// `globalThis` here so that real behavior (window === globalThis in the app) is
+// mirrored in tests, without pulling in a full jsdom environment.
+if (typeof (globalThis as {window?: unknown}).window === 'undefined') {
+	(globalThis as {window?: unknown}).window = globalThis;
+}
 
 // Global mock for the Obsidian API since it's only available inside the Obsidian app.
 vi.mock('obsidian', () => {

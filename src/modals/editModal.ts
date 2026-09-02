@@ -575,7 +575,7 @@ export class EditModal extends Modal {
 		copyBtn.addEventListener('click', () => {
 			void navigator.clipboard.writeText(text);
 			setIcon(copyBtn, 'check');
-			setTimeout(() => setIcon(copyBtn, 'copy'), 1500);
+			window.setTimeout(() => setIcon(copyBtn, 'copy'), 1500);
 			new Notice('Copied to clipboard.');
 		});
 

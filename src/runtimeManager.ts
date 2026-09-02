@@ -13,7 +13,7 @@
  */
 
 // Available at runtime in the esbuild CJS bundle.
-const nodeRequire = typeof globalThis.require === 'function' ? globalThis.require : undefined;
+const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
 declare const __dirname: string;
 declare const process: {
 	platform: string;

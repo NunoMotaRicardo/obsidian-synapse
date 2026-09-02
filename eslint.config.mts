@@ -97,7 +97,7 @@ export default tseslint.config(
 							/** Report a Literal node if its value is not sentence case. */
 							function checkLiteral(node: { type?: string; value?: unknown }) {
 								if (node?.type === 'Literal' && typeof node.value === 'string' && !isSentenceCase(node.value)) {
-									context.report({ node: node as unknown as never, messageId: 'notSentenceCase', data: { text: node.value } });
+									context.report({ node: node, messageId: 'notSentenceCase', data: { text: node.value } });
 								}
 							}
 
@@ -190,12 +190,23 @@ export default tseslint.config(
 				projectService: {
 					allowDefaultProject: [
 						'eslint.config.mts',
-						'manifest.json'
+						'manifest.json',
+						'vitest.config.ts',
 					]
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.json']
 			},
+		},
+	},
+	{
+		// test/** runs under vitest's `node` environment (see vitest.config.ts), not
+		// inside Obsidian's Electron renderer — `window` doesn't exist there, so the
+		// obsidianmd rules that assume a browser/popout-window context don't apply.
+		files: ['test/**/*.ts'],
+		rules: {
+			'obsidianmd/prefer-window-timers': 'off',
+			'obsidianmd/no-global-this': 'off',
 		},
 	},
 	globalIgnores([

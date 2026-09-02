@@ -253,7 +253,7 @@ async function runOnFile(
 		abortController,
 		onEvent: onResult ? (msg) => {
 			if (msg.type === 'result') {
-				onResult(msg as SDKResultMessage);
+				onResult(msg);
 			}
 		} : undefined,
 	});

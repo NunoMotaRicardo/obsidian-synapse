@@ -171,7 +171,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.handleAttachFile = function (): void {
-		const input = document.createElement('input');
+		const input = createEl('input');
 		input.type = 'file';
 		input.multiple = true;
 		input.classList.add('synapse-file-input-hidden');
@@ -183,7 +183,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			// Resolve absolute OS path: prefer Electron webUtils, fallback to File.path
 			let getPath: (f: File) => string;
 			try {
-				const {webUtils} = globalThis.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
+				const {webUtils} = window.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
 				if (webUtils?.getPathForFile) {
 					getPath = (f: File) => webUtils.getPathForFile(f);
 				} else {
@@ -298,7 +298,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Resolve absolute OS path using Electron webUtils, same as handleAttachFile
 		let getPath: (f: File) => string;
 		try {
-			const {webUtils} = globalThis.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
+			const {webUtils} = window.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
 			if (webUtils?.getPathForFile) {
 				getPath = (f: File) => webUtils.getPathForFile(f);
 			} else {
@@ -661,7 +661,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	/** (Re)render the popup dropdown from `skillPopupMatches`, creating it lazily. */
 	proto.renderSkillPopup = function (): void {
 		if (!this.skillPopupEl) {
-			const inputArea = this.inputEl.closest('.synapse-input-area') as HTMLElement | null;
+			const inputArea = this.inputEl.closest('.synapse-input-area');
 			if (!inputArea) return;
 			this.skillPopupEl = inputArea.createDiv({cls: 'synapse-skill-popup'});
 		}

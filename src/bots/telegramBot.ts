@@ -156,7 +156,7 @@ export class TelegramBotService {
 				if (!this.polling) break; // disconnect was called
 				console.error('Synapse Telegram: poll error', e);
 				// Back off on error
-				await new Promise(r => setTimeout(r, 5000));
+				await new Promise(r => window.setTimeout(r, 5000));
 			}
 		}
 	}
@@ -403,7 +403,7 @@ export class TelegramBotService {
 						...(threadId != null ? {message_thread_id: threadId} : {}),
 					});
 				} catch { /* ignore */ }
-				await new Promise(r => setTimeout(r, TYPING_INTERVAL));
+				await new Promise(r => window.setTimeout(r, TYPING_INTERVAL));
 			}
 		};
 		void loop();

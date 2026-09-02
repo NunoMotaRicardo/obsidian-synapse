@@ -428,7 +428,7 @@ export async function executeLocalProviderQuery(
 						console.error(`Synapse: failed to parse arguments for tool ${toolName}:`, e);
 					}
 				} else if (typeof rawArgs === 'object' && rawArgs !== null) {
-					args = rawArgs as Record<string, unknown>;
+					args = rawArgs;
 				}
 
 				let result: string;
