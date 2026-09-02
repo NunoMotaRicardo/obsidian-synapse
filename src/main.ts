@@ -277,9 +277,10 @@ export default class SynapsePlugin extends Plugin {
 			}
 
 			for (const suffix of suffixes) {
-				const oldValue = this.app.loadLocalStorage(oldPrefix + suffix);
+				// loadLocalStorage() is typed `any | null` in obsidian.d.ts; narrow to unknown.
+				const oldValue: unknown = this.app.loadLocalStorage(oldPrefix + suffix);
 				if (oldValue != null) {
-					const existing = this.app.loadLocalStorage(newPrefix + suffix);
+					const existing: unknown = this.app.loadLocalStorage(newPrefix + suffix);
 					if (existing == null) {
 						this.app.saveLocalStorage(newPrefix + suffix, oldValue);
 					}

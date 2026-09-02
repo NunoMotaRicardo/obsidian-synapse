@@ -362,8 +362,11 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 
 		// Validate that content is valid JSON with nodes array
 		try {
-			const parsed = JSON.parse(content);
-			if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+			const parsed: unknown = JSON.parse(content);
+			if (
+				typeof parsed !== 'object' || parsed === null ||
+				!('nodes' in parsed) || !Array.isArray((parsed as {nodes?: unknown}).nodes)
+			) {
 				throw new Error('Missing nodes array');
 			}
 			content = JSON.stringify(parsed, null, '\t');

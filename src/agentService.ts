@@ -14,6 +14,10 @@ try {
 	const nodeReq = typeof window.require === 'function' ? window.require : undefined;
 	const events = nodeReq?.('node:events') as typeof import('node:events') | undefined;
 	if (events && typeof events.setMaxListeners === 'function') {
+		// Intentionally extracted so the wrapper below can call it via `.apply(this,
+		// ...)`, which re-binds `this` to whatever `events.setMaxListeners(...)` is
+		// called on — the rule can't verify that manual rebinding.
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- see comment above
 		const origSetMaxListeners = events.setMaxListeners;
 		events.setMaxListeners = function(n: number, ...eventTargets: unknown[]) {
 			try {
@@ -55,6 +59,10 @@ import type {
 	EffortLevel,
 	ModelInfo as SDKModelInfo,
 } from '@anthropic-ai/claude-agent-sdk';
+// zod is a transitive dependency of @anthropic-ai/claude-agent-sdk; declaring it
+// directly in package.json is a dependency-manifest change out of scope for this
+// lint-only fix. Follow-up: add zod as an explicit devDependency/dependency (#115).
+// eslint-disable-next-line import/no-extraneous-dependencies -- see comment above
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';

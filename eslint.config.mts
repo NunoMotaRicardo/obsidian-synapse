@@ -270,6 +270,45 @@ export default tseslint.config(
 			'obsidianmd/no-global-this': 'off',
 		},
 	},
+	{
+		files: ['src/main.ts'],
+		rules: {
+			// Renaming command IDs (drop the "synapse-"/plugin-id prefix) needs a migration
+			// path — CLAUDE.md: "Don't rename command IDs ... without a migration path"
+			// (existing hotkey bindings and any automation keyed on the id would break).
+			// Renaming command *names* and removing default hotkeys are real user-facing
+			// UX changes (a previously-set keybinding would silently stop existing), not
+			// mechanical lint fixes. All three need a deliberate product decision — left
+			// as-is here; see #115 for follow-up.
+			'obsidianmd/commands/no-plugin-id-in-command-id': 'off',
+			'obsidianmd/commands/no-plugin-name-in-command-name': 'off',
+			'obsidianmd/commands/no-default-hotkeys': 'off',
+		},
+	},
+	{
+		files: ['src/providerModels.ts'],
+		rules: {
+			// This module's fetch() calls talk to user-configured local/BYOK provider base
+			// URLs (Ollama, OpenAI-compatible endpoints, Azure, Anthropic-compatible) —
+			// requestUrl() has different semantics (buffers the whole response instead of
+			// streaming, different error/CORS behavior) that would need real verification
+			// against each provider shape, not a blind lint-driven swap. Left as-is here;
+			// see #115 for follow-up.
+			'no-restricted-globals': 'off',
+		},
+	},
+	{
+		files: ['src/configWriter.ts'],
+		rules: {
+			// deleteArtifact() intentionally always uses Obsidian's local .trash folder
+			// (vault.trash(file, false)), not the user's system trash preference — this is
+			// the plugin deleting its own generated artifact files (not user notes), and
+			// switching to FileManager.trashFile() would change that behavior (deferring to
+			// the "Deleted files" setting instead). Needs its own design/verification pass,
+			// not a blind lint-driven swap — left as-is here; see #115 for follow-up.
+			'obsidianmd/prefer-file-manager-trash-file': 'off',
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",
