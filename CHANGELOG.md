@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Real token-level streaming of assistant output in the chat panel, via the
+  Agent SDK's `includePartialMessages` (#103). One-shot and unattended paths
+  (search, triggers, Telegram, batch loops) are unaffected.
+
+### Changed
+
+- Stopping a chat run now asks the CLI to stop gracefully via the SDK's
+  `Query.interrupt()` instead of hard-aborting the subprocess (#116).
+- Provider model lookups and local-provider chat calls now go through
+  Obsidian's `requestUrl()` rather than `fetch()`, which avoids the renderer's
+  CORS sandbox for local endpoints such as Ollama (#115).
+- Renamed the **Chat with Synapse** command to **Chat with selection** to
+  distinguish it from **Open chat**. The command ID and its hotkey are
+  unchanged (#115).
+
+### Fixed
+
+- Interrupting a chat run no longer throws
+  `TypeError: setTimeout(...).unref is not a function` in the developer
+  console. This is an upstream Agent SDK bug (an unguarded `.unref()` on its
+  subprocess-teardown timers, which Electron renderers do not provide); the
+  previous workaround patched `globalThis.setTimeout` for the whole app's
+  lifetime and has been replaced (#116).
+
 ## [1.3.0] - 2026-09-02
 
 ### Added
