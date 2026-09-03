@@ -197,23 +197,30 @@ vault scope, folder tree.
   - **Deferred while a conversation is in progress (issue #108 / #93):** applying this auto-update
     unconditionally used to force `ensureSession()` (`synapseView.ts`) to tear down the live
     `Session` and rebuild it with an empty `_sessionId` on every folder-crossing note switch —
-    `Session.send()` only passes `resume` when `_sessionId` is truthy, so the very next message
-    silently started a brand-new CLI session with no history. Since users switch notes constantly
-    *between* turns, this was the likely root cause of #93 ("chat is losing context of the
-    conversation in each turn"). `updateActiveNote()` (`inputArea.ts`) now calls the pure
-    `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`) with whether a conversation is
-    currently in progress (`currentSession !== null && messages.length > 0`, true for both live
-    and cold-resumed/replayed sessions): if so, the directory change is **deferred** —
-    `SynapseView.pendingWorkingDir` records the new folder, `workingDir`/`configDirty` are left
-    untouched, and the live session (and its transcript) survives the note switch. The deferred
-    directory is applied — `workingDir` updated, cwd button refreshed — the next time a
-    conversation is not in progress, currently only `newConversation()` (which is about to mark
-    `configDirty` and rebuild the session anyway, so applying it there costs nothing extra). A
-    session reset genuinely tied to a *manual* working-directory override
-    (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) is a deliberate
-    user action, not a silent side effect of navigation, and is unaffected by this change — as is
-    the unrelated `configDirty`-on-toolbar-toggle pattern (agent/model/reasoning/tools), tracked
-    separately in issue #104.
+    the rebuilt `Session`'s very next message silently started a brand-new CLI session with no
+    history. Since users switch notes constantly *between* turns, this was the likely root cause
+    of #93 ("chat is losing context of the conversation in each turn"). `updateActiveNote()`
+    (`inputArea.ts`) now calls the pure `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`)
+    with whether a conversation is currently in progress (`currentSession !== null &&
+    messages.length > 0`, true for both live and cold-resumed/replayed sessions): if so, the
+    directory change is **deferred** — `SynapseView.pendingWorkingDir` records the new folder,
+    `workingDir`/`configDirty` are left untouched, and the live session (and its transcript)
+    survives the note switch. The deferred directory is applied — `workingDir` updated, cwd
+    button refreshed — the next time a conversation is not in progress, currently only
+    `newConversation()` (which is about to mark `configDirty` and rebuild the session anyway, so
+    applying it there costs nothing extra). A session reset genuinely tied to a *manual*
+    working-directory override (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the
+    input area) is a deliberate user action, not a silent side effect of navigation, and is
+    unaffected by this change.
+  - **Every `configDirty` rebuild now carries the conversation forward (issue #104):** the
+    toolbar-toggle pattern above (agent/model/reasoning/tools) still marks `configDirty` and lets
+    `ensureSession()` rebuild the `Session` — that part is unchanged, and deliberately so (see
+    `agent-service.md`'s "Carrying a conversation across a rebuilt Session" for why there's no
+    live query to mutate instead). What changed is that `ensureSession()` now reads the outgoing
+    `Session`'s `sessionId` before tearing it down and seeds the rebuilt `SessionConfig` with it
+    (`buildSessionConfig({..., resume})`), so the new `Session`'s first `send()` still resumes the
+    prior conversation even though the `Session` object itself is new. Previously any toolbar
+    config change silently reset the conversation the same way #108/#93 did for note switches.
   To anchor path resolution, the session is configured with standard system instructions containing
   the absolute vault root, active note path, and working directory, preventing the LLM from constructing
   incorrect absolute paths (e.g., nesting file paths under attached image subfolders).

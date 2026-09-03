@@ -740,6 +740,14 @@ export class SynapseView extends ItemView {
 	async ensureSession(): Promise<void> {
 		if (this.currentSession && !this.configDirty) return;
 
+		// Carry the conversation across a configDirty rebuild: the outgoing session's
+		// sessionId (once it has one — a session that never sent a message has none to
+		// carry) is threaded through as `resume` on the rebuilt config below. Without
+		// this, the new Session() starts with an empty `_sessionId` and no seeding path,
+		// so send() silently omits `resume` and the conversation is lost on every config
+		// change (issue #104).
+		const resumeSessionId = this.currentSession?.sessionId || undefined;
+
 		// Tear down existing session
 		if (this.currentSession) {
 			this.unsubscribeEvents();
@@ -752,6 +760,7 @@ export class SynapseView extends ItemView {
 		const sessionConfig = this.buildSessionConfig({
 			model: this.selectedModel || undefined,
 			selectedAgentName: this.selectedAgent,
+			resume: resumeSessionId,
 		});
 
 		this.earlyEventBuffer = [];
@@ -1128,6 +1137,13 @@ export class SynapseView extends ItemView {
 		model?: string;
 		systemContent?: string;
 		selectedAgentName?: string;
+		/**
+		 * Session id to resume, for rebuilding a session that already had a conversation
+		 * (e.g. a `configDirty` rebuild in `ensureSession()`) — carried into the new
+		 * `Session`'s config so `send()` passes `resume` even though the fresh `Session`
+		 * itself starts with an empty `_sessionId` (see `ensureSession()`).
+		 */
+		resume?: string;
 	}): SessionConfig {
 		// Permission handler — canUseTool for Agent SDK
 		const permissionHandler: import('./agentService').PermissionHandler = async (toolName, input, options) => {
@@ -1202,6 +1218,7 @@ export class SynapseView extends ItemView {
 			// behavior) and the model stops using tools or reading files.
 			systemPrompt: {type: 'preset', preset: 'claude_code', append: systemContent},
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
+			...(opts.resume ? {resume: opts.resume} : {}),
 		};
 
 		return config;

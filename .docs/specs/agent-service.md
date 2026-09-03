@@ -186,6 +186,29 @@ first captures a `session_id` (also when it changes on resume), it dispatches a
 the real id, name the session, and add it to the sidebar. Do not read `Session.sessionId`
 right after `createSession()` for a new session — it is `''` at that point.
 
+### Carrying a conversation across a rebuilt Session (issue #104)
+
+The SDK has no long-lived `Query` to mutate mid-conversation — `Session.send()` creates a fresh
+`query()` per turn (with `resume: <sessionId>` when known) and clears its `Query` handle in a
+`finally` once the turn ends. Because of that, model/permission-mode/reasoning-effort changes
+already take effect on the next turn simply by living in `this.config`; there is nothing to call
+mid-session (no `Query.setModel()`/`setPermissionMode()` — there's no live `Query` between turns
+for those to act on).
+
+That also means a brand-new `Session` object always starts with `_sessionId = ''` and has no
+seeding path other than its config — `sessionId` is a read-only getter. `synapseView.ts`'s
+`ensureSession()` tears down and rebuilds the `Session` whenever `configDirty` is set (any
+toolbar config change); without carrying the outgoing session's id forward, the rebuilt
+`Session`'s first `send()` would omit `resume` and silently start a brand-new CLI conversation.
+
+`ensureSession()` fixes this by reading `currentSession.sessionId` **before** tearing the old
+session down, then passing it as `buildSessionConfig(opts.resume)` into the rebuilt
+`SessionConfig`. `Session.send()` resolves the effective `resume` id via
+`resolveResumeSessionId(sessionId, configResume)`: the session's own captured `_sessionId` wins
+once it has one (set from the first message of *this* `Session` object); otherwise the
+config-seeded id — the prior `Session`'s id, carried across the rebuild — is used. Exported and
+unit-tested (`test/sessionResume.test.ts`) since it requires no live CLI to verify.
+
 ## Model list mapping
 
 `fetchModels()` maps the CLI's `initializationResult().models` to the plugin `ModelInfo` shape.
