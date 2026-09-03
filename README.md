@@ -150,14 +150,23 @@ Synapse is built natively for Claude models (via the Anthropic API or OAuth). It
 
 ### Supported providers
 
-Configure providers under **Settings → Synapse → Models**:
+Configure local providers under **Settings → Synapse → Models**. The dropdown has three presets
+(Ollama, OpenAI-compatible, Azure OpenAI), but the OpenAI-compatible preset works unchanged with
+any endpoint exposing `/v1/chat/completions` — which covers most of the table below:
 
-| Provider | Preset | Default endpoint |
-|----------|--------|-----------------|
-| **Anthropic** | `anthropic` | `https://api.anthropic.com` |
-| **Ollama** | `ollama` | `http://localhost:11434/v1` |
-| **Microsoft Foundry Local** | `openai` | Local Foundry model server |
-| **Other OpenAI-compatible** | `openai` | Any compatible endpoint |
+| Provider | Preset | Base URL | Notes |
+|---|---|---|---|
+| Ollama (local) | Ollama | `http://localhost:11434` | Default. Capabilities auto-detected |
+| Ollama Cloud | Ollama | `http://localhost:11434` | `ollama signin`, pull a `:cloud` model |
+| OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` | 400+ models, one key |
+| OpenAI | OpenAI-compatible | `https://api.openai.com` | |
+| LM Studio | OpenAI-compatible | `http://localhost:1234/v1` | |
+| llama.cpp server | OpenAI-compatible | `http://localhost:8080/v1` | |
+| vLLM | OpenAI-compatible | `http://localhost:8000/v1` | |
+| Groq / Together / DeepSeek / Mistral | OpenAI-compatible | provider's `/v1` | |
+| Foundry Local | OpenAI-compatible | `http://localhost:<port>/v1` | Port from `foundry service status`. **Model list unavailable** — enter the id manually |
+| Azure OpenAI | Azure OpenAI | `https://<res>.openai.azure.com/openai` | v1 API only; classic deployment URLs unsupported |
+| Anthropic | — | — | Use **Settings → Claude → API key**, not this section |
 
 ---
 
@@ -320,7 +329,7 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Provider** | Anthropic | Anthropic, Ollama, MS Foundry Local, or Other |
+| **Provider** | Ollama | `Ollama`, `OpenAI-compatible`, or `Azure OpenAI` — see [Supported providers](#supported-providers) |
 | **Model name** | *(empty)* | Model ID (e.g. `claude-3-5-sonnet-latest`, `llama3`) |
 | **API key / Token** | *(empty)* | Credentials for the chosen provider |
 

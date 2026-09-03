@@ -48,7 +48,7 @@ You should see your cloud model (e.g., `deepseek-v3.1:671b-cloud`) in the list.
 1. Open Obsidian and go to **Settings** → **Synapse**.
 2. Go to the **Models** tab.
 3. Select **Ollama** as your **Provider**.
-4. Keep the default **Base URL** (`http://localhost:11434/v1`).
+4. Keep the default **Base URL** (`http://localhost:11434`).
 5. Click **Test** to fetch your model list. Synapse will automatically detect the cloud model from your local daemon.
 6. In the **Model name** input field, select or type the cloud model name exactly as it appeared in `ollama list` (e.g., `deepseek-v3.1:671b-cloud`).
 7. Save settings.

@@ -6,7 +6,7 @@ This guide explains how to configure and use local models (such as `qwen3`, `gem
 
 ## 1. Overview of the ReAct Loop
 
-When you select a local model provider preset (such as **Ollama**, **Foundry Local**, or another OpenAI-compatible local gateway) and the model supports tool usage, Synapse wraps the session queries in an autonomous **Reasoning & Action (ReAct) loop**.
+When you select a local model provider preset (**Ollama** or **OpenAI-compatible** — the latter covers LM Studio, llama.cpp, vLLM, Foundry Local, and any other OpenAI-compatible endpoint) and the model supports tool usage, Synapse wraps the session queries in an autonomous **Reasoning & Action (ReAct) loop**.
 
 - **Stateless Execution**: Unlike Claude agentic sessions, the local ReAct loop runs statelessly per-query or per-trigger execution.
 - **Loop Limits**: The loop executes up to **5 turns** (`maxTurns = 5`) to prevent runaway API requests.
