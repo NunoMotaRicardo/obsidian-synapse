@@ -602,6 +602,21 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			}
 
+			if (this.plugin.settings.providerPreset === 'ollama') {
+				new Setting(providerFieldsEl)
+					.setName('Bearer token')
+					.setDesc('Optional — only needed for a remote or proxied Ollama, such as one behind a reverse proxy. A local Ollama needs no token, including for the cloud models it brokers. Stored securely.')
+					.addText(text => {
+						text.inputEl.type = 'password';
+						text.inputEl.autocomplete = 'off';
+						text.setValue(this.plugin.settings.providerBearerToken)
+							.onChange(async (val) => {
+								updateSecureField(this.app, this.plugin, 'providerBearerToken', val.trim());
+								await this.plugin.initAgentService();
+							});
+					});
+			}
+
 			new Setting(providerFieldsEl)
 				.setName('Model name')
 				.setDesc('Model name/ID for operations. Select from test results or enter custom ID.')

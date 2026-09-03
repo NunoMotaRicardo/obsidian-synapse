@@ -180,6 +180,134 @@ describe('provider preset matrix', () => {
 	}
 });
 
+// ---------------------------------------------------------------------------
+// Ollama discovery fixes (issue #120):
+//   1. `/api/show` calls are bound-concurrent, not serial — a 20-model library
+//      should not issue its `/api/show` requests one at a time.
+//   2. `ollamaShowCache` is keyed on `baseUrl + '\0' + id`, not `id` alone, so
+//      switching hosts does not serve stale capabilities for a same-named model.
+// ---------------------------------------------------------------------------
+describe('ollama /api/show discovery (#120)', () => {
+	it('parallelises /api/show calls instead of awaiting them serially', async () => {
+		const modelCount = 12;
+		const tagsBody = {
+			models: Array.from({length: modelCount}, (_, i) => ({name: `model-${i}`, details: {family: 'llama'}})),
+		};
+
+		let inFlight = 0;
+		let maxInFlight = 0;
+		const showCallOrder: number[] = [];
+
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/api/tags')) {
+				return Promise.resolve(jsonResponse(200, tagsBody));
+			}
+			if (req.url.endsWith('/api/show')) {
+				inFlight++;
+				maxInFlight = Math.max(maxInFlight, inFlight);
+				showCallOrder.push(inFlight);
+				return new Promise((resolve) => {
+					setTimeout(() => {
+						inFlight--;
+						resolve(jsonResponse(200, {capabilities: ['tools']}));
+					}, 5);
+				});
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const result = await fetchProviderModels({preset: 'ollama', baseUrl: 'http://localhost:11434'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.models).toHaveLength(modelCount);
+
+		// Serial execution would never have more than one /api/show in flight at once;
+		// bound concurrency should let several run together (but not literally all of them,
+		// proving there is a cap rather than an unbounded Promise.all).
+		expect(maxInFlight).toBeGreaterThan(1);
+		expect(maxInFlight).toBeLessThan(modelCount);
+	});
+
+	it('does not let one failing /api/show call fail discovery or block the others', async () => {
+		const tagsBody = {
+			models: [
+				{name: 'good-model-1', details: {family: 'llama'}},
+				{name: 'bad-model', details: {family: 'llama'}},
+				{name: 'good-model-2', details: {family: 'llama'}},
+			],
+		};
+
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string; body?: string};
+			if (req.url.endsWith('/api/tags')) {
+				return Promise.resolve(jsonResponse(200, tagsBody));
+			}
+			if (req.url.endsWith('/api/show')) {
+				const parsedBody = JSON.parse(req.body || '{}') as {model?: string};
+				if (parsedBody.model === 'bad-model') {
+					return Promise.reject(new Error('network error'));
+				}
+				return Promise.resolve(jsonResponse(200, {capabilities: ['tools', 'vision']}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const result = await fetchProviderModels({preset: 'ollama', baseUrl: 'http://localhost:11434'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.models).toHaveLength(3);
+
+		const good1 = result.models.find(m => m.id === 'good-model-1');
+		const bad = result.models.find(m => m.id === 'bad-model');
+		const good2 = result.models.find(m => m.id === 'good-model-2');
+		expect(good1?.supportsTools).toBe(true);
+		expect(good2?.supportsTools).toBe(true);
+		// The failed /api/show falls back to the heuristic default (false), rather than
+		// dropping the model or failing the whole discovery.
+		expect(bad?.supportsTools).toBe(false);
+	});
+
+	it('keys the capability cache on baseUrl + id, so switching hosts does not serve stale capabilities', async () => {
+		const tagsBody = {models: [{name: 'llama3.1', details: {family: 'llama'}}]};
+
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/api/tags')) {
+				return Promise.resolve(jsonResponse(200, tagsBody));
+			}
+			if (req.url === 'http://host-a:11434/api/show') {
+				return Promise.resolve(jsonResponse(200, {capabilities: ['tools']}));
+			}
+			if (req.url === 'http://host-b:11434/api/show') {
+				// Different host, same model name, genuinely different capabilities (e.g. a
+				// vision-capable build on host B).
+				return Promise.resolve(jsonResponse(200, {capabilities: ['tools', 'vision']}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const resultA = await fetchProviderModels({preset: 'ollama', baseUrl: 'http://host-a:11434'});
+		expect(resultA.ok).toBe(true);
+		if (!resultA.ok) return;
+		expect(resultA.models[0]?.isVision).toBe(false);
+
+		const resultB = await fetchProviderModels({preset: 'ollama', baseUrl: 'http://host-b:11434'});
+		expect(resultB.ok).toBe(true);
+		if (!resultB.ok) return;
+		// If the cache were keyed on model id alone, this would incorrectly return host A's
+		// cached (non-vision) result instead of hitting /api/show again for host B.
+		expect(resultB.models[0]?.isVision).toBe(true);
+
+		// Re-querying host A again should still be correct, i.e. re-keying for host B must
+		// not have clobbered host A's cache entry either.
+		const resultA2 = await fetchProviderModels({preset: 'ollama', baseUrl: 'http://host-a:11434'});
+		expect(resultA2.ok).toBe(true);
+		if (!resultA2.ok) return;
+		expect(resultA2.models[0]?.isVision).toBe(false);
+	});
+});
+
 describe('migrateProviderPreset', () => {
 	it('passes surviving presets through unchanged', () => {
 		expect(migrateProviderPreset('ollama')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
