@@ -25,7 +25,7 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -40,6 +40,24 @@ export class SynapseView extends ItemView {
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
 	messages: ChatMessage[] = [];
+	/**
+	 * High-water mark (#137): index into `messages` up to which the *current* CLI/Agent SDK
+	 * session already has the transcript — either because those turns were themselves sent via
+	 * the SDK (advanced on every successful SDK-routed `send()`, see `handleSend()`), or because
+	 * they were injected as a bridging history block into an earlier SDK turn. Turns sent via the
+	 * local-provider branch (`AgentService.isLocalModel()`) never advance this mark, since they
+	 * never reach the CLI — see `agent-service.md`'s "Bridging local-provider turns into the SDK
+	 * session". Lives on `SynapseView`, not `Session`, deliberately: `ensureSession()` rebuilds
+	 * the `Session` object on every `configDirty` change (issue #104), but the conversation
+	 * transcript and this mark must survive that rebuild unchanged — resetting it on a config
+	 * change (e.g. switching models) would immediately re-inject already-seen history on the next
+	 * turn. Reset to `0` only when the conversation itself resets (`newConversation()`) or a
+	 * different session is loaded (`selectSession()`/`restoreFromBackground()` in
+	 * `sessionSidebar.ts`, which set it from the loaded transcript's length instead, since a
+	 * cold-resumed or backgrounded session's `messages` already reflect exactly what that
+	 * session's CLI transcript contains).
+	 */
+	sdkSeenIndex = 0;
 	currentSession: Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
@@ -644,9 +662,24 @@ export class SynapseView extends ItemView {
 				? await buildLocalHistory(this.messages.slice(0, -1), vaultBasePath)
 				: undefined;
 
+			// Bridge the two-store gap (#137): local-provider turns never reach the CLI, so a
+			// conversation that switches from a local model back to Claude (or starts on a
+			// local model entirely) resumes a CLI session missing those turns. `sdkSeenIndex`
+			// marks how much of `this.messages` the CLI already has; anything since then (and
+			// before the just-added current-turn user message, excluded the same way `history`
+			// above excludes it) is injected as a delimited transcript block prepended to the
+			// prompt. Only relevant for the real Agent SDK branch — local models get continuity
+			// from `history` instead and never touch `sdkSeenIndex` (see its field doc comment).
+			let promptForSend = fullPrompt;
+			if (!isLocalModel) {
+				const gapMessages = computeSdkHistoryGap(this.messages, this.sdkSeenIndex);
+				const injection = buildSdkHistoryInjection(gapMessages);
+				if (injection) promptForSend = injection + fullPrompt;
+			}
+
 			try {
 				await this.currentSession!.send({
-					prompt: fullPrompt,
+					prompt: promptForSend,
 					...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 					...(images && images.length > 0 ? {images} : {}),
 					...(history && history.length > 0 ? {history} : {}),
@@ -661,7 +694,7 @@ export class SynapseView extends ItemView {
 					await this.ensureSession();
 					this.registerSessionEvents();
 					await this.currentSession!.send({
-						prompt: fullPrompt,
+						prompt: promptForSend,
 						...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 						...(images && images.length > 0 ? {images} : {}),
 						...(history && history.length > 0 ? {history} : {}),
@@ -669,6 +702,17 @@ export class SynapseView extends ItemView {
 				} else {
 					throw sendErr;
 				}
+			}
+
+			// The turn above just reached the CLI successfully (either call — a thrown error
+			// from either would have skipped this line via the catch above). Advance the mark
+			// so the next SDK turn doesn't re-inject what the CLI now has — including this
+			// turn's own prompt/response, which is why this uses `this.messages.length` (after
+			// `finalizeStreamingMessage()` has already pushed the assistant reply — see
+			// `agent-service.md`: `session.idle` fires synchronously inside `send()`, before it
+			// resolves here) rather than the pre-turn snapshot.
+			if (!isLocalModel) {
+				this.sdkSeenIndex = this.messages.length;
 			}
 		} catch (e) {
 			this.finalizeStreamingMessage();
@@ -1100,6 +1144,7 @@ export class SynapseView extends ItemView {
 		this.currentSessionId = null;
 		this.pendingSessionLabel = null;
 		this.messages = [];
+		this.sdkSeenIndex = 0;
 		if (this.fullRenderTimer) {
 			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;

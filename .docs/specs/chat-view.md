@@ -323,6 +323,25 @@ vault scope, folder tree.
   conversation history" section for the full mapping/budget/sizing details (this stays scoped to
   what's specific to the view: where in `handleSend()` history is built and why the slice excludes
   the current turn).
+  **Bridging local turns into the SDK session (issue #135's asymmetry, fixed by #137):** #135
+  alone only fixed continuity in the direction the plugin controls the payload (local-model
+  turns). Switching *back* to a Claude model — or starting a conversation on a local model at all
+  — resumed a CLI session with no record of the local turns, since they never reached the CLI.
+  `handleSend()`'s non-local branch now computes `computeSdkHistoryGap(this.messages,
+  this.sdkSeenIndex)` and, when non-empty, prepends `buildSdkHistoryInjection()`'s delimited
+  transcript block to the prompt actually sent to `Session.send()` (`promptForSend`, distinct from
+  the clean `fullPrompt` used for local models and for what's stored in `this.messages`).
+  `SynapseView.sdkSeenIndex` — the high-water mark of how much of `this.messages` the CLI's
+  session already has — advances to `this.messages.length` after every SDK-routed `send()` that
+  reaches the CLI without throwing, and is otherwise left alone (including by local-routed turns,
+  by `ensureSession()`'s `configDirty` rebuilds, and by a live conversation's ordinary turns). See
+  agent-service.md's "Bridging local-provider turns into the SDK session" for the full mechanism,
+  the budget rationale (deliberately different from #135's — Claude's context window is far larger
+  than a local model's), and why the mark lives on `SynapseView` rather than `Session` (it must
+  survive a `configDirty` `Session` rebuild, #104). The mark is reset on `newConversation()`, set
+  to "fully seen" on cold session resume (`selectSession()`'s SDK-resume path) since a resumed
+  session's replayed messages come straight from the CLI's own transcript, and carried through
+  `BackgroundSession` on background-session save/restore.
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched

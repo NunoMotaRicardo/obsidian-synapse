@@ -451,6 +451,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			sessionId: this.currentSessionId,
 			session: this.currentSession,
 			messages: [...this.messages],
+			sdkSeenIndex: this.sdkSeenIndex,
 			isStreaming: this.isStreaming,
 			streamingContent: this.streamingContent,
 			streamingReasoning: this.streamingReasoning,
@@ -508,6 +509,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.currentSession = bg.session;
 		this.currentSessionId = bg.sessionId;
 		this.messages = bg.messages;
+		this.sdkSeenIndex = bg.sdkSeenIndex;
 		this.isStreaming = bg.isStreaming;
 		this.streamingContent = bg.streamingContent;
 		this.streamingReasoning = bg.streamingReasoning;
@@ -777,6 +779,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		// Clear UI for the new session
 		this.messages = [];
+		this.sdkSeenIndex = 0;
 		if (this.fullRenderTimer) {
 			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
@@ -887,6 +890,12 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				// (includeSystemMessages defaults to false) and are skipped if seen.
 			}
 			await Promise.all(renderPromises);
+
+			// The replayed messages above came straight from the CLI's own persisted transcript
+			// (`getSessionMessages()`), so the CLI already has all of them — mark the whole thing
+			// seen (#137) rather than leaving the mark at 0, which would otherwise re-inject this
+			// entire history as a redundant bridging block into the very next SDK turn.
+			this.sdkSeenIndex = this.messages.length;
 
 			if (this.messages.length === 0) {
 				this.renderWelcome();

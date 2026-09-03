@@ -544,8 +544,14 @@ function computeHistoryCharBudget(advertisedContextLengthTokens?: number): numbe
  * newest history message is always kept even if it alone exceeds the budget: splitting it is
  * off the table, and dropping the entire history to zero would defeat the point more than
  * slightly overshooting the budget on an unavoidable single oversized turn.
+ *
+ * Exported (#137) for reuse by `view/sessionConfig.ts#buildSdkHistoryInjection` — the same
+ * oldest-first-drop-whole-messages policy also bounds the transcript injected into an Agent SDK
+ * prompt to bridge turns the CLI's own session never saw (local-provider turns), just sized with
+ * a different, much larger budget appropriate to Claude's context window rather than a local
+ * model's — see that function's doc comment.
  */
-function buildBudgetedHistory(history: LocalHistoryMessage[], budgetChars: number): LocalHistoryMessage[] {
+export function buildBudgetedHistory(history: LocalHistoryMessage[], budgetChars: number): LocalHistoryMessage[] {
 	const kept: LocalHistoryMessage[] = [];
 	let total = 0;
 	for (let i = history.length - 1; i >= 0; i--) {
