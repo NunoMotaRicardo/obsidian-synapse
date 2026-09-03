@@ -27,16 +27,25 @@ import type {ChatMessage} from '../src/types';
 // `SynapseView`/`Session`.
 // ---------------------------------------------------------------------------
 
+// Fixed, deterministic timestamp rather than `Date.now()`. Several assertions compare a
+// computed result against freshly-built fixtures (`expect(gap).toEqual([userMsg('hello'),
+// ...])`), and `toEqual` deep-compares every field including `timestamp` — so a builder
+// reading the clock made those assertions fail whenever the millisecond ticked between
+// constructing the input and constructing the expectation. Nothing here depends on
+// timestamps being distinct or realistic (ordering is by array position), so a constant
+// makes the fixtures reproducible and the assertions honest.
+const FIXTURE_TIMESTAMP = 1_700_000_000_000;
+
 function userMsg(content: string): ChatMessage {
-	return {id: `u-${content}`, role: 'user', content, timestamp: Date.now()};
+	return {id: `u-${content}`, role: 'user', content, timestamp: FIXTURE_TIMESTAMP};
 }
 
 function assistantMsg(content: string, reasoning?: string): ChatMessage {
-	return {id: `a-${content}`, role: 'assistant', content, reasoning, timestamp: Date.now()};
+	return {id: `a-${content}`, role: 'assistant', content, reasoning, timestamp: FIXTURE_TIMESTAMP};
 }
 
 function infoMsg(content: string): ChatMessage {
-	return {id: `i-${content}`, role: 'info', content, timestamp: Date.now()};
+	return {id: `i-${content}`, role: 'info', content, timestamp: FIXTURE_TIMESTAMP};
 }
 
 /**
