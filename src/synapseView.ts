@@ -25,7 +25,7 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -672,7 +672,7 @@ export class SynapseView extends ItemView {
 			// from `history` instead and never touch `sdkSeenIndex` (see its field doc comment).
 			let promptForSend = fullPrompt;
 			if (!isLocalModel) {
-				const gapMessages = this.messages.slice(this.sdkSeenIndex, -1);
+				const gapMessages = computeSdkHistoryGap(this.messages, this.sdkSeenIndex);
 				const injection = buildSdkHistoryInjection(gapMessages);
 				if (injection) promptForSend = injection + fullPrompt;
 			}

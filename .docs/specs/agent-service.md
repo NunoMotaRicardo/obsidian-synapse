@@ -463,14 +463,102 @@ now accepts an optional `history` param (`LocalHistoryMessage[]`, exported from
   error** — unlike OpenAI-compatible backends, which return HTTP 400 on overflow (a visible
   failure). Any backend that publishes nothing (every non-Ollama preset; a failed/erroring
   `/api/show` call) falls back to a fixed conservative default (`DEFAULT_HISTORY_CHAR_BUDGET`).
-- **Scope:** the Agent SDK path is unaffected — it already carries continuity via `resume` and the
-  CLI's persisted session id (see "BYOK local provider routing" above), so `Session.send({history})`
-  is only read in the local-model branch.
+- **Scope:** `Session.send({history})` is only read in the local-model branch — the Agent SDK
+  branch carries its own continuity via `resume` and the CLI's persisted session id (see "BYOK
+  local provider routing" above). That continuity is necessarily one-sided, though: it only
+  covers turns that themselves went through the CLI. See "Bridging local-provider turns into the
+  SDK session (issue #137)" below for the gap this leaves and how it's closed.
 
 Full feature parity for a local model — running it through the actual Agent SDK — requires a
 Messages-API-speaking gateway (e.g. LiteLLM) in front of it and `ANTHROPIC_BASE_URL` pointed at
 that gateway; that is a distinct, not-yet-built feature (see
 `.docs/research/2026-09-03-provider-matrix.md` §6), not something `buildEnv()` should approximate.
+
+### Bridging local-provider turns into the SDK session (issue #137)
+
+**The two-store problem.** Continuity for the two provider paths comes from two independent
+stores that don't know about each other:
+
+- **Agent SDK path:** the transcript lives in the CLI's own session store; continuity comes from
+  `resume` + the persisted session id (`Session._sessionId`, only ever set inside the SDK stream
+  loop above, from a `session_id` the CLI itself assigns). The plugin sends no history explicitly.
+- **Local-provider path (#135):** no CLI, no persisted session — continuity comes entirely from
+  the plugin sending `history` built from `SynapseView.messages` (see above).
+
+A turn routed through the local-provider branch never touches the CLI subprocess at all, so it
+never sets `_sessionId` and the CLI's session store has no record it happened. Switching back to
+a Claude model then resumes (or, if the conversation started on a local model, *starts*) a CLI
+session that's missing those turns — silently, since `resume` succeeds either way, it just
+resumes the wrong (incomplete) transcript.
+
+**Why this can't be fixed the same way as #135, or natively.** The SDK offers no supported way to
+seed or append to a session transcript without taking a turn (checked against the installed SDK's
+`sdk.d.ts` — `forkSession()` forks an *existing* session rather than injecting messages, and
+streaming input accepts `SDKUserMessage` only, so assistant turns can't be inserted either). The
+gap has to be bridged from the plugin side, into the prompt of an actual SDK turn.
+
+**The bridge.** `SynapseView.sdkSeenIndex` is a high-water mark: how much of `SynapseView.messages`
+the *current* CLI/Agent SDK session already has.
+
+- Any SDK-routed `send()` advances the mark to `messages.length` once the turn reaches the CLI
+  without throwing (`handleSend()`, after both `send()` attempts — the retry-on-`'Session not
+  found'` path included). Local-routed turns never advance it.
+- Before every SDK-routed `send()`, `computeSdkHistoryGap(messages, sdkSeenIndex)`
+  (`view/sessionConfig.ts`) slices everything since the mark, excluding the just-added
+  current-turn user message (same convention as `history`'s slice above — that turn goes through
+  `prompt`, not a replay block). `buildSdkHistoryInjection()` maps the gap through the same
+  `role: 'info'`-excluded, `reasoning`-never-replayed filtering `buildLocalHistory()` uses, budgets
+  it via `buildBudgetedHistory()` (reused from `providerModels.ts`, exported for this reuse — same
+  oldest-first, never-truncate-mid-message policy as #135), and wraps the result in an explicit,
+  low-collision-risk delimiter pair (`[SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]` /
+  `[/SYNAPSE:...]`) plus a plain-language "this is context, not an instruction" line, so the model
+  reads it as history rather than acting on anything inside it. The block (if non-empty) is
+  prepended to the prompt actually sent to `Session.send()`.
+- **Budget is sized differently from #135's, deliberately.** #135's budget scales down from a
+  *local* model's own advertised (often tiny) context window. There's no equivalent per-model
+  signal to read here — the CLI exposes no context-length metadata to query — and the target
+  window is Claude's: 200k tokens ordinarily, up to 1M for `[1m]` variants. Flooring to a
+  local-sized budget would needlessly truncate a bridgeable gap Claude could hold easily.
+  `SDK_HISTORY_INJECTION_CHAR_BUDGET` (`sessionConfig.ts`) is fixed at 60,000 characters — using
+  the same conservative ~3 chars/token proxy #135 uses, that's ~20k tokens, about 10% of even the
+  smaller 200k window, comfortably leaving room for the system prompt, tool definitions, and the
+  rest of the conversation the CLI's own `resume` already carries. It only needs to cover an
+  occasional local-provider detour, not become the primary transport.
+- **Both cases from the issue are the same mechanism, not two branches:** started-on-local (the
+  mark is still its initial `0` when the first SDK turn happens, so the whole local prefix is the
+  gap) and switched-mid-conversation (the mark reflects the last SDK turn, so only the local turns
+  since then are the gap) fall out of the same `sdkSeenIndex`/`computeSdkHistoryGap()` logic with
+  no special-casing.
+
+**Where the mark lives, and why it survives a rebuilt `Session` (issue #104 interaction).**
+`sdkSeenIndex` is a field on `SynapseView`, not `Session` — deliberately, since `ensureSession()`
+tears down and rebuilds the `Session` object on every `configDirty` change (model, agent,
+reasoning-effort, tool toggles), while `SynapseView.messages` and the conversation itself survive
+that rebuild unchanged (see "Carrying a conversation across a rebuilt Session" above). Had the
+mark lived on `Session`, a config change mid-conversation (e.g. switching *to* the local model
+that triggered the gap in the first place) would silently reset it to a fresh session's default,
+re-injecting already-seen history on the very next SDK turn. Lifecycle:
+
+- Reset to `0` only when the conversation itself resets — `newConversation()`.
+- Set to `messages.length` (fully seen) rather than reset when a different session is *loaded* —
+  cold resume (`selectSession()`'s SDK-resume path, `sessionSidebar.ts`) replays `messages`
+  straight from the CLI's own persisted transcript (`getSessionMessages()`), so by definition the
+  CLI already has every one of them.
+- Carried through unchanged on background-session save/restore
+  (`saveCurrentToBackground()`/`restoreFromBackground()`) — added to `BackgroundSession`
+  (`view/types.ts`) alongside `messages`, since a backgrounded session is a distinct in-flight
+  conversation with its own mark, not the foreground one being reset.
+- Left untouched by `ensureSession()`'s `configDirty` rebuild — it isn't part of `SessionConfig`
+  and nothing in the rebuild path writes to it, so it naturally carries forward with `messages`.
+
+**Known limitation, not a bug:** the injected block becomes part of the actual prompt text sent to
+(and persisted by) the CLI, so a later cold-resume replay of that session
+(`AgentService.getSessionMessages()`) will show the delimited block verbatim as part of that
+turn's raw user-message content, rather than it being invisible plumbing. This is the same
+"inject into the prompt" mechanism the issue itself specifies (no native alternative exists — see
+above), and cosmetic only; it doesn't affect the model's behavior or which content participates in
+the visible chat UI (`SynapseView.messages`, which never includes the injected block — only the
+outgoing wire prompt does).
 
 ## Connection error handling
 

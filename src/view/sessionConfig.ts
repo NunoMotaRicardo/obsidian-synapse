@@ -361,8 +361,22 @@ export async function buildLocalHistory(
  */
 export const SDK_HISTORY_INJECTION_CHAR_BUDGET = 60000;
 
-const SDK_HISTORY_BLOCK_START = '[SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]';
-const SDK_HISTORY_BLOCK_END = '[/SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]';
+/** Exported for test assertions only — callers should treat `buildSdkHistoryInjection()`'s
+ * output as opaque text, not parse against these directly. */
+export const SDK_HISTORY_BLOCK_START = '[SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]';
+export const SDK_HISTORY_BLOCK_END = '[/SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]';
+
+/**
+ * Slices the messages a `sdkSeenIndex` high-water mark says the CLI hasn't seen yet, excluding
+ * the current turn's just-added user message (the last element — sent via `prompt`, not this
+ * bridging block, same convention `buildLocalHistory()`'s caller uses for `history`). Extracted
+ * as a small pure function (#137) so the gap-selection logic is independently testable without
+ * standing up `SynapseView`/`Session` — see `SynapseView.handleSend()` for the caller and
+ * `SynapseView.sdkSeenIndex`'s doc comment for what the mark means and how it advances.
+ */
+export function computeSdkHistoryGap(messages: ChatMessage[], sdkSeenIndex: number): ChatMessage[] {
+	return messages.slice(sdkSeenIndex, -1);
+}
 
 /**
  * Builds the delimited transcript block prepended to an Agent SDK prompt to bridge turns the
