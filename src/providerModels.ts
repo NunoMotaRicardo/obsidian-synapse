@@ -72,6 +72,53 @@ export function migrateProviderPreset(value: string | undefined | null): Provide
 	return {preset: 'openai', migrated: true, wasAnthropic: false};
 }
 
+/**
+ * Two predictable wrong inputs for the `azure` preset's base URL, both of which Synapse's URL
+ * builder (`{base}/v1/models` at `:251`, `{base}/v1/chat/completions` at `:472` — both strip
+ * trailing slashes then special-case a base that already ends in `/v1`) can never turn into a
+ * working request:
+ *
+ * 1. A **classic deployment-scoped URL**
+ *    (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) — flagged by a
+ *    `/deployments/` path segment or an `api-version=` query param.
+ * 2. The **bare portal Endpoint** (`https://<resource>.openai.azure.com/`, no path, or empty
+ *    path) — this is what the Azure portal actually shows and copies to the clipboard, so it's
+ *    the *more* likely paste, not a corner case. It needs the `/openai` suffix appended to reach
+ *    the v1 API.
+ *
+ * Both `.../openai` **and** `.../openai/v1` (each with or without a trailing slash) are
+ * genuinely working base URLs — the builder's own `endsWith('/v1')` special-case makes both
+ * resolve to the same `.../openai/v1/...` request, so the path check below accepts both; only a
+ * path that is empty or `/` (or already matched the deployment fingerprint above) gets flagged.
+ * Host-matching `*.openai.azure.com` runs first so a preset pointed at some other proxy/gateway
+ * is never second-guessed about a shape this module can't verify.
+ *
+ * Either case gets a message naming its specific fix instead of a bare "Test failed: HTTP 404".
+ * Returns `null` when neither fingerprint matches — including an empty/whitespace URL, since
+ * `fetchProviderModels` already reports that case with "Base URL is required.".
+ */
+export function describeAzureBaseUrlIssue(baseUrl: string): string | null {
+	const trimmed = (baseUrl || '').trim();
+	if (!trimmed) return null;
+
+	if (/\/deployments\//i.test(trimmed) || /[?&]api-version=/i.test(trimmed)) {
+		return 'That looks like a classic Azure deployment URL. Use the v1 API base URL instead: https://<resource>.openai.azure.com/openai';
+	}
+
+	try {
+		const url = new URL(trimmed);
+		const isAzureHost = /\.openai\.azure\.com$/i.test(url.hostname);
+		const hasOpenaiSuffix = /^\/openai(\/v1)?\/?$/i.test(url.pathname);
+		if (isAzureHost && !hasOpenaiSuffix) {
+			return 'That looks like the Azure resource\'s Endpoint from the portal. Append /openai to it — the v1 API base URL is https://<resource>.openai.azure.com/openai';
+		}
+	} catch {
+		// Not a parseable absolute URL — leave it to fetchProviderModels()'s request failure.
+	}
+
+	return null;
+}
+
 export interface ProviderConfigOptions {
 	// `(string & {})` (not bare `string`) keeps editor autocomplete for the known
 	// ProviderPreset literals while still accepting arbitrary strings — a bare

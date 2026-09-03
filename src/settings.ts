@@ -1,7 +1,7 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
-import {fetchProviderModels, clearOllamaShowCache, ProviderPreset} from "./providerModels";
+import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, ProviderPreset} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 
 /** Hardcoded vault folder for Synapse customization artifacts. */
@@ -470,6 +470,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 				providerDescEl.setText('Ollama integration: make sure Ollama is running locally ("ollama serve"). Pull models via "ollama pull <model>". Default URL is http://localhost:11434.');
 			} else if (this.plugin.settings.providerPreset === 'openai') {
 				providerDescEl.setText('Works with OpenAI, OpenRouter, LM Studio, llama.cpp, vLLM, Groq, Together, DeepSeek, Mistral, Foundry Local, and anything else exposing /v1/chat/completions.');
+			} else if (this.plugin.settings.providerPreset === 'azure') {
+				providerDescEl.setText('Azure OpenAI: base URL must be the v1 API endpoint, https://<resource>.openai.azure.com/openai — not the bare resource endpoint, and not a classic deployment-scoped URL (…/deployments/<deployment>/…?api-version=…).');
 			} else {
 				providerDescEl.setText('Configure an OpenAI-compatible endpoint or BYOK provider for local or custom models.');
 			}
@@ -551,8 +553,13 @@ export class SynapseSettingTab extends PluginSettingTab {
 									updateModelDatalist([]);
 								}
 							} else {
+								const azureUrlIssue = this.plugin.settings.providerPreset === 'azure'
+									? describeAzureBaseUrlIssue(this.plugin.settings.providerBaseUrl)
+									: null;
 								if (this.plugin.settings.providerPreset === 'ollama' && res.isOllamaConnectionError) {
 									new Notice('Could not connect to Ollama. Make sure Ollama is running ("ollama serve") and the base URL is correct.');
+								} else if (azureUrlIssue) {
+									new Notice(azureUrlIssue);
 								} else {
 									new Notice(`Test failed: ${res.error}`);
 								}
@@ -569,7 +576,10 @@ export class SynapseSettingTab extends PluginSettingTab {
 				.setName('Base URL')
 				.setDesc('Base URL for the provider endpoint.')
 				.addText(text => text
-					.setPlaceholder(this.plugin.settings.providerPreset === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com')
+					.setPlaceholder(
+						this.plugin.settings.providerPreset === 'ollama' ? 'http://localhost:11434' :
+						this.plugin.settings.providerPreset === 'azure' ? 'https://<resource>.openai.azure.com/openai' :
+						'https://api.openai.com')
 					.setValue(this.plugin.settings.providerBaseUrl)
 					.onChange(async (val) => {
 						this.plugin.settings.providerBaseUrl = val.trim();

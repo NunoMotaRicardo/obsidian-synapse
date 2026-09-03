@@ -4,6 +4,7 @@ import {
 	fetchProviderModels,
 	executeLocalProviderQuery,
 	migrateProviderPreset,
+	describeAzureBaseUrlIssue,
 	clearOllamaShowCache,
 	clearCachedDefaultModel,
 	type ProviderPreset,
@@ -228,5 +229,104 @@ describe('migrateProviderPreset', () => {
 	it('does not treat a whitespace-only string as a legacy alias', () => {
 		expect(migrateProviderPreset('   ')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
 		expect(migrateProviderPreset('\t\n')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// describeAzureBaseUrlIssue (issue #119) — Azure's classic deployment-scoped chat URL
+// (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) is a shape
+// Synapse's URL builder can never produce; it always requests `{base}/v1/...`. This is the
+// predictable wrong input a user pastes straight from the Azure portal, so the Test button
+// should name the fix instead of a bare 404.
+// ---------------------------------------------------------------------------
+describe('describeAzureBaseUrlIssue', () => {
+	it('flags a classic deployment-scoped URL', () => {
+		const issue = describeAzureBaseUrlIssue(
+			'https://my-res.openai.azure.com/openai/deployments/gpt-4o/chat/completions'
+		);
+		expect(issue).toBeTruthy();
+		expect(issue).toContain('v1');
+	});
+
+	it('flags a URL carrying an api-version query param', () => {
+		const issue = describeAzureBaseUrlIssue(
+			'https://my-res.openai.azure.com/openai?api-version=2024-02-01'
+		);
+		expect(issue).toBeTruthy();
+	});
+
+	it('flags a URL with both fingerprints', () => {
+		const issue = describeAzureBaseUrlIssue(
+			'https://my-res.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-01'
+		);
+		expect(issue).toBeTruthy();
+	});
+
+	it('is case-insensitive about the fingerprints', () => {
+		expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/DEPLOYMENTS/gpt-4o')).toBeTruthy();
+		expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai?API-VERSION=2024-02-01')).toBeTruthy();
+	});
+
+	it('does not flag the correct v1 API base URL', () => {
+		expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai')).toBeNull();
+	});
+
+	it('does not flag an unrelated base URL', () => {
+		expect(describeAzureBaseUrlIssue('https://api.openai.com')).toBeNull();
+	});
+
+	it('does not flag an empty base URL (fetchProviderModels already reports that case)', () => {
+		expect(describeAzureBaseUrlIssue('')).toBeNull();
+		expect(describeAzureBaseUrlIssue('   ')).toBeNull();
+	});
+
+	// Review round 1: the bare portal "Endpoint" (no /openai suffix) is the value actually
+	// shown/copyable in the Azure portal, so it's the more likely wrong paste — not the
+	// deployment URL. Must get its own, distinguishable message.
+	describe('bare portal Endpoint (missing /openai suffix)', () => {
+		it('flags the bare endpoint with no trailing slash', () => {
+			const issue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com');
+			expect(issue).toBeTruthy();
+			expect(issue).toContain('/openai');
+		});
+
+		it('flags the bare endpoint with a trailing slash', () => {
+			const issue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com/');
+			expect(issue).toBeTruthy();
+			expect(issue).toContain('/openai');
+		});
+
+		it('is a distinct message from the classic-deployment-URL one', () => {
+			const bareEndpointIssue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com/');
+			const deploymentIssue = describeAzureBaseUrlIssue(
+				'https://my-res.openai.azure.com/openai/deployments/gpt-4o/chat/completions'
+			);
+			expect(bareEndpointIssue).not.toEqual(deploymentIssue);
+		});
+
+		it('does not flag the correct v1 API base URL without a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai')).toBeNull();
+		});
+
+		it('does not flag the correct v1 API base URL with a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/')).toBeNull();
+		});
+
+		it('does not flag a non-Azure host missing an /openai path (cannot verify a shape we do not own)', () => {
+			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com')).toBeNull();
+			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com/')).toBeNull();
+		});
+
+		// Review round 2: `.../openai/v1` is a genuinely working base URL — the URL builder's
+		// own `endsWith('/v1')` special-case (providerModels.ts:251, :472) makes it resolve to
+		// exactly the same `.../openai/v1/...` request as `.../openai`. The helper must not
+		// tell a user their working setup is broken.
+		it('does not flag the working /openai/v1 base URL without a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/v1')).toBeNull();
+		});
+
+		it('does not flag the working /openai/v1 base URL with a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/v1/')).toBeNull();
+		});
 	});
 });
