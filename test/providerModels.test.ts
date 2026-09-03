@@ -308,6 +308,140 @@ describe('ollama /api/show discovery (#120)', () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// Catalogue capability metadata (issue #129) — `fetchProviderModels()`'s non-Ollama path used
+// to guess `isVision`/`supportsReasoning` from a fixed regex over the model id and hardcode
+// `supportsTools = true` for every model. It now reads real per-model capability fields when a
+// catalogue publishes them (`supported_parameters`, `architecture.input_modalities`,
+// `reasoning.supported_efforts` — field names verified against a live
+// `GET https://openrouter.ai/api/v1/models` response, 2026-09-03), and falls back to the old
+// heuristics — per field independently — only when a catalogue entry omits that field.
+// ---------------------------------------------------------------------------
+describe('catalogue capability metadata (#129)', () => {
+	function mockModelsResponse(models: unknown[]): void {
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const url = (request as {url: string}).url;
+			if (url.endsWith('/v1/models')) {
+				return Promise.resolve(jsonResponse(200, {data: models}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+	}
+
+	it('reads full metadata (vision, tools, reasoning with custom effort levels) generically, not gated on preset', async () => {
+		mockModelsResponse([
+			{
+				id: 'some-vendor/reasoning-vision-model',
+				name: 'Some Vendor: Reasoning Vision Model',
+				supported_parameters: ['max_tokens', 'tools', 'reasoning', 'reasoning_effort'],
+				architecture: {input_modalities: ['text', 'image']},
+				reasoning: {supported_efforts: ['xhigh', 'high', 'medium', 'low', 'minimal']},
+			},
+		]);
+
+		const result = await fetchProviderModels({preset: 'openai', baseUrl: 'http://localhost:9999'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const model = result.models[0];
+		expect(model?.isVision).toBe(true);
+		expect(model?.supportsTools).toBe(true);
+		expect(model?.capabilities?.supports?.reasoningEffort).toBe(true);
+		// The catalogue's own advertised effort levels are used verbatim, not the generic
+		// three-level fallback list.
+		expect(model?.capabilities?.supportedReasoningEfforts).toEqual(['xhigh', 'high', 'medium', 'low', 'minimal']);
+	});
+
+	it('reads a model with no tools/reasoning support from full metadata, not just no metadata', async () => {
+		mockModelsResponse([
+			{
+				id: 'tencent/hy-mt2-1.8b',
+				supported_parameters: ['max_completion_tokens', 'max_tokens', 'stop', 'temperature'],
+				architecture: {input_modalities: ['text']},
+			},
+		]);
+
+		const result = await fetchProviderModels({preset: 'openai', baseUrl: 'http://localhost:9999'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const model = result.models[0];
+		expect(model?.isVision).toBe(false);
+		expect(model?.supportsTools).toBe(false);
+		expect(model?.capabilities?.supports?.reasoningEffort).toBe(false);
+		expect(model?.capabilities?.supportedReasoningEfforts).toBeUndefined();
+	});
+
+	it('falls back to the heuristic for a bare OpenAI-shaped catalogue with no capability fields at all', async () => {
+		mockModelsResponse([
+			{id: 'gpt-4o-mini', object: 'model', created: 1700000000, owned_by: 'openai'},
+			{id: 'gpt-3.5-turbo', object: 'model', created: 1700000000, owned_by: 'openai'},
+			{id: 'o1-preview', object: 'model', created: 1700000000, owned_by: 'openai'},
+		]);
+
+		const result = await fetchProviderModels({preset: 'openai', baseUrl: 'http://localhost:9999'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+
+		const gpt4oMini = result.models.find(m => m.id === 'gpt-4o-mini');
+		const gpt35 = result.models.find(m => m.id === 'gpt-3.5-turbo');
+		const o1preview = result.models.find(m => m.id === 'o1-preview');
+
+		// Vision heuristic still applies as a last resort.
+		expect(gpt4oMini?.isVision).toBe(true);
+		expect(gpt35?.isVision).toBe(false);
+		// No metadata at all: tools default conservatively to false, not the old unconditional true.
+		expect(gpt4oMini?.supportsTools).toBe(false);
+		expect(gpt35?.supportsTools).toBe(false);
+		// Tightened reasoning heuristic still recognizes the real o1/o3 family.
+		expect(o1preview?.capabilities?.supports?.reasoningEffort).toBe(true);
+		expect(gpt35?.capabilities?.supports?.reasoningEffort).toBe(false);
+	});
+
+	it('does not over-match the tightened reasoning heuristic on ids that merely contain "o1"/"o3" as a substring', async () => {
+		mockModelsResponse([
+			{id: 'photon-13b'},
+			{id: 'co3-turbo'},
+		]);
+
+		const result = await fetchProviderModels({preset: 'openai', baseUrl: 'http://localhost:9999'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+
+		for (const model of result.models) {
+			expect(model.capabilities?.supports?.reasoningEffort).toBe(false);
+		}
+	});
+
+	it('handles a partial catalogue: each capability falls back independently per missing field, not the whole model', async () => {
+		mockModelsResponse([
+			{
+				// Vision metadata present, tools/reasoning metadata absent — the fallback for the
+				// missing fields must not be dragged down by the presence of the other field.
+				id: 'partial/vision-only-metadata',
+				architecture: {input_modalities: ['text', 'image']},
+			},
+			{
+				// Tools/reasoning metadata present, vision metadata absent.
+				id: 'partial/tools-only-metadata',
+				supported_parameters: ['tools'],
+			},
+		]);
+
+		const result = await fetchProviderModels({preset: 'openai', baseUrl: 'http://localhost:9999'});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+
+		const visionOnly = result.models.find(m => m.id === 'partial/vision-only-metadata');
+		expect(visionOnly?.isVision).toBe(true);
+		// No supported_parameters on this entry: falls back to the conservative tools default.
+		expect(visionOnly?.supportsTools).toBe(false);
+
+		const toolsOnly = result.models.find(m => m.id === 'partial/tools-only-metadata');
+		expect(toolsOnly?.supportsTools).toBe(true);
+		// No architecture on this entry: falls back to the vision id heuristic (no match here).
+		expect(toolsOnly?.isVision).toBe(false);
+	});
+});
+
 describe('migrateProviderPreset', () => {
 	it('passes surviving presets through unchanged', () => {
 		expect(migrateProviderPreset('ollama')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});

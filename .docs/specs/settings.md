@@ -224,10 +224,42 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
     Test button before every run) still clears the whole map regardless of key shape. Locked by
     `test/providerModels.test.ts`'s `ollama /api/show discovery (#120)` block.
 
-- **Non-Ollama BYOK Providers (openai, azure)**:
-  - Since standard `/v1/models` responses contain no capability fields, name-based regex heuristics are used on the model ID.
-  - **Vision Support**: Enabled if the model ID matches a case-insensitive regex for known vision-capable models (e.g. `gpt-4o`, `gpt-4-vision`, `claude-3`, `gemini-1.5`, `vision`, `pixtral`).
-  - **Reasoning Effort/Summary Support**: Enabled if the model ID matches reasoning models (e.g. `o1`, `o3`).
+- **Non-Ollama BYOK Providers (openai, azure)** (issue #129): **metadata-first**, per field
+  independently, with a name-based heuristic as an explicit last resort — `deriveCatalogueCapabilities()`
+  in `src/providerModels.ts`. Field names were verified against a live
+  `GET https://openrouter.ai/api/v1/models` response (2026-09-03); they are read **generically**
+  off any catalogue entry that publishes them, not gated on `preset` or hostname, so any
+  OpenAI-compatible backend that returns the same field names benefits, not just OpenRouter:
+  - **`supported_parameters: string[]`** on the model object — `'tools'` present means the model
+    accepts an OpenAI-style `tools` array; `'reasoning'` or `'reasoning_effort'` present means it
+    accepts a reasoning-effort request parameter. Governs both **Tool support** and **Reasoning
+    Effort support**.
+  - **`architecture.input_modalities: string[]`** — `'image'` present means vision input.
+    Governs **Vision support**.
+  - **`reasoning.supported_efforts: string[]`**, when present, is used verbatim as the model's
+    `supportedReasoningEfforts` instead of the generic three-level fallback list.
+  - A catalogue entry may publish some of these fields and omit others (a "partial" catalogue —
+    e.g. modality info but no `supported_parameters`); each capability falls back to its own
+    heuristic only when its own field is absent, never when the model object as a whole lacks any
+    metadata.
+  - **Fallback heuristics** (only used when the corresponding field above is absent):
+    - **Vision**: the pre-#129 fixed-allowlist regex on the model ID (`gpt-4o`, `gpt-4-vision`,
+      `claude-3`, `gemini-1.5`, `vision`, `pixtral`), unchanged, now scoped as a last resort
+      rather than the default path.
+    - **Tools**: defaults to **`false`** — a deliberate change from the pre-#129 unconditional
+      `true`. An assumed-supported tool call the model actually rejects fails at call time with an
+      opaque provider error; assuming unsupported only hides a UI affordance that might have
+      worked. This also matches the Ollama path above, which already defaults `false` and only
+      flips to `true` on a confirmed `/api/show` capability.
+    - **Reasoning**: tightened from the pre-#129 `/o1|o3/i` substring test (matched the letters
+      "o1"/"o3" anywhere in an id) to `/(?:^|\/)o[13](?:-|$)/i` — the token must start the id or
+      immediately follow a `/`, and must itself be immediately followed by `-` or end-of-string,
+      so it recognizes OpenAI's real `o1`/`o1-mini`/`o1-preview`/`o3`/`o3-mini`/`openai/o3-...`
+      naming without matching an unrelated id that merely contains that two-character run.
+  - Locked by `test/providerModels.test.ts`'s `catalogue capability metadata (#129)` block: full
+    metadata, a model with metadata present but no tools/reasoning support, a bare
+    OpenAI-shaped catalogue with no capability fields, the tightened reasoning regex's
+    non-over-matching, and a partial catalogue exercising per-field-independent fallback.
 
 ## Invariants
 
