@@ -6,11 +6,11 @@ This guide explains how to configure and use local models (such as `qwen3`, `gem
 
 ## 1. Overview of the ReAct Loop
 
-When you select a local model provider preset (such as **Ollama**, **Foundry Local**, or another OpenAI-compatible local gateway) and the model supports tool usage, Synapse wraps the session queries in an autonomous **Reasoning & Action (ReAct) loop**.
+When you select a local model provider preset (**Ollama** or **OpenAI-compatible** — the latter covers LM Studio, llama.cpp, vLLM, Foundry Local, and any other OpenAI-compatible endpoint) and the model supports tool usage, Synapse wraps the session queries in an autonomous **Reasoning & Action (ReAct) loop**.
 
 - **Stateless Execution**: Unlike Claude agentic sessions, the local ReAct loop runs statelessly per-query or per-trigger execution.
 - **Loop Limits**: The loop executes up to **5 turns** (`maxTurns = 5`) to prevent runaway API requests.
-- **No Streaming for Tool Calls**: Streaming is disabled when sending tool-invocation requests to Ollama to ensure structural JSON integrity.
+- **No streaming, any preset**: `executeLocalProviderQuery()` never streams the response — Ollama's request body sets `stream: false` explicitly, and every OpenAI-compatible preset (including Azure) omits the `stream` field entirely, which those APIs default to non-streaming. Obsidian's `requestUrl()` (used for every local-provider call) also has no server-sent-events support, so the full response always arrives as one parsed JSON payload regardless of provider.
 
 The loop sequence is managed by [executeLocalProviderQuery()](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/src/providerModels.ts#L238-L248) inside [providerModels.ts](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/src/providerModels.ts):
 1. **Thought & Call**: The model returns text reasoning (if supported) followed by tool-call intents.

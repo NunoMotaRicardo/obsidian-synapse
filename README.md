@@ -150,14 +150,23 @@ Synapse is built natively for Claude models (via the Anthropic API or OAuth). It
 
 ### Supported providers
 
-Configure providers under **Settings → Synapse → Models**:
+Configure local providers under **Settings → Synapse → Claude → Local & custom providers**. The dropdown has three presets
+(Ollama, OpenAI-compatible, Azure OpenAI), but the OpenAI-compatible preset works unchanged with
+any endpoint exposing `/v1/chat/completions` — which covers most of the table below:
 
-| Provider | Preset | Default endpoint |
-|----------|--------|-----------------|
-| **Anthropic** | `anthropic` | `https://api.anthropic.com` |
-| **Ollama** | `ollama` | `http://localhost:11434/v1` |
-| **Microsoft Foundry Local** | `openai` | Local Foundry model server |
-| **Other OpenAI-compatible** | `openai` | Any compatible endpoint |
+| Provider | Preset | Base URL | Notes |
+|---|---|---|---|
+| Ollama (local) | Ollama | `http://localhost:11434` | Default. Capabilities auto-detected |
+| Ollama Cloud | Ollama | `http://localhost:11434` | `ollama signin`, pull a `:cloud` model |
+| OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` | 400+ models, one key |
+| OpenAI | OpenAI-compatible | `https://api.openai.com` | |
+| LM Studio | OpenAI-compatible | `http://localhost:1234/v1` | |
+| llama.cpp server | OpenAI-compatible | `http://localhost:8080/v1` | |
+| vLLM | OpenAI-compatible | `http://localhost:8000/v1` | |
+| Groq / Together / DeepSeek / Mistral | OpenAI-compatible | provider's `/v1` | |
+| Foundry Local | OpenAI-compatible | `http://localhost:<port>/v1` | Port from `foundry service status`. **Model list unavailable** — enter the id manually |
+| Azure OpenAI | Azure OpenAI | `https://<res>.openai.azure.com/openai` | v1 API only; classic deployment URLs unsupported |
+| Anthropic | — | — | Use **Settings → Claude → API key**, not this section |
 
 ---
 
@@ -206,7 +215,7 @@ Configure external tool servers in `_synapse/.mcp.json`. Synapse discovers and s
 
 ### Tool approval
 
-In **Settings → Synapse → Tools approval**:
+In **Settings → Synapse → Tools**, set **Tools approval**:
 
 - **Allow** — Tool calls run automatically.
 - **Ask** — Confirm each tool call in a modal before execution.
@@ -314,22 +323,27 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 
 ## Settings reference
 
-**Settings → Synapse**
-
-### Models
+### Settings → Synapse → Claude → Local & custom providers
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Provider** | Anthropic | Anthropic, Ollama, MS Foundry Local, or Other |
-| **Model name** | *(empty)* | Model ID (e.g. `claude-3-5-sonnet-latest`, `llama3`) |
-| **API key / Token** | *(empty)* | Credentials for the chosen provider |
+| **Provider** | Ollama | `Ollama`, `OpenAI-compatible`, or `Azure OpenAI` — see [Supported providers](#supported-providers) |
+| **Base URL** | `http://localhost:11434` | Endpoint for the selected preset |
+| **Model name** | *(empty)* | Model ID for local-provider operations (e.g. `llama3`) — select from Test results or type a custom ID |
+| **API key** | *(empty)* | Credentials for the chosen provider (hidden when **Provider** is Ollama) |
 
-### Synapse settings
+### Settings → Synapse → Tools
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Inline operations model** | Default | Model for context-menu actions |
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
+
+### Chat panel toolbar (per-session, not in Settings)
+
+These are configured from the config toolbar inside the chat panel itself, not from **Settings → Synapse**:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
 
