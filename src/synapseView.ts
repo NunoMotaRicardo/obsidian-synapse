@@ -541,12 +541,7 @@ export class SynapseView extends ItemView {
 
 					// Determine effective cap: min of plugin setting and SDK model limit
 					const selectedModelInfo = this.models.find(m => m.id === this.selectedModel);
-					// `limits` is typed as `{max_context_window_tokens?: number}` with no index
-					// signature, so indexing by 'vision' needs it widened to Record<string,
-					// unknown> first — the rule's autofix strips this cast, but that's a false
-					// positive: removing it is a tsc compile error.
-					// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- see comment above
-					const sdkLimit = (selectedModelInfo?.capabilities?.limits as Record<string, unknown> | undefined)?.['vision'] as {max_prompt_images?: number} | undefined;
+					const sdkLimit = selectedModelInfo?.capabilities?.limits?.['vision'] as {max_prompt_images?: number} | undefined;
 					const maxPromptImages = sdkLimit?.max_prompt_images;
 					const configuredCap = Math.max(1, Math.min(20, this.plugin.settings.maxNoteImages));
 					const effectiveCap = maxPromptImages != null ? Math.min(configuredCap, maxPromptImages) : configuredCap;
