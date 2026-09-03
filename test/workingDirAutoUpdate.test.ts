@@ -2,66 +2,32 @@ import {describe, it, expect} from 'vitest';
 import {decideWorkingDirAutoUpdate} from '../src/view/sessionConfig';
 
 // ---------------------------------------------------------------------------
-// decideWorkingDirAutoUpdate (issue #108 / #93)
+// decideWorkingDirAutoUpdate (issue #108 / #93 / #131)
 //
-// Reproduces the bug: `autoUpdateWorkingDirectory` (default true) makes
-// `updateActiveNote()` (inputArea.ts) set `configDirty = true` on every active-note
-// folder switch, which `ensureSession()` (synapseView.ts) then turns into a full
-// session rebuild — discarding the live `Session` and its `_sessionId`, so the next
-// `send()` starts a brand-new CLI session with no history. Since users switch notes
-// constantly *between* turns, this silently drops conversation context on nearly
-// every follow-up message (the likely root cause of #93).
+// `autoUpdateWorkingDirectory` (default true) makes `updateActiveNote()` (inputArea.ts)
+// set `workingDir`/`configDirty` whenever the active note switches to a different folder,
+// even mid-conversation. Before #104, that forced a `Session` rebuild whose `_sessionId`
+// started empty, silently dropping conversation history (the likely root cause of #93) —
+// so the change was deferred until the conversation ended. #104 fixed the rebuild to carry
+// `resume` forward, and #131 verified (empirically, against a real CLI session) that
+// resuming under a changed `cwd` does not degrade path handling either. With no surviving
+// justification for deferring, the change now always applies immediately: this function is
+// just "did the folder actually change".
 // ---------------------------------------------------------------------------
 
 describe('decideWorkingDirAutoUpdate', () => {
-	it('does not apply the change immediately when a conversation is already in progress', () => {
-		// Active note switches to a different folder mid-conversation (issue #108
-		// repro: send a message, switch to a note in a different folder, send a
-		// follow-up). Applying this now would mark configDirty and orphan the
-		// session id on the next ensureSession() rebuild.
-		const decision = decideWorkingDirAutoUpdate({
-			newDir: 'ProjectB',
-			currentWorkingDir: 'ProjectA',
-			conversationInProgress: true,
-		});
-
-		expect(decision.applyNow).toBe(false);
+	it('applies the change when the active note moved to a different folder', () => {
+		expect(decideWorkingDirAutoUpdate({newDir: 'ProjectB', currentWorkingDir: 'ProjectA'})).toBe(true);
 	});
 
-	it('remembers the new directory as pending when deferred', () => {
-		const decision = decideWorkingDirAutoUpdate({
-			newDir: 'ProjectB',
-			currentWorkingDir: 'ProjectA',
-			conversationInProgress: true,
-		});
-
-		expect(decision.pendingDir).toBe('ProjectB');
+	it('applies the change even while a conversation would be considered in progress', () => {
+		// There is no conversationInProgress parameter anymore — the decision no longer
+		// depends on it. This test exists so a future re-introduction of that parameter
+		// doesn't silently reintroduce the deferral without a deliberate decision.
+		expect(decideWorkingDirAutoUpdate({newDir: 'ProjectB', currentWorkingDir: 'ProjectA'})).toBe(true);
 	});
 
-	it('applies the change immediately when no conversation is in progress', () => {
-		const decision = decideWorkingDirAutoUpdate({
-			newDir: 'ProjectB',
-			currentWorkingDir: 'ProjectA',
-			conversationInProgress: false,
-		});
-
-		expect(decision.applyNow).toBe(true);
-		expect(decision.pendingDir).toBe(null);
-	});
-
-	it('is a no-op when the folder has not actually changed, regardless of conversation state', () => {
-		const midConversation = decideWorkingDirAutoUpdate({
-			newDir: 'ProjectA',
-			currentWorkingDir: 'ProjectA',
-			conversationInProgress: true,
-		});
-		const idle = decideWorkingDirAutoUpdate({
-			newDir: 'ProjectA',
-			currentWorkingDir: 'ProjectA',
-			conversationInProgress: false,
-		});
-
-		expect(midConversation).toEqual({applyNow: false, pendingDir: null});
-		expect(idle).toEqual({applyNow: false, pendingDir: null});
+	it('is a no-op when the folder has not actually changed', () => {
+		expect(decideWorkingDirAutoUpdate({newDir: 'ProjectA', currentWorkingDir: 'ProjectA'})).toBe(false);
 	});
 });
