@@ -18,6 +18,53 @@ export interface LocalTool {
 }
 
 /**
+ * Context handed to a `LocalToolApprovalHandler` alongside the tool name/input, naming the
+ * endpoint the call is going to (#138) — a tool call against a loopback Ollama instance stays on
+ * this machine, but the same `executeLocalProviderQuery` code path also serves BYOK remote
+ * endpoints (OpenAI, Azure, OpenRouter, ...), where a read-only vault tool's result is genuinely
+ * sent to a third party. `isRemoteEndpoint` lets the caller-supplied approval prompt say which
+ * case this is instead of showing the same prompt either way.
+ */
+export interface LocalToolApprovalContext {
+	/** Identifies this specific tool call, for callers that need to correlate/dedupe prompts. */
+	toolUseID: string;
+	/** The base URL this tool call's request (and thus, for a vault tool, note content) goes to. */
+	endpoint: string;
+	/** True when `endpoint` is not a loopback address. */
+	isRemoteEndpoint: boolean;
+}
+
+/**
+ * Approval gate for the local tool-execution loop (#138). Deliberately neutral (no SDK or view
+ * types) so this module stays free of both — the caller (`agentService.ts#Session.send()`)
+ * adapts the chat panel's existing `canUseTool` (`CanUseTool` from the Agent SDK, built in
+ * `SynapseView.buildSessionConfig()` and already opening `ToolApprovalModal`) into this shape,
+ * the same way `history` was threaded in as a plain callback/value for #135 rather than importing
+ * `ChatMessage`. Returning `{allow: false}` denies the call; `message` (optional) is surfaced to
+ * the model as the tool's result so it knows the call was declined, not that it errored.
+ */
+export type LocalToolApprovalHandler = (
+	toolName: string,
+	input: Record<string, unknown>,
+	context: LocalToolApprovalContext
+) => Promise<{allow: boolean; message?: string}>;
+
+/**
+ * True when `baseUrl`'s host is a loopback address (`localhost`, `127.0.0.1`, `::1`) — i.e. the
+ * request never leaves this machine. Used only to label the approval prompt (#138); an
+ * unparseable URL is treated as remote (the more cautious label), not silently skipped.
+ */
+export function isLoopbackEndpoint(baseUrl: string): boolean {
+	try {
+		const {hostname} = new URL(baseUrl);
+		const h = hostname.toLowerCase();
+		return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]';
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Neutral wire-agnostic history entry for `executeLocalProviderQuery()`'s conversation-history
  * parameter (#135). Deliberately not `ChatMessage` (`types.ts`) — this module must not import
  * view types, so the mapping from `ChatMessage` to this shape lives at the call site
@@ -677,6 +724,14 @@ export async function executeLocalProviderQuery(
 		 * same way the current turn is.
 		 */
 		history?: LocalHistoryMessage[];
+		/**
+		 * Approval gate consulted before each tool call executes (#138). Optional and omitted by
+		 * the trigger path (`triggerExecutor.ts`), which runs unattended by design and is
+		 * unchanged by this parameter — when absent, a tool call runs immediately, exactly as
+		 * before. The chat panel (`agentService.ts#Session.send()`) always supplies one so
+		 * interactive tool use is consented to the same way the Agent SDK path already gates it.
+		 */
+		onApproveTool?: LocalToolApprovalHandler;
 	}
 ): Promise<LocalQueryResult> {
 	const baseUrl = (options.baseUrl || '').trim();
@@ -873,10 +928,33 @@ export async function executeLocalProviderQuery(
 					if (!params.app) {
 						result = `Error: Obsidian App instance is not provided to execute tool "${toolName}".`;
 					} else {
-						try {
-							result = await tool.execute(args, params.app);
-						} catch (e) {
-							result = `Error executing tool "${toolName}": ${e instanceof Error ? e.message : String(e)}`;
+						const toolUseID = tc.id || `${toolName ?? tool.name}-${turn}`;
+						let approved = true;
+						let denyMessage: string | undefined;
+						if (params.onApproveTool) {
+							try {
+								const approval = await params.onApproveTool(tool.name, args, {
+									toolUseID,
+									endpoint: baseUrl,
+									isRemoteEndpoint: !isLoopbackEndpoint(baseUrl),
+								});
+								approved = approval.allow;
+								denyMessage = approval.message;
+							} catch (e) {
+								// Fail closed — an approval handler that throws is treated as a
+								// denial, not silently allowed.
+								approved = false;
+								denyMessage = e instanceof Error ? e.message : String(e);
+							}
+						}
+						if (!approved) {
+							result = `Tool "${toolName}" was not approved${denyMessage ? `: ${denyMessage}` : '.'}`;
+						} else {
+							try {
+								result = await tool.execute(args, params.app);
+							} catch (e) {
+								result = `Error executing tool "${toolName}": ${e instanceof Error ? e.message : String(e)}`;
+							}
 						}
 					}
 				} else {

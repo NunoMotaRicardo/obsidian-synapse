@@ -113,6 +113,7 @@ function forceRestoreSetTimeoutShim(): void {
  */
 const ABORT_SHIM_GRACE_MS = 8000;
 
+import type {App} from 'obsidian';
 import {query, listSessions, getSessionMessages, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
 	Options,
@@ -146,7 +147,8 @@ import type {
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
-import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage} from './providerModels';
+import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
+import {vaultTools} from './vaultTools';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
@@ -1200,8 +1202,15 @@ export class Session {
 	 * be redundant at best. The caller (`SynapseView`) maps its own `ChatMessage[]` transcript
 	 * into the neutral `LocalHistoryMessage[]` shape (`sessionConfig.ts#buildLocalHistory`)
 	 * before calling `send()`; this method just threads it through unchanged.
+	 *
+	 * `app` (#138) is only used in the local-model branch, where it's forwarded to
+	 * `executeLocalProviderQuery()` as the `App` instance vault tools (`read_note`, `list_notes`,
+	 * `search_notes`) execute against — the real Agent SDK path never needs it, since its own
+	 * tools run inside the CLI process. `Session`/`AgentService` hold no `App` reference of their
+	 * own (architecture rule: SDK/session plumbing stays UI-agnostic), so `SynapseView` passes it
+	 * per call, the same shape as `images`/`history`.
 	 */
-	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>; history?: LocalHistoryMessage[]}): Promise<void> {
+	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>; history?: LocalHistoryMessage[]; app?: App}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
 		this.userInterruptRequested = false;
@@ -1223,12 +1232,66 @@ export class Session {
 				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig()) {
 					this.dispatch({type: 'assistant.turn_start', data: {}});
 					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
+
+					// Vault tools for the chat panel's local-model branch (#138) — mirrors
+					// triggerExecutor.ts's `supportsTools = modelInfo?.supportsTools !== false`
+					// gate: a catalogue that explicitly says "no tools" is honored, but a model
+					// with no capability info (most OpenAI-compatible catalogues) defaults to
+					// allowed.
+					//
+					// MCP tools are deliberately NOT offered here, unlike triggerExecutor.ts.
+					// Triggers run once per file event, so starting/stopping an McpBridgeSession
+					// (spawn a stdio server, negotiate JSON-RPC, tear down) once per trigger is
+					// cheap relative to the trigger itself. Chat's local branch runs once per
+					// user message in a potentially long back-and-forth conversation — paying
+					// that spawn/teardown cost on every single turn would make chat noticeably
+					// slower, and there is no session-scoped owner in `Session` to keep an MCP
+					// bridge alive across turns without a larger lifecycle change than this
+					// issue's gap (no vault-tool access in chat) calls for. MCP tools are also
+					// arbitrary and not necessarily read-only, unlike the three built-ins, so the
+					// smaller surface is also the more conservative default for an unreviewed
+					// increment. Revisit if interactive chat needs MCP tools (separate issue).
+					const modelInfo = this.service.getModels().find(m => m.id === queryOpts.model);
+					const supportsTools = modelInfo?.supportsTools !== false;
+					// No App instance to execute tools against (shouldn't happen from the chat
+					// panel, which always supplies one) — fail safe by not offering tools rather
+					// than crashing on a missing `app` inside providerModels.ts.
+					const localTools = (supportsTools && options.app) ? vaultTools : undefined;
+
+					// Approval gate (#138): reuse the same `canUseTool` this session was built
+					// with (`SynapseView.buildSessionConfig()`'s `permissionHandler`, which opens
+					// `ToolApprovalModal`) rather than a second approval UI, per the issue's
+					// decision comment. `providerModels.ts` must not import view/SDK types, so
+					// the adapter — translating its neutral `LocalToolApprovalHandler` shape into
+					// an Agent-SDK `CanUseTool` call — lives here, the one file that already
+					// imports both.
+					const canUseTool = queryOpts.canUseTool;
+					const onApproveTool: LocalToolApprovalHandler | undefined = (localTools && canUseTool)
+						? async (toolName, input, context) => {
+							const result = await canUseTool(toolName, input, {
+								signal: ctrl.signal,
+								toolUseID: context.toolUseID,
+								requestId: context.toolUseID,
+								title: `${context.isRemoteEndpoint ? 'Remote' : 'Local'} model wants to use ${toolName}`,
+								description: context.isRemoteEndpoint
+									? `This sends data to ${context.endpoint} — a remote endpoint outside this machine.`
+									: `This runs locally against ${context.endpoint} and stays on this machine.`,
+							});
+							if (result && result.behavior === 'allow') {
+								return {allow: true};
+							}
+							return {allow: false, message: (result && result.behavior === 'deny') ? result.message : 'Denied by user'};
+						}
+						: undefined;
+
 					const res = await executeLocalProviderQuery(this.service.getProviderConfig()!, {
 						prompt: options.prompt,
 						systemPrompt: sysPrompt,
 						model: queryOpts.model,
 						images: options.images,
 						history: options.history,
+						...(localTools ? {tools: localTools, app: options.app} : {}),
+						...(onApproveTool ? {onApproveTool} : {}),
 					});
 					if (ctrl.signal.aborted) return;
 					if (res.ok) {
