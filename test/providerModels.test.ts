@@ -316,5 +316,17 @@ describe('describeAzureBaseUrlIssue', () => {
 			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com')).toBeNull();
 			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com/')).toBeNull();
 		});
+
+		// Review round 2: `.../openai/v1` is a genuinely working base URL — the URL builder's
+		// own `endsWith('/v1')` special-case (providerModels.ts:251, :472) makes it resolve to
+		// exactly the same `.../openai/v1/...` request as `.../openai`. The helper must not
+		// tell a user their working setup is broken.
+		it('does not flag the working /openai/v1 base URL without a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/v1')).toBeNull();
+		});
+
+		it('does not flag the working /openai/v1 base URL with a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/v1/')).toBeNull();
+		});
 	});
 });

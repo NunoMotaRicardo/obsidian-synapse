@@ -147,8 +147,11 @@ discoverable instead of a silent 404:
     `https://<resource>.openai.azure.com/` with no path, and therefore the *more* likely wrong
     paste, not the deployment URL. Detected by host-matching `*.openai.azure.com` first (so a
     preset pointed at some other proxy/gateway host is never second-guessed about a shape this
-    module can't verify), then checking the path doesn't already end in `/openai` (trailing slash
-    allowed).
+    module can't verify), then checking whether the path is already `/openai` **or** `/openai/v1`
+    (each with an optional trailing slash) — review round 2 caught that `.../openai/v1` is a
+    genuinely working base URL (the URL builder's own `endsWith('/v1')` special-case at `:251`
+    and `:472` resolves both shapes to the identical `.../openai/v1/...` request), so only a
+    path that's empty/`/` (or already matched the deployment fingerprint above) is flagged.
   Returns `null` for an empty/unmatched URL (the empty case is already reported by
   `fetchProviderModels()`'s "Base URL is required." error) and for a non-Azure host. The Test
   button's failure branch in `settings.ts` calls this only when `providerPreset === 'azure'`, and

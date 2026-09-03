@@ -74,18 +74,24 @@ export function migrateProviderPreset(value: string | undefined | null): Provide
 
 /**
  * Two predictable wrong inputs for the `azure` preset's base URL, both of which Synapse's URL
- * builder (`{base}/v1/models`, `{base}/v1/chat/completions`) can never turn into a working
- * request:
+ * builder (`{base}/v1/models` at `:251`, `{base}/v1/chat/completions` at `:472` — both strip
+ * trailing slashes then special-case a base that already ends in `/v1`) can never turn into a
+ * working request:
  *
  * 1. A **classic deployment-scoped URL**
  *    (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) — flagged by a
  *    `/deployments/` path segment or an `api-version=` query param.
- * 2. The **bare portal Endpoint** (`https://<resource>.openai.azure.com/`, no path) — this is
- *    what the Azure portal actually shows and copies to the clipboard, so it's the *more* likely
- *    paste, not a corner case. It needs the `/openai` suffix appended to reach the v1 API.
- *    Detected by host-matching `*.openai.azure.com` first (so we never lecture a user pointing
- *    the preset at some other proxy/gateway about a shape we can't verify), then checking the
- *    path doesn't already end in `/openai` (trailing slash allowed).
+ * 2. The **bare portal Endpoint** (`https://<resource>.openai.azure.com/`, no path, or empty
+ *    path) — this is what the Azure portal actually shows and copies to the clipboard, so it's
+ *    the *more* likely paste, not a corner case. It needs the `/openai` suffix appended to reach
+ *    the v1 API.
+ *
+ * Both `.../openai` **and** `.../openai/v1` (each with or without a trailing slash) are
+ * genuinely working base URLs — the builder's own `endsWith('/v1')` special-case makes both
+ * resolve to the same `.../openai/v1/...` request, so the path check below accepts both; only a
+ * path that is empty or `/` (or already matched the deployment fingerprint above) gets flagged.
+ * Host-matching `*.openai.azure.com` runs first so a preset pointed at some other proxy/gateway
+ * is never second-guessed about a shape this module can't verify.
  *
  * Either case gets a message naming its specific fix instead of a bare "Test failed: HTTP 404".
  * Returns `null` when neither fingerprint matches — including an empty/whitespace URL, since
@@ -101,7 +107,9 @@ export function describeAzureBaseUrlIssue(baseUrl: string): string | null {
 
 	try {
 		const url = new URL(trimmed);
-		if (/\.openai\.azure\.com$/i.test(url.hostname) && !/\/openai\/?$/i.test(url.pathname)) {
+		const isAzureHost = /\.openai\.azure\.com$/i.test(url.hostname);
+		const hasOpenaiSuffix = /^\/openai(\/v1)?\/?$/i.test(url.pathname);
+		if (isAzureHost && !hasOpenaiSuffix) {
 			return 'That looks like the Azure resource\'s Endpoint from the portal. Append /openai to it — the v1 API base URL is https://<resource>.openai.azure.com/openai';
 		}
 	} catch {
