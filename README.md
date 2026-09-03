@@ -288,7 +288,7 @@ If you prefer not to see the inline Synapse icon beside the active line, disable
 
 | Action | What happens |
 |--------|-------------|
-| **Edit** | Opens the [Edit modal](#edit-modal) with tone, format, and length controls |
+| **Edit** | Opens the Edit modal with tone, format, and length controls |
 | **Rewrite** | Improves clarity and readability |
 | **Proofread** | Fixes grammar, spelling, and punctuation |
 | **Use synonyms** | Swaps words for variety |
