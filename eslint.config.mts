@@ -10,6 +10,14 @@ const ALLOWED_UPPERCASE = new Set([
 	'Settings', 'Community', 'Enter', 'Ollama', 'OpenAI', 'BYOK',
 	// OpenAI-compatible provider description (#117) — proper nouns naming other
 	// providers/tools compatible with the generic `/v1/chat/completions` preset.
+	// `isSentenceCase` below tokenizes on whitespace/hyphen and checks each `clean`
+	// single word independently (see the `words[i].split('-')` / per-`part` loop) — it
+	// has no concept of a multi-word phrase, so "LM Studio" / "Foundry Local" can't be
+	// allow-listed as a unit the way `obsidianmd/ui/sentence-case`'s `brands` array
+	// (below) allows. Each word of those two-word names is listed separately here
+	// instead; 'Studio', 'Together', 'Local', 'Foundry' are broader than the specific
+	// phrases that motivated them (they'd now pass capitalized anywhere in any UI
+	// string), but that's this checker's only mechanism — not an oversight.
 	'OpenRouter', 'Studio', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry', 'Local',
 ]);
 

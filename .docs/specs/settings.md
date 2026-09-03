@@ -93,8 +93,13 @@ value to one of the three current presets:
 - `anthropic` → `openai`, **plus a one-time `Notice`** (shown from `main.ts#loadSettings()`)
   explaining that Anthropic/Claude models belong in **Settings → Claude → API key**, since this
   migration silently changes which key drives chat.
-- Any other unrecognized value → `openai` (defensive fallback, same as the pre-existing
-  `options.preset || 'openai'` default used throughout `providerModels.ts`).
+- Any other **non-empty** unrecognized value → `openai` (defensive fallback, same as the
+  pre-existing `options.preset || 'openai'` default used throughout `providerModels.ts`).
+- An **absent/empty/whitespace-only** value → `migrated: false`, i.e. not a legacy alias at
+  all. This is the fresh-install / pre-this-setting case, where `Object.assign({}, DEFAULT_
+  SETTINGS, raw)` has already seeded `providerPreset: 'ollama'` — the migration must not
+  overwrite that with the unrecognized-value fallback (issue #117 review round 1 caught a
+  version that did, defaulting every fresh install to `openai` instead of `ollama`).
 
 `loadSettings()` calls this on every load; when it reports `migrated: true` it overwrites
 `settings.providerPreset` and forces a `saveSettings()` write, so the notice fires exactly once

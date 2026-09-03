@@ -46,9 +46,19 @@ export interface ProviderPresetMigrationResult {
  * the three current presets. Silent for `other-openai`/`foundry-local`; callers should show
  * a one-time notice when `wasAnthropic` is true, since that migration changes which key
  * drives chat (see `.docs/specs/settings.md`).
+ *
+ * An absent/empty/whitespace-only value is **not** a legacy alias — it means no
+ * `providerPreset` was ever persisted (fresh install, or a `data.json` that predates this
+ * setting), and `migrated: false` here tells the caller to leave `DEFAULT_SETTINGS`'s
+ * `'ollama'` default untouched rather than overwriting it with the generic-unknown fallback
+ * (issue #117 review round 1 — a prior version of this function conflated "nothing stored"
+ * with "unrecognized legacy string" and silently defaulted fresh installs to `openai`).
  */
 export function migrateProviderPreset(value: string | undefined | null): ProviderPresetMigrationResult {
-	const raw = (value || '').toLowerCase();
+	const raw = (value || '').trim().toLowerCase();
+	if (!raw) {
+		return {preset: 'ollama', migrated: false, wasAnthropic: false};
+	}
 	if (raw === 'ollama' || raw === 'openai' || raw === 'azure') {
 		return {preset: raw, migrated: false, wasAnthropic: false};
 	}
@@ -56,8 +66,9 @@ export function migrateProviderPreset(value: string | undefined | null): Provide
 	if (mapped) {
 		return {preset: mapped, migrated: true, wasAnthropic: raw === 'anthropic'};
 	}
-	// Unknown value (corrupted or from a future version): fall back to the generic path,
-	// matching the `options.preset || 'openai'` default used elsewhere in this module.
+	// Genuinely unrecognized non-empty value (corrupted or from a future version): fall back
+	// to the generic path, matching the `options.preset || 'openai'` default used elsewhere
+	// in this module.
 	return {preset: 'openai', migrated: true, wasAnthropic: false};
 }
 

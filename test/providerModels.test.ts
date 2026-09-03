@@ -198,13 +198,35 @@ describe('migrateProviderPreset', () => {
 		expect(migrateProviderPreset('anthropic')).toEqual({preset: 'openai', migrated: true, wasAnthropic: true});
 	});
 
-	it('falls back to openai for unrecognized values', () => {
+	it('falls back to openai (migrated: true) for a genuinely unrecognized non-empty value', () => {
+		// Distinguishes "nothing was ever stored" (below) from "a stored string that isn't
+		// any known preset, past or present" — both must NOT be conflated (review round 1).
 		expect(migrateProviderPreset('some-future-preset')).toEqual({preset: 'openai', migrated: true, wasAnthropic: false});
+		expect(migrateProviderPreset('sagemaker')).toEqual({preset: 'openai', migrated: true, wasAnthropic: false});
 	});
 
-	it('falls back to openai for empty/missing values', () => {
-		expect(migrateProviderPreset(undefined)).toEqual({preset: 'openai', migrated: true, wasAnthropic: false});
-		expect(migrateProviderPreset(null)).toEqual({preset: 'openai', migrated: true, wasAnthropic: false});
-		expect(migrateProviderPreset('')).toEqual({preset: 'openai', migrated: true, wasAnthropic: false});
+	// -------------------------------------------------------------------
+	// Regression (#117 review round 1): an absent providerPreset must NOT be treated as an
+	// unrecognized legacy value. `Object.assign({}, DEFAULT_SETTINGS, raw)` in
+	// `main.ts#loadSettings()` already seeds `'ollama'` (settings.ts DEFAULT_SETTINGS) for a
+	// fresh install or a data.json predating this setting; `migrated: false` here is what
+	// tells the caller to leave that default untouched instead of overwriting it with the
+	// generic-unknown-value fallback.
+	// -------------------------------------------------------------------
+	it('does not treat an absent value as a legacy alias (migrated: false, so DEFAULT_SETTINGS wins)', () => {
+		expect(migrateProviderPreset(undefined)).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
+	});
+
+	it('does not treat null as a legacy alias', () => {
+		expect(migrateProviderPreset(null)).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
+	});
+
+	it('does not treat an empty string as a legacy alias', () => {
+		expect(migrateProviderPreset('')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
+	});
+
+	it('does not treat a whitespace-only string as a legacy alias', () => {
+		expect(migrateProviderPreset('   ')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
+		expect(migrateProviderPreset('\t\n')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
 	});
 });
