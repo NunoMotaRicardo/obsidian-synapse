@@ -269,6 +269,11 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
     authoritative-unsupported case), a bare OpenAI-shaped catalogue with no capability fields at
     all (asserting `supportsTools: true`, not `false`), the tightened reasoning regex's
     non-over-matching, and a partial catalogue exercising per-field-independent fallback.
+  - `supportsTools` isn't just UI gating — since issue #138 it also decides whether the chat
+    panel's local-model branch (`Session.send()`, `agentService.ts`) offers `vaultTools` to a
+    model at all, using the same `modelInfo?.supportsTools !== false` test `triggerExecutor.ts`
+    already used. See `.docs/specs/agent-service.md` "Vault tools and approval gate in the chat
+    panel (issue #138)" for the tool-execution/approval side of this (not part of this module).
 
 ## Invariants
 

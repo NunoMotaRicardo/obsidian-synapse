@@ -677,6 +677,10 @@ export class SynapseView extends ItemView {
 					...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 					...(images && images.length > 0 ? {images} : {}),
 					...(history && history.length > 0 ? {history} : {}),
+					// Only meaningful in the local-model branch (#138) — vault tools
+					// execute against this. Passed unconditionally; unused on the real
+					// Agent SDK path.
+					app: this.app,
 				});
 			} catch (sendErr) {
 				// If the session is stale (e.g. SDK restarted), invalidate and retry once
@@ -692,6 +696,7 @@ export class SynapseView extends ItemView {
 						...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 						...(images && images.length > 0 ? {images} : {}),
 						...(history && history.length > 0 ? {history} : {}),
+						app: this.app,
 					});
 				} else {
 					throw sendErr;

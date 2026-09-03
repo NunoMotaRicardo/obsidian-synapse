@@ -560,6 +560,75 @@ above), and cosmetic only; it doesn't affect the model's behavior or which conte
 the visible chat UI (`SynapseView.messages`, which never includes the injected block — only the
 outgoing wire prompt does).
 
+### Vault tools and approval gate in the chat panel (issue #138)
+
+Before #138, `vaultTools` (`vaultTools.ts` — `read_note`, `list_notes`, `search_notes`) was wired
+into exactly one call site, `triggerExecutor.ts`. `Session.send()`'s local-model branch called
+`executeLocalProviderQuery()` with `prompt`/`systemPrompt`/`model`/`images`/`history` but no
+`tools`, so a local/BYOK model's ReAct loop degenerated to a single completion in chat — it could
+not read, list or search notes, even though the same model could do exactly that when driving a
+trigger.
+
+**Why this needed an approval gate, not just wiring the array through.** The local
+tool-execution loop (`executeLocalProviderQuery()`) calls `tool.execute(args, params.app)`
+directly, with no permission check anywhere in `providerModels.ts` — tolerable for triggers (the
+user configured a specific trigger deliberately; it runs unattended by design) but not for
+interactive chat, where the real Agent SDK path already gates tool use through `canUseTool`
+(`CanUseTool`, built as `permissionHandler` in `SynapseView.buildSessionConfig()`, opening
+`ToolApprovalModal`). Wiring the same tools into chat without a gate would put ungated tool
+execution right next to a path that asks permission.
+
+**Decision (issue comment, authoritative): reuse the existing approval flow**, not a second one.
+Approving `read_note` looks identical whether the model is Claude or a local/BYOK model.
+
+- **The gate lives in `providerModels.ts`, but stays neutral.** `executeLocalProviderQuery()`
+  accepts an optional `onApproveTool?: LocalToolApprovalHandler` — `(toolName, input, {toolUseID,
+  endpoint, isRemoteEndpoint}) => Promise<{allow: boolean; message?: string}>`. No SDK or view
+  types are imported into `providerModels.ts` for this (architecture rule): the shape is
+  deliberately plain, the same way `history` was threaded in as a value for #135 rather than
+  `providerModels.ts` importing `ChatMessage`. When `onApproveTool` is omitted (the trigger path,
+  unchanged), a tool call executes immediately exactly as before #138 — the gate is opt-in per
+  call, not a hard requirement of the loop.
+- **The adapter lives in `agentService.ts#Session.send()`**, the one file that already imports
+  both the SDK's `CanUseTool` type and `providerModels.ts`. The local-model branch wraps the
+  session's own `queryOpts.canUseTool` (already present on `SessionConfig` — built once in
+  `SynapseView.buildSessionConfig()` for the Agent SDK path) into a `LocalToolApprovalHandler`
+  that calls it with a synthesized `title`/`description` and forwards its `PermissionResult` back
+  as `{allow, message}`. Fail-closed both ways: a handler that throws, or a `canUseTool` call that
+  resolves to anything but `{behavior: 'allow'}`, denies the call.
+- **Endpoint visibility.** `executeLocalProviderQuery()` computes `endpoint` (the configured
+  `baseUrl`) and `isRemoteEndpoint` (`!isLoopbackEndpoint(baseUrl)` — true unless the host is
+  `localhost`/`127.0.0.1`/`::1`) itself, since it already has `baseUrl` in scope, and passes both
+  in the context handed to `onApproveTool`. The `Session.send()` adapter puts `endpoint` into the
+  approval prompt's `description` (`ToolApprovalModal` already renders that field as a row) so
+  `read_note` against `http://localhost:11434` reads visibly differently from `read_note` against
+  `https://openrouter.ai` or an Azure endpoint — the first stays on the machine, the second sends
+  note content to a third party. No settings-only opt-in and no silent-trust-loopback shortcut:
+  both were explicitly rejected in the issue's decision comment in favor of per-call visibility.
+- **A denied call never runs `tool.execute()`.** The loop returns a `tool`-role message to the
+  model (`Tool "<name>" was not approved[: <message>]`) instead of throwing — the model sees a
+  normal (if unsuccessful) tool result and can adapt its next turn, rather than the whole query
+  erroring out.
+- **Capability gate**, same test triggers already use: `Session.send()` only offers `vaultTools`
+  when `modelInfo?.supportsTools !== false` (looked up via `AgentService.getModels()`) — a
+  catalogue that explicitly says "no tools" is honored, a model with no capability info (most
+  OpenAI-compatible catalogues) defaults to allowed, per #129's `deriveCatalogueCapabilities()`.
+- **MCP tools are deliberately NOT offered in chat**, unlike triggers (which merge
+  `McpBridgeSession`'s tools alongside `vaultTools`). Triggers run once per file event, so
+  spawning/tearing down an MCP bridge once per trigger is cheap relative to the trigger itself;
+  chat's local branch runs once per user message in a potentially long back-and-forth
+  conversation, and `Session` has no session-scoped owner to keep an MCP bridge alive across turns
+  without a larger lifecycle change than this issue's gap called for. MCP tools are also arbitrary
+  and not necessarily read-only, unlike the three built-ins, so the smaller surface is also the
+  more conservative default for this increment. Revisit as a separate issue if interactive chat
+  needs MCP tools.
+- **`App` plumbing.** Neither `Session` nor `AgentService` holds an `App` reference (SDK/session
+  plumbing stays UI-agnostic). `Session.send()` gained an `app?: App` option, threaded in the same
+  per-call shape as `images`/`history` — `SynapseView` passes `this.app` on every send; it's only
+  read in the local-model branch (forwarded to `executeLocalProviderQuery()` as the `App` instance
+  vault tools execute against) and ignored on the Agent SDK path, whose own tools run inside the
+  CLI process.
+
 ## Connection error handling
 
 When `chat()` or `inlineChat()` fails with a connection/network error, the service fires its
