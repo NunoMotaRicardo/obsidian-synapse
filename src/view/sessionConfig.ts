@@ -2,8 +2,9 @@ import {normalizePath, TFile} from 'obsidian';
 import type {App} from 'obsidian';
 import type {ModelInfo} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
-import type {AgentConfig, ChatAttachment} from '../types';
+import type {AgentConfig, ChatAttachment, ChatMessage} from '../types';
 import {IMAGE_EXTS} from '../types';
+import type {LocalHistoryMessage} from '../providerModels';
 
 // Lazy-loaded Node built-ins (same pattern as agentService.ts / runtimeManager.ts) —
 // used only for writing clipboard/blob attachments to temp files.
@@ -298,6 +299,41 @@ export async function resolveImageAttachments(
 	}
 
 	return results;
+}
+
+/**
+ * Maps `SynapseView.messages` (`ChatMessage[]`) to the neutral `LocalHistoryMessage[]` shape
+ * `executeLocalProviderQuery()` accepts (#135) — the `ChatMessage` -> wire-message mapping lives
+ * here, not in `providerModels.ts`, so that module never has to import view types (see its
+ * `LocalHistoryMessage` doc comment). Only `role: 'user' | 'assistant'` turns are representable
+ * (`role: 'info'` — UI notices, not conversation — is dropped), and only `content` is carried:
+ * `reasoning` is a separate field and is deliberately never replayed as conversation content.
+ *
+ * Image attachments on historical messages get the same base64 resolution as the current turn
+ * (`resolveImageAttachments()`, above) — local models have no agentic `Read` tool regardless of
+ * which turn an image was attached to. An empty `blobPaths` map is correct here (not a shortcut):
+ * `type: 'blob'` attachments carry their base64 `data` inline on the `ChatAttachment` itself and
+ * are resolved directly by `resolveImageAttachments()` without consulting `blobPaths` at all;
+ * that map only ever matters for `type: 'image'`/`'file'` attachments that were themselves
+ * materialized from a blob for *this* send — never true of a past turn being replayed as history.
+ * Truncation to a character budget happens downstream in `executeLocalProviderQuery()`, not here.
+ */
+export async function buildLocalHistory(
+	messages: ChatMessage[],
+	vaultBasePath: string,
+): Promise<LocalHistoryMessage[]> {
+	const history: LocalHistoryMessage[] = [];
+	const emptyBlobPaths = new Map<ChatAttachment, string>();
+	for (const msg of messages) {
+		if (msg.role === 'info') continue;
+		let images: Array<{mimeType: string; base64: string}> | undefined;
+		if (msg.attachments && msg.attachments.length > 0) {
+			const resolved = await resolveImageAttachments(msg.attachments, emptyBlobPaths, vaultBasePath);
+			if (resolved.length > 0) images = resolved;
+		}
+		history.push({role: msg.role, content: msg.content, ...(images ? {images} : {})});
+	}
+	return history;
 }
 
 /**

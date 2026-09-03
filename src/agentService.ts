@@ -146,7 +146,7 @@ import type {
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
-import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel} from './providerModels';
+import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage} from './providerModels';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
@@ -1194,8 +1194,14 @@ export class Session {
 	 * where it's threaded through to `executeLocalProviderQuery()` to build a multimodal
 	 * message — local models have no agentic `Read` tool, so they need the actual image
 	 * bytes rather than a path inlined into the prompt text.
+	 *
+	 * `history` (#135) is likewise only used in the local-model branch — the real Agent SDK
+	 * carries continuity itself via `resume`/the persisted session id, so passing it there would
+	 * be redundant at best. The caller (`SynapseView`) maps its own `ChatMessage[]` transcript
+	 * into the neutral `LocalHistoryMessage[]` shape (`sessionConfig.ts#buildLocalHistory`)
+	 * before calling `send()`; this method just threads it through unchanged.
 	 */
-	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>}): Promise<void> {
+	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>; history?: LocalHistoryMessage[]}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
 		this.userInterruptRequested = false;
@@ -1222,6 +1228,7 @@ export class Session {
 						systemPrompt: sysPrompt,
 						model: queryOpts.model,
 						images: options.images,
+						history: options.history,
 					});
 					if (ctrl.signal.aborted) return;
 					if (res.ok) {

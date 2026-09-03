@@ -25,7 +25,7 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -629,8 +629,19 @@ export class SynapseView extends ItemView {
 			// (buildPrompt(), above) isn't enough for them to actually see image content —
 			// resolve base64 image data instead. Skipped entirely for cloud/SDK models to
 			// avoid unnecessary file I/O, since they can Read the inlined path themselves.
-			const images = this.plugin.agentService?.isLocalModel(this.selectedModel || undefined)
+			const isLocalModel = this.plugin.agentService?.isLocalModel(this.selectedModel || undefined);
+			const images = isLocalModel
 				? await resolveImageAttachments(currentAttachments, blobPaths, vaultBasePath)
+				: undefined;
+
+			// Conversation history (#135) — local models have no SDK-side session/resume
+			// mechanism, so continuity has to be sent explicitly. `this.messages` already has
+			// the just-added current-turn user message pushed by addUserMessage() above (line
+			// ~579), so it's excluded here — the current turn goes through `prompt`, not
+			// `history`. Cloud/SDK models get continuity from `resume` instead (agent-service.md)
+			// and don't need this at all.
+			const history = isLocalModel
+				? await buildLocalHistory(this.messages.slice(0, -1), vaultBasePath)
 				: undefined;
 
 			try {
@@ -638,6 +649,7 @@ export class SynapseView extends ItemView {
 					prompt: fullPrompt,
 					...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 					...(images && images.length > 0 ? {images} : {}),
+					...(history && history.length > 0 ? {history} : {}),
 				});
 			} catch (sendErr) {
 				// If the session is stale (e.g. SDK restarted), invalidate and retry once
@@ -652,6 +664,7 @@ export class SynapseView extends ItemView {
 						prompt: fullPrompt,
 						...(additionalDirectories.length > 0 ? {additionalDirectories} : {}),
 						...(images && images.length > 0 ? {images} : {}),
+						...(history && history.length > 0 ? {history} : {}),
 					});
 				} else {
 					throw sendErr;

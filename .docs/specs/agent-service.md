@@ -421,6 +421,52 @@ return ids that collide with, or resemble, genuine Claude ids (e.g. an OpenRoute
 never be misrouted into the degraded local loop (no skills, subagents, sessions, permission modes
 or streaming), regardless of what a local catalogue happens to contain.
 
+### BYOK local provider conversation history (issue #135)
+
+Unlike the real Agent SDK path, `executeLocalProviderQuery()`'s ReAct loop has no CLI process and
+no persisted session to `resume` — every call previously rebuilt its `messages` array from
+scratch (system message + exactly one current-turn user message), so two consecutive turns on the
+same local model had no memory of each other, model switch or not. `executeLocalProviderQuery()`
+now accepts an optional `history` param (`LocalHistoryMessage[]`, exported from
+`providerModels.ts`) threaded into the request between the system message and the current turn.
+
+- **What's carried:** only `role: 'user' | 'assistant'` text turns. `ChatMessage` (`types.ts`) has
+  no tool-call fields, so prior tool calls/results cannot be reconstructed even in principle, and
+  replaying partial tool state would also break OpenAI-compatible APIs (a `tool` message needs a
+  `tool_call_id` matching an immediately preceding assistant `tool_calls` entry this history can't
+  supply). `role: 'info'` messages (UI notices, not conversation) and the separate `reasoning`
+  field are both excluded.
+- **Where the mapping lives:** `providerModels.ts` must not import view types, so the
+  `ChatMessage[]` -> `LocalHistoryMessage[]` mapping lives in `sessionConfig.ts`
+  (`buildLocalHistory()`), not there. `SynapseView.handleSend()` calls it (only when
+  `isLocalModel()` is true) and passes the result as `Session.send({history})`
+  (`agentService.ts`), which threads it straight through to `executeLocalProviderQuery()`
+  unchanged. Image attachments on historical messages get the same base64 resolution as the
+  current turn (`resolveImageAttachments()`), since local models have no agentic `Read` tool
+  regardless of which turn an image was attached to.
+- **Budget:** a character budget, not a turn cap — `ChatMessage.content` can carry inlined
+  attachment text tens of thousands of characters long, so a turn count doesn't bound the
+  payload the way a character count does. `buildBudgetedHistory()` drops whole messages from the
+  oldest end until the transcript fits; it never truncates mid-message and the system message
+  (pushed separately, unconditionally) is never part of the budget or at risk of being dropped.
+  Character count is a deliberately conservative proxy for token count
+  (`HISTORY_CHARS_PER_TOKEN = 3`; real text runs closer to ~4 chars/token for English prose, lower
+  for code/CJK — picking a low divisor avoids under-budgeting either).
+- **Sizing the budget:** for `preset: 'ollama'`, `getOllamaContextLength()` reads the model's
+  advertised maximum context length from the same `/api/show` call `fetchProviderModels()` already
+  makes for capability discovery (`model_info["*.context_length"]`; the exact key varies by model
+  architecture, so any key ending in `.context_length` is accepted), cached alongside the existing
+  vision/tools cache. That figure is only ever used as a ceiling to stay well under
+  (`OLLAMA_CONTEXT_SAFETY_FRACTION = 0.25`), never as available headroom: Ollama's own effective
+  `num_ctx` for a request defaults to a few thousand tokens regardless of what the model can
+  technically support, and **silently truncates the oldest tokens off an over-long request with no
+  error** — unlike OpenAI-compatible backends, which return HTTP 400 on overflow (a visible
+  failure). Any backend that publishes nothing (every non-Ollama preset; a failed/erroring
+  `/api/show` call) falls back to a fixed conservative default (`DEFAULT_HISTORY_CHAR_BUDGET`).
+- **Scope:** the Agent SDK path is unaffected — it already carries continuity via `resume` and the
+  CLI's persisted session id (see "BYOK local provider routing" above), so `Session.send({history})`
+  is only read in the local-model branch.
+
 Full feature parity for a local model — running it through the actual Agent SDK — requires a
 Messages-API-speaking gateway (e.g. LiteLLM) in front of it and `ANTHROPIC_BASE_URL` pointed at
 that gateway; that is a distinct, not-yet-built feature (see
