@@ -621,55 +621,39 @@ export function buildSelfImproveHint(agentName: string): string {
 		` Current agent: ${agentName}.`;
 }
 
-/** Result of {@link decideWorkingDirAutoUpdate}. */
-export interface WorkingDirAutoUpdateDecision {
-	/** Whether `workingDir` should be updated (and the session config marked dirty) right now. */
-	applyNow: boolean;
-	/**
-	 * The directory that should become pending — applied once the conversation ends —
-	 * when `applyNow` is false and the note actually moved to a different folder.
-	 * `null` when there is nothing to defer (directory unchanged, or applied now).
-	 */
-	pendingDir: string | null;
-}
-
 /**
  * Decide whether an active-note-driven working-directory change (issue #108) should be
- * applied immediately or deferred.
+ * applied.
  *
- * Applying a `cwd` change mid-conversation still forces `ensureSession()` to tear down the
- * live `Session` and build a replacement whose `_sessionId` starts empty. At the time this
- * function was written (issue #108, likely root cause of #93), that meant the next turn
- * silently started a fresh CLI session with no history — `Session.send()` only passed `resume`
- * when `_sessionId` was truthy, and a freshly rebuilt `Session` had no way to seed it. Since
- * users switch notes constantly *between* turns, this fired on nearly every follow-up message.
+ * Historically (issue #108) this deferred the change whenever a conversation was in
+ * progress: applying a `cwd` change mid-conversation forced `ensureSession()` to tear down
+ * the live `Session` and build a replacement whose `_sessionId` started empty, so the next
+ * turn silently began a fresh CLI session with no history. Since users switch notes
+ * constantly *between* turns, that fired on nearly every follow-up message and was the
+ * likely root cause of #93.
  *
  * **That conversation-loss mechanism no longer exists (issue #104):** `ensureSession()` now
  * seeds the rebuilt `SessionConfig` with the outgoing session's id (`resume`), and
  * `Session.send()` falls back to it via `resolveResumeSessionId()` (`agentService.ts`) whenever
  * the new `Session`'s own `_sessionId` is still empty — see `agent-service.md`'s "Carrying a
- * conversation across a rebuilt Session" section. So a `cwd` change applied immediately would no
- * longer drop the transcript.
+ * conversation across a rebuilt Session" section. A rebuild triggered by a `cwd` change no
+ * longer drops the transcript.
  *
- * The deferral below is left unchanged by #104 — whether `cwd` changes should now apply
- * immediately instead of waiting for the conversation to end is a separate behavioral question
- * (with its own testing needs) that #104 deliberately did not touch. It is tracked in #131.
- * As written, this function's deferral may now be redundant for the reason originally
- * documented here, but is kept as-is pending that decision.
+ * **The remaining candidate justification — that resuming a session under a changed `cwd`
+ * would degrade the model's handling of paths referenced in earlier turns — was tested
+ * empirically for issue #131 and did not hold:** a session queried with `cwd` at folder A,
+ * resumed with `cwd` at folder B, correctly recalled folder-A content from the transcript
+ * without re-reading, correctly resolved new relative references against folder B, and (when
+ * explicitly asked to re-read a stale relative path against the new `cwd`) reported the file
+ * not found rather than hallucinating — i.e. it degrades gracefully, not silently. See
+ * `.docs/decisions/2026-09-03-cwd-deferral-removed.md` for the full test and results.
  *
- * When a conversation is already in progress, the directory change is deferred instead of
- * applied — the working-directory button doesn't move and no session rebuild happens, so
- * the live session (and its transcript) survives. The deferred `pendingDir` is applied the
- * next time a conversation is *not* in progress (e.g. once `newConversation()` runs, or the
- * next note switch after the session has otherwise ended).
+ * With no surviving justification, the deferral has been removed: an active-note-driven
+ * `cwd` change now applies immediately regardless of whether a conversation is in progress.
  */
 export function decideWorkingDirAutoUpdate(params: {
 	newDir: string;
 	currentWorkingDir: string;
-	conversationInProgress: boolean;
-}): WorkingDirAutoUpdateDecision {
-	const {newDir, currentWorkingDir, conversationInProgress} = params;
-	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null};
-	if (conversationInProgress) return {applyNow: false, pendingDir: newDir};
-	return {applyNow: true, pendingDir: null};
+}): boolean {
+	return params.newDir !== params.currentWorkingDir;
 }
