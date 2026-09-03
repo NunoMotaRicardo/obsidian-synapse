@@ -212,6 +212,12 @@ vault scope, folder tree.
     working-directory override (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the
     input area) is a deliberate user action, not a silent side effect of navigation, and is
     unaffected by this change.
+    **Note (issue #104):** the conversation-loss mechanism this deferral was built to avoid — an
+    `ensureSession()` rebuild silently dropping `resume` — is fixed generally now (see the bullet
+    below and `decideWorkingDirAutoUpdate()`'s doc comment in `view/sessionConfig.ts`), so an
+    immediately-applied `cwd` change would no longer lose the transcript either. This deferral's
+    logic and behavior are unchanged here; whether it's still worth keeping is a separate,
+    unresolved question tracked apart from #104.
   - **Every `configDirty` rebuild now carries the conversation forward (issue #104):** the
     toolbar-toggle pattern above (agent/model/reasoning/tools) still marks `configDirty` and lets
     `ensureSession()` rebuild the `Session` — that part is unchanged, and deliberately so (see
