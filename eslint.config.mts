@@ -8,6 +8,9 @@ const ALLOWED_UPPERCASE = new Set([
 	'Claude', 'Synapse', 'Mermaid', 'Agent', 'Markdown', 'GitHub', 'URL', 'API', 'LLM',
 	'MCP', 'CLI', 'JSON', 'YAML', 'HTML', 'CSS', 'UI', 'ID',
 	'Settings', 'Community', 'Enter', 'Ollama', 'OpenAI', 'BYOK',
+	// OpenAI-compatible provider description (#117) — proper nouns naming other
+	// providers/tools compatible with the generic `/v1/chat/completions` preset.
+	'OpenRouter', 'Studio', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry', 'Local',
 ]);
 
 /**
@@ -207,6 +210,8 @@ export default tseslint.config(
 					'WebDAV', 'WebStorm',
 					// Synapse-specific additions:
 					'Synapse', 'Ollama', 'Sonnet',
+					// OpenAI-compatible provider description (#117):
+					'OpenRouter', 'LM Studio', 'llama.cpp', 'vLLM', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry Local',
 				],
 				acronyms: [
 					'API', 'HTTP', 'HTTPS', 'URL', 'DNS', 'TCP', 'IP', 'SSH', 'TLS', 'SSL', 'FTP', 'SFTP', 'SMTP',

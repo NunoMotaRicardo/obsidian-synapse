@@ -1,7 +1,7 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {AgentService} from "./agentService";
-import {fetchProviderModels} from "./providerModels";
+import {fetchProviderModels, migrateProviderPreset} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
@@ -353,6 +353,24 @@ export default class SynapsePlugin extends Plugin {
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		this.settings.featureAgents = Object.assign({}, DEFAULT_SETTINGS.featureAgents, raw?.featureAgents);
+
+		// Migrate legacy providerPreset values (#117): `other-openai` and `foundry-local` were
+		// byte-identical to `openai` and collapse silently. `anthropic` also collapses to
+		// `openai`, but that changes which key drives chat, so it gets a one-time Notice. Once
+		// migrated + saved below, the stored value is `openai` and this branch won't fire again.
+		const presetMigration = migrateProviderPreset(raw?.providerPreset);
+		if (presetMigration.migrated) {
+			this.settings.providerPreset = presetMigration.preset;
+			needsSave = true;
+			if (presetMigration.wasAnthropic) {
+				new Notice(
+					'Synapse: the "Anthropic (BYOK)" provider preset was removed and this vault has been ' +
+					'switched to "OpenAI-compatible". Anthropic/Claude models belong in Settings → Claude → ' +
+					'API key, not the local provider section — please reconfigure there if needed.',
+					0
+				);
+			}
+		}
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
 		for (const key of SECURE_FIELDS) {
