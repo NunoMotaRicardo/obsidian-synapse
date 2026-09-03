@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, AgentService} from '../src/agentService';
+import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, AgentService, mapSdkModel} from '../src/agentService';
+import type {SDKModelInfo} from '../src/agentService';
 
 // ---------------------------------------------------------------------------
 // parseTodoWritePayload — normalizes a TodoWrite tool call's `input` into a
@@ -226,5 +227,106 @@ describe('AgentService#isLocalModel', () => {
 	it('does not classify a claude-* id as local when no local backend is configured', () => {
 		const service = new AgentService();
 		expect(service.isLocalModel('claude-sonnet-4-5-20250929')).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// mapSdkModel — issue #105. mapSdkModel must stop inventing capabilities
+// (`max_context_window_tokens`, blanket `vision`/`tools`) and instead adopt
+// only the real fields the SDK's ModelInfo publishes.
+// ---------------------------------------------------------------------------
+
+function makeSdkModel(overrides: Partial<SDKModelInfo> = {}): SDKModelInfo {
+	return {
+		value: 'sonnet',
+		displayName: 'Sonnet',
+		description: 'Balanced model for everyday tasks',
+		...overrides,
+	};
+}
+
+describe('mapSdkModel', () => {
+	it('never invents vision or tool support', () => {
+		const result = mapSdkModel(makeSdkModel());
+		expect(result.isVision).toBeUndefined();
+		expect(result.supportsTools).toBeUndefined();
+		expect(result.capabilities?.supports?.vision).toBeUndefined();
+		expect(result.capabilities?.supports?.tools).toBeUndefined();
+	});
+
+	it('never stamps a context-window limit', () => {
+		const result = mapSdkModel(makeSdkModel());
+		expect(result.capabilities?.limits).toBeUndefined();
+	});
+
+	it('maps the model id via sdkModelId (default -> empty id)', () => {
+		expect(mapSdkModel(makeSdkModel({value: 'default'})).id).toBe('');
+		expect(mapSdkModel(makeSdkModel({value: 'sonnet[1m]'})).id).toBe('sonnet[1m]');
+	});
+
+	it('carries resolvedModel, description and the mode-support fields through unchanged', () => {
+		const result = mapSdkModel(makeSdkModel({
+			value: 'sonnet',
+			resolvedModel: 'claude-sonnet-5',
+			description: 'Fast, balanced everyday model',
+			supportsAdaptiveThinking: true,
+			supportsFastMode: true,
+			supportsAutoMode: false,
+		}));
+		expect(result.resolvedModel).toBe('claude-sonnet-5');
+		expect(result.description).toBe('Fast, balanced everyday model');
+		expect(result.supportsAdaptiveThinking).toBe(true);
+		expect(result.supportsFastMode).toBe(true);
+		expect(result.supportsAutoMode).toBe(false);
+	});
+
+	it('leaves resolvedModel/description/mode-support fields absent when the SDK omits them', () => {
+		const result = mapSdkModel(makeSdkModel());
+		expect(result.resolvedModel).toBeUndefined();
+		expect(result.supportsAdaptiveThinking).toBeUndefined();
+		expect(result.supportsFastMode).toBeUndefined();
+		expect(result.supportsAutoMode).toBeUndefined();
+	});
+
+	it('derives reasoningEffort from supportsEffort when present', () => {
+		const result = mapSdkModel(makeSdkModel({supportsEffort: true, supportedEffortLevels: ['low', 'high']}));
+		expect(result.capabilities?.supports?.reasoningEffort).toBe(true);
+		expect(result.capabilities?.supportedReasoningEfforts).toEqual(['low', 'high']);
+	});
+
+	it('falls back to effort-levels presence for reasoningEffort when supportsEffort is absent', () => {
+		const result = mapSdkModel(makeSdkModel({supportedEffortLevels: ['medium']}));
+		expect(result.capabilities?.supports?.reasoningEffort).toBe(true);
+	});
+
+	it('omits supportedReasoningEfforts when there are no effort levels', () => {
+		const result = mapSdkModel(makeSdkModel());
+		expect(result.capabilities?.supportedReasoningEfforts).toBeUndefined();
+		expect(result.capabilities?.supports?.reasoningEffort).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// AgentService#resolveValidModel — resolvedModel exact-match tier (#105).
+// A persisted explicit/canonical id (e.g. 'claude-sonnet-5') should resolve
+// deterministically to the alias row it belongs to via `resolvedModel`,
+// rather than relying on the substring/keyword heuristics below it.
+// ---------------------------------------------------------------------------
+
+describe('AgentService#resolveValidModel — resolvedModel matching', () => {
+	it('matches a canonical id against a row\'s resolvedModel before falling back to substring heuristics', () => {
+		const service = new AgentService();
+		service.setCustomModels([
+			{id: 'sonnet', name: 'Sonnet', resolvedModel: 'claude-sonnet-5'},
+			{id: 'opus', name: 'Opus', resolvedModel: 'claude-opus-5'},
+		]);
+		expect(service.resolveValidModel('claude-sonnet-5')).toBe('sonnet');
+		expect(service.resolveValidModel('CLAUDE-OPUS-5')).toBe('opus');
+	});
+
+	it('still falls back to substring/keyword heuristics when no row has a matching resolvedModel', () => {
+		const service = new AgentService();
+		service.setCustomModels([{id: 'my-sonnet-mirror', name: 'Sonnet Mirror'}]);
+		expect(service.resolveValidModel('sonnet')).toBe('my-sonnet-mirror');
 	});
 });

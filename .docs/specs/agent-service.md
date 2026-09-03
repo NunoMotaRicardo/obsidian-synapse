@@ -211,11 +211,37 @@ unit-tested (`test/sessionResume.test.ts`) since it requires no live CLI to veri
 
 ## Model list mapping
 
-`fetchModels()` maps the CLI's `initializationResult().models` to the plugin `ModelInfo` shape.
-`ModelInfo.id` is `sdk.value` verbatim (`'sonnet'`, `'sonnet[1m]'`, `'opus'`,
+`fetchModels()` maps the CLI's `initializationResult().models` to the plugin `ModelInfo` shape via
+`mapSdkModel()`. `ModelInfo.id` is `sdk.value` verbatim (`'sonnet'`, `'sonnet[1m]'`, `'opus'`,
 `'claude-fable-5[1m]'`, …) with `'default'` mapped to `''` (= let the CLI pick). Never derive
 ids from `displayName` — labels like "Sonnet (1M context)" or "Fable" do not round-trip to
 valid model identifiers.
+
+`mapSdkModel()` only carries over fields the SDK's `ModelInfo` actually publishes — `resolvedModel`,
+`description`, `supportsAdaptiveThinking`, `supportsFastMode`, `supportsAutoMode`, plus
+`reasoningEffort`/`supportedReasoningEfforts` derived from `supportsEffort`/`supportedEffortLevels`.
+It used to also stamp every model with a hardcoded `limits: {max_context_window_tokens: 200000}`
+(wrong for 1M-context variants, and unread by any consumer) and a blanket `vision: true`/
+`tools: true` (invented — the SDK's `ModelInfo` has no vision or tool-support field at all). Both
+are gone (#105); absent beats wrong. Consumers that read `supportsTools` already treat absence as
+"assume supported" (`triggerExecutor.ts`: `modelInfo?.supportsTools !== false`), so Claude models
+keep working exactly as before. `ModelInfo.capabilities.limits` stays typed as an open
+`Record<string, unknown>` bag (not currently populated for Claude models) rather than removed
+outright, because `synapseView.ts` reads a `limits['vision'].max_prompt_images` shape that some
+future provider mapping may populate — only the dead `max_context_window_tokens` key is gone.
+`isVision`/`supportsTools`/`capabilities.supports.vision`/`capabilities.supports.tools` remain part
+of the `ModelInfo` shape (local providers in `providerModels.ts` still populate them from real
+heuristics/`/api/show` capability lists) — `mapSdkModel()` just no longer sets them.
+
+`resolvedModel` (the canonical wire id an alias row resolves to, e.g. `'sonnet'` ->
+`'claude-sonnet-5'`) is used as an additional exact-match tier in `AgentService#resolveValidModel`
+and `resolveModelForAgent` (`view/sessionConfig.ts`), ahead of their existing substring/keyword
+heuristics: a persisted explicit/canonical id now matches its alias row deterministically instead
+of only via the substring fallback (`target.includes(m.id)`) that already coincidentally caught
+most such cases. The substring and keyword-list (`haiku`/`sonnet`/`opus`/`flash`/`pro`) tiers stay,
+unchanged, because `resolvedModel` is only ever set on SDK-sourced (Claude) rows — local-provider
+rows from `customModels` never have it, and the keyword tier still does useful work for
+non-Claude/partial-name matches.
 
 ## Tool execution events (issue #78)
 
