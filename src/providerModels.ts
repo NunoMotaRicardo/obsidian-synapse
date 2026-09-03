@@ -72,6 +72,25 @@ export function migrateProviderPreset(value: string | undefined | null): Provide
 	return {preset: 'openai', migrated: true, wasAnthropic: false};
 }
 
+/**
+ * Azure OpenAI's classic deployment-scoped chat URL
+ * (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) is a shape Synapse's
+ * URL builder can never produce — it always requests `{base}/v1/models` and
+ * `{base}/v1/chat/completions`. A user pasting that URL straight from the Azure portal gets a
+ * bare "Test failed: HTTP 404" with no clue why. Detect the two fingerprints of that predictable
+ * wrong input (`/deployments/` segment, `api-version=` query) so the caller can surface a message
+ * naming the fix (the v1 API base URL) instead. Returns `null` when the URL doesn't match either
+ * fingerprint — including when it's empty, since `fetchProviderModels` already reports that case.
+ */
+export function describeAzureBaseUrlIssue(baseUrl: string): string | null {
+	const trimmed = (baseUrl || '').trim();
+	if (!trimmed) return null;
+	if (/\/deployments\//i.test(trimmed) || /[?&]api-version=/i.test(trimmed)) {
+		return 'That looks like a classic Azure deployment URL. Use the v1 API base URL instead: https://<resource>.openai.azure.com/openai';
+	}
+	return null;
+}
+
 export interface ProviderConfigOptions {
 	// `(string & {})` (not bare `string`) keeps editor autocomplete for the known
 	// ProviderPreset literals while still accepting arbitrary strings — a bare
