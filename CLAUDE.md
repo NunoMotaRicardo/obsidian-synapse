@@ -32,7 +32,8 @@ Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules
   build/lint/deploy-test, opens a draft PR). See
   `.docs/decisions/2026-06-14-github-issue-workflow.md`.
 - Verify changes with the **deploy-test** skill: build → copy artifacts to
-  `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\` → reload
+  the test vault (`$env:SYNAPSE_DEV_VAULT` or default
+  `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`) → reload
   (`obsidian plugin:reload id=synapse`). That vault is the user's real vault — deploy only
   builds that compile clean.
 - Releases (BRAT): the **release** skill. Tag = `manifest.json` version, no `v` prefix.

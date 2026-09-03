@@ -5,10 +5,12 @@ description: Build the plugin and deploy it to the user's Obsidian vault for ver
 
 # Deploy & test the plugin
 
-Target vault (the user's real vault — never deploy a build that didn't compile clean):
+Target vault (never deploy a build that didn't compile clean):
 
-```
-D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\
+The target plugin directory can be configured via `$env:SYNAPSE_DEV_VAULT` (defaults to `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`):
+
+```powershell
+$target = if ($env:SYNAPSE_DEV_VAULT) { $env:SYNAPSE_DEV_VAULT } else { 'D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\' }
 ```
 
 ## Steps
@@ -17,7 +19,8 @@ D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\
    `main.js` at the repo root). Stop and report on any error.
 2. Copy artifacts:
    ```powershell
-   Copy-Item main.js, manifest.json, styles.css 'D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\' -Force
+   $target = if ($env:SYNAPSE_DEV_VAULT) { $env:SYNAPSE_DEV_VAULT } else { 'D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\' }
+   Copy-Item main.js, manifest.json, styles.css $target -Force
    ```
 3. Reload the plugin (Obsidian CLI, works while Obsidian is running):
    ```powershell
