@@ -150,7 +150,7 @@ Synapse is built natively for Claude models (via the Anthropic API or OAuth). It
 
 ### Supported providers
 
-Configure local providers under **Settings → Synapse → Models**. The dropdown has three presets
+Configure local providers under **Settings → Synapse → Claude → Local & custom providers**. The dropdown has three presets
 (Ollama, OpenAI-compatible, Azure OpenAI), but the OpenAI-compatible preset works unchanged with
 any endpoint exposing `/v1/chat/completions` — which covers most of the table below:
 
@@ -215,7 +215,7 @@ Configure external tool servers in `_synapse/.mcp.json`. Synapse discovers and s
 
 ### Tool approval
 
-In **Settings → Synapse → Tools approval**:
+In **Settings → Synapse → Tools**, set **Tools approval**:
 
 - **Allow** — Tool calls run automatically.
 - **Ask** — Confirm each tool call in a modal before execution.
@@ -323,22 +323,27 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 
 ## Settings reference
 
-**Settings → Synapse**
-
-### Models
+### Settings → Synapse → Claude → Local & custom providers
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Provider** | Ollama | `Ollama`, `OpenAI-compatible`, or `Azure OpenAI` — see [Supported providers](#supported-providers) |
-| **Model name** | *(empty)* | Model ID (e.g. `claude-3-5-sonnet-latest`, `llama3`) |
-| **API key / Token** | *(empty)* | Credentials for the chosen provider |
+| **Base URL** | `http://localhost:11434` | Endpoint for the selected preset |
+| **Model name** | *(empty)* | Model ID for local-provider operations (e.g. `llama3`) — select from Test results or type a custom ID |
+| **API key** | *(empty)* | Credentials for the chosen provider (hidden when **Provider** is Ollama) |
 
-### Synapse settings
+### Settings → Synapse → Tools
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Inline operations model** | Default | Model for context-menu actions |
 | **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
+
+### Chat panel toolbar (per-session, not in Settings)
+
+These are configured from the config toolbar inside the chat panel itself, not from **Settings → Synapse**:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
 
