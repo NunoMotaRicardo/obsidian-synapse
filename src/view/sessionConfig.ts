@@ -528,9 +528,9 @@ export interface WorkingDirAutoUpdateDecision {
  *
  * The deferral below is left unchanged by #104 — whether `cwd` changes should now apply
  * immediately instead of waiting for the conversation to end is a separate behavioral question
- * (with its own testing needs) that #104 deliberately did not touch; it may be filed and decided
- * separately. As written, this function's deferral may now be redundant for the reason
- * originally documented here, but is kept as-is pending that separate decision.
+ * (with its own testing needs) that #104 deliberately did not touch. It is tracked in #131.
+ * As written, this function's deferral may now be redundant for the reason originally
+ * documented here, but is kept as-is pending that decision.
  *
  * When a conversation is already in progress, the directory change is deferred instead of
  * applied — the working-directory button doesn't move and no session rebuild happens, so
