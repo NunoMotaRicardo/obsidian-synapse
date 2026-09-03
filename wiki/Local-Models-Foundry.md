@@ -73,7 +73,7 @@ A loaded model will appear in the output instead of "No models are currently loa
 
 ## Step 3 — Configure Synapse
 
-Open Obsidian **Settings → Synapse → Local & custom providers** and set:
+Open Obsidian **Settings → Synapse → Claude → Local & custom providers** and set:
 
 | Setting | Value |
 |---------|-------|
