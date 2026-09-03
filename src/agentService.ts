@@ -1055,6 +1055,20 @@ export function parseTaskUpdateInput(input: unknown): {taskId: string; status?: 
 	};
 }
 
+/**
+ * Resolve the `resume` session id a query() call should use: the session's own captured
+ * `sessionId` (set once a prior query in *this* `Session` object has streamed at least one
+ * message) takes priority; otherwise falls back to `configResume` — the id a rebuilt
+ * `Session` was seeded with via `SessionConfig.resume` (see `synapseView.ts`'s
+ * `ensureSession()`/`buildSessionConfig()`), which carries the conversation across a
+ * `configDirty` rebuild even though the new `Session` object's own `sessionId` starts empty
+ * (issue #104). Returns `undefined` (omit `resume`) when neither is set, e.g. a session that
+ * has never sent a message.
+ */
+export function resolveResumeSessionId(sessionId: string, configResume: string | undefined): string | undefined {
+	return sessionId || configResume || undefined;
+}
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;
@@ -1162,10 +1176,11 @@ export class Session {
 					...(this.config.additionalDirectories ?? []),
 					...(options.additionalDirectories ?? []),
 				]));
+				const resumeSessionId = resolveResumeSessionId(this._sessionId, this.config.resume);
 				const queryOpts: Options = {
 					...this.config,
 					abortController: ctrl,
-					...(this._sessionId ? {resume: this._sessionId} : {}),
+					...(resumeSessionId ? {resume: resumeSessionId} : {}),
 					...(mergedAdditionalDirectories.length > 0 ? {additionalDirectories: mergedAdditionalDirectories} : {}),
 				};
 

@@ -512,11 +512,25 @@ export interface WorkingDirAutoUpdateDecision {
  * Decide whether an active-note-driven working-directory change (issue #108) should be
  * applied immediately or deferred.
  *
- * Applying a `cwd` change mid-conversation forces `ensureSession()` to tear down the
- * live `Session` and build a replacement whose `_sessionId` starts empty — `Session.send()`
- * only passes `resume` when `_sessionId` is truthy, so the next turn silently starts a
- * fresh CLI session with no history (issue #108, likely root cause of #93). Since users
- * switch notes constantly *between* turns, this fires on nearly every follow-up message.
+ * Applying a `cwd` change mid-conversation still forces `ensureSession()` to tear down the
+ * live `Session` and build a replacement whose `_sessionId` starts empty. At the time this
+ * function was written (issue #108, likely root cause of #93), that meant the next turn
+ * silently started a fresh CLI session with no history — `Session.send()` only passed `resume`
+ * when `_sessionId` was truthy, and a freshly rebuilt `Session` had no way to seed it. Since
+ * users switch notes constantly *between* turns, this fired on nearly every follow-up message.
+ *
+ * **That conversation-loss mechanism no longer exists (issue #104):** `ensureSession()` now
+ * seeds the rebuilt `SessionConfig` with the outgoing session's id (`resume`), and
+ * `Session.send()` falls back to it via `resolveResumeSessionId()` (`agentService.ts`) whenever
+ * the new `Session`'s own `_sessionId` is still empty — see `agent-service.md`'s "Carrying a
+ * conversation across a rebuilt Session" section. So a `cwd` change applied immediately would no
+ * longer drop the transcript.
+ *
+ * The deferral below is left unchanged by #104 — whether `cwd` changes should now apply
+ * immediately instead of waiting for the conversation to end is a separate behavioral question
+ * (with its own testing needs) that #104 deliberately did not touch. It is tracked in #131.
+ * As written, this function's deferral may now be redundant for the reason originally
+ * documented here, but is kept as-is pending that decision.
  *
  * When a conversation is already in progress, the directory change is deferred instead of
  * applied — the working-directory button doesn't move and no session rebuild happens, so

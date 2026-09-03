@@ -160,8 +160,11 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.applyReasoningToSession = function(): void {
-		// Agent SDK doesn't support mid-session config changes;
-		// mark config as dirty so the next send creates a new session.
+		// This plugin creates a fresh query() per turn (resuming via `resume`) rather than
+		// holding a live Query between turns, so there's no live handle to mutate mid-turn —
+		// config changes like this one apply on the next turn simply by living in
+		// `this.config`. Mark config dirty so `ensureSession()` rebuilds the Session (its
+		// `resume` carries the conversation across the rebuild — see `ensureSession()`).
 		if (!this.configDirty) {
 			this.configDirty = true;
 		}
