@@ -18,8 +18,12 @@ const nodeRequire = typeof window.require === 'function' ? window.require : unde
 export function resolveModelForAgent(agent: AgentConfig | undefined, models: ModelInfo[], fallback: string | undefined): string | undefined {
 	if (!agent?.model) return fallback;
 	const target = agent.model.toLowerCase();
+	// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
+	// alias row resolves to) so an agent config naming a canonical id like
+	// 'claude-sonnet-5' matches the 'sonnet' alias row deterministically instead of
+	// falling through to the substring/keyword heuristics below.
 	let match = models.find(
-		m => m.name.toLowerCase() === target || m.id.toLowerCase() === target
+		m => m.name.toLowerCase() === target || m.id.toLowerCase() === target || m.resolvedModel?.toLowerCase() === target
 	);
 	if (!match) {
 		match = models.find(

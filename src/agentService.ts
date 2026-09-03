@@ -183,6 +183,7 @@ export type {
 	EffortLevel as ReasoningEffort,
 	ResolvedCliPath,
 	CliPathSource,
+	SDKModelInfo,
 };
 
 export type SessionConfig = Options & {
@@ -208,9 +209,29 @@ export type BetaRawMessageStreamEvent = SDKPartialAssistantMessage['event'];
 export interface ModelInfo {
 	id: string;
 	name: string;
+	/**
+	 * Canonical wire model id this row's `id` resolves to (SDK `ModelInfo.resolvedModel`,
+	 * e.g. `'sonnet'` -> `'claude-sonnet-5'`). Only Claude (SDK-sourced) models carry this;
+	 * local-provider models never set it. Lets a persisted explicit id be matched back to
+	 * the alias row that covers it (see `resolveValidModel` / `resolveModelForAgent`).
+	 */
+	resolvedModel?: string;
+	/** Human-readable capability description from the CLI, when available. */
+	description?: string;
+	/** SDK `ModelInfo.supportsAdaptiveThinking` — Claude decides when/how much to think. */
+	supportsAdaptiveThinking?: boolean;
+	/** SDK `ModelInfo.supportsFastMode`. */
+	supportsFastMode?: boolean;
+	/** SDK `ModelInfo.supportsAutoMode`. */
+	supportsAutoMode?: boolean;
 	capabilities?: {
 		supports?: {vision?: boolean; reasoningEffort?: boolean; tools?: boolean};
-		limits?: {max_context_window_tokens?: number};
+		/**
+		 * Provider-specific limit bag (e.g. a `vision` entry shaped like
+		 * `{max_prompt_images?: number}`, read by synapseView.ts). Untyped on purpose —
+		 * no current provider populates it, but the shape must stay open for one that does.
+		 */
+		limits?: Record<string, unknown>;
 		supportedReasoningEfforts?: string[];
 	};
 	isVision?: boolean;
@@ -229,23 +250,29 @@ function sdkModelId(sdk: SDKModelInfo): string {
 	return sdk.value === 'default' ? '' : sdk.value;
 }
 
-/** Map SDK ModelInfo to the plugin's ModelInfo shape. */
-function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
+/**
+ * Map SDK ModelInfo to the plugin's ModelInfo shape.
+ * Only fields the SDK actually publishes are populated — no vision/tools/context-window
+ * claims. The SDK's `ModelInfo` has no vision or tool-support field at all, so those stay
+ * absent rather than guessed (consumers already treat absent as "assume supported", e.g.
+ * `triggerExecutor.ts`'s `modelInfo?.supportsTools !== false`).
+ */
+export function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	const efforts = sdk.supportedEffortLevels ?? [];
 	return {
 		id: sdkModelId(sdk),
 		name: sdk.displayName,
+		resolvedModel: sdk.resolvedModel,
+		description: sdk.description,
+		supportsAdaptiveThinking: sdk.supportsAdaptiveThinking,
+		supportsFastMode: sdk.supportsFastMode,
+		supportsAutoMode: sdk.supportsAutoMode,
 		capabilities: {
 			supports: {
-				vision: true,
 				reasoningEffort: sdk.supportsEffort ?? efforts.length > 0,
-				tools: true,
 			},
-			limits: {max_context_window_tokens: 200000},
 			...(efforts.length > 0 ? {supportedReasoningEfforts: efforts} : {}),
 		},
-		isVision: true,
-		supportsTools: true,
 	};
 }
 
@@ -256,11 +283,8 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 		id: '',
 		name: 'Default',
 		capabilities: {
-			supports: {vision: true, reasoningEffort: true, tools: true},
-			limits: {max_context_window_tokens: 200000},
+			supports: {reasoningEffort: true},
 		},
-		isVision: true,
-		supportsTools: true,
 	},
 ];
 
@@ -551,7 +575,13 @@ export class AgentService {
 		if (allModels.length === 0) return modelId;
 
 		const target = modelId.toLowerCase();
-		let match = allModels.find(m => m.id.toLowerCase() === target || m.name.toLowerCase() === target);
+		// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
+		// alias row resolves to) so a persisted explicit id like 'claude-sonnet-5' matches
+		// the 'sonnet' alias row deterministically instead of falling through to the
+		// substring/keyword heuristics below.
+		let match = allModels.find(
+			m => m.id.toLowerCase() === target || m.name.toLowerCase() === target || m.resolvedModel?.toLowerCase() === target
+		);
 		if (!match) {
 			match = allModels.find(m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase()));
 		}

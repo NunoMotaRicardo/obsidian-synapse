@@ -6,8 +6,10 @@ vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
 }));
 
-import {buildSelfImproveHint, buildVaultContextBlock} from '../src/view/sessionConfig';
+import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent} from '../src/view/sessionConfig';
 import {scanVaultStructure} from '../src/configWriter';
+import type {ModelInfo} from '../src/agentService';
+import type {AgentConfig} from '../src/types';
 
 const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>;
 
@@ -118,5 +120,50 @@ describe('buildVaultContextBlock', () => {
 		buildVaultContextBlock(mockApp);
 
 		expect(mockedScanVaultStructure).toHaveBeenCalledWith(mockApp);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolveModelForAgent — issue #105. A persisted canonical id (e.g.
+// 'claude-sonnet-5') should resolve deterministically to the alias row it
+// belongs to via the SDK's `resolvedModel` field, ahead of the existing
+// substring/keyword heuristics.
+// ---------------------------------------------------------------------------
+
+describe('resolveModelForAgent', () => {
+	function makeAgent(model: string | undefined): AgentConfig {
+		return {name: 'Test', description: '', model, instructions: '', filePath: 'agents/test.agent.md'};
+	}
+
+	const models: ModelInfo[] = [
+		{id: 'sonnet', name: 'Sonnet', resolvedModel: 'claude-sonnet-5'},
+		{id: 'opus', name: 'Opus', resolvedModel: 'claude-opus-5'},
+	];
+
+	it('returns fallback when the agent has no configured model', () => {
+		expect(resolveModelForAgent(makeAgent(undefined), models, 'fallback-id')).toBe('fallback-id');
+		expect(resolveModelForAgent(undefined, models, 'fallback-id')).toBe('fallback-id');
+	});
+
+	it('matches a canonical id against resolvedModel', () => {
+		expect(resolveModelForAgent(makeAgent('claude-sonnet-5'), models, undefined)).toBe('sonnet');
+	});
+
+	it('matches a canonical id against resolvedModel case-insensitively', () => {
+		expect(resolveModelForAgent(makeAgent('CLAUDE-OPUS-5'), models, undefined)).toBe('opus');
+	});
+
+	it('still matches by exact id/name when no resolvedModel is set', () => {
+		const noResolved: ModelInfo[] = [{id: 'my-model', name: 'My Model'}];
+		expect(resolveModelForAgent(makeAgent('My Model'), noResolved, undefined)).toBe('my-model');
+	});
+
+	it('falls back to substring/keyword heuristics when nothing matches resolvedModel', () => {
+		const noResolved: ModelInfo[] = [{id: 'my-sonnet-mirror', name: 'Sonnet Mirror'}];
+		expect(resolveModelForAgent(makeAgent('sonnet'), noResolved, undefined)).toBe('my-sonnet-mirror');
+	});
+
+	it('falls back when nothing matches at all', () => {
+		expect(resolveModelForAgent(makeAgent('gpt-4o'), models, 'fallback-id')).toBe('fallback-id');
 	});
 });
