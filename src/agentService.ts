@@ -368,31 +368,22 @@ export class AgentService {
 	 * Build the env block for query() calls.
 	 * For API key auth, sets ANTHROPIC_API_KEY in the environment.
 	 * For subscription auth, inherits process env (CLI handles OAuth).
+	 *
+	 * Does NOT point ANTHROPIC_BASE_URL at a local/OpenAI-compatible provider — the Claude
+	 * CLI only speaks the Anthropic Messages API, not the OpenAI-shaped `/v1` surface that
+	 * Ollama and other local backends expose. Local models run through the separate
+	 * `executeLocalProviderQuery` ReAct loop in providerModels.ts instead. Routing a local
+	 * model through the real Agent SDK requires a Messages-API-speaking gateway in front of
+	 * it (see .docs/research/2026-09-03-provider-matrix.md §6) — a distinct, not-yet-built
+	 * feature, not something this method should approximate.
 	 */
-	private buildEnv(forLocalModel = false): Record<string, string | undefined> | undefined {
+	private buildEnv(): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
 			...cleanEnv(),
 			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-synapse/1.0.0',
 		};
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
-		}
-		if (forLocalModel && this.providerConfig && this.providerConfig.baseUrl) {
-			const preset = (this.providerConfig.preset || '').toLowerCase();
-			let baseUrl = this.providerConfig.baseUrl.trim();
-			if (preset === 'ollama') {
-				baseUrl = baseUrl.replace(/\/+$/, '');
-				if (!baseUrl.endsWith('/v1')) {
-					baseUrl = `${baseUrl}/v1`;
-				}
-			}
-			env['ANTHROPIC_BASE_URL'] = baseUrl;
-			env['OPENAI_BASE_URL'] = baseUrl;
-			const token = this.providerConfig.bearerToken || this.providerConfig.apiKey;
-			if (token) {
-				env['ANTHROPIC_API_KEY'] = token;
-				env['OPENAI_API_KEY'] = token;
-			}
 		}
 		return env;
 	}
@@ -528,13 +519,27 @@ export class AgentService {
 		return this.providerConfig;
 	}
 
-	/** Check if a model ID is handled by the local provider backend. */
+	/**
+	 * Check if a model ID is handled by the local provider backend.
+	 *
+	 * SDK-known ids are checked FIRST, before the `customModels` membership test, and
+	 * `customModels` membership is never sufficient on its own. This is deliberate: `customModels`
+	 * is populated from whatever a provider's `/v1/models` catalogue returns (setCustomModels(),
+	 * agentService.ts:483), and some providers/aggregators (e.g. an OpenRouter-style
+	 * `anthropic/claude-*` id, or a provider that simply echoes real `claude-*` ids) can return
+	 * ids that collide with — or otherwise still identify — genuine Claude models. If membership
+	 * in `customModels` alone were enough to classify a model as local, any such catalogue would
+	 * silently misroute Claude models down the degraded local one-shot loop (no skills, subagents,
+	 * sessions, permissions or streaming) with no indication to the user. Checking `sdkModels` and
+	 * the `/^claude-/i` guard first ensures an SDK-known/Claude-shaped id can never be classified
+	 * local, regardless of what a local catalogue happens to contain.
+	 */
 	isLocalModel(modelId?: string): boolean {
 		if (!modelId) return false;
+		if (this.sdkModels.some(m => m.id === modelId)) return false;
+		if (/^claude-/i.test(modelId)) return false;
 		if (this.customModels.some(m => m.id === modelId)) return true;
-		if (this.isLocalBackendAvailable() && !this.sdkModels.some(m => m.id === modelId)) {
-			if (!/^claude-/i.test(modelId)) return true;
-		}
+		if (this.isLocalBackendAvailable()) return true;
 		return false;
 	}
 
