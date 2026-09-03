@@ -312,6 +312,17 @@ vault scope, folder tree.
   `inlineChat()` doesn't thread structured attachments today and is unaffected (no regression).
   Non-image file attachments still have no delivery path for local providers (no filesystem
   tool) and stay text-path-inlined — unreadable to the model, but no worse than before.
+  **BYOK local provider conversation history (issue #135):** same local-model check
+  (`isLocalModel()`) additionally builds a `history` payload before `Session.send()` — before this
+  fix, the local ReAct loop was fully stateless turn-to-turn (no `resume`, no persisted session,
+  every call rebuilt its `messages` array from just the current prompt). `handleSend()` calls
+  `buildLocalHistory(this.messages.slice(0, -1), vaultBasePath)` (`sessionConfig.ts`) — the slice
+  excludes the current-turn user message `addUserMessage()` already pushed onto `this.messages`
+  earlier in the same call, since that turn is sent via `prompt`, not replayed as history — and
+  passes the result as `Session.send({history})`. See agent-service.md's "BYOK local provider
+  conversation history" section for the full mapping/budget/sizing details (this stays scoped to
+  what's specific to the view: where in `handleSend()` history is built and why the slice excludes
+  the current turn).
 - Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched

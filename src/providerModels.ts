@@ -17,6 +17,23 @@ export interface LocalTool {
 	execute: (args: Record<string, unknown>, app: App) => Promise<string>;
 }
 
+/**
+ * Neutral wire-agnostic history entry for `executeLocalProviderQuery()`'s conversation-history
+ * parameter (#135). Deliberately not `ChatMessage` (`types.ts`) — this module must not import
+ * view types, so the mapping from `ChatMessage` to this shape lives at the call site
+ * (`agentService.ts` / `synapseView.ts`), not here. Only `user`/`assistant` turns are
+ * representable: `ChatMessage` carries no tool-call fields, so prior tool calls/results cannot
+ * be reconstructed, and replaying partial tool state would also break OpenAI-compatible APIs
+ * (a `tool` message needs a `tool_call_id` matching an immediately preceding assistant
+ * `tool_calls` entry that this history has no way to supply). Callers must exclude
+ * `role: 'info'` entries and must not replay `reasoning` as `content`.
+ */
+export interface LocalHistoryMessage {
+	role: 'user' | 'assistant';
+	content: string;
+	images?: Array<{mimeType: string; base64: string}>;
+}
+
 export type ProviderPreset = 'ollama' | 'openai' | 'azure';
 
 /**
@@ -235,7 +252,7 @@ function deriveCatalogueCapabilities(item: CatalogueModelListItem, id: string): 
 	};
 }
 
-const ollamaShowCache = new Map<string, {vision?: boolean; tools?: boolean}>();
+const ollamaShowCache = new Map<string, {vision?: boolean; tools?: boolean; contextLength?: number}>();
 
 /**
  * Cache key is `baseUrl + '\0' + modelId`, not the model id alone (#120) — the same model
@@ -445,6 +462,173 @@ export type LocalQueryResult =
 	| {ok: true; content: string; truncated?: boolean}
 	| {ok: false; error: string};
 
+/**
+ * Character-per-token divisor used to turn a token-based context length into a character
+ * budget for conversation history (#135). Deliberately conservative (i.e. low): ~4 chars/token
+ * is a reasonable average for English prose, but code and CJK text run closer to 2-3
+ * chars/token, and under-budgeting (leaving headroom) is far cheaper than over-budgeting
+ * (silently overflowing the model's real window).
+ */
+const HISTORY_CHARS_PER_TOKEN = 3;
+
+/**
+ * Fixed fallback (chars) for the history budget when **no context-length signal is available at
+ * all** — a backend that publishes nothing (OpenAI/Azure-compatible catalogues don't carry
+ * context length in the `/v1/models` shape this module reads) or an `/api/show` call that
+ * failed/returned nothing. This is a signal-less middle-ground guess, not a safety guarantee:
+ * ~2.7k tokens at the divisor above can still exceed a small local `num_ctx` (commonly
+ * 2048-4096 on Ollama) on its own, before the system prompt, current turn, and response are even
+ * counted. It is used *only* in the no-signal case — whenever a real context length is known
+ * (`computeHistoryCharBudget`'s `advertisedContextLengthTokens` branch), that measured value is
+ * trusted directly instead of being floored up to this constant, since a small measured window is
+ * the strongest possible reason to shrink the budget, not override it.
+ */
+const DEFAULT_HISTORY_CHAR_BUDGET = 8000;
+
+/**
+ * Small floor on the computed (not the fallback) budget — guards only against a technically
+ * nonzero but useless sliver (e.g. a handful of chars) when an advertised context length is
+ * tiny, not a target to reach for. Deliberately much smaller than
+ * `DEFAULT_HISTORY_CHAR_BUDGET`: this floor applies precisely when a real signal says the window
+ * is small, so honoring that signal (even down to "basically no history") is the safe behaviour,
+ * not overriding it upward.
+ */
+const MIN_HISTORY_CHAR_BUDGET = 500;
+
+/**
+ * Hard ceiling on the history budget regardless of how large a model's advertised context length
+ * is. Prevents a single huge advertised max (see the `/api/show` caveat below) from producing an
+ * enormous request even after the safety fraction is applied.
+ */
+const MAX_HISTORY_CHAR_BUDGET = 24000;
+
+/**
+ * Fraction of a model's *advertised* (`/api/show` `model_info["*.context_length"]`) maximum
+ * context length actually used to size the history budget. Deliberately small: Ollama defaults
+ * `num_ctx` (the server's *effective* context window for a request) to a few thousand tokens
+ * regardless of what the model itself can technically support, silently truncating the oldest
+ * tokens off the request when it's exceeded — no error, unlike OpenAI-compatible backends' HTTP
+ * 400 on overflow. The advertised max is therefore only ever a ceiling to stay well under, not
+ * headroom to spend: it accounts for the system prompt, the current turn (which may itself carry
+ * inlined attachment text), and the model's response, none of which this budget (history only)
+ * otherwise reserves for. This fraction must actually bind for small windows too — see
+ * `computeHistoryCharBudget()`, which trusts a known context length directly rather than
+ * flooring it up to `DEFAULT_HISTORY_CHAR_BUDGET`.
+ */
+const OLLAMA_CONTEXT_SAFETY_FRACTION = 0.25;
+
+/**
+ * Sizes the character budget for conversation history from a model's advertised context length
+ * (tokens), when known. See `OLLAMA_CONTEXT_SAFETY_FRACTION` for why this stays well under the
+ * advertised max rather than treating it as available headroom, and `DEFAULT_HISTORY_CHAR_BUDGET`
+ * for the fallback when no context-length signal is available.
+ */
+function computeHistoryCharBudget(advertisedContextLengthTokens?: number): number {
+	if (!advertisedContextLengthTokens || advertisedContextLengthTokens <= 0) {
+		return DEFAULT_HISTORY_CHAR_BUDGET;
+	}
+	const safeTokens = advertisedContextLengthTokens * OLLAMA_CONTEXT_SAFETY_FRACTION;
+	const chars = Math.floor(safeTokens * HISTORY_CHARS_PER_TOKEN);
+	// Trust a known context length directly — clamped only to MIN/MAX_HISTORY_CHAR_BUDGET, never
+	// floored up to DEFAULT_HISTORY_CHAR_BUDGET. Flooring a *measured* small window up to the
+	// signal-less fallback would silently exceed it (e.g. an 8000-char floor is already ~130% of
+	// a 2048-token window before the system prompt/current turn/response are even counted) —
+	// exactly the silent-overflow failure this budget exists to prevent.
+	return Math.max(MIN_HISTORY_CHAR_BUDGET, Math.min(chars, MAX_HISTORY_CHAR_BUDGET));
+}
+
+/**
+ * Drops whole history messages from the oldest end until the remaining set fits within
+ * `budgetChars` (#135). Never truncates mid-message and never drops the system message (which
+ * isn't part of `history` at all — callers push it separately, unconditionally). The single
+ * newest history message is always kept even if it alone exceeds the budget: splitting it is
+ * off the table, and dropping the entire history to zero would defeat the point more than
+ * slightly overshooting the budget on an unavoidable single oversized turn.
+ */
+function buildBudgetedHistory(history: LocalHistoryMessage[], budgetChars: number): LocalHistoryMessage[] {
+	const kept: LocalHistoryMessage[] = [];
+	let total = 0;
+	for (let i = history.length - 1; i >= 0; i--) {
+		const msg = history[i] as LocalHistoryMessage;
+		const len = msg.content.length;
+		if (kept.length > 0 && total + len > budgetChars) {
+			break;
+		}
+		kept.unshift(msg);
+		total += len;
+	}
+	return kept;
+}
+
+/**
+ * Reads a model's advertised maximum context length (tokens) from Ollama's `/api/show`, which
+ * `fetchProviderModels()` already calls per-model for vision/tools capability discovery (`:296`
+ * onward) — this reuses the same endpoint and cache (`ollamaShowCache`), keyed the same way
+ * (`baseUrl + '\0' + model`, #120), just reading a different field off the same response
+ * (`model_info`). The key name for context length varies by model architecture
+ * (`llama.context_length`, `qwen2.context_length`, ...), so this scans for any `model_info` key
+ * ending in `.context_length` rather than hardcoding one family's key. Returns `undefined` (not
+ * a guess) on any failure — `computeHistoryCharBudget()` falls back to the fixed conservative
+ * default in that case, per #135's decision to fall back rather than invent a number.
+ */
+async function getOllamaContextLength(baseUrl: string, model: string, headers: Record<string, string>): Promise<number | undefined> {
+	const cacheKey = ollamaShowCacheKey(baseUrl, model);
+	const cached = ollamaShowCache.get(cacheKey);
+	if (cached && cached.contextLength !== undefined) {
+		return cached.contextLength;
+	}
+	try {
+		const showUrl = `${baseUrl}/api/show`;
+		const showRes = await requestUrl({
+			url: showUrl,
+			method: 'POST',
+			headers: {'Content-Type': 'application/json', ...headers},
+			body: JSON.stringify({model}),
+			throw: false,
+		});
+		if (showRes.status >= 400) return undefined;
+		const showData = showRes.json as {model_info?: Record<string, unknown>};
+		const info = showData.model_info || {};
+		let contextLength: number | undefined;
+		for (const [key, value] of Object.entries(info)) {
+			if (key.endsWith('.context_length') && typeof value === 'number' && value > 0) {
+				contextLength = value;
+				break;
+			}
+		}
+		ollamaShowCache.set(cacheKey, {...cached, contextLength});
+		return contextLength;
+	} catch {
+		// Ignore /api/show network errors — caller falls back to the conservative fixed default.
+		return undefined;
+	}
+}
+
+/**
+ * Builds a single wire-format chat message, handling the same Ollama-vs-OpenAI-compatible image
+ * shape difference for any role/turn (#135 extends the current-turn-only handling this was
+ * factored out of to also cover history entries — see the doc comment at this function's call
+ * sites below for the shape details).
+ */
+function buildLocalWireMessage(
+	role: 'user' | 'assistant',
+	text: string,
+	images: Array<{mimeType: string; base64: string}> | undefined,
+	preset: string
+): {role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>; images?: string[]} {
+	if (images && images.length > 0) {
+		if (preset === 'ollama') {
+			return {role, content: text, images: images.map(img => img.base64)};
+		}
+		const content: Array<{type: string; text?: string; image_url?: {url: string}}> = [{type: 'text', text}];
+		for (const img of images) {
+			content.push({type: 'image_url', image_url: {url: `data:${img.mimeType};base64,${img.base64}`}});
+		}
+		return {role, content};
+	}
+	return {role, content: text};
+}
+
 export function isLocalBackendConfigured(options?: ProviderConfigOptions): boolean {
 	return Boolean(options && options.baseUrl && options.baseUrl.trim().length > 0);
 }
@@ -478,6 +662,15 @@ export async function executeLocalProviderQuery(
 		app?: App;
 		maxTurns?: number;
 		images?: Array<{mimeType: string; base64: string}>;
+		/**
+		 * Prior conversation turns (#135), oldest first. Optional and omitted by one-shot
+		 * callers (triggers, inline edits, the in-process delegation tools) that have no
+		 * ongoing conversation to carry — see `.docs/specs/agent-service.md` "BYOK local
+		 * provider conversation history" for which call sites pass this and why. Budgeted to a
+		 * character budget (see `computeHistoryCharBudget`) and mapped to wire messages the
+		 * same way the current turn is.
+		 */
+		history?: LocalHistoryMessage[];
 	}
 ): Promise<LocalQueryResult> {
 	const baseUrl = (options.baseUrl || '').trim();
@@ -514,28 +707,32 @@ export async function executeLocalProviderQuery(
 	// OpenAI-style `content: [{type: 'image_url', ...}]` arrays — it expects `content: string`
 	// plus a sibling `images: string[]` (raw base64, no data: URI prefix) on the message.
 	// Every other preset goes through an OpenAI-compatible /v1/chat/completions endpoint, which
-	// does accept the `image_url` content-part array. Build whichever shape matches the target
-	// endpoint; calls with no images keep the existing plain-string content unchanged either way.
+	// does accept the `image_url` content-part array. `buildLocalWireMessage()` builds whichever
+	// shape matches the target endpoint for both history entries and the current turn; calls
+	// with no images keep the existing plain-string content unchanged either way.
 	type MessageContent = string | Array<{type: string; text?: string; image_url?: {url: string}}>;
 	const messages: Array<{role: string; content: MessageContent; images?: string[]; tool_calls?: LocalToolCall[]; tool_call_id?: string; name?: string}> = [];
 	if (params.systemPrompt) {
 		messages.push({role: 'system', content: params.systemPrompt});
 	}
-	if (params.images && params.images.length > 0) {
-		if (preset === 'ollama') {
-			messages.push({role: 'user', content: params.prompt, images: params.images.map(img => img.base64)});
-		} else {
-			const content: Array<{type: string; text?: string; image_url?: {url: string}}> = [
-				{type: 'text', text: params.prompt},
-			];
-			for (const img of params.images) {
-				content.push({type: 'image_url', image_url: {url: `data:${img.mimeType};base64,${img.base64}`}});
-			}
-			messages.push({role: 'user', content});
+
+	// Conversation history (#135): character-budgeted, oldest messages dropped whole first, system
+	// message always kept (it isn't part of `history` — pushed unconditionally above). The budget
+	// is sized from the model's advertised context length when we can get one (Ollama's
+	// `/api/show`); every other backend, and any failed lookup, falls back to a fixed conservative
+	// default — see `computeHistoryCharBudget()`/`getOllamaContextLength()`.
+	if (params.history && params.history.length > 0) {
+		const contextLength = preset === 'ollama'
+			? await getOllamaContextLength(baseUrl, targetModel, headers)
+			: undefined;
+		const budgetChars = computeHistoryCharBudget(contextLength);
+		const budgetedHistory = buildBudgetedHistory(params.history, budgetChars);
+		for (const entry of budgetedHistory) {
+			messages.push(buildLocalWireMessage(entry.role, entry.content, entry.images, preset));
 		}
-	} else {
-		messages.push({role: 'user', content: params.prompt});
 	}
+
+	messages.push(buildLocalWireMessage('user', params.prompt, params.images, preset));
 
 	let turn = 0;
 	const maxTurns = params.maxTurns ?? 5;

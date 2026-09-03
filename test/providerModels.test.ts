@@ -449,6 +449,286 @@ describe('catalogue capability metadata (#129)', () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// Local-provider conversation history (issue #135) — the local ReAct loop previously rebuilt
+// its `messages` array from scratch on every call (system + one current-turn user message),
+// discarding all prior turns. `executeLocalProviderQuery()` now accepts an optional `history`
+// param (a neutral `LocalHistoryMessage[]`, never a `ChatMessage[]` — that mapping lives at the
+// call site, not in this module) and threads it into the outgoing request between the system
+// message and the current turn, budgeted to a character budget that drops whole messages from
+// the oldest end.
+// ---------------------------------------------------------------------------
+describe('local-provider conversation history (#135)', () => {
+	it('includes prior turns in the outgoing messages array, in order, between system and current turn', async () => {
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{
+				prompt: 'and then?',
+				systemPrompt: 'You are a helpful assistant.',
+				model: 'test-model',
+				history: [
+					{role: 'user', content: 'first turn'},
+					{role: 'assistant', content: 'first reply'},
+				],
+			}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		expect(call).toBeDefined();
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		expect(body.messages).toEqual([
+			{role: 'system', content: 'You are a helpful assistant.'},
+			{role: 'user', content: 'first turn'},
+			{role: 'assistant', content: 'first reply'},
+			{role: 'user', content: 'and then?'},
+		]);
+	});
+
+	it('carries history for OpenAI-compatible presets too', async () => {
+		const result = await executeLocalProviderQuery(
+			{preset: 'openai', baseUrl: 'http://localhost:9999', apiKey: 'test-token'},
+			{
+				prompt: 'second question',
+				model: 'test-model',
+				history: [{role: 'user', content: 'first question'}, {role: 'assistant', content: 'first answer'}],
+			}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		expect(body.messages?.map(m => m.role)).toEqual(['user', 'assistant', 'user']);
+		expect(body.messages?.[0]?.content).toBe('first question');
+		expect(body.messages?.[2]?.content).toBe('second question');
+	});
+
+	it('omits history from the request when none is passed (default, unchanged behaviour)', async () => {
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{prompt: 'ping', model: 'test-model'}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {messages?: Array<{role: string}>};
+		expect(body.messages).toHaveLength(1);
+		expect(body.messages?.[0]?.role).toBe('user');
+	});
+
+	it('truncates history from the oldest end when it exceeds the character budget, while preserving the system message and never splitting a message', async () => {
+		// No /api/show model_info in this mock, so the budget falls back to the fixed
+		// conservative default (8000 chars) — build a history that comfortably overflows it.
+		const bigTurn = (label: string) => 'x'.repeat(3000) + `-${label}`;
+		const history = [
+			{role: 'user' as const, content: bigTurn('oldest-user')},
+			{role: 'assistant' as const, content: bigTurn('oldest-assistant')},
+			{role: 'user' as const, content: bigTurn('middle-user')},
+			{role: 'assistant' as const, content: bigTurn('middle-assistant')},
+			{role: 'user' as const, content: bigTurn('newest-user')},
+			{role: 'assistant' as const, content: bigTurn('newest-assistant')},
+		];
+
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{
+				prompt: 'current turn',
+				systemPrompt: 'system instructions',
+				model: 'test-model',
+				history,
+			}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		const messages = body.messages || [];
+
+		// System message is always first and always present, regardless of truncation.
+		expect(messages[0]).toEqual({role: 'system', content: 'system instructions'});
+
+		// The oldest history turns were dropped; the newest-surviving history entries are intact,
+		// whole strings (never a split/partial message) — assert by checking the full expected
+		// content string is present verbatim for whichever entries survived.
+		const historyMessages = messages.slice(1, -1);
+		expect(historyMessages.length).toBeGreaterThan(0);
+		expect(historyMessages.length).toBeLessThan(history.length);
+		for (const m of historyMessages) {
+			const content = m.content as string;
+			// Every surviving message is one of the exact original strings (never truncated
+			// mid-message into a partial/different length).
+			expect(history.some(h => h.content === content)).toBe(true);
+		}
+		// Whole-message drop from the oldest end: the newest history entry must have survived.
+		expect(historyMessages.some(m => (m.content as string).endsWith('-newest-assistant'))).toBe(true);
+		// And the oldest entry must not have.
+		expect(historyMessages.some(m => (m.content as string).endsWith('-oldest-user'))).toBe(false);
+
+		// Current turn is always last, unaffected by history truncation.
+		expect(messages[messages.length - 1]).toEqual({role: 'user', content: 'current turn'});
+	});
+
+	it('sizes the Ollama history budget from /api/show model_info context_length, staying well under the advertised max', async () => {
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string; body?: string};
+			if (req.url.endsWith('/api/show')) {
+				// A small advertised context length (2048 tokens) should produce a small budget
+				// scaled to roughly a quarter of it — not the fixed conservative fallback, which
+				// would actually exceed this window (see the dedicated regression test below).
+				return Promise.resolve(jsonResponse(200, {model_info: {'llama.context_length': 2048}}));
+			}
+			if (req.url.endsWith('/api/chat')) {
+				return Promise.resolve(jsonResponse(200, {message: {role: 'assistant', content: 'pong'}}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const history = [{role: 'user' as const, content: 'short prior turn'}];
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{prompt: 'ping', model: 'test-model', history}
+		);
+		expect(result.ok).toBe(true);
+
+		// A small prior turn well within any reasonable budget must still survive.
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		expect(body.messages?.some(m => m.content === 'short prior turn')).toBe(true);
+
+		// /api/show was actually consulted for context length.
+		const showCall = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/show'));
+		expect(showCall).toBeDefined();
+	});
+
+	it('regression: a small advertised context length must NOT be floored up to the signal-less default budget (review round 1 — Math.max(DEFAULT_HISTORY_CHAR_BUDGET, ...) silently exceeded the window)', async () => {
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/api/show')) {
+				// 2048 tokens: the fixed fallback (8000 chars ~ 2667 tokens at the 3-char/token
+				// divisor) is already ~130% of this window on its own — a floor at that constant
+				// would silently exceed the model's entire context before the system prompt,
+				// current turn, or response are even counted.
+				return Promise.resolve(jsonResponse(200, {model_info: {'llama.context_length': 2048}}));
+			}
+			if (req.url.endsWith('/api/chat')) {
+				return Promise.resolve(jsonResponse(200, {message: {role: 'assistant', content: 'pong'}}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		// One big oldest turn and one small newest turn: if the budget were incorrectly floored
+		// up to the 8000-char default, both would survive (well under 8000 chars combined). If
+		// the budget correctly honours the measured ~25%-of-window figure (~1536 chars at 2048
+		// tokens), the big oldest turn must be dropped and only the small newest turn survives.
+		const history = [
+			{role: 'user' as const, content: 'x'.repeat(3000)},
+			{role: 'assistant' as const, content: 'short newest reply'},
+		];
+
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{prompt: 'ping', model: 'test-model', history}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		const messages = body.messages || [];
+
+		// The small newest turn survives...
+		expect(messages.some(m => m.content === 'short newest reply')).toBe(true);
+		// ...but the large oldest turn must have been dropped: a floored-up budget would have
+		// let it through instead.
+		expect(messages.some(m => m.content === 'x'.repeat(3000))).toBe(false);
+
+		// Sanity check on the actual numbers: total history chars sent must stay comfortably
+		// under the fixed signal-less fallback (8000 chars, providerModels.ts's
+		// DEFAULT_HISTORY_CHAR_BUDGET) — proving the measured small window, not that default,
+		// drove the budget. (Not importing the constant itself: it's intentionally unexported —
+		// this asserts the externally observable behaviour instead.)
+		const historyOnlyChars = messages
+			.filter(m => m.content !== 'ping')
+			.reduce((sum, m) => sum + String(m.content).length, 0);
+		expect(historyOnlyChars).toBeLessThan(8000);
+	});
+
+	it('excludes info-role and reasoning content from history — enforced at the call site, not this module (see sessionConfig.ts#buildLocalHistory); this module only ever sees what it is given', async () => {
+		// LocalHistoryMessage has no 'info' role and no reasoning field at the type level —
+		// this test documents that the wire-level mapping is a straight passthrough of
+		// role/content with no reasoning field anywhere in the request.
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{
+				prompt: 'ping',
+				model: 'test-model',
+				history: [{role: 'assistant', content: 'assistant text only'}],
+			}
+		);
+		expect(result.ok).toBe(true);
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<Record<string, unknown>>;
+		};
+		const historyMsg = body.messages?.find(m => m.content === 'assistant text only');
+		expect(historyMsg).toEqual({role: 'assistant', content: 'assistant text only'});
+		expect(historyMsg && 'reasoning' in historyMsg).toBe(false);
+	});
+
+	it('applies the Ollama-native image shape (content + sibling images[]) to history entries carrying images, same as the current turn', async () => {
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{
+				prompt: 'follow-up',
+				model: 'test-model',
+				history: [
+					{role: 'user', content: 'look at this', images: [{mimeType: 'image/png', base64: 'AAAA'}]},
+					{role: 'assistant', content: 'I see a cat.'},
+				],
+			}
+		);
+		expect(result.ok).toBe(true);
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown; images?: string[]}>;
+		};
+		const imageMsg = body.messages?.find(m => m.role === 'user' && m.content === 'look at this');
+		expect(imageMsg?.images).toEqual(['AAAA']);
+	});
+
+	it('applies the OpenAI-compatible image_url content-part shape to history entries carrying images on non-Ollama presets', async () => {
+		const result = await executeLocalProviderQuery(
+			{preset: 'openai', baseUrl: 'http://localhost:9999', apiKey: 'test-token'},
+			{
+				prompt: 'follow-up',
+				model: 'test-model',
+				history: [
+					{role: 'user', content: 'look at this', images: [{mimeType: 'image/png', base64: 'AAAA'}]},
+				],
+			}
+		);
+		expect(result.ok).toBe(true);
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		const imageMsg = body.messages?.[0] as {content: Array<{type: string; text?: string; image_url?: {url: string}}>};
+		expect(imageMsg.content).toEqual([
+			{type: 'text', text: 'look at this'},
+			{type: 'image_url', image_url: {url: 'data:image/png;base64,AAAA'}},
+		]);
+	});
+});
+
 describe('migrateProviderPreset', () => {
 	it('passes surviving presets through unchanged', () => {
 		expect(migrateProviderPreset('ollama')).toEqual({preset: 'ollama', migrated: false, wasAnthropic: false});
