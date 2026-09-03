@@ -136,8 +136,39 @@ export type FetchProviderModelsResult =
 
 const ollamaShowCache = new Map<string, {vision?: boolean; tools?: boolean}>();
 
+/**
+ * Cache key is `baseUrl + '\0' + modelId`, not the model id alone (#120) — the same model
+ * name (e.g. `llama3.1`) can exist on two different Ollama hosts with different capability
+ * metadata, and keying on id alone served stale capabilities from whichever host was queried
+ * first after a `baseUrl` switch.
+ */
+function ollamaShowCacheKey(baseUrl: string, id: string): string {
+	return `${baseUrl}\0${id}`;
+}
+
 export function clearOllamaShowCache(): void {
 	ollamaShowCache.clear();
+}
+
+/**
+ * Small bound-concurrency mapper for `/api/show` calls (#120): running all of them serially
+ * turns a 20-model library into 20 sequential round-trips; running them fully unbounded could
+ * flood the local daemon. `limit` caps how many are in flight at once while still letting each
+ * task fail independently — a slow/failing `/api/show` for one model must not affect the rest.
+ */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let nextIndex = 0;
+	const worker = async () => {
+		while (nextIndex < items.length) {
+			const i = nextIndex++;
+			const item = items[i] as T;
+			results[i] = await fn(item);
+		}
+	};
+	const workers = Array.from({length: Math.min(limit, items.length)}, () => worker());
+	await Promise.all(workers);
+	return results;
 }
 
 export async function fetchProviderModels(options: ProviderConfigOptions): Promise<FetchProviderModelsResult> {
@@ -175,11 +206,10 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 			};
 
 			const rawModels = data.models || [];
-			const models: ModelInfo[] = [];
 
-			for (const item of rawModels) {
+			const models = await mapWithConcurrency(rawModels, 5, async (item): Promise<ModelInfo | null> => {
 				const id = item.name || item.model || '';
-				if (!id) continue;
+				if (!id) return null;
 				const name = item.name || item.model || id;
 
 				const familyList = [
@@ -196,7 +226,8 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 					/vision|llava|minicpm|moondream|gemma3/.test(nameLower);
 				let supportsTools = false;
 
-				const cached = ollamaShowCache.get(id);
+				const cacheKey = ollamaShowCacheKey(baseUrl, id);
+				const cached = ollamaShowCache.get(cacheKey);
 				if (cached) {
 					if (cached.vision !== undefined) isVision = cached.vision;
 					if (cached.tools !== undefined) supportsTools = cached.tools;
@@ -221,7 +252,7 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 							if (Array.isArray(caps)) {
 								if (caps.includes('vision')) isVision = true;
 								if (caps.includes('tools')) supportsTools = true;
-								ollamaShowCache.set(id, {
+								ollamaShowCache.set(cacheKey, {
 									vision: caps.includes('vision'),
 									tools: caps.includes('tools')
 								});
@@ -232,7 +263,7 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 					}
 				}
 
-				models.push({
+				return {
 					id,
 					name,
 					capabilities: {
@@ -243,10 +274,10 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 					},
 					isVision,
 					supportsTools
-				});
-			}
+				};
+			});
 
-			return {ok: true, models};
+			return {ok: true, models: models.filter((m): m is ModelInfo => m !== null)};
 		} catch (e) {
 			return {
 				ok: false,

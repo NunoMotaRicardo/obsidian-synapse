@@ -121,6 +121,30 @@ Locked by `test/providerModels.test.ts`, table-driven over `{preset, baseUrl}` f
 presets across both a bare and a trailing-`/v1` base URL, asserting the model-list URL, chat
 URL, auth header and request body shape.
 
+### Ollama bearer token (issue #120)
+
+The **API key** field is hidden for the `ollama` preset (local daemon needs none, and neither
+does Ollama Cloud — the local daemon brokers that auth; see
+`.docs/decisions/2026-06-26-ollama-cloud-models-support.md`). A separate, optional **Bearer
+token** field is shown only when `providerPreset === 'ollama'`, for the case those two don't
+cover: a remote Ollama sitting behind a reverse proxy or a token-gated tunnel (a common
+home-server setup). Its description says explicitly it's needed only for that case, not for
+local or Ollama Cloud use.
+
+- Backed by the existing `providerBearerToken` setting — no new settings key. It was already
+  declared on `SynapseSettings`, defaulted to `''`, and listed in `SECURE_FIELDS`; `fetch
+  ProviderModels()`/`executeLocalProviderQuery()` already read it (`bearerToken` wins over
+  `apiKey` when both are set, per the SDK's `ProviderConfig` precedence). Only the UI control
+  was missing before this change.
+- Persisted exactly like `providerApiKey`/`anthropicApiKey`/`telegramBotToken`: `updateSecure
+  Field()` writes it to `plugin.settings` in memory and to vault-scoped local storage via
+  `saveSecureField()` (`synapse-secure-providerBearerToken` key), **not** `data.json`. `main.ts#
+  loadSettings()`'s `SECURE_FIELDS` loop already round-trips it on load, same as the other three
+  secrets — no changes needed there.
+- Rendered as a `type="password"` input with `autocomplete="off"`, matching the API key field.
+- Blank (the default) is behaviourally identical to before this change: no `Authorization`
+  header is sent for `ollama` unless a token is present.
+
 ### Azure base-URL UI (issue #119)
 
 Azure OpenAI works **only** against its v1 API surface
@@ -180,8 +204,25 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
 - **Ollama Provider**:
   - Uses a **heuristic-first** approach: checks the model's `details.family` and `details.families` arrays returned by `/api/tags`.
   - Multimodal/vision support is detected if the family/families array contains `"mllama"` or `"clip"`, or if the model name includes known vision keywords (e.g. `vision`, `llava`, `minicpm`, `moondream`, `gemma3`).
-  - If the heuristic is inconclusive (e.g. unknown family/families), the plugin fires a cached, parallel `POST /api/show` request with `{"model": "<name>"}` and inspects the `capabilities` array returned from the response. If `"vision"` is in the list, vision is supported. If `"tools"` is in the list, tool execution is supported.
-  - Results of `/api/show` are cached in memory (at the settings tab or provider model lifecycle level) to avoid redundant network calls.
+  - Regardless of the heuristic result, the plugin also fires a `POST /api/show` request per
+    model with `{"model": "<name>"}` and inspects the `capabilities` array returned from the
+    response — it takes priority over the heuristic when it succeeds. If `"vision"` is in the
+    list, vision is supported. If `"tools"` is in the list, tool execution is supported.
+  - **Bound-concurrent, not serial (issue #120)**: `fetchProviderModels()` dispatches these
+    `/api/show` calls through an internal `mapWithConcurrency()` helper with a cap of 5 in
+    flight at once, rather than `await`ing them one at a time inside the model loop or firing
+    an unbounded `Promise.all`. A 20-model library previously meant 20 sequential round-trips
+    (a Test button that felt broken); the cap keeps a large local library from flooding the
+    daemon while still parallelising the common case. A single model's `/api/show` failing
+    (network error or non-2xx) only affects that model — it falls back to the heuristic result
+    and does not fail discovery for the rest, same as before this change.
+  - **Cache keyed on `baseUrl + '\0' + id`, not `id` alone (issue #120)**: `ollamaShowCache`
+    used to key on the model id only, so switching the Ollama `baseUrl` between two hosts
+    (e.g. laptop → home server) served stale capabilities cached from whichever host was
+    queried first for a same-named model. `ollamaShowCacheKey(baseUrl, id)` composes the key
+    from both so each host gets its own cache entries; `clearOllamaShowCache()` (called by the
+    Test button before every run) still clears the whole map regardless of key shape. Locked by
+    `test/providerModels.test.ts`'s `ollama /api/show discovery (#120)` block.
 
 - **Non-Ollama BYOK Providers (openai, azure)**:
   - Since standard `/v1/models` responses contain no capability fields, name-based regex heuristics are used on the model ID.
