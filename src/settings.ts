@@ -605,7 +605,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			if (this.plugin.settings.providerPreset === 'ollama') {
 				new Setting(providerFieldsEl)
 					.setName('Bearer token')
-					.setDesc('Optional — only needed for a remote or proxied Ollama (e.g. behind a reverse proxy). Not required for local Ollama or Ollama cloud. Stored securely.')
+					.setDesc('Optional — only needed for a remote or proxied Ollama, such as one behind a reverse proxy. A local Ollama needs no token, including for the cloud models it brokers. Stored securely.')
 					.addText(text => {
 						text.inputEl.type = 'password';
 						text.inputEl.autocomplete = 'off';
