@@ -73,21 +73,41 @@ export function migrateProviderPreset(value: string | undefined | null): Provide
 }
 
 /**
- * Azure OpenAI's classic deployment-scoped chat URL
- * (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) is a shape Synapse's
- * URL builder can never produce — it always requests `{base}/v1/models` and
- * `{base}/v1/chat/completions`. A user pasting that URL straight from the Azure portal gets a
- * bare "Test failed: HTTP 404" with no clue why. Detect the two fingerprints of that predictable
- * wrong input (`/deployments/` segment, `api-version=` query) so the caller can surface a message
- * naming the fix (the v1 API base URL) instead. Returns `null` when the URL doesn't match either
- * fingerprint — including when it's empty, since `fetchProviderModels` already reports that case.
+ * Two predictable wrong inputs for the `azure` preset's base URL, both of which Synapse's URL
+ * builder (`{base}/v1/models`, `{base}/v1/chat/completions`) can never turn into a working
+ * request:
+ *
+ * 1. A **classic deployment-scoped URL**
+ *    (`.../openai/deployments/<deployment>/chat/completions?api-version=...`) — flagged by a
+ *    `/deployments/` path segment or an `api-version=` query param.
+ * 2. The **bare portal Endpoint** (`https://<resource>.openai.azure.com/`, no path) — this is
+ *    what the Azure portal actually shows and copies to the clipboard, so it's the *more* likely
+ *    paste, not a corner case. It needs the `/openai` suffix appended to reach the v1 API.
+ *    Detected by host-matching `*.openai.azure.com` first (so we never lecture a user pointing
+ *    the preset at some other proxy/gateway about a shape we can't verify), then checking the
+ *    path doesn't already end in `/openai` (trailing slash allowed).
+ *
+ * Either case gets a message naming its specific fix instead of a bare "Test failed: HTTP 404".
+ * Returns `null` when neither fingerprint matches — including an empty/whitespace URL, since
+ * `fetchProviderModels` already reports that case with "Base URL is required.".
  */
 export function describeAzureBaseUrlIssue(baseUrl: string): string | null {
 	const trimmed = (baseUrl || '').trim();
 	if (!trimmed) return null;
+
 	if (/\/deployments\//i.test(trimmed) || /[?&]api-version=/i.test(trimmed)) {
 		return 'That looks like a classic Azure deployment URL. Use the v1 API base URL instead: https://<resource>.openai.azure.com/openai';
 	}
+
+	try {
+		const url = new URL(trimmed);
+		if (/\.openai\.azure\.com$/i.test(url.hostname) && !/\/openai\/?$/i.test(url.pathname)) {
+			return 'That looks like the Azure resource\'s Endpoint from the portal. Append /openai to it — the v1 API base URL is https://<resource>.openai.azure.com/openai';
+		}
+	} catch {
+		// Not a parseable absolute URL — leave it to fetchProviderModels()'s request failure.
+	}
+
 	return null;
 }
 

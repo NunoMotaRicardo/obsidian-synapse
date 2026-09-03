@@ -471,7 +471,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			} else if (this.plugin.settings.providerPreset === 'openai') {
 				providerDescEl.setText('Works with OpenAI, OpenRouter, LM Studio, llama.cpp, vLLM, Groq, Together, DeepSeek, Mistral, Foundry Local, and anything else exposing /v1/chat/completions.');
 			} else if (this.plugin.settings.providerPreset === 'azure') {
-				providerDescEl.setText('Azure OpenAI: base URL must be the v1 API, https://<resource>.openai.azure.com/openai. The classic deployment-scoped URL (…/openai/deployments/<deployment>/…?api-version=…) is not supported.');
+				providerDescEl.setText('Azure OpenAI: base URL must be the v1 API endpoint, https://<resource>.openai.azure.com/openai — not the bare resource endpoint, and not a classic deployment-scoped URL (…/deployments/<deployment>/…?api-version=…).');
 			} else {
 				providerDescEl.setText('Configure an OpenAI-compatible endpoint or BYOK provider for local or custom models.');
 			}

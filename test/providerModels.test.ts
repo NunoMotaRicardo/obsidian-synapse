@@ -279,4 +279,42 @@ describe('describeAzureBaseUrlIssue', () => {
 		expect(describeAzureBaseUrlIssue('')).toBeNull();
 		expect(describeAzureBaseUrlIssue('   ')).toBeNull();
 	});
+
+	// Review round 1: the bare portal "Endpoint" (no /openai suffix) is the value actually
+	// shown/copyable in the Azure portal, so it's the more likely wrong paste — not the
+	// deployment URL. Must get its own, distinguishable message.
+	describe('bare portal Endpoint (missing /openai suffix)', () => {
+		it('flags the bare endpoint with no trailing slash', () => {
+			const issue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com');
+			expect(issue).toBeTruthy();
+			expect(issue).toContain('/openai');
+		});
+
+		it('flags the bare endpoint with a trailing slash', () => {
+			const issue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com/');
+			expect(issue).toBeTruthy();
+			expect(issue).toContain('/openai');
+		});
+
+		it('is a distinct message from the classic-deployment-URL one', () => {
+			const bareEndpointIssue = describeAzureBaseUrlIssue('https://my-res.openai.azure.com/');
+			const deploymentIssue = describeAzureBaseUrlIssue(
+				'https://my-res.openai.azure.com/openai/deployments/gpt-4o/chat/completions'
+			);
+			expect(bareEndpointIssue).not.toEqual(deploymentIssue);
+		});
+
+		it('does not flag the correct v1 API base URL without a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai')).toBeNull();
+		});
+
+		it('does not flag the correct v1 API base URL with a trailing slash', () => {
+			expect(describeAzureBaseUrlIssue('https://my-res.openai.azure.com/openai/')).toBeNull();
+		});
+
+		it('does not flag a non-Azure host missing an /openai path (cannot verify a shape we do not own)', () => {
+			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com')).toBeNull();
+			expect(describeAzureBaseUrlIssue('https://my-proxy.example.com/')).toBeNull();
+		});
+	});
 });

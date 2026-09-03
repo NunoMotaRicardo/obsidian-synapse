@@ -134,16 +134,26 @@ discoverable instead of a silent 404:
   `ollama`): shows `https://<resource>.openai.azure.com/openai` when `providerPreset === 'azure'`
   (falls through to the `openai`/generic placeholder `https://api.openai.com` otherwise).
 - **Provider description** (`updateProviderDesc()`, same function that already branches on
-  `ollama`/`openai`): for `azure`, names the v1 API requirement and states the classic
-  deployment-scoped URL is unsupported.
+  `ollama`/`openai`): for `azure`, names the v1 API endpoint as the required base URL and calls
+  out both wrong shapes it is not — the bare resource endpoint and a classic deployment-scoped
+  URL — mirroring the two cases `describeAzureBaseUrlIssue()` below detects, so the three UI
+  strings (placeholder, description, Test failure) tell one consistent story.
 - **Friendlier Test failure** — `describeAzureBaseUrlIssue(baseUrl)` (`src/providerModels.ts`)
-  detects the two fingerprints of the classic-URL mistake — a `/deployments/` path segment or an
-  `api-version=` query parameter (case-insensitive) — and returns a message naming the fix
-  instead of the generic `Test failed: HTTP 404`. Returns `null` for an empty/unmatched URL (the
-  empty case is already reported by `fetchProviderModels()`'s "Base URL is required." error).
-  The Test button's failure branch in `settings.ts` calls this only when `providerPreset ===
-  'azure'`, and prefers it over the generic `Test failed: ${error}` notice when it returns a
-  message. Locked by `test/providerModels.test.ts`'s `describeAzureBaseUrlIssue` block.
+  detects two distinct predictable wrong inputs and returns a distinguishable message naming the
+  fix for each, instead of the generic `Test failed: HTTP 404`:
+  - **Classic deployment-scoped URL** — a `/deployments/` path segment or an `api-version=` query
+    parameter (case-insensitive).
+  - **Bare portal Endpoint** (review round 1) — the value the Azure portal actually shows/copies,
+    `https://<resource>.openai.azure.com/` with no path, and therefore the *more* likely wrong
+    paste, not the deployment URL. Detected by host-matching `*.openai.azure.com` first (so a
+    preset pointed at some other proxy/gateway host is never second-guessed about a shape this
+    module can't verify), then checking the path doesn't already end in `/openai` (trailing slash
+    allowed).
+  Returns `null` for an empty/unmatched URL (the empty case is already reported by
+  `fetchProviderModels()`'s "Base URL is required." error) and for a non-Azure host. The Test
+  button's failure branch in `settings.ts` calls this only when `providerPreset === 'azure'`, and
+  prefers it over the generic `Test failed: ${error}` notice when it returns a message. Locked by
+  `test/providerModels.test.ts`'s `describeAzureBaseUrlIssue` block.
 
 Hands-on confirmation that `GET https://<res>.openai.azure.com/openai/v1/models` returns the
 OpenAI-shaped `{data: [...]}` `fetchProviderModels()` parses is **not yet recorded** — no Azure
