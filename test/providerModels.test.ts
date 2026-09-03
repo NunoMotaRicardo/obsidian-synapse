@@ -579,8 +579,8 @@ describe('local-provider conversation history (#135)', () => {
 			const req = request as {url: string; body?: string};
 			if (req.url.endsWith('/api/show')) {
 				// A small advertised context length (2048 tokens) should produce a small budget
-				// that still falls back to (or near) the fixed conservative default, not a huge
-				// one — proving the advertised max is treated as a ceiling, not headroom.
+				// scaled to roughly a quarter of it — not the fixed conservative fallback, which
+				// would actually exceed this window (see the dedicated regression test below).
 				return Promise.resolve(jsonResponse(200, {model_info: {'llama.context_length': 2048}}));
 			}
 			if (req.url.endsWith('/api/chat')) {
@@ -606,6 +606,60 @@ describe('local-provider conversation history (#135)', () => {
 		// /api/show was actually consulted for context length.
 		const showCall = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/show'));
 		expect(showCall).toBeDefined();
+	});
+
+	it('regression: a small advertised context length must NOT be floored up to the signal-less default budget (review round 1 — Math.max(DEFAULT_HISTORY_CHAR_BUDGET, ...) silently exceeded the window)', async () => {
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/api/show')) {
+				// 2048 tokens: the fixed fallback (8000 chars ~ 2667 tokens at the 3-char/token
+				// divisor) is already ~130% of this window on its own — a floor at that constant
+				// would silently exceed the model's entire context before the system prompt,
+				// current turn, or response are even counted.
+				return Promise.resolve(jsonResponse(200, {model_info: {'llama.context_length': 2048}}));
+			}
+			if (req.url.endsWith('/api/chat')) {
+				return Promise.resolve(jsonResponse(200, {message: {role: 'assistant', content: 'pong'}}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		// One big oldest turn and one small newest turn: if the budget were incorrectly floored
+		// up to the 8000-char default, both would survive (well under 8000 chars combined). If
+		// the budget correctly honours the measured ~25%-of-window figure (~1536 chars at 2048
+		// tokens), the big oldest turn must be dropped and only the small newest turn survives.
+		const history = [
+			{role: 'user' as const, content: 'x'.repeat(3000)},
+			{role: 'assistant' as const, content: 'short newest reply'},
+		];
+
+		const result = await executeLocalProviderQuery(
+			{preset: 'ollama', baseUrl: 'http://localhost:11434'},
+			{prompt: 'ping', model: 'test-model', history}
+		);
+		expect(result.ok).toBe(true);
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/api/chat'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {
+			messages?: Array<{role: string; content: unknown}>;
+		};
+		const messages = body.messages || [];
+
+		// The small newest turn survives...
+		expect(messages.some(m => m.content === 'short newest reply')).toBe(true);
+		// ...but the large oldest turn must have been dropped: a floored-up budget would have
+		// let it through instead.
+		expect(messages.some(m => m.content === 'x'.repeat(3000))).toBe(false);
+
+		// Sanity check on the actual numbers: total history chars sent must stay comfortably
+		// under the fixed signal-less fallback (8000 chars, providerModels.ts's
+		// DEFAULT_HISTORY_CHAR_BUDGET) — proving the measured small window, not that default,
+		// drove the budget. (Not importing the constant itself: it's intentionally unexported —
+		// this asserts the externally observable behaviour instead.)
+		const historyOnlyChars = messages
+			.filter(m => m.content !== 'ping')
+			.reduce((sum, m) => sum + String(m.content).length, 0);
+		expect(historyOnlyChars).toBeLessThan(8000);
 	});
 
 	it('excludes info-role and reasoning content from history — enforced at the call site, not this module (see sessionConfig.ts#buildLocalHistory); this module only ever sees what it is given', async () => {

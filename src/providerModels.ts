@@ -472,13 +472,28 @@ export type LocalQueryResult =
 const HISTORY_CHARS_PER_TOKEN = 3;
 
 /**
- * Conservative fixed fallback (chars) for the history budget when no context-length signal is
- * available at all — a backend that publishes nothing (OpenAI/Azure-compatible catalogues don't
- * carry context length in the `/v1/models` shape this module reads) or an `/api/show` call that
- * failed/returned nothing. ~2.7k tokens at the divisor above — small enough to be safe for the
- * smallest commonly-run local models, generous enough to still carry several prior turns.
+ * Fixed fallback (chars) for the history budget when **no context-length signal is available at
+ * all** — a backend that publishes nothing (OpenAI/Azure-compatible catalogues don't carry
+ * context length in the `/v1/models` shape this module reads) or an `/api/show` call that
+ * failed/returned nothing. This is a signal-less middle-ground guess, not a safety guarantee:
+ * ~2.7k tokens at the divisor above can still exceed a small local `num_ctx` (commonly
+ * 2048-4096 on Ollama) on its own, before the system prompt, current turn, and response are even
+ * counted. It is used *only* in the no-signal case — whenever a real context length is known
+ * (`computeHistoryCharBudget`'s `advertisedContextLengthTokens` branch), that measured value is
+ * trusted directly instead of being floored up to this constant, since a small measured window is
+ * the strongest possible reason to shrink the budget, not override it.
  */
 const DEFAULT_HISTORY_CHAR_BUDGET = 8000;
+
+/**
+ * Small floor on the computed (not the fallback) budget — guards only against a technically
+ * nonzero but useless sliver (e.g. a handful of chars) when an advertised context length is
+ * tiny, not a target to reach for. Deliberately much smaller than
+ * `DEFAULT_HISTORY_CHAR_BUDGET`: this floor applies precisely when a real signal says the window
+ * is small, so honoring that signal (even down to "basically no history") is the safe behaviour,
+ * not overriding it upward.
+ */
+const MIN_HISTORY_CHAR_BUDGET = 500;
 
 /**
  * Hard ceiling on the history budget regardless of how large a model's advertised context length
@@ -496,7 +511,9 @@ const MAX_HISTORY_CHAR_BUDGET = 24000;
  * 400 on overflow. The advertised max is therefore only ever a ceiling to stay well under, not
  * headroom to spend: it accounts for the system prompt, the current turn (which may itself carry
  * inlined attachment text), and the model's response, none of which this budget (history only)
- * otherwise reserves for.
+ * otherwise reserves for. This fraction must actually bind for small windows too — see
+ * `computeHistoryCharBudget()`, which trusts a known context length directly rather than
+ * flooring it up to `DEFAULT_HISTORY_CHAR_BUDGET`.
  */
 const OLLAMA_CONTEXT_SAFETY_FRACTION = 0.25;
 
@@ -512,7 +529,12 @@ function computeHistoryCharBudget(advertisedContextLengthTokens?: number): numbe
 	}
 	const safeTokens = advertisedContextLengthTokens * OLLAMA_CONTEXT_SAFETY_FRACTION;
 	const chars = Math.floor(safeTokens * HISTORY_CHARS_PER_TOKEN);
-	return Math.max(DEFAULT_HISTORY_CHAR_BUDGET, Math.min(chars, MAX_HISTORY_CHAR_BUDGET));
+	// Trust a known context length directly — clamped only to MIN/MAX_HISTORY_CHAR_BUDGET, never
+	// floored up to DEFAULT_HISTORY_CHAR_BUDGET. Flooring a *measured* small window up to the
+	// signal-less fallback would silently exceed it (e.g. an 8000-char floor is already ~130% of
+	// a 2048-token window before the system prompt/current turn/response are even counted) —
+	// exactly the silent-overflow failure this budget exists to prevent.
+	return Math.max(MIN_HISTORY_CHAR_BUDGET, Math.min(chars, MAX_HISTORY_CHAR_BUDGET));
 }
 
 /**
