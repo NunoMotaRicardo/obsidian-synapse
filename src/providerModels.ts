@@ -134,6 +134,107 @@ export type FetchProviderModelsResult =
 	| {ok: true; models: ModelInfo[]}
 	| {ok: false; error: string; isOllamaConnectionError?: boolean};
 
+const DEFAULT_REASONING_EFFORTS = ['low', 'medium', 'high'];
+
+function isStringArray(value: unknown): value is string[] {
+	return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+/**
+ * Tightened from the pre-#129 `/o1|o3/i` test, which substring-matched the letter "o" followed
+ * by the digit "1" or "3" anywhere in an id — over-matching (any id happening to contain that
+ * two-character run) with no guarantee of actually catching OpenAI's reasoning family either.
+ * This only matches OpenAI's real `o1`/`o3` naming (`o1`, `o1-mini`, `o1-preview`,
+ * `openai/o3-mini`, …): the token must start the id or immediately follow a `/`, and must itself
+ * be immediately followed by `-` or the end of the string — never a substring mid-word.
+ */
+const HEURISTIC_REASONING_ID_PATTERN = /(?:^|\/)o[13](?:-|$)/i;
+
+/** Unchanged pre-#129 fixed-allowlist heuristic — still used, but now strictly as the last
+ *  resort for catalogues that publish no modality metadata at all (see
+ *  `deriveCatalogueCapabilities` below). */
+const HEURISTIC_VISION_ID_PATTERN = /gpt-4o|gpt-4-vision|claude-3|gemini-1\.5|vision|pixtral/i;
+
+interface CatalogueModelListItem {
+	id?: string;
+	name?: string;
+	/** OpenAI-compatible catalogues may publish real capability metadata on top of the bare
+	 *  `{id, object, created, owned_by}` shape. Field names verified against a live
+	 *  `GET https://openrouter.ai/api/v1/models` response (2026-09-03, #129) — read generically
+	 *  here (not gated on `preset` or hostname) so any backend publishing the same field names
+	 *  on its model objects benefits, not just OpenRouter. */
+	supported_parameters?: unknown;
+	architecture?: {input_modalities?: unknown};
+	reasoning?: {supported_efforts?: unknown};
+}
+
+interface DerivedCapabilities {
+	isVision: boolean;
+	supportsTools: boolean;
+	supportsReasoning: boolean;
+	reasoningEfforts: string[];
+}
+
+/**
+ * Derives per-model capability flags for a `/v1/models` catalogue entry.
+ *
+ * Metadata-first, per field independently — a catalogue entry may publish some capability
+ * fields and omit others (a "partial" catalogue); each capability falls back to a name-based
+ * guess only when its own field is absent, not when the model object as a whole lacks metadata:
+ *   - `supported_parameters: string[]` — presence of `'tools'` means the model accepts an
+ *     OpenAI-style `tools` array on chat requests; presence of `'reasoning'` or
+ *     `'reasoning_effort'` means it accepts a reasoning-effort request parameter.
+ *   - `architecture.input_modalities: string[]` — presence of `'image'` means vision input.
+ *   - `reasoning.supported_efforts: string[]` — the model's own advertised effort levels, used
+ *     verbatim instead of the generic three-level fallback list when present.
+ *
+ * `supportsTools` distinguishes "authoritatively unsupported" from "unknown", rather than
+ * collapsing both into the same flag:
+ *   - `supported_parameters` present and lacking `'tools'` → `false`. The catalogue said no; this
+ *     is the real new behaviour #129 asked for, replacing the old unconditional `true`.
+ *   - `supported_parameters` absent entirely → `true` (optimistic, unchanged from before this
+ *     change). A bare OpenAI-shaped `{id, object, created, owned_by}` catalogue — which is what
+ *     OpenAI's own `/v1/models` and Azure's `/openai/v1/models` both return, i.e. the common case
+ *     for the two flagship presets, not an edge case — carries no information either way, and
+ *     `triggerExecutor.ts`'s `supportsTools = modelInfo?.supportsTools !== false` treats anything
+ *     but a hard `false` as "equip the model with vault tools and start the MCP bridge". Defaulting
+ *     unknown to `false` would silently strip every trigger's tools with no error on exactly the
+ *     backends most users are on — a worse, less debuggable failure than the opaque call-time
+ *     tool-call rejection an over-eager `true` risks on the minority of backends that both omit
+ *     this field and genuinely can't call tools. Ollama's own `false` default is not a
+ *     counter-example: it is backed by a per-model `/api/show` call, i.e. a *confirmed* answer,
+ *     not an absent one, so it isn't the same state as a catalogue that publishes nothing.
+ */
+function deriveCatalogueCapabilities(item: CatalogueModelListItem, id: string): DerivedCapabilities {
+	const rawSupportedParams = item.supported_parameters;
+	const supportedParams = isStringArray(rawSupportedParams) ? rawSupportedParams : undefined;
+
+	const rawInputModalities = item.architecture?.input_modalities;
+	const inputModalities = isStringArray(rawInputModalities) ? rawInputModalities : undefined;
+
+	const rawReasoningEfforts = item.reasoning?.supported_efforts;
+	const catalogueReasoningEfforts = isStringArray(rawReasoningEfforts) ? rawReasoningEfforts : undefined;
+
+	const isVision = inputModalities
+		? inputModalities.includes('image')
+		: HEURISTIC_VISION_ID_PATTERN.test(id);
+
+	const supportsTools = supportedParams
+		? supportedParams.includes('tools')
+		: true;
+
+	const supportsReasoning = supportedParams
+		? (supportedParams.includes('reasoning') || supportedParams.includes('reasoning_effort'))
+		: HEURISTIC_REASONING_ID_PATTERN.test(id);
+
+	return {
+		isVision,
+		supportsTools,
+		supportsReasoning,
+		reasoningEfforts: (supportsReasoning && catalogueReasoningEfforts) ? catalogueReasoningEfforts : DEFAULT_REASONING_EFFORTS,
+	};
+}
+
 const ollamaShowCache = new Map<string, {vision?: boolean; tools?: boolean}>();
 
 /**
@@ -303,10 +404,9 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 			if (res.status >= 400) {
 				return {ok: false, error: `HTTP ${res.status}`};
 			}
-			type ModelListItem = {id?: string; name?: string};
-			const data = res.json as {data?: ModelListItem[]} | ModelListItem[];
+			const data = res.json as {data?: CatalogueModelListItem[]} | CatalogueModelListItem[];
 
-			const rawModels: ModelListItem[] = !Array.isArray(data) && Array.isArray(data.data)
+			const rawModels: CatalogueModelListItem[] = !Array.isArray(data) && Array.isArray(data.data)
 				? data.data
 				: Array.isArray(data) ? data : [];
 			const models: ModelInfo[] = [];
@@ -316,9 +416,7 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 				if (!id) continue;
 				const name = item.name || id;
 
-				const isVision = /gpt-4o|gpt-4-vision|claude-3|gemini-1\.5|vision|pixtral/i.test(id);
-				const supportsReasoning = /o1|o3/i.test(id);
-				const supportsTools = true;
+				const {isVision, supportsTools, supportsReasoning, reasoningEfforts} = deriveCatalogueCapabilities(item, id);
 
 				models.push({
 					id,
@@ -329,7 +427,7 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 							reasoningEffort: supportsReasoning,
 							tools: supportsTools
 						},
-						supportedReasoningEfforts: supportsReasoning ? ['low', 'medium', 'high'] : undefined
+						supportedReasoningEfforts: supportsReasoning ? reasoningEfforts : undefined
 					},
 					isVision,
 					supportsTools
