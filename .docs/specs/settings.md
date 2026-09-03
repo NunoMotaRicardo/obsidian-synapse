@@ -23,8 +23,14 @@ The **Feature Map & Agents** tab replaces the former Models tab:
   - `lyt.agent.md`: Methodology assistant for Linking Your Thinking and Maps of Content (MOCs).
 - **Per-Agent Model Bindings**: Each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the underlying `.agent.md` file in the vault.
 
-For every BYOK preset (`openai`, `azure`, `anthropic`, `ollama`, `foundry-local`,
-`other-openai` — everything except `github`), the Models-tab **Test** button performs a
+`ProviderPreset` (`src/providerModels.ts`) has exactly three values — `'ollama' | 'openai' |
+'azure'` (issue #117) — mapping to two real code paths and one header variant. The dropdown
+label for `openai` is **"OpenAI-compatible"**; its description names the providers it covers:
+"Works with OpenAI, OpenRouter, LM Studio, llama.cpp, vLLM, Groq, Together, DeepSeek, Mistral,
+Foundry Local, and anything else exposing `/v1/chat/completions`." — a documentation-only
+statement, not a code path per provider.
+
+For every BYOK preset (`openai`, `azure`, `ollama`), the Models-tab **Test** button performs a
 **direct model-list fetch** against the configured provider, via
 `fetchProviderModels()` (`src/providerModels.ts`):
 
@@ -71,6 +77,36 @@ The `github` BYOK preset was removed as part of the Claude Agent SDK migration (
 `wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`). Only local/OpenAI-compatible
 presets remain; all use the `fetchProviderModels()` path described above.
 
+### Legacy preset migration (issue #117)
+
+`other-openai`, `foundry-local` and `anthropic` were removed from `ProviderPreset` — the first
+two were byte-identical to `openai` in both `fetchProviderModels()` and
+`executeLocalProviderQuery()` (same URLs, same headers, same body shape), and `anthropic` was
+redundant with (and actively harmful alongside) the first-class Claude auth in the **Claude**
+group — selecting it routed Claude models through the degraded local ReAct loop instead of the
+Agent SDK, and could corrupt `AgentService.isLocalModel()`'s routing for every Claude model in
+the plugin. `src/providerModels.ts#migrateProviderPreset()` resolves a possibly-legacy stored
+value to one of the three current presets:
+
+- `other-openai` → `openai`, silent.
+- `foundry-local` → `openai`, silent.
+- `anthropic` → `openai`, **plus a one-time `Notice`** (shown from `main.ts#loadSettings()`)
+  explaining that Anthropic/Claude models belong in **Settings → Claude → API key**, since this
+  migration silently changes which key drives chat.
+- Any other **non-empty** unrecognized value → `openai` (defensive fallback, same as the
+  pre-existing `options.preset || 'openai'` default used throughout `providerModels.ts`).
+- An **absent/empty/whitespace-only** value → `migrated: false`, i.e. not a legacy alias at
+  all. This is the fresh-install / pre-this-setting case, where `Object.assign({}, DEFAULT_
+  SETTINGS, raw)` has already seeded `providerPreset: 'ollama'` — the migration must not
+  overwrite that with the unrecognized-value fallback (issue #117 review round 1 caught a
+  version that did, defaulting every fresh install to `openai` instead of `ollama`).
+
+`loadSettings()` calls this on every load; when it reports `migrated: true` it overwrites
+`settings.providerPreset` and forces a `saveSettings()` write, so the notice fires exactly once
+per vault — after the first post-upgrade load, the persisted value is already `openai` and the
+legacy branch no longer matches. The `providerPreset` settings key itself is unchanged; only its
+set of valid values narrowed.
+
 `fetchProviderModels()` is also the basis for `buildOnListModels()`'s `onListModels` callback
 (used by `AgentService` for the inline-operations model dropdown today; the sidebar BYOK
 model picker wiring is Phase 2, not yet built — `populateModelSelect()` in
@@ -78,10 +114,12 @@ model picker wiring is Phase 2, not yet built — `populateModelSelect()` in
 
 **Auth headers** (`fetchProviderModels()`, shared by Test and `onListModels`): mirrors the
 SDK's `ProviderConfig` precedence — `bearerToken` wins over `apiKey` when both are set — and
-uses provider-appropriate header shapes: `api-key` for `azure`, `x-api-key` for `anthropic`,
-`Authorization: Bearer <token>` for everything else (`openai`, `ollama`, `foundry-local`,
-`other-openai`). This makes a successful Test a reliable (though not 100% guaranteed —
-deployment-listing APIs like Azure's can differ) predictor of session auth working.
+uses provider-appropriate header shapes: `api-key` for `azure`, `Authorization: Bearer <token>`
+for `openai` and `ollama`. This makes a successful Test a reliable (though not 100%
+guaranteed — deployment-listing APIs like Azure's can differ) predictor of session auth working.
+Locked by `test/providerModels.test.ts`, table-driven over `{preset, baseUrl}` for all three
+presets across both a bare and a trailing-`/v1` base URL, asserting the model-list URL, chat
+URL, auth header and request body shape.
 
 ## Model name field (datalist-backed)
 
@@ -104,7 +142,7 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   - If the heuristic is inconclusive (e.g. unknown family/families), the plugin fires a cached, parallel `POST /api/show` request with `{"model": "<name>"}` and inspects the `capabilities` array returned from the response. If `"vision"` is in the list, vision is supported. If `"tools"` is in the list, tool execution is supported.
   - Results of `/api/show` are cached in memory (at the settings tab or provider model lifecycle level) to avoid redundant network calls.
 
-- **Non-Ollama BYOK Providers (OpenAI, Azure, Anthropic, etc.)**:
+- **Non-Ollama BYOK Providers (openai, azure)**:
   - Since standard `/v1/models` responses contain no capability fields, name-based regex heuristics are used on the model ID.
   - **Vision Support**: Enabled if the model ID matches a case-insensitive regex for known vision-capable models (e.g. `gpt-4o`, `gpt-4-vision`, `claude-3`, `gemini-1.5`, `vision`, `pixtral`).
   - **Reasoning Effort/Summary Support**: Enabled if the model ID matches reasoning models (e.g. `o1`, `o3`).

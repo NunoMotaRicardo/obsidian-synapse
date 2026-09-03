@@ -468,6 +468,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 		const updateProviderDesc = () => {
 			if (this.plugin.settings.providerPreset === 'ollama') {
 				providerDescEl.setText('Ollama integration: make sure Ollama is running locally ("ollama serve"). Pull models via "ollama pull <model>". Default URL is http://localhost:11434.');
+			} else if (this.plugin.settings.providerPreset === 'openai') {
+				providerDescEl.setText('Works with OpenAI, OpenRouter, LM Studio, llama.cpp, vLLM, Groq, Together, DeepSeek, Mistral, Foundry Local, and anything else exposing /v1/chat/completions.');
 			} else {
 				providerDescEl.setText('Configure an OpenAI-compatible endpoint or BYOK provider for local or custom models.');
 			}
@@ -501,11 +503,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 				.addDropdown(dropdown => dropdown
 					.addOptions({
 						ollama: 'Ollama',
-						openai: 'OpenAI',
+						openai: 'OpenAI-compatible',
 						azure: 'Azure OpenAI',
-						anthropic: 'Anthropic (BYOK)',
-						'foundry-local': 'Foundry Local',
-						'other-openai': 'OpenAI Compatible',
 					})
 					.setValue(this.plugin.settings.providerPreset)
 					.onChange(async (value) => {

@@ -17,7 +17,60 @@ export interface LocalTool {
 	execute: (args: Record<string, unknown>, app: App) => Promise<string>;
 }
 
-export type ProviderPreset = 'openai' | 'azure' | 'anthropic' | 'ollama' | 'foundry-local' | 'other-openai';
+export type ProviderPreset = 'ollama' | 'openai' | 'azure';
+
+/**
+ * Legacy `providerPreset` values from older `data.json` files, collapsed into the three
+ * surviving presets (#117). `other-openai` and `foundry-local` were byte-identical to
+ * `openai` in `fetchProviderModels`/`executeLocalProviderQuery` — no behaviour changes.
+ * `anthropic` also maps to `openai`, but changes which API key drives chat (previously
+ * `providerApiKey` via the hand-rolled local-provider loop; now none, until the user
+ * reconfigures) — callers migrating this value should surface that to the user once.
+ */
+const LEGACY_PROVIDER_PRESET_MAP: Record<string, ProviderPreset> = {
+	'other-openai': 'openai',
+	'foundry-local': 'openai',
+	'anthropic': 'openai',
+};
+
+export interface ProviderPresetMigrationResult {
+	preset: ProviderPreset;
+	/** True when the stored value was a legacy alias and had to be remapped. */
+	migrated: boolean;
+	/** True specifically when the legacy value was `anthropic` — callers should notify the user. */
+	wasAnthropic: boolean;
+}
+
+/**
+ * Resolves a possibly-legacy `providerPreset` value (as read from `data.json`) to one of
+ * the three current presets. Silent for `other-openai`/`foundry-local`; callers should show
+ * a one-time notice when `wasAnthropic` is true, since that migration changes which key
+ * drives chat (see `.docs/specs/settings.md`).
+ *
+ * An absent/empty/whitespace-only value is **not** a legacy alias — it means no
+ * `providerPreset` was ever persisted (fresh install, or a `data.json` that predates this
+ * setting), and `migrated: false` here tells the caller to leave `DEFAULT_SETTINGS`'s
+ * `'ollama'` default untouched rather than overwriting it with the generic-unknown fallback
+ * (issue #117 review round 1 — a prior version of this function conflated "nothing stored"
+ * with "unrecognized legacy string" and silently defaulted fresh installs to `openai`).
+ */
+export function migrateProviderPreset(value: string | undefined | null): ProviderPresetMigrationResult {
+	const raw = (value || '').trim().toLowerCase();
+	if (!raw) {
+		return {preset: 'ollama', migrated: false, wasAnthropic: false};
+	}
+	if (raw === 'ollama' || raw === 'openai' || raw === 'azure') {
+		return {preset: raw, migrated: false, wasAnthropic: false};
+	}
+	const mapped = LEGACY_PROVIDER_PRESET_MAP[raw];
+	if (mapped) {
+		return {preset: mapped, migrated: true, wasAnthropic: raw === 'anthropic'};
+	}
+	// Genuinely unrecognized non-empty value (corrupted or from a future version): fall back
+	// to the generic path, matching the `options.preset || 'openai'` default used elsewhere
+	// in this module.
+	return {preset: 'openai', migrated: true, wasAnthropic: false};
+}
 
 export interface ProviderConfigOptions {
 	// `(string & {})` (not bare `string`) keeps editor autocomplete for the known
@@ -162,9 +215,6 @@ export async function fetchProviderModels(options: ProviderConfigOptions): Promi
 		if (token) {
 			if (preset === 'azure') {
 				headers['api-key'] = token;
-			} else if (preset === 'anthropic') {
-				headers['x-api-key'] = token;
-				headers['anthropic-version'] = '2023-06-01';
 			} else {
 				headers['Authorization'] = `Bearer ${token}`;
 			}
@@ -270,9 +320,6 @@ export async function executeLocalProviderQuery(
 	if (token) {
 		if (preset === 'azure') {
 			headers['api-key'] = token;
-		} else if (preset === 'anthropic') {
-			headers['x-api-key'] = token;
-			headers['anthropic-version'] = '2023-06-01';
 		} else {
 			headers['Authorization'] = `Bearer ${token}`;
 		}
