@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../src/agentService';
+import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, AgentService} from '../src/agentService';
 
 // ---------------------------------------------------------------------------
 // parseTodoWritePayload — normalizes a TodoWrite tool call's `input` into a
@@ -174,5 +174,57 @@ describe('parseTaskUpdateInput', () => {
 	it('returns a dependency-only update with just the taskId (no status/subject/activeForm)', () => {
 		// e.g. {taskId: '2', addBlockedBy: ['1']} — dependency fields aren't tracked in the panel
 		expect(parseTaskUpdateInput({taskId: '2', addBlockedBy: ['1']})).toEqual({taskId: '2'});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// AgentService#isLocalModel — issue #118. A local provider's `/v1/models`
+// catalogue (setCustomModels()) can contain ids that collide with, or merely
+// resemble, genuine Claude model ids (an SDK-known id, or any `claude-*`-shaped
+// id — real SDK ids are always `claude-*`, so that prefix guard is what actually
+// protects a Claude id even before a `fetchModels()` call has populated the
+// SDK model list). Those must never be classified "local" regardless of what a
+// provider catalogue happens to contain, or the plugin silently drops Claude
+// models into the degraded local one-shot loop (no skills, subagents,
+// sessions, permissions or streaming).
+// ---------------------------------------------------------------------------
+
+describe('AgentService#isLocalModel', () => {
+	function makeLocalBackedService(): AgentService {
+		return new AgentService({
+			providerConfig: {preset: 'openai', baseUrl: 'http://localhost:1234/v1'},
+		});
+	}
+
+	it('returns undefined/false for an undefined model id', () => {
+		const service = makeLocalBackedService();
+		expect(service.isLocalModel(undefined)).toBe(false);
+	});
+
+	it('never classifies a claude-* (SDK-shaped) model id as local, even if it also appears in customModels', () => {
+		const service = makeLocalBackedService();
+		// Simulates a provider catalogue that happens to echo a real Claude id
+		// (e.g. the removed `anthropic` preset's /v1/models response).
+		service.setCustomModels([{id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5'}]);
+		expect(service.isLocalModel('claude-sonnet-4-5-20250929')).toBe(false);
+	});
+
+	it('classifies a genuine custom/local model id as local', () => {
+		const service = makeLocalBackedService();
+		service.setCustomModels([{id: 'llama3.1:8b', name: 'Llama 3.1 8B'}]);
+		expect(service.isLocalModel('llama3.1:8b')).toBe(true);
+	});
+
+	it('classifies an aggregator-style id (e.g. anthropic/claude-sonnet-4) as local', () => {
+		const service = makeLocalBackedService();
+		// OpenRouter-style ids are namespaced (`anthropic/claude-sonnet-4`), so they don't
+		// match the /^claude-/i guard and are treated as a distinct local/custom model.
+		service.setCustomModels([{id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4 (via OpenRouter)'}]);
+		expect(service.isLocalModel('anthropic/claude-sonnet-4')).toBe(true);
+	});
+
+	it('does not classify a claude-* id as local when no local backend is configured', () => {
+		const service = new AgentService();
+		expect(service.isLocalModel('claude-sonnet-4-5-20250929')).toBe(false);
 	});
 });

@@ -351,14 +351,31 @@ turn:
   dependency graph. The view only applies an update if `taskId` already exists in `TaskPlan`
   (ignores updates to unknown/untracked ids rather than fabricating a placeholder entry).
 
-## BYOK local provider injection
+## BYOK local provider routing
 
-When a local provider is configured (Ollama, Foundry Local, or other OpenAI-compatible endpoint),
-`buildEnv(forLocalModel = true)` injects the provider base URL and API key into the subprocess
-environment (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
+Local/BYOK models (Ollama, or another OpenAI-compatible endpoint) never flow through the Claude
+CLI subprocess — `buildEnv()` only ever sets `ANTHROPIC_API_KEY` for `authType: 'apiKey'` auth and
+otherwise inherits the process env; it does **not** repoint `ANTHROPIC_BASE_URL` at a local
+backend, because the CLI speaks the Anthropic Messages API and cannot talk to an OpenAI-shaped
+`/v1` endpoint. (An earlier `buildEnv(forLocalModel = true)` branch attempted this — issue #118
+removed it as dead code; no caller passed `true`.)
 
-This allows the Claude CLI to route through the local endpoint for sessions that use a
-locally-backed agent.
+Instead, `isLocalModel(modelId)` decides per-model whether a query is routed to
+`executeLocalProviderQuery()` (`providerModels.ts`) — a separate, hand-rolled ReAct loop that talks
+directly to the configured provider's OpenAI-compatible `/v1/chat/completions` endpoint — or to the
+real Agent SDK via the CLI. `isLocalModel` deliberately checks `sdkModels` and the `/^claude-/i`
+prefix guard **before** `customModels` membership: `customModels` is whatever the provider's last
+`/v1/models` response contained (`setCustomModels()`), and a provider/aggregator catalogue can
+return ids that collide with, or resemble, genuine Claude ids (e.g. an OpenRouter-style
+`anthropic/claude-*` id, or — historically — the removed `anthropic` BYOK preset echoing real
+`claude-*` ids back). Checking the SDK-known/Claude-shaped guards first ensures such an id can
+never be misrouted into the degraded local loop (no skills, subagents, sessions, permission modes
+or streaming), regardless of what a local catalogue happens to contain.
+
+Full feature parity for a local model — running it through the actual Agent SDK — requires a
+Messages-API-speaking gateway (e.g. LiteLLM) in front of it and `ANTHROPIC_BASE_URL` pointed at
+that gateway; that is a distinct, not-yet-built feature (see
+`.docs/research/2026-09-03-provider-matrix.md` §6), not something `buildEnv()` should approximate.
 
 ## Connection error handling
 
