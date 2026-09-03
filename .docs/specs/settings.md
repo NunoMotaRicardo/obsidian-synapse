@@ -231,9 +231,10 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   off any catalogue entry that publishes them, not gated on `preset` or hostname, so any
   OpenAI-compatible backend that returns the same field names benefits, not just OpenRouter:
   - **`supported_parameters: string[]`** on the model object — `'tools'` present means the model
-    accepts an OpenAI-style `tools` array; `'reasoning'` or `'reasoning_effort'` present means it
-    accepts a reasoning-effort request parameter. Governs both **Tool support** and **Reasoning
-    Effort support**.
+    accepts an OpenAI-style `tools` array; `'tools'` **absent from a present array** is treated as
+    an authoritative "no" (see **Tools**, below). `'reasoning'` or `'reasoning_effort'` present
+    means it accepts a reasoning-effort request parameter. Governs both **Tool support** and
+    **Reasoning Effort support**.
   - **`architecture.input_modalities: string[]`** — `'image'` present means vision input.
     Governs **Vision support**.
   - **`reasoning.supported_efforts: string[]`**, when present, is used verbatim as the model's
@@ -246,19 +247,27 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
     - **Vision**: the pre-#129 fixed-allowlist regex on the model ID (`gpt-4o`, `gpt-4-vision`,
       `claude-3`, `gemini-1.5`, `vision`, `pixtral`), unchanged, now scoped as a last resort
       rather than the default path.
-    - **Tools**: defaults to **`false`** — a deliberate change from the pre-#129 unconditional
-      `true`. An assumed-supported tool call the model actually rejects fails at call time with an
-      opaque provider error; assuming unsupported only hides a UI affordance that might have
-      worked. This also matches the Ollama path above, which already defaults `false` and only
-      flips to `true` on a confirmed `/api/show` capability.
+    - **Tools**: `supported_parameters` present and lacking `'tools'` → `false` — this is the real
+      new, deliberate behaviour #129 asked for: the catalogue authoritatively said no.
+      `supported_parameters` **absent entirely** → `true` (optimistic, unchanged from before this
+      change), not `false`. A bare OpenAI-shaped `{id, object, created, owned_by}` catalogue —
+      what OpenAI's own `/v1/models` and Azure's `/openai/v1/models` both return, i.e. the common
+      case for the two flagship presets, not an edge case — carries no information either way.
+      `triggerExecutor.ts`'s `const supportsTools = modelInfo?.supportsTools !== false;` treats
+      anything but a hard `false` as "equip this model with vault tools and start the MCP bridge";
+      defaulting an *absent* field to `false` would silently drop every trigger's vault tools with
+      no error on exactly the backends most users are on. Ollama's own `false` default (above) is
+      not a counter-example: it is backed by a per-model `/api/show` call — a *confirmed* answer —
+      not an *absent* one, so the two states are not the same and must not produce the same flag.
     - **Reasoning**: tightened from the pre-#129 `/o1|o3/i` substring test (matched the letters
       "o1"/"o3" anywhere in an id) to `/(?:^|\/)o[13](?:-|$)/i` — the token must start the id or
       immediately follow a `/`, and must itself be immediately followed by `-` or end-of-string,
       so it recognizes OpenAI's real `o1`/`o1-mini`/`o1-preview`/`o3`/`o3-mini`/`openai/o3-...`
       naming without matching an unrelated id that merely contains that two-character run.
   - Locked by `test/providerModels.test.ts`'s `catalogue capability metadata (#129)` block: full
-    metadata, a model with metadata present but no tools/reasoning support, a bare
-    OpenAI-shaped catalogue with no capability fields, the tightened reasoning regex's
+    metadata, a model with `supported_parameters` present but lacking `tools`/`reasoning` (the
+    authoritative-unsupported case), a bare OpenAI-shaped catalogue with no capability fields at
+    all (asserting `supportsTools: true`, not `false`), the tightened reasoning regex's
     non-over-matching, and a partial catalogue exercising per-field-independent fallback.
 
 ## Invariants

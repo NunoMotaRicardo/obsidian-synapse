@@ -188,12 +188,22 @@ interface DerivedCapabilities {
  *   - `reasoning.supported_efforts: string[]` — the model's own advertised effort levels, used
  *     verbatim instead of the generic three-level fallback list when present.
  *
- * `supportsTools` falls back to `false` (conservative), not the old unconditional `true`: an
- * assumed-supported tool call that the model actually rejects fails at call time with an opaque
- * provider error, whereas assuming unsupported just hides a UI affordance that might have
- * worked. This also matches the Ollama path above, which already defaults `false` and only
- * flips to `true` on a confirmed `/api/show` capability — this keeps that same posture for
- * every other preset instead of being the one path that guesses optimistically.
+ * `supportsTools` distinguishes "authoritatively unsupported" from "unknown", rather than
+ * collapsing both into the same flag:
+ *   - `supported_parameters` present and lacking `'tools'` → `false`. The catalogue said no; this
+ *     is the real new behaviour #129 asked for, replacing the old unconditional `true`.
+ *   - `supported_parameters` absent entirely → `true` (optimistic, unchanged from before this
+ *     change). A bare OpenAI-shaped `{id, object, created, owned_by}` catalogue — which is what
+ *     OpenAI's own `/v1/models` and Azure's `/openai/v1/models` both return, i.e. the common case
+ *     for the two flagship presets, not an edge case — carries no information either way, and
+ *     `triggerExecutor.ts`'s `supportsTools = modelInfo?.supportsTools !== false` treats anything
+ *     but a hard `false` as "equip the model with vault tools and start the MCP bridge". Defaulting
+ *     unknown to `false` would silently strip every trigger's tools with no error on exactly the
+ *     backends most users are on — a worse, less debuggable failure than the opaque call-time
+ *     tool-call rejection an over-eager `true` risks on the minority of backends that both omit
+ *     this field and genuinely can't call tools. Ollama's own `false` default is not a
+ *     counter-example: it is backed by a per-model `/api/show` call, i.e. a *confirmed* answer,
+ *     not an absent one, so it isn't the same state as a catalogue that publishes nothing.
  */
 function deriveCatalogueCapabilities(item: CatalogueModelListItem, id: string): DerivedCapabilities {
 	const rawSupportedParams = item.supported_parameters;
@@ -211,7 +221,7 @@ function deriveCatalogueCapabilities(item: CatalogueModelListItem, id: string): 
 
 	const supportsTools = supportedParams
 		? supportedParams.includes('tools')
-		: false;
+		: true;
 
 	const supportsReasoning = supportedParams
 		? (supportedParams.includes('reasoning') || supportedParams.includes('reasoning_effort'))
