@@ -1,0 +1,71 @@
+name: Bug report
+description: Report something that's broken in Synapse.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much of this as you can.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: Tell us what you saw, and what you expected to see.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Open the Synapse chat panel
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant console output
+      description: Any relevant errors from the developer console (Ctrl/Cmd+Shift+I), especially lines starting with `[synapse]`. This will be auto-formatted as code.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: synapse-version
+    attributes:
+      label: Synapse version
+      description: Found in Settings → Community plugins → Synapse, or in `manifest.json`.
+      placeholder: "1.3.0"
+    validations:
+      required: true
+  - type: input
+    id: obsidian-version
+    attributes:
+      label: Obsidian version
+      description: Found in Settings → About.
+      placeholder: "1.13.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else?
+      description: Any other context, screenshots, or vault configuration details that might help.
+    validations:
+      required: false

@@ -987,6 +987,11 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		updateConnectButton();
 
+		const telegramWarning = panel.createDiv({cls: 'synapse-settings-warning'});
+		telegramWarning.createEl('p', {
+			text: 'Anyone on the allowed users list gets unattended, unapproved, full read/write agent access to this vault from their phone — messages run with permissions bypassed, no per-action approval.',
+		});
+
 		new Setting(panel)
 			.setName('Bot identifier')
 			.setDesc('The unique identifier for your bot.')
