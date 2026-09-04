@@ -38,7 +38,11 @@ jobs:
                   node-version: 22.x
                   cache: "npm"
             - run: npm ci
-            - run: npm run test:coverage | tee coverage-output.txt
+            # `shell: bash` sets -o pipefail; without it the pipe to tee would mask a
+            # non-zero exit from vitest and this job would go green on a crashed run.
+            - name: Run tests with coverage
+              shell: bash
+              run: npm run test:coverage | tee coverage-output.txt
             - name: Publish coverage summary
               if: always()
               run: |
