@@ -37,7 +37,8 @@ CLI process per query.
 | bots | [bots-triggers.md](specs/bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
 | triggers | [bots-triggers.md](specs/bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
 | mcp-bridge | [mcp-bridge.md](specs/mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
-| batch-loops | [batch-loops.md](specs/batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file execution, report writing |
+| run-executor | [run-executor.md](specs/run-executor.md) | `src/runExecutor.ts` | Shared per-item run pipeline (substitute → route Claude/local → run → apply write mode → append report), used by triggers and batch loops |
+| batch-loops | [batch-loops.md](specs/batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file orchestration (budget, cancellation, progress) over `run-executor` |
 | lock-manager | [lock-manager.md](specs/lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (triggers, batch loops, config writes) |
 | vault-paths | [vault-paths.md](specs/vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, reports folder, today's-date helper |
 
