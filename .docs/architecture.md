@@ -26,19 +26,19 @@ CLI process per query.
 | Module | Spec | Source | Responsibility |
 |---|---|---|---|
 | main | — | `src/main.ts` | Plugin lifecycle, service wiring, commands, ribbon |
-| agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
-| runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
-| settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
-| provider-models | [settings.md](settings.md) | `src/providerModels.ts` | Shared BYOK model-list fetch (`/v1/models`, `/api/tags`), used by Settings Test button and `onListModels` |
-| config-writer | [config-loader.md](config-loader.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
-| chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
-| modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
-| editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
-| bots | [bots-triggers.md](bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
-| triggers | [bots-triggers.md](bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
-| mcp-bridge | [mcp-bridge.md](mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
-| batch-loops | [batch-loops.md](batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file execution, report writing |
-| lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (triggers, batch loops, config writes) |
+| agent-service | [agent-service.md](specs/agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
+| runtime-manager | [runtime-manager.md](specs/runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
+| settings | [settings.md](specs/settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
+| provider-models | [settings.md](specs/settings.md) | `src/providerModels.ts` | Shared BYOK model-list fetch (`/v1/models`, `/api/tags`), used by Settings Test button and `onListModels` |
+| config-writer | [config-writer.md](specs/config-writer.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
+| chat-view | [chat-view.md](specs/chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
+| modals | [chat-view.md](specs/chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
+| editor | [editor.md](specs/editor.md) | `src/editor/*` | Context-menu AI actions |
+| bots | [bots-triggers.md](specs/bots-triggers.md) | `src/bots/*` | Telegram bot front-end |
+| triggers | [bots-triggers.md](specs/bots-triggers.md) | `src/triggers.ts` | Vault event watcher, trigger matching, glob patterns |
+| mcp-bridge | [mcp-bridge.md](specs/mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
+| batch-loops | [batch-loops.md](specs/batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file execution, report writing |
+| lock-manager | [lock-manager.md](specs/lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (triggers, batch loops, config writes) |
 
 ## Vault customization (`_synapse/`)
 
@@ -51,7 +51,7 @@ The `_synapse/` folder in the user's vault is registered as an SDK local plugin 
 
 No custom config loader. The plugin provides write-side utilities (`configWriter.ts`) for the
 self-improve feature and first-run seeding. A lightweight directory scan populates toolbar
-dropdowns (display-only). See [config-loader.md](config-loader.md) for details.
+dropdowns (display-only). See [config-writer.md](specs/config-writer.md) for details.
 
 ## Key dependency facts (June 2026)
 
