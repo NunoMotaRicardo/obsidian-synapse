@@ -140,28 +140,86 @@ describe('parseFrontmatter', () => {
 		expect(meta['description']).toBe('  padded value  ');
 	});
 
-	// --- Suspected defect (documented, not fixed — see final report) ---
+	// --- Escaping round-trip (#161) ---
 	//
-	// serializeFmField escapes embedded double quotes as `\"` when it quotes a
-	// value (src/configWriter.ts:222: `str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')`),
-	// but parseFrontmatter only strips the *outer* quote characters — it never
-	// un-escapes `\"` back to `"` or `\\` back to `\`. A value containing a
-	// literal double quote therefore does NOT round-trip: the escaped
-	// backslash-quote sequence comes back out verbatim instead of the original
-	// character. This test pins down *current* behavior (the mismatch) rather
-	// than asserting the (missing) correct round-trip.
-	it('documents that a value containing a double quote does not round-trip cleanly (suspected defect)', async () => {
+	// serializeFmField escapes embedded backslashes and double quotes (`\` -> `\\`,
+	// `"` -> `\"`) when it quotes a value, and parseFrontmatter un-escapes them
+	// back in a single pass when it strips the outer quotes. Write and read must
+	// stay exact inverses of each other.
+	it('round-trips a value containing a double quote', async () => {
 		const app = createMockApp() as unknown as App;
 		const original = 'He said "hi" to me';
 		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Quote Bug',
+			name: 'Quote Value',
 			description: original,
 			instructions: '',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
-		expect(meta['description']).not.toBe(original);
-		expect(meta['description']).toBe('He said \\"hi\\" to me');
+		expect(meta['description']).toBe(original);
+	});
+
+	it('round-trips a value containing backslashes', async () => {
+		const app = createMockApp() as unknown as App;
+		// The colon is what triggers quoting/escaping for this value.
+		const original = 'C:\\Users\\me: path';
+		const path = await writeAgent(app, '_synapse/agents', {
+			name: 'Backslash Value',
+			description: original,
+			instructions: '',
+		});
+		const raw = await readVaultFile(app, path);
+		const {meta} = parseFrontmatter(raw);
+		expect(meta['description']).toBe(original);
+	});
+
+	it('round-trips a value ending in a backslash immediately before a quote (single-pass un-escape trap)', async () => {
+		const app = createMockApp() as unknown as App;
+		// A naive two-step un-escape (`\\` -> `\` fully, then `\"` -> `"`) mis-pairs this:
+		// the escaped form is `...end\\\"` (escaped trailing backslash + escaped quote), and
+		// replacing all `\\` first turns it into `...end\"` before the quote pass ever runs,
+		// which then wrongly consumes the literal backslash as part of a fake escape sequence.
+		const original = 'value ending in backslash\\" and more';
+		const path = await writeAgent(app, '_synapse/agents', {
+			name: 'Backslash Before Quote',
+			description: original,
+			instructions: '',
+		});
+		const raw = await readVaultFile(app, path);
+		const {meta} = parseFrontmatter(raw);
+		expect(meta['description']).toBe(original);
+	});
+
+	it('leaves an unquoted value containing a backslash unchanged (no colon/quote/newline to trigger escaping)', async () => {
+		const app = createMockApp() as unknown as App;
+		const original = 'Users\\me\\docs';
+		const path = await writeAgent(app, '_synapse/agents', {
+			name: 'Plain Backslash',
+			description: original,
+			instructions: '',
+		});
+		const raw = await readVaultFile(app, path);
+		// Confirm it was written unquoted (the case that was already correct and must not regress).
+		expect(raw).toContain(`description: ${original}`);
+		const {meta} = parseFrontmatter(raw);
+		expect(meta['description']).toBe(original);
+	});
+
+	it('keeps a quoted+escaped value byte-identical across writeAgent and repeated modifyArtifact cycles', async () => {
+		const app = createMockApp() as unknown as App;
+		const original = 'C:\\Users\\me: path with "quotes"';
+		const path = await writeAgent(app, '_synapse/agents', {
+			name: 'Cycle Value',
+			description: original,
+			instructions: '',
+		});
+
+		for (let i = 0; i < 4; i++) {
+			await modifyArtifact(app, path, {description: original});
+			const raw = await readVaultFile(app, path);
+			const {meta} = parseFrontmatter(raw);
+			expect(meta['description']).toBe(original);
+		}
 	});
 });
 

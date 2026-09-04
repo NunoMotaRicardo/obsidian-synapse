@@ -67,6 +67,33 @@ Write operations for the self-improve feature. All output is SDK-native format.
 - `modifyArtifact` uses `parseFrontmatter` for in-place patching.
 - No MCP config mutation — `.mcp.json` is user-edited.
 
+### Frontmatter value escaping (write ↔ read must be inverses)
+
+`serializeFmField` quotes a scalar value when it contains a colon, a double quote, a newline,
+or has leading/trailing whitespace (`needsQuotes = /[:"\n]/.test(str) || str !== str.trim()`).
+Only quoted values are escaped: `\` → `\\` and `"` → `\"`. Unquoted values (the common case —
+e.g. a Windows path with no colon) are written verbatim and must never be touched by the
+un-escape step.
+
+`parseFrontmatter` strips the surrounding quotes and, for double-quoted values only, un-escapes
+`\\` and `\"` back to `\` and `"` in a **single left-to-right regex pass**
+(`/\\(\\|")/g`), not two sequential `.replace()` calls. A two-step un-escape can mis-pair a
+literal backslash that sits immediately before an escaped quote; the single alternation-regex
+pass consumes each two-character escape token (`\\` or `\"`) atomically, left to right, which is
+the correct inverse of how `serializeFmField` produced it.
+
+Write and read are round-trip inverses for every string value, including one that already went
+through a prior `writeAgent`/`modifyArtifact` cycle — `modifyArtifact` reads (un-escapes),
+merges, and re-serializes (re-escapes), so an un-escape bug compounds (doubles) on every cycle
+rather than staying constant. See issue #161.
+
+**Existing on-disk artifacts are not migrated.** A doubled backslash already written by the old
+(unpaired) code path is indistinguishable from a legitimate single escaped backslash — there is
+no reliable way to tell "this was corrupted by the old bug" from "the user's actual value
+contains `\\`". Attempting to "repair" old files on read would silently corrupt values that were
+always correct. Only newly written/modified artifacts benefit from the fix; pre-existing
+corrupted values must be fixed by the user re-entering them.
+
 ## Vault structure scanner
 
 `scanVaultStructure(app, synapseFolder)` scans top-level vault folders (name + child count),
