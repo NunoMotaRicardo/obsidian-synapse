@@ -1,4 +1,4 @@
-import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
+import {App, Notice, PluginSettingTab, Setting, TFile, debounce, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, ProviderPreset} from "./providerModels";
@@ -37,7 +37,6 @@ export interface SynapseSettings {
 	providerApiKey: string;
 	/** Provider bearer token (stored securely via local storage). */
 	providerBearerToken: string;
-	synapseFolder: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
@@ -143,7 +142,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	providerBaseUrl: 'http://localhost:11434',
 	providerApiKey: '',
 	providerBearerToken: '',
-	synapseFolder: SYNAPSE_FOLDER,
 	toolApproval: 'ask',
 	inlineModel: '',
 	featureAgents: {
@@ -295,9 +293,25 @@ export async function updateAgentModelFile(app: App, filePath: string, newModel:
 export class SynapseSettingTab extends PluginSettingTab {
 	plugin: SynapsePlugin;
 
+	/**
+	 * Debounces `initAgentService()` calls triggered by the provider Base URL / API key text
+	 * fields (issue #148) so a full teardown-and-rebuild of `AgentService` — plus the
+	 * `fetchProviderModels()` discovery request it fires — happens once after the user stops
+	 * typing, not once per keystroke. `resetTimer: true` means it fires 500ms after the *last*
+	 * call, not the first. `hide()` below cancels any pending call so it can't fire against a
+	 * torn-down settings tab / stale `this.plugin` state after the tab closes.
+	 */
+	private readonly debouncedInitAgentService = debounce(() => {
+		void this.plugin.initAgentService();
+	}, 500, true);
+
 	constructor(app: App, plugin: SynapsePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	hide(): void {
+		this.debouncedInitAgentService.cancel();
 	}
 
 	display(): void {
@@ -585,7 +599,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					.onChange(async (val) => {
 						this.plugin.settings.providerBaseUrl = val.trim();
 						await this.plugin.saveSettings();
-						await this.plugin.initAgentService();
+						this.debouncedInitAgentService();
 					}));
 
 			if (this.plugin.settings.providerPreset !== 'ollama') {
@@ -596,9 +610,9 @@ export class SynapseSettingTab extends PluginSettingTab {
 						text.inputEl.type = 'password';
 						text.inputEl.autocomplete = 'off';
 						text.setValue(this.plugin.settings.providerApiKey)
-							.onChange(async (val) => {
+							.onChange((val) => {
 								updateSecureField(this.app, this.plugin, 'providerApiKey', val.trim());
-								await this.plugin.initAgentService();
+								this.debouncedInitAgentService();
 							});
 					});
 			}

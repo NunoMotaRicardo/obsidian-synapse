@@ -6,7 +6,7 @@ Source: `src/settings.ts` — settings interface, defaults, and the settings tab
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
 - **Feature Map & Agents** (replaces legacy Models tab) — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
-- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/`, `_synapse/skills/`, and `_synapse/triggers/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `.docs/specs/chat-view.md` "Loop turn/cost thresholds" for enforcement details. The `synapseFolder` field remains in `SynapseSettings` for data compatibility but its value is ignored — all code uses the constant.
+- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/`, `_synapse/skills/`, and `_synapse/triggers/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `.docs/specs/chat-view.md` "Loop turn/cost thresholds" for enforcement details. All code uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly; see the `synapseFolder` removal note under Invariants (issue #148).
 - **Tools** — tools approval mode (`ask` or `allow`), and MCP input variable management (with secure storage for password inputs).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
 - **Triggers** — list of all triggers found in `_synapse/triggers/`, with enable/disable toggle (writes `enabled` frontmatter field via `modifyArtifact`) and last-fired timestamp (from `triggerLastFired` in settings). Includes an **Open triggers folder** button that reveals the folder in the file explorer. Empty state shows a hint to create `.md` files in `_synapse/triggers/`.
@@ -186,6 +186,50 @@ Hands-on confirmation that `GET https://<res>.openai.azure.com/openai/v1/models`
 OpenAI-shaped `{data: [...]}` `fetchProviderModels()` parses is **not yet recorded** — no Azure
 resource was available during implementation; see issue #119.
 
+## Provider Base URL / API key debounce (issue #148)
+
+The provider **Base URL** and **API key** text fields' `onChange` handlers used to call
+`plugin.initAgentService()` — which stops the existing `AgentService`, constructs a new one,
+and fires `fetchProviderModels()` — on **every keystroke**. Typing a full URL (e.g.
+`http://localhost:11434`, 22 characters) meant 22 teardown/rebuild cycles and 22 model-discovery
+requests in a burst.
+
+`SynapseSettingTab` now has one `private readonly debouncedInitAgentService` instance field,
+built once via Obsidian's own `debounce(fn, 500, true)` (not a hand-rolled timer):
+
+```ts
+private readonly debouncedInitAgentService = debounce(() => {
+	void this.plugin.initAgentService();
+}, 500, true);
+```
+
+- `resetTimer: true` means the 500ms window restarts on every call — the rebuild fires once,
+  500ms after the *last* keystroke, not the first (matches the documented `debounce()` contract:
+  the interface's own doc example shows this is a trailing-edge debounce, not throttling).
+- Both the Base URL and API key `onChange` handlers call `this.debouncedInitAgentService()`
+  instead of `await this.plugin.initAgentService()` directly.
+- What is **not** debounced: `this.plugin.settings.providerBaseUrl = val.trim()` /
+  `updateSecureField(...)` and the subsequent `saveSettings()` (Base URL) / local-storage write
+  (API key) still happen synchronously on every keystroke, so the persisted value is always
+  correct on the very first and very last keystroke even if the tab is closed mid-burst — only
+  the expensive `AgentService` rebuild + discovery request is deferred.
+- `SynapseSettingTab.hide()` (called by Obsidian "when the user navigates away, the containing
+  tab is switched, or the settings modal is closed" — see `obsidian.d.ts`'s `SettingTab#hide()`)
+  calls `this.debouncedInitAgentService.cancel()`, so a pending rebuild can never fire against a
+  closed/stale settings tab.
+- Deliberately scoped to Base URL + API key only, matching the issue's acceptance criteria — the
+  **Bearer token** field (ollama-only) and **Claude CLI location** field have the same
+  per-keystroke `initAgentService()` call pattern and are candidates for the same treatment, but
+  that's out of scope for #148 and left as a follow-up rather than bundled in silently.
+- Locked by `test/settingsDebounce.test.ts`, which reaches into the private
+  `debouncedInitAgentService` field (same pattern as `test/mcpBridge.test.ts`'s
+  `_drainLines` reach-in) and drives it under `vi.useFakeTimers()` against `test/setup.ts`'s
+  `debounce()` mock — a from-scratch reimplementation of the documented `resetTimer` contract,
+  since Obsidian's real implementation lives in its closed-source `app.js`, not in
+  `node_modules/obsidian` (types only). Asserts: a 22-call burst 50ms apart collapses to exactly
+  one `initAgentService()` call fired 500ms after the last call; a single call still fires (no
+  starvation on the first-and-only keystroke); `hide()` cancels a pending call so it never fires.
+
 ## Model name field (datalist-backed)
 
 **Model name** remains a free-text `<input>` (never a hard `<select>`) — it must keep working
@@ -287,6 +331,18 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   error: `main.ts#loadSettings` merges persisted data over `DEFAULT_SETTINGS` via
   `Object.assign({}, DEFAULT_SETTINGS, raw)`, so the stale keys just ride along as harmless
   untyped properties rather than causing a load failure or wiping unrelated settings.
+- (issue #148) `synapseFolder` was removed from `SynapseSettings` and `DEFAULT_SETTINGS` —
+  it was declared and defaulted (to `SYNAPSE_FOLDER`) but **nothing in `src/` ever read it**;
+  every call site uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly. This is a
+  genuine no-op migration — dropping the setting changes no behaviour, because the value was
+  never consulted in the first place, not even to seed a default that then diverged. (Contrast
+  `configWriter.ts#ensureImproveSynapseSkill`'s `synapseFolder` *parameter*, which defaults to
+  `SYNAPSE_FOLDER` and *is* used within that function — an unrelated same-named identifier, out
+  of scope for #148 and unchanged.) Same load-time tolerance as the #106 keys above: old
+  `data.json` files carrying a stale `synapseFolder` still load without error via the same
+  `Object.assign` merge, riding along as a harmless untyped property. Locked by
+  `test/settings.test.ts`'s `legacy settings key tolerance` block, extended for #148 to include
+  `synapseFolder` alongside `contextTier`/`reasoningSummary`.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
 - All BYOK provider HTTP calls (Test, `onListModels`) go through `fetchProviderModels()`
