@@ -272,7 +272,7 @@ export async function readVaultFile(app: App, path: string): Promise<string> {
  * the *last* call); `resetTimer: false` schedules on the first call and lets later calls
  * before the timeout update the pending args without pushing the fire time out further.
  * Used by `settings.ts`'s provider Base URL / API key debouncing (#148) and exercised by
- * `test/settings.test.ts`.
+ * `test/settingsDebounce.test.ts`.
  */
 function debounceForMock<T extends unknown[]>(cb: (...args: T) => void, timeout = 100, resetTimer = false) {
 	let timerId: ReturnType<typeof setTimeout> | null = null;
