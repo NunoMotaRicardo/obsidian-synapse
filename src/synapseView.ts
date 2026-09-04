@@ -1106,13 +1106,15 @@ export class SynapseView extends ItemView {
 			this.handleSessionEvent(event);
 		}
 
-		// Register typed handlers for future events. The onEvent handler in
-		// buildSessionConfig now delegates directly to handleSessionEvent,
-		// so events arriving after this point are handled twice only if both
-		// fire — but since onEvent fires for *all* events and the typed
-		// handlers are more specific, they complement each other. We keep
-		// the typed handlers for type-safety and because resumeSession paths
-		// don't go through buildSessionConfig's onEvent.
+		// Register typed handlers for future events.
+		//
+		// **This list is the only live delivery path, so an event type missing from it is
+		// silently never handled.** `ensureSession()`'s `onEvent` callback does not delegate
+		// to `handleSessionEvent` — it only *buffers* events until this method runs, and once
+		// `earlyEventBuffer` is swapped for `EMPTY_EVENT_BUFFER` above it drops everything it
+		// receives. (A previous version of this comment claimed onEvent delegated directly;
+		// it does not, and #130's `session.metadata` was dead on arrival because of it.)
+		// Add every new SessionEvent type here.
 		this.eventUnsubscribers.push(
 			session.on('session.init', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.turn_start', (event) => { this.handleSessionEvent(event); }),
@@ -1129,6 +1131,7 @@ export class SynapseView extends ItemView {
 			session.on('skill.invoked', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_complete', (event) => { this.handleSessionEvent(event); }),
+			session.on('session.metadata', (event) => { this.handleSessionEvent(event); }),
 		);
 	}
 
