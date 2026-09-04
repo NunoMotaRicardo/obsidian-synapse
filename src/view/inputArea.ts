@@ -34,8 +34,16 @@ declare module '../synapseView' {
 	}
 }
 
-/** Skill-name characters accepted while typing a `/name` filter (no spaces). */
-const SKILL_NAME_CHAR = /[A-Za-z0-9_-]/;
+/**
+ * Skill-name characters accepted while typing a `/name` filter (no spaces).
+ *
+ * `:` is included (issue #163) because the popup inserts the CLI's namespaced id for
+ * plugin-provided commands (`/_synapse:improve-synapse`). Without it the scan-back from the
+ * caret stopped at the colon, so the popup could not re-parse text it had itself inserted.
+ * This does not make `and/or: x` trigger the popup — opening still requires the `/` to be at
+ * the start of the input or preceded by whitespace.
+ */
+const SKILL_NAME_CHAR = /[A-Za-z0-9_:-]/;
 
 export function installInputArea(ViewClass: {prototype: unknown}): void {
 	const proto = ViewClass.prototype as SynapseView;
@@ -651,7 +659,13 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// restriction narrows `enabledSkills` below the full discovered `this.skills` set.
 		// Live CLI supportedCommands() (issue #130) when the session has captured one,
 		// else the `_synapse/skills/` directory scan — see `getEffectiveSkills()`.
-		const matches = this.getEffectiveSkills().filter(s => this.enabledSkills.has(s.name) && s.name.toLowerCase().startsWith(query));
+		// Match on the skill's own name first — that is what the user typed when creating it
+		// — but also accept the CLI's namespaced id, so the text the popup itself inserts still
+		// re-filters to the same entry (issue #163).
+		const matches = this.getEffectiveSkills().filter(s =>
+			this.enabledSkills.has(s.name)
+			&& (s.name.toLowerCase().startsWith(query) || (s.qualifiedName?.toLowerCase().startsWith(query) ?? false))
+		);
 		if (matches.length === 0) {
 			this.closeSkillPopup();
 			return;
@@ -715,7 +729,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		let end = caret;
 		while (end < value.length && SKILL_NAME_CHAR.test(value[end]!)) end++;
 		const after = value.slice(end);
-		const inserted = `/${skill.name} `;
+		// Insert the CLI's namespaced id when there is one: it is the form the CLI advertises
+		// and therefore certainly resolves. `name` is only ever the display/filter form (#163).
+		const inserted = `/${skill.qualifiedName ?? skill.name} `;
 		this.inputEl.value = before + inserted + after;
 		const newCaret = before.length + inserted.length;
 		this.inputEl.setSelectionRange(newCaret, newCaret);

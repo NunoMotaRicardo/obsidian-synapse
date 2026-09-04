@@ -328,7 +328,10 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 * transparently returns the scan result — the pre-#130 fallback behavior is unchanged.
 	 */
 	proto.getEffectiveAgents = function(): AgentConfig[] {
-		const live = this.currentSession?.cachedSupportedAgents;
+		// Current session's capture first, then the view's last-known one (#163) — a config
+		// change rebuilds the Session and empties its cache, and dropping to the directory scan
+		// there made CLI-provided agents vanish mid-conversation.
+		const live = this.currentSession?.cachedSupportedAgents ?? this.lastSupportedAgents;
 		if (!live) return this.agents;
 		// The CLI decides membership; the vault scan supplies the richer config for any
 		// agent present in both. Replacing a scanned `AgentConfig` wholesale would drop its
@@ -343,7 +346,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 * scan (`this.skills`). Same fallback guarantee as `getEffectiveAgents()`.
 	 */
 	proto.getEffectiveSkills = function(): SkillInfo[] {
-		const live = this.currentSession?.cachedSupportedCommands;
+		// Same fallback chain as `getEffectiveAgents()` — see `lastSupportedCommands` (#163).
+		const live = this.currentSession?.cachedSupportedCommands ?? this.lastSupportedCommands;
 		if (!live) return this.skills;
 		// Merged by name for the same reason as `getEffectiveAgents()`, so a vault skill
 		// keeps its `folderPath` instead of being flattened to `''`. Nothing reads
