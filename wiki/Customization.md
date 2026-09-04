@@ -154,6 +154,7 @@ path: inbox/**            # optional glob filter
 model: qwen3:8b           # optional: local model for cheap one-shot
 agent: General            # optional: agent to use
 write: frontmatter        # false (report) | true (replace) | frontmatter (merge YAML)
+toolApproval: allow       # optional: let this trigger use tools without asking
 enabled: true
 ---
 Read the content of {{file}} and return YAML tags suitable for its frontmatter.
@@ -183,6 +184,23 @@ Examples:
 | `false` (default) | Appends result to `_synapse/reports/<name>-YYYY-MM-DD.md` |
 | `true` | Replaces the triggering file's entire content with the model response |
 | `'frontmatter'` | Parses response as YAML, merges keys into existing frontmatter |
+
+### Tool approval
+
+Triggers run unattended, so there is nobody to answer an approval prompt. The **Tools approval**
+setting therefore means something different for them than it does for editor actions:
+
+| Setting | Effect on a trigger |
+|---|---|
+| **Allow (auto-approve)** | Tool calls run without asking |
+| **Ask (require approval)** (default) | Tool calls are **denied**, and each denial is recorded in the trigger's report |
+
+Read-only work is unaffected either way — the model can still read the files it needs. Only tools
+that would normally prompt (writing or editing a file, running a command) are denied.
+
+Add `toolApproval: allow` to one trigger's frontmatter to grant just that trigger tool access
+without loosening the global setting. There is no override in the other direction: a trigger
+cannot force approval prompts when the global setting is already **Allow (auto-approve)**.
 
 ### Model routing
 
