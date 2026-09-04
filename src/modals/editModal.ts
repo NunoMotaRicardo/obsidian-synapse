@@ -5,6 +5,7 @@ import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TaskLabel} from '../tasks';
 import {SynapseView, SYNAPSE_VIEW_TYPE} from '../synapseView';
 import {DEFAULT_EDIT_MODAL} from '../settings';
+import {getSynapsePluginConfig} from '../vaultPaths';
 
 /** Tone options for the edit modal. */
 const TONES = [
@@ -459,7 +460,7 @@ export class EditModal extends Modal {
 		const {content: result, sessionId} = await this.plugin.agentService!.inlineChat({
 			prompt,
 			agent: this.plugin.settings.featureAgents?.inline || undefined,
-			plugins: [{type: 'local', path: `${(this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath.replace(/\\/g, '/')}/_synapse/`}],
+			plugins: getSynapsePluginConfig(this.plugin.app),
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
 			tools: [],

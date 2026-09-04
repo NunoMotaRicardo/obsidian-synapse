@@ -2,7 +2,7 @@ import {App, normalizePath, TFile, TAbstractFile} from 'obsidian';
 import type SynapsePlugin from './main';
 import type {TriggerConfig, TriggerEvent} from './types';
 import {scanTriggers} from './configWriter';
-import {SYNAPSE_FOLDER} from './settings';
+import {SYNAPSE_FOLDER} from './vaultPaths';
 import {executeTrigger} from './triggerExecutor';
 import {debugTrace} from './debug';
 

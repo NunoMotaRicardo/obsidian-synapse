@@ -10,7 +10,7 @@ import {SYNAPSE_VIEW_TYPE} from '../synapseView';
 import type {SessionConfig} from '../agentService';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo} from '../types';
-import {SYNAPSE_FOLDER} from '../settings';
+import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 import {scanAgents, scanSkills} from '../configWriter';
 import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
@@ -324,7 +324,7 @@ export class TelegramBotService {
 			permissionMode: 'bypassPermissions' as const,
 			allowDangerouslySkipPermissions: true,
 			cwd: basePath,
-			plugins: [{type: 'local', path: `${normalizedBasePath}/_synapse/`}],
+			plugins: getSynapsePluginConfig(this.plugin.app),
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../agentService').ReasoningEffort} : {}),
 			...(defaultAgentName ? {agent: defaultAgentName} : {}),
 			// Append to the Claude Code preset — a plain string would replace the
@@ -480,7 +480,7 @@ export class TelegramBotService {
 	}
 
 	private getVaultBasePath(): string {
-		return (this.plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+		return getVaultBasePath(this.plugin.app);
 	}
 
 	private getAvailableModels(): import('../agentService').ModelInfo[] {

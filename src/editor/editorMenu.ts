@@ -2,6 +2,7 @@ import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFil
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 import type {SdkPluginConfig} from '../agentService';
+import {getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
 import {EditModal} from '../modals/editModal';
@@ -687,14 +688,13 @@ function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 
 /** Get the absolute OS path for a vault file. */
 function getAbsolutePath(plugin: SynapsePlugin, file: TFile): string {
-	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+	const basePath = getVaultBasePath(plugin.app);
 	return basePath + '/' + file.path;
 }
 
 /** Get the SDK plugin configs to pass to inlineChat so the SDK can discover vault artifacts. */
 function getVaultPlugins(plugin: SynapsePlugin): SdkPluginConfig[] {
-	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath.replace(/\\/g, '/');
-	return [{type: 'local', path: `${basePath}/_synapse/`}];
+	return getSynapsePluginConfig(plugin.app);
 }
 
 /** Extract content from an image by sending it to the LLM. */

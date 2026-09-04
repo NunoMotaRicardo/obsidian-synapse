@@ -18,7 +18,7 @@ import type {
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from './agentService';
 import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills, scanTriggers} from './configWriter';
-import {SYNAPSE_FOLDER} from './settings';
+import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
@@ -1289,7 +1289,7 @@ export class SynapseView extends ItemView {
 			canUseTool: permissionHandler,
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),
-			plugins: [{type: 'local', path: `${vaultRoot}/_synapse/`}],
+			plugins: getSynapsePluginConfig(this.app),
 			skills: Array.from(this.enabledSkills),
 			agent: effectiveAgentName || undefined,
 			// Append to the Claude Code preset rather than replacing it — a plain
@@ -1324,7 +1324,7 @@ export class SynapseView extends ItemView {
 	}
 
 	getVaultBasePath(): string {
-		return (this.app.vault.adapter as unknown as {basePath: string}).basePath;
+		return getVaultBasePath(this.app);
 	}
 
 	scrollToBottom(): void {
