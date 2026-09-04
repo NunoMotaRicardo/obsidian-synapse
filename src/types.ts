@@ -40,10 +40,24 @@ export interface TriggerConfig {
 
 /** Parsed skill information from a skill folder's SKILL.md. */
 export interface SkillInfo {
+	/**
+	 * The skill's own name, as written in its `SKILL.md` folder — always unqualified.
+	 * This is what the user typed when they created the skill, so it is what the popup
+	 * displays, what the popup filters on, and what an agent's `skills:` restriction is
+	 * matched against (issue #163).
+	 */
 	name: string;
 	description: string;
 	/** Vault-relative path to the skill folder. */
 	folderPath: string;
+	/**
+	 * The CLI's namespaced id for this command (`<plugin>:<name>`), when it has one — set
+	 * only for skills sourced from the live `supportedCommands()` capture (#130), and only
+	 * when the CLI actually namespaced them. This is the form inserted into the input,
+	 * because it is what the CLI advertises and therefore certainly resolves, while `name`
+	 * alone is what the user sees and types (issue #163).
+	 */
+	qualifiedName?: string;
 }
 
 /** A message in the Synapse chat conversation. */

@@ -6,7 +6,7 @@ vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
 }));
 
-import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig, mergeLiveAgents, mergeLiveSkills} from '../src/view/sessionConfig';
+import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig, mergeLiveAgents, mergeLiveSkills, splitCommandNamespace} from '../src/view/sessionConfig';
 import {scanVaultStructure} from '../src/configWriter';
 import type {ModelInfo, SlashCommand, AgentInfo} from '../src/agentService';
 import type {AgentConfig, SkillInfo} from '../src/types';
@@ -285,5 +285,89 @@ describe('mergeLiveSkills', () => {
 		const merged = mergeLiveSkills(live, scanned);
 		expect(merged.map(s => s.name)).toEqual(['summarize', 'usage']);
 		expect(merged[1]?.folderPath).toBe('');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Command namespacing (issue #163)
+//
+// The CLI advertises plugin-provided commands as `<plugin>:<command>`, so a vault
+// skill `improve-synapse` arrives as `_synapse:improve-synapse`. Carrying that
+// through as the skill's `name` made vault skills undiscoverable: the popup filters
+// on name, so typing the skill's own name matched nothing, and an agent's
+// `skills: [improve-synapse]` restriction stopped matching too. `name` must stay
+// unqualified; the namespaced id lives in `qualifiedName` and is what gets inserted.
+// ---------------------------------------------------------------------------
+
+describe('splitCommandNamespace', () => {
+	it('splits a namespaced command into the plain name plus the full id', () => {
+		expect(splitCommandNamespace('_synapse:improve-synapse'))
+			.toEqual({name: 'improve-synapse', qualifiedName: '_synapse:improve-synapse'});
+	});
+
+	it('leaves an unnamespaced command untouched and sets no qualifiedName', () => {
+		expect(splitCommandNamespace('dataviz')).toEqual({name: 'dataviz'});
+	});
+
+	it('splits on the last colon so a plugin name containing one still works', () => {
+		expect(splitCommandNamespace('a:b:run'))
+			.toEqual({name: 'run', qualifiedName: 'a:b:run'});
+	});
+
+	it('treats a trailing colon as no namespace rather than yielding an empty name', () => {
+		expect(splitCommandNamespace('broken:')).toEqual({name: 'broken:'});
+	});
+});
+
+describe('mapSlashCommandsToSkillInfo namespacing', () => {
+	it('exposes the plain name and keeps the namespaced id separately', () => {
+		const mapped = mapSlashCommandsToSkillInfo([
+			{name: '_synapse:improve-synapse', description: 'Vault skill', argumentHint: ''},
+		]);
+		expect(mapped[0]?.name).toBe('improve-synapse');
+		expect(mapped[0]?.qualifiedName).toBe('_synapse:improve-synapse');
+	});
+
+	it('omits qualifiedName entirely for an unnamespaced command', () => {
+		const mapped = mapSlashCommandsToSkillInfo([
+			{name: 'dataviz', description: 'Personal skill', argumentHint: ''},
+		]);
+		expect(mapped[0]?.name).toBe('dataviz');
+		expect('qualifiedName' in mapped[0]!).toBe(false);
+	});
+});
+
+describe('mergeLiveSkills with namespaced commands', () => {
+	const scanned: SkillInfo[] = [
+		{name: 'improve-synapse', description: 'From the vault', folderPath: '_synapse/skills/improve-synapse'},
+	];
+
+	it('matches a namespaced CLI command to the scanned vault skill', () => {
+		const merged = mergeLiveSkills(
+			[{name: '_synapse:improve-synapse', description: 'From the CLI', argumentHint: ''}],
+			scanned,
+		);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]?.name).toBe('improve-synapse');
+		expect(merged[0]?.folderPath).toBe('_synapse/skills/improve-synapse');
+	});
+
+	it('carries the CLI qualifiedName onto the scanned entry so insertion still resolves', () => {
+		const merged = mergeLiveSkills(
+			[{name: '_synapse:improve-synapse', description: 'From the CLI', argumentHint: ''}],
+			scanned,
+		);
+		expect(merged[0]?.qualifiedName).toBe('_synapse:improve-synapse');
+	});
+
+	it('lets an agent skills: restriction written as the plain name still match', () => {
+		// applyAgentToolsAndSkills() filters with `allowed.has(s.name)`; before #163 the
+		// name was '_synapse:improve-synapse', so this restriction silently dropped the skill.
+		const merged = mergeLiveSkills(
+			[{name: '_synapse:improve-synapse', description: 'From the CLI', argumentHint: ''}],
+			scanned,
+		);
+		const allowed = new Set(['improve-synapse']);
+		expect(merged.filter(s => allowed.has(s.name))).toHaveLength(1);
 	});
 });

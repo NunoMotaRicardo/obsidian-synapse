@@ -663,13 +663,42 @@ export function decideWorkingDirAutoUpdate(params: {
  * slash-command popup (`inputArea.ts`) already renders. `SlashCommand` has no vault folder —
  * `folderPath` is set to `''`, which is never read for CLI-sourced entries (only ever
  * populated/consumed for the directory-scan fallback's own bookkeeping).
+ *
+ * **Namespaces are split off `name` (issue #163).** The CLI advertises plugin-provided
+ * commands as `<plugin>:<command>` — a vault skill `improve-synapse` arrives as
+ * `_synapse:improve-synapse`. Carrying that straight through made vault skills
+ * undiscoverable: the popup filters on `name`, so typing the skill's own name matched
+ * nothing, and an agent's `skills: [improve-synapse]` restriction no longer matched either.
+ * So `name` keeps the unqualified command — what the user wrote and types — and the full
+ * namespaced id moves to `qualifiedName`, which is what gets inserted.
  */
 export function mapSlashCommandsToSkillInfo(commands: SlashCommand[]): SkillInfo[] {
-	return commands.map(c => ({
-		name: c.name,
-		description: c.description,
-		folderPath: '',
-	}));
+	return commands.map(c => {
+		const {name, qualifiedName} = splitCommandNamespace(c.name);
+		return {
+			name,
+			description: c.description,
+			folderPath: '',
+			...(qualifiedName ? {qualifiedName} : {}),
+		};
+	});
+}
+
+/**
+ * Split a CLI command id into its unqualified name and, when it carries a `<plugin>:` prefix,
+ * the full namespaced id (issue #163).
+ *
+ * Splits on the **last** colon, so a plugin whose own name contains one still yields the
+ * command as the caller typed it. A command with no colon is returned unchanged with no
+ * `qualifiedName`, which is what leaves non-plugin commands untouched. A trailing colon (no
+ * command after it) is treated as no namespace at all rather than producing an empty name.
+ */
+export function splitCommandNamespace(commandName: string): {name: string; qualifiedName?: string} {
+	const idx = commandName.lastIndexOf(':');
+	if (idx < 0) return {name: commandName};
+	const unqualified = commandName.slice(idx + 1);
+	if (!unqualified) return {name: commandName};
+	return {name: unqualified, qualifiedName: commandName};
 }
 
 /**
@@ -714,8 +743,18 @@ export function mergeLiveAgents(live: AgentInfo[], scanned: AgentConfig[]): Agen
  * Reconcile the CLI's live slash-command list with the vault skill scan (issue #130), on the
  * same rule as `mergeLiveAgents()`: the CLI decides membership, the scan supplies the config
  * so a vault skill keeps its `folderPath` rather than being flattened to `''`.
+ *
+ * Matching is on the **unqualified** name (issue #163), since `mapSlashCommandsToSkillInfo()`
+ * has already split any `<plugin>:` prefix off — a CLI `_synapse:improve-synapse` therefore
+ * finds the scanned `improve-synapse` instead of falling through as a separate entry. When the
+ * scanned entry wins, the CLI's `qualifiedName` is carried onto it: the vault copy knows the
+ * folder, only the CLI knows the id that resolves, and the popup needs both.
  */
 export function mergeLiveSkills(live: SlashCommand[], scanned: SkillInfo[]): SkillInfo[] {
 	const byName = new Map(scanned.map(s => [s.name, s]));
-	return mapSlashCommandsToSkillInfo(live).map(s => byName.get(s.name) ?? s);
+	return mapSlashCommandsToSkillInfo(live).map(s => {
+		const match = byName.get(s.name);
+		if (!match) return s;
+		return s.qualifiedName ? {...match, qualifiedName: s.qualifiedName} : match;
+	});
 }
