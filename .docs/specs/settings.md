@@ -2,6 +2,15 @@
 
 Source: `src/settings.ts` — settings interface, defaults, and the settings tab UI.
 
+`SynapseSettingTab.display()` (issue #149) only builds the tab bar/panel scaffolding and dispatches
+to one private `render*Panel(panel: HTMLElement)` method per tab — `renderClaudePanel`,
+`renderAgentsPanel`, `renderCapabilitiesPanel`, `renderToolsPanel`, `renderBotsPanel`,
+`renderTriggersPanel` — matching the shape `renderBotsPanel`/`renderTriggersPanel` already had.
+Per-tab state (e.g. `renderAuthFields`, `renderProviderFields`, `updateProviderDesc`,
+`updateModelDatalist`, the CLI-status renderer) lives as closures local to the owning
+`render*Panel` method, same pattern as `renderBotsPanel`'s `updateConnectButton` — none of it is
+shared across tabs, so nothing needed to become a class-level field.
+
 ## Groups
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
