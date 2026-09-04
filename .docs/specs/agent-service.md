@@ -629,6 +629,49 @@ Approving `read_note` looks identical whether the model is Claude or a local/BYO
   vault tools execute against) and ignored on the Agent SDK path, whose own tools run inside the
   CLI process.
 
+### Vault tools and approval gate in `inlineChat()` (issue #150)
+
+#138 (above) closed this gap for the chat panel's `Session.send()`. `inlineChat()`'s local-model
+branch — the second call site running local/BYOK models, used by editor actions
+(`editorMenu.ts`), the edit modal (`editModal.ts`) and search (`searchPanel.ts`) — had the exact
+same shape of gap: `prompt`/`systemPrompt`/`model` only, no `tools`, no `app`. `triggerExecutor.ts`
+gave the same models the full ReAct kit; `inlineChat()`'s local branch gave them a bare one-shot.
+
+**Same capability gate, same adapter, one deliberate difference in reachability.**
+
+- `inlineChat()` gained an `app?: App` option, the same per-call shape as `Session.send()`'s.
+  Ignored on the Agent SDK path (that path's own tools run inside the CLI process); read only in
+  the local-model branch.
+- **Capability gate is identical**: `modelInfo?.supportsTools !== false` via `getModels()`.
+- **The `CanUseTool -> LocalToolApprovalHandler` translation is not duplicated.** It was factored
+  out of `Session.send()` into a module-level `adaptCanUseToolToLocalApproval(canUseTool, signal)`
+  in `agentService.ts`, and both `Session.send()` and `AgentService.inlineChat()` call it — per the
+  issue's requirement that this translation exist in exactly one place.
+- **Reachability differs from `Session.send()` on purpose.** `Session.send()` offers `vaultTools`
+  whenever `supportsTools && app` — if the session has no `canUseTool` (shouldn't happen from the
+  chat panel, which always builds one), the local tool loop falls back to running ungated, the same
+  "unattended by design" behavior the trigger path already has. `inlineChat()` does **not** fall
+  back that way: it only offers `vaultTools` when `supportsTools && app && canUseTool` are *all*
+  present. Editor actions are one-shot rather than an ongoing attended conversation, so there is no
+  trigger-like "the user configured this to run unattended" precedent to lean on — every tool call
+  `inlineChat()`'s local branch makes must go through the same approval path as the chat panel's,
+  never a silent auto-approve next to it. A caller that supplies `app` but not `canUseTool` gets no
+  tools at all (the model degrades to the pre-#150 bare one-shot) rather than an ungated one.
+- MCP tools are deliberately **not** offered here either, for the same spawn/teardown-cost
+  reasoning `Session.send()`'s comment gives — that reasoning is specifically about paying the cost
+  once per conversational turn, which doesn't automatically carry over to `inlineChat()`'s one-shot
+  calls, but extending to MCP is left as a separate question.
+
+**Caller reachability as of #150 — file-boundary note.** #150 was scoped to `agentService.ts`
+only; it did not touch `editorMenu.ts`, `editModal.ts` or `searchPanel.ts`. As of this change,
+*none* of `inlineChat()`'s callers pass `app` or `canUseTool`, so the new capability exists but is
+not yet reachable from any UI call site — every existing call still gets the pre-#150 bare one-shot
+on a local model, satisfying AC4 ("with no `App` instance available, no tools are offered and
+nothing crashes") by construction rather than by an explicit check. Wiring `app`/`canUseTool` into
+whichever specific call sites should get vault tools (search is the obvious first candidate, since
+it already requests real-SDK-path tools via `SEARCH_TOOLS`) is a follow-up issue against those
+files.
+
 ## Query metadata cache (issue #130)
 
 Capture-and-cache, not a persistent query — see
