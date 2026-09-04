@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an idea or improvement for Synapse.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem before the solution — it's easier
+        to evaluate a feature request when we understand what it's for.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that Synapse doesn't support today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen? Sketch the behavior, UI, or settings you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you're currently using, or other approaches you considered.
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else?
+      description: Any other context or screenshots about the feature request.
+    validations:
+      required: false
