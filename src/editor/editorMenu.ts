@@ -493,7 +493,7 @@ export async function runSelectionAction(
 }
 
 /**
- * Core helper: send the action prompt to Copilot and return the result.
+ * Core helper: send the action prompt to the agent and return the result.
  */
 async function runActionPrompt(
 	plugin: SynapsePlugin,

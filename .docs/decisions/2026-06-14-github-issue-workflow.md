@@ -4,14 +4,14 @@
 
 The `.claude/agents/sidekick-*` pipeline (analyst → technical-planner → coder → reviewer)
 originally assumed local `issues/NNNN-*.md` files as the work-item source of truth, mirroring
-this repo's GitHub issues on `NunoMotaRicardo/obsidian-copilot`. Commit `ad623af` deleted the
+this repo's GitHub issues. Commit `ad623af` deleted the
 local mirror (`issues/0001-0008`). Checking GitHub showed issues #1-#8 were already tracked
 there (#2, #4, #5, #6 still open; #1, #3, #7, #8 closed) — the local files were pure
 duplication, not lost work.
 
 ## Decision
 
-GitHub issues on `NunoMotaRicardo/obsidian-copilot` are the **single source of truth** for
+GitHub issues on the repo `origin` points to are the **single source of truth** for
 Claude Code dev-agent work items. There is no local `issues/` folder, and
 `.claude/skills/issue-workflow/` is retired. Two orchestrating skills drive the work:
 
@@ -50,8 +50,8 @@ opened.
 
 ## Hand-off Notes for the Technical Planner
 
-- Issue creation/editing via `gh issue create|edit|view|list` against
-  `NunoMotaRicardo/obsidian-copilot`.
+- Issue creation/editing via `gh issue create|edit|view|list`, which defaults to the repo
+  `origin` points to — never a hardcoded slug, so a rename costs nothing.
 - Reuse the repo's existing labels (`bug`, `enhancement`, `documentation`, ...) for type; add
   `in-progress` (create via `gh label create` if it doesn't exist) for active work.
 - Issue body: Summary, Acceptance Criteria, Technical Notes (link `.docs/specs/<module>.md`),

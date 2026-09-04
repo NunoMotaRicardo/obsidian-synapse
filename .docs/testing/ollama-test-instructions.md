@@ -1,7 +1,6 @@
 # Ollama test pass — step-by-step instructions
 
-Reference: [decision record](../decisions/2026-06-25-ollama-support-and-multimodal.md) |
-[issue #24](https://github.com/NunoMotaRicardo/obsidian-copilot/issues/24)
+Reference: [decision record](../decisions/2026-06-25-ollama-support-and-multimodal.md)
 
 ## Prerequisites
 
