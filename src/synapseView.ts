@@ -14,6 +14,8 @@ import type {
 	ReasoningEffort,
 	SessionEvent,
 	TodoItem,
+	SlashCommand,
+	AgentInfo,
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from './agentService';
 import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
@@ -58,6 +60,24 @@ export class SynapseView extends ItemView {
 	 * session's CLI transcript contains).
 	 */
 	sdkSeenIndex = 0;
+	/**
+	 * Last successful `supportedCommands()`/`supportedAgents()` capture (#130), held here
+	 * rather than read only from `currentSession` (#163).
+	 *
+	 * The cache lives on `Session`, but `ensureSession()` builds a **new** `Session` on every
+	 * `configDirty` change — switching model does it, via `applyReasoningToSession()` — and
+	 * `newConversation()` replaces it outright. Reading only the current session's cache
+	 * therefore made every CLI-provided slash command and subagent vanish from the pickers
+	 * the moment the user changed a setting, falling back to the vault directory scan until
+	 * the next turn completed. That looked like the user's skills disappearing.
+	 *
+	 * These lists describe the CLI installation and its cwd, not one conversation, so they
+	 * stay valid across a session rebuild. Same reasoning as `sdkSeenIndex` above: state the
+	 * rebuild must not destroy belongs on the view. Refreshed on every capture; the current
+	 * session's own cache still wins when it has one.
+	 */
+	lastSupportedCommands: SlashCommand[] | null = null;
+	lastSupportedAgents: AgentInfo[] | null = null;
 	currentSession: Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
@@ -1090,6 +1110,16 @@ export class SynapseView extends ItemView {
 				// `enabledSkills`. Doing that while a turn is in flight would mutate the
 				// session's own configuration underneath it. The agent/skill lists refresh
 				// on `session.idle` instead.
+				//
+				// The captured lists are also mirrored onto the view so they survive the
+				// `Session` rebuild that any config change triggers (#163) — see
+				// `lastSupportedCommands`.
+				if (this.currentSession?.cachedSupportedCommands) {
+					this.lastSupportedCommands = this.currentSession.cachedSupportedCommands;
+				}
+				if (this.currentSession?.cachedSupportedAgents) {
+					this.lastSupportedAgents = this.currentSession.cachedSupportedAgents;
+				}
 				this.updateContextIndicator();
 				break;
 		}
