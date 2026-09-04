@@ -5,7 +5,7 @@ import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
 import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
-import {resolveModelForAgent, mapAgentInfoToAgentConfig, mapSlashCommandsToSkillInfo} from './sessionConfig';
+import {resolveModelForAgent, mergeLiveAgents, mergeLiveSkills} from './sessionConfig';
 
 /** Human label for a reasoning-effort level. 'none' reads as "Off". */
 function effortLabel(level: string): string {
@@ -329,7 +329,12 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 */
 	proto.getEffectiveAgents = function(): AgentConfig[] {
 		const live = this.currentSession?.cachedSupportedAgents;
-		return live ? mapAgentInfoToAgentConfig(live) : this.agents;
+		if (!live) return this.agents;
+		// The CLI decides membership; the vault scan supplies the richer config for any
+		// agent present in both. Replacing a scanned `AgentConfig` wholesale would drop its
+		// declared `tools`/`skills`, and `applyAgentToolsAndSkills()` reads `skills:
+		// undefined` as "enable all" — silently widening a deliberately narrowed agent.
+		return mergeLiveAgents(live, this.agents);
 	};
 
 	/**
@@ -339,7 +344,11 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 */
 	proto.getEffectiveSkills = function(): SkillInfo[] {
 		const live = this.currentSession?.cachedSupportedCommands;
-		return live ? mapSlashCommandsToSkillInfo(live) : this.skills;
+		if (!live) return this.skills;
+		// Merged by name for the same reason as `getEffectiveAgents()`, so a vault skill
+		// keeps its `folderPath` instead of being flattened to `''`. Nothing reads
+		// `SkillInfo.folderPath` today, so this is defensive rather than load-bearing.
+		return mergeLiveSkills(live, this.skills);
 	};
 
 	/**

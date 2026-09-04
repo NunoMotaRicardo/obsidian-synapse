@@ -962,6 +962,11 @@ export class SynapseView extends ItemView {
 					this.finalizeReasoning();
 				}
 				this.finalizeStreamingMessage();
+				// Agent/skill lists refresh here rather than on `session.metadata` (issue
+				// #130): that event fires once per `assistant` message, and `updateConfigUI()`
+				// mutates session configuration (see the `session.metadata` case). The cache
+				// is one turn stale by design, so end-of-turn is the natural refresh point.
+				this.updateConfigUI();
 				break;
 			case 'session.error': {
 				const errMsg = (data as {message?: string; error?: string}).message ?? (data as {error?: string}).error ?? '';
@@ -1075,9 +1080,17 @@ export class SynapseView extends ItemView {
 				// Capture-and-cache refresh (issue #130) — Session already holds the
 				// authoritative cache (`cachedContextUsage`/`cachedSupportedCommands`/
 				// `cachedSupportedAgents`); this event just tells the view it's time to
-				// re-read those getters and re-render the bits that depend on them.
+				// re-read those getters.
+				//
+				// Only the read-only gauge refreshes here. This event fires once per
+				// `assistant` message, i.e. repeatedly *mid-turn*, and `updateConfigUI()`
+				// is not a read-only render: it rebuilds the agent `<select>`, resets
+				// `selectedAgent` when the newly-preferred list doesn't contain the current
+				// selection, and re-runs `applyAgentToolsAndSkills()`, which rewrites
+				// `enabledSkills`. Doing that while a turn is in flight would mutate the
+				// session's own configuration underneath it. The agent/skill lists refresh
+				// on `session.idle` instead.
 				this.updateContextIndicator();
-				this.updateConfigUI();
 				break;
 		}
 	}

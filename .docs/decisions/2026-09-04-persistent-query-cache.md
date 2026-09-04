@@ -111,6 +111,30 @@ event is dispatched for a metadata-capture failure. Verified in
   renders nothing — not a zero — until the first successful capture, and stays absent for the
   entire conversation on the BYOK local-model path (`executeLocalProviderQuery()` never touches
   a `Query` handle at all).
+## Review correction: the CLI list decides membership, the vault scan supplies config
+
+Review of the first implementation caught a regression in how the two lists were adopted. The
+CLI's `AgentInfo` carries only `name`/`description`/`model` — it has no `tools` or `skills`,
+because those are a vault-local concept. The first version replaced the scanned `AgentConfig`
+wholesale with the mapped CLI one, and `applyAgentToolsAndSkills()` reads `skills: undefined`
+as **"enable all"**. So a vault agent declaring `skills: [summarize]` had its restriction
+silently discarded the moment the first capture landed — a deliberately narrowed agent quietly
+widened to every skill, mid-conversation.
+
+Fixed by merging rather than replacing (`mergeLiveAgents()`/`mergeLiveSkills()` in
+`sessionConfig.ts`): **the CLI decides membership** — it is authoritative about which agents
+actually loaded, so one the scan found but the CLI did not is genuinely unavailable and is
+dropped — while **the directory scan supplies the config** for any entry present in both.
+Covered by tests in `test/sessionConfig.test.ts`.
+
+The same review moved `updateConfigUI()` off the `session.metadata` event. That event fires once
+per `assistant` message, i.e. repeatedly *mid-turn*, and `updateConfigUI()` is not a read-only
+render — it rebuilds the agent `<select>`, resets `selectedAgent` when the preferred list no
+longer contains the current selection, and rewrites `enabledSkills`. Running it mid-turn would
+mutate the session's own configuration while that session was answering. Only the read-only
+gauge refreshes on `session.metadata`; the agent/skill lists refresh on `session.idle`, which is
+also the point at which a one-turn-stale cache is meaningful.
+
 - The slash-command popup (`inputArea.ts`) and agent picker (`configToolbar.ts`) prefer
   `cachedSupportedCommands`/`cachedSupportedAgents` (mapped to the existing `SkillInfo`/
   `AgentConfig` shapes by `mapSlashCommandsToSkillInfo()`/`mapAgentInfoToAgentConfig()` in

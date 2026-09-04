@@ -6,10 +6,10 @@ vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
 }));
 
-import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig} from '../src/view/sessionConfig';
+import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig, mergeLiveAgents, mergeLiveSkills} from '../src/view/sessionConfig';
 import {scanVaultStructure} from '../src/configWriter';
 import type {ModelInfo, SlashCommand, AgentInfo} from '../src/agentService';
-import type {AgentConfig} from '../src/types';
+import type {AgentConfig, SkillInfo} from '../src/types';
 
 const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>;
 
@@ -211,5 +211,79 @@ describe('mapAgentInfoToAgentConfig', () => {
 		const agents: AgentInfo[] = [{name: 'Explore', description: 'No model binding'}];
 		const result = mapAgentInfoToAgentConfig(agents);
 		expect('model' in result[0]!).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// mergeLiveAgents / mergeLiveSkills (issue #130) — the CLI decides which agents
+// and skills exist; the vault directory scan supplies the config for those it
+// also knows about. Replacing a scanned AgentConfig wholesale would drop its
+// declared `tools`/`skills`, and applyAgentToolsAndSkills() reads
+// `skills: undefined` as "enable all" — which would silently widen a
+// deliberately narrowed agent as soon as the first capture landed.
+// ---------------------------------------------------------------------------
+
+describe('mergeLiveAgents', () => {
+	const scanned: AgentConfig[] = [
+		{
+			name: 'Researcher',
+			description: 'From the vault',
+			instructions: 'Full agent body from the markdown file',
+			filePath: '_synapse/agents/researcher.md',
+			skills: ['summarize'],
+			tools: ['read_note'],
+			model: 'sonnet',
+		},
+	];
+
+	it('preserves a vault agent declared skills and tools instead of widening them', () => {
+		const live: AgentInfo[] = [{name: 'Researcher', description: 'From the CLI'}];
+		const merged = mergeLiveAgents(live, scanned);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]?.skills).toEqual(['summarize']);
+		expect(merged[0]?.tools).toEqual(['read_note']);
+		expect(merged[0]?.instructions).toBe('Full agent body from the markdown file');
+		expect(merged[0]?.filePath).toBe('_synapse/agents/researcher.md');
+	});
+
+	it('includes CLI-only agents the vault scan never saw', () => {
+		const live: AgentInfo[] = [
+			{name: 'Researcher', description: 'From the CLI'},
+			{name: 'Explore', description: 'Built-in CLI agent'},
+		];
+		const merged = mergeLiveAgents(live, scanned);
+		expect(merged.map(a => a.name)).toEqual(['Researcher', 'Explore']);
+		expect(merged[1]?.skills).toBeUndefined();
+	});
+
+	it('drops a scanned agent the CLI did not load, since the CLI is authoritative', () => {
+		const live: AgentInfo[] = [{name: 'Explore', description: 'Built-in CLI agent'}];
+		expect(mergeLiveAgents(live, scanned).map(a => a.name)).toEqual(['Explore']);
+	});
+
+	it('returns an empty list when the CLI reports no agents', () => {
+		expect(mergeLiveAgents([], scanned)).toEqual([]);
+	});
+});
+
+describe('mergeLiveSkills', () => {
+	const scanned: SkillInfo[] = [
+		{name: 'summarize', description: 'From the vault', folderPath: '_synapse/skills/summarize'},
+	];
+
+	it('keeps the vault skill folderPath rather than flattening it to the empty string', () => {
+		const live: SlashCommand[] = [{name: 'summarize', description: 'From the CLI', argumentHint: ''}];
+		const merged = mergeLiveSkills(live, scanned);
+		expect(merged[0]?.folderPath).toBe('_synapse/skills/summarize');
+	});
+
+	it('includes CLI-only commands with an empty folderPath', () => {
+		const live: SlashCommand[] = [
+			{name: 'summarize', description: 'From the CLI', argumentHint: ''},
+			{name: 'usage', description: 'Built-in', argumentHint: ''},
+		];
+		const merged = mergeLiveSkills(live, scanned);
+		expect(merged.map(s => s.name)).toEqual(['summarize', 'usage']);
+		expect(merged[1]?.folderPath).toBe('');
 	});
 });

@@ -375,14 +375,21 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
     `disconnectSession()`, `newConversation()`, and the sidebar's `restoreFromBackground()`/
     `selectSession()` cold-resume path (`sessionSidebar.ts`) — so the gauge never shows a stale
     session's numbers under a different session's tab.
-- **Slash-command popup and agent picker** prefer the live cache over the directory scan:
+- **Slash-command popup and agent picker** merge the live cache with the directory scan:
   `getEffectiveSkills()`/`getEffectiveAgents()` (`configToolbar.ts`) return
-  `mapSlashCommandsToSkillInfo(session.cachedSupportedCommands)`/
-  `mapAgentInfoToAgentConfig(session.cachedSupportedAgents)` (`sessionConfig.ts`) when the
+  `mergeLiveSkills(session.cachedSupportedCommands, this.skills)`/
+  `mergeLiveAgents(session.cachedSupportedAgents, this.agents)` (`sessionConfig.ts`) when the
   current session has captured a value, else the unchanged directory-scan result (`this.skills`
   from `scanSkills()`, `this.agents` from `scanAgents()`). A session that has never sent a turn
   has an empty cache, so this transparently falls through to the scan — the pre-#130 behavior
   for that case is unchanged.
+  - **The merge rule is: the CLI decides membership, the scan supplies config.** An agent the
+    CLI did not load is dropped (the CLI is authoritative about what actually loaded); an agent
+    present in both keeps its scanned `AgentConfig`. This matters because `AgentInfo` has no
+    `tools`/`skills` and `applyAgentToolsAndSkills()` reads `skills: undefined` as "enable all"
+    — replacing a scanned config outright would silently widen a vault agent that had
+    deliberately restricted itself. Same rule for skills, so a vault skill keeps its
+    `folderPath`.
   - `inputArea.ts`'s slash popup (`updateSkillPopup()`) filters `getEffectiveSkills()` (not
     `this.skills` directly) by `enabledSkills`.
   - `configToolbar.ts`'s `selectAgent()` looks up the chosen name in `getEffectiveAgents()`
@@ -390,6 +397,11 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
   - `applyAgentToolsAndSkills()` — the agent-declared `skills:` restriction filter — filters
     `getEffectiveSkills()`, so a CLI-sourced skill list is restricted the same way a
     scan-sourced one is.
+  - **Only the gauge refreshes on `session.metadata`.** That event fires once per `assistant`
+    message, i.e. repeatedly mid-turn, and `updateConfigUI()` mutates session configuration
+    (rebuilds the `<select>`, can reset `selectedAgent`, rewrites `enabledSkills`). The
+    agent/skill lists therefore refresh on `session.idle` instead, which is also when a
+    one-turn-stale cache is meaningful.
   - The mapping is lossy in one direction: `AgentInfo` (CLI) carries no `skills`/`tools`
     restriction or markdown body, so a CLI-sourced `AgentConfig` entry always has
     `skills: undefined`/`tools: undefined` (= "all enabled", the same default the scan path
