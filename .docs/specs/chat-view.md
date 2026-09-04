@@ -485,6 +485,18 @@ exec tools regardless of the tool-approval setting.
   `claude_code` preset. The resulting session is named `[search] <Agent>: <query>` and added
   to the sidebar (skipped when the query aborted without an id).
 
+**Reaches a local model too, as of issue #167.** Both `inlineChat()` calls now also pass
+`app: this.app` and `canUseTool: autoApproveReadOnlyTools` (`agentService.ts`). Without these,
+`inlineChat()`'s `supportsTools && app && canUseTool` gate (#150) was never satisfied for search,
+so a local/BYOK model got the pre-#150 bare one-shot regardless of `SEARCH_TOOLS` — it could not
+actually explore the vault, only guess from the prompt text. `autoApproveReadOnlyTools` is an
+always-allow `CanUseTool`, safe here specifically because both search call sites restrict `tools`
+to the read-only set (`SEARCH_TOOLS`) — see "Wiring `inlineChat()`'s callers (issue #167)" in
+`agent-service.md` for the full reasoning (parity with the SDK path's own auto-approval of
+read-only tools, and why this is deliberately not #151's unattended `resolveToolApprovalPolicy()`
+mechanism). This does not open an approval modal per tool call — up to `maxTurns: 40` of them
+would make search unusable — and does not change the Claude-path behavior search already has.
+
 ## Error handling
 
 `session.error` events and `handleSend()` catch blocks pass raw errors through

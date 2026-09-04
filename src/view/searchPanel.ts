@@ -1,6 +1,6 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
-import type {SessionConfig} from '../agentService';
+import {autoApproveReadOnlyTools, type SessionConfig} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
@@ -343,6 +343,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		// Read-only file tools + enough turns to actually explore the vault.
 		// (tools: [] with maxTurns: 1 made every search fail with
 		// "Reached maximum number of turns (1)".)
+		// `app` + `autoApproveReadOnlyTools` (#167) makes this reachable on a local model too —
+		// see the doc comment on `autoApproveReadOnlyTools` in `agentService.ts` for why an
+		// always-allow handler is safe here specifically (tools is restricted to SEARCH_TOOLS).
 		const {content} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
@@ -351,6 +354,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			tools: SEARCH_TOOLS,
 			maxTurns: 20,
 			timeoutMs,
+			app: this.app,
+			canUseTool: autoApproveReadOnlyTools,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 		this.renderSearchResults(content || '');
@@ -362,10 +367,15 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
+		// `app` + `autoApproveReadOnlyTools` (#167) — see the doc comment on
+		// `autoApproveReadOnlyTools` in `agentService.ts`. Safe here because
+		// `buildSearchSessionConfig()` always sets `tools: SEARCH_TOOLS` (read-only).
 		const {content, sessionId} = await this.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			...sessionConfig,
 			timeoutMs,
+			app: this.app,
+			canUseTool: autoApproveReadOnlyTools,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 

@@ -1226,6 +1226,50 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
 	};
 }
 
+/**
+ * Auto-approving `CanUseTool` for `inlineChat()` call sites that request only the read-only
+ * vault-tool set — `['Read']` or `['Read', 'Glob', 'Grep']` on the SDK path, which
+ * `vaultTools` (`read_note`/`list_notes`/`search_notes`, `src/vaultTools.ts`) mirror on the
+ * local-model branch. Introduced by #167 to make `inlineChat()`'s local-model branch reachable
+ * for `searchPanel.ts` (`maxTurns: 40`) without opening one approval modal per tool call.
+ *
+ * This is deliberately **not** a new permission concept, and is narrower than #151's
+ * `resolveToolApprovalPolicy()` (`src/runExecutor.ts`), which governs unattended runs that may
+ * request write-capable tools and therefore must fail closed (`'ask'` == deny with no human to
+ * ask). The read-only case is different: a verified spike against the live CLI showed the Agent
+ * SDK path *never invokes* `canUseTool` for `Read`/`Glob`/`Grep` at all — it auto-approves them
+ * before the callback would even fire — while a write tool (`Write`) still goes through
+ * `canUseTool` and is denied with no attended handler present. `vaultTools` are genuinely
+ * read-only (`app.vault.read()` / `getFiles()` / `getMarkdownFiles()` only — no
+ * `modify`/`create`/`delete`/`rename`), so this handler reproduces the Claude path's own
+ * shipped behavior for the local-model path rather than inventing a laxer one. See
+ * "Tool approval for inlineChat()'s read-only callers" in `.docs/specs/agent-service.md`.
+ *
+ * The read-only set is **enforced here**, not merely assumed of the caller: any tool outside
+ * `READ_ONLY_TOOL_NAMES` is denied. `inlineChat()` forwards the same `canUseTool` to the raw
+ * Claude-path `query()` call too, so a blanket always-allow handler would silently grant writes
+ * to any future call site that wired it in alongside a write-capable tool. Failing closed on the
+ * tool name keeps the guarantee in the code rather than in this comment. Call sites that
+ * legitimately need write-capable tools stay on #151's `resolveToolApprovalPolicy()` path.
+ */
+const READ_ONLY_TOOL_NAMES = new Set([
+	// SDK path — searchPanel's SEARCH_TOOLS and editorMenu's ['Read'].
+	'Read', 'Glob', 'Grep',
+	// Local-model path — the `vaultTools` analogues (`src/vaultTools.ts`), verified read-only:
+	// they call only `vault.read()` / `getFiles()` / `getMarkdownFiles()`.
+	'read_note', 'list_notes', 'search_notes',
+]);
+
+export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
+	if (READ_ONLY_TOOL_NAMES.has(toolName)) {
+		return {behavior: 'allow', updatedInput: input};
+	}
+	return {
+		behavior: 'deny',
+		message: `Synapse: "${toolName}" is not one of the read-only tools this call site auto-approves.`,
+	};
+};
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;
