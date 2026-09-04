@@ -5,8 +5,9 @@
  * interleave `vault.read()`/`vault.modify()` and clobber each other.
  *
  * Advisory and in-process only: this guards writes that go through the
- * plugin's own code paths (`configWriter.ts`, `triggerExecutor.ts`,
- * `batchLoopExecutor.ts` report appends). It cannot — and does not try to —
+ * plugin's own code paths (`configWriter.ts`, and `runExecutor.ts`'s report
+ * appends on behalf of `triggerExecutor.ts`/`batchLoopExecutor.ts`). It cannot
+ * — and does not try to —
  * guard writes the Claude CLI makes via its own file tools during an
  * `inlineChat()` run, nor a user's manual edits in the Obsidian editor. See
  * `specs/lock-manager.md` for the full scope note.

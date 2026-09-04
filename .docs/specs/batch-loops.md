@@ -11,7 +11,10 @@ caps; it never hands control of the loop itself to the model.
 This is built on the foundational slice (issue #73) of the Tier-2 batch-loops feature (tracked by
 #66), and adds budget-based cost caps and true in-flight cancellation (issue #74). Issue #75 adds a
 dedicated progress modal that replaces the plain per-file `Notice`s with a live-updating view of
-the run.
+the run. Since issue #154, the per-file substitute → route → run → apply-write-mode pipeline is
+owned by the shared `src/runExecutor.ts` (see [run-executor.md](run-executor.md)) — this module is
+a thin caller over it, owning the batch-loop-specific orchestration: scope/prompt launch flow,
+sequential iteration, budget/cancellation/progress, and the shared-report block formatting.
 
 ## Launch flow (`src/batchLoopExecutor.ts`)
 
@@ -71,17 +74,17 @@ cumulative `budget` (if any) has already been exceeded by prior files' usage (st
 starting the next file — see **Budget enforcement** below). Either stop appends a run summary to
 the report and reports processed vs. skipped via `Notice`.
 
-**Per-file execution — `runOnFile()`:** mirrors `triggerExecutor.ts`'s Claude routing path
-exactly: substitutes `{{file}}` in the instruction with the vault-relative path, then calls
-`AgentService.inlineChat()` with `systemPrompt: {type: 'preset', preset: 'claude_code'}` (the
-default tool-usage prompt, so the loop can read the substituted file path), `cwd` set to the
-absolute vault base path and `plugins` set to
+**Per-file execution — `runExecutor.ts`'s `runItem()`:** substitutes `{{file}}` in the instruction
+with the vault-relative path, then routes to `AgentService.inlineChat()` with
+`systemPrompt: {type: 'preset', preset: 'claude_code'}` (the default tool-usage prompt, so the loop
+can read the substituted file path), `cwd` set to the absolute vault base path and `plugins` set to
 the `_synapse/` local plugin path (same SDK plugin-discovery wiring bots/triggers/editor actions
-use), `maxTurns: 10`, `permissionMode: 'default'`. This always routes through Claude — local-model
-routing (as `triggerExecutor.ts` has for triggers) remains out of scope. It also passes a
-per-file `AbortController` (see **Cancellation** below) and an `onEvent` callback that forwards
-each file's `SDKResultMessage` (`type: 'result'`) to the caller, which accumulates cumulative
-token/cost usage for budget enforcement.
+use), `maxTurns: 10`, `permissionMode: 'default'`. Batch loops never pass a `model`, so this always
+routes through Claude — local-model routing (as `triggerExecutor.ts` has for triggers) remains out
+of scope (see [run-executor.md](run-executor.md)). `runBatchLoop()` passes a per-file
+`AbortController` (see **Cancellation** below) and an `onEvent` callback that forwards each file's
+`SDKResultMessage` (`type: 'result'`) to the caller, which accumulates cumulative token/cost usage
+for budget enforcement.
 
 **Per-file progress:** the optional `onProgress` callback is invoked twice per file — once when the
 file starts, with `{index, total, filePath, phase: 'starting'}` paired with cumulative usage
@@ -205,16 +208,18 @@ even exists), so there is nothing to append — no run summary block is written 
 runs (`reason: 'completed'`) also do *not* get a run summary block — the per-file entries and
 completion `Notice` are sufficient, matching #73's original behavior.
 
-`_synapse/reports/` is created automatically if missing, via `configWriter.ts`'s `ensureFolder()`
-(shared with other writers rather than duplicating trigger-executor's own folder-creation logic).
-Appends use `vault.read()` + `vault.modify()` (not `adapter.read`/`write`) so the Obsidian cache
-and internal file queue stay consistent — same rationale as `triggerExecutor.ts`'s
-`appendToReport()`.
-
-The whole read-modify-write in `appendBlockToReport()` is wrapped in the per-path advisory lock
-from [lock-manager.md](lock-manager.md), keyed on the report path, so two batch-loop runs (or a
-batch loop and a trigger) appending to the same day's report can't interleave and clobber each
-other.
+Appends go through `runExecutor.ts`'s shared `appendReportBlock()` primitive (see
+[run-executor.md](run-executor.md)) — the same one `triggerExecutor.ts` uses, parameterized by this
+module's report path/heading and `## <filePath>`/`### Error` block formatting.
+`appendReportBlock()` ensures `_synapse/reports/` exists (via `configWriter.ts`'s `ensureFolder()`),
+uses `vault.read()` + `vault.modify()` (not `adapter.read`/`write`) so the Obsidian cache and
+internal file queue stay consistent, and wraps the whole read-modify-write in the per-path advisory
+lock from [lock-manager.md](lock-manager.md), keyed on the report path, so two batch-loop runs (or
+a batch loop and a trigger) appending to the same day's report can't interleave and clobber each
+other. Unlike the trigger executor, a `LockAcquisitionError` here propagates to the per-file loop
+body in `runBatchLoop()`, which already catches and reports per-file failures — see
+[run-executor.md](run-executor.md) for why this degrade-or-propagate choice differs between the two
+callers.
 
 This report format is deliberately close to (but distinct from) the trigger executor's: triggers
 key their report file by trigger name (`<trigger-name>-YYYY-MM-DD.md`) with one heading per day
@@ -277,3 +282,9 @@ Obsidian's `Modal.onClose()` — does not stop the loop. `onClose()` intentional
 background and keeps appending to the report; there is no way to reopen its progress view for
 that run (out of scope for this slice) — only the report file and the final completion `Notice`
 remain as a record.
+
+The per-file substitute → route → run → apply-write-mode pipeline and the report-append primitive
+were extracted into `src/runExecutor.ts` in issue #154, shared with `triggerExecutor.ts` (see
+[run-executor.md](run-executor.md)). `runBatchLoop()`'s public signature, budget/cancellation/
+progress orchestration, and report format are unchanged; #152's tests
+(`test/batchLoopExecutor.test.ts`) pass unchanged against the new implementation.
