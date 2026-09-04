@@ -367,8 +367,39 @@ export class SynapseSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════════════════════════
 		// TAB 1: Claude (auth)
 		// ══════════════════════════════════════════════════════════
-		const claudePanel = panels['claude']!;
-		const authFieldsEl = claudePanel.createDiv();
+		this.renderClaudePanel(panels['claude']!);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 2: Feature Map & Agents
+		// ══════════════════════════════════════════════════════════
+		this.renderAgentsPanel(panels['agents']!);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 3: Capabilities
+		// ══════════════════════════════════════════════════════════
+		this.renderCapabilitiesPanel(panels['capabilities']!);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 4: Tools
+		// ══════════════════════════════════════════════════════════
+		this.renderToolsPanel(panels['tools']!);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 5: Bots
+		// ══════════════════════════════════════════════════════════
+		const botsPanel = panels['bots']!;
+		this.renderBotsPanel(botsPanel);
+
+		// ══════════════════════════════════════════════════════════
+		// TAB 6: Triggers
+		// ══════════════════════════════════════════════════════════
+		const triggersPanel = panels['triggers']!;
+		void this.renderTriggersPanel(triggersPanel);
+	}
+
+	/** Render the Claude tab (auth, CLI location, local & custom BYOK provider). */
+	private renderClaudePanel(panel: HTMLElement): void {
+		const authFieldsEl = panel.createDiv();
 
 		const renderAuthFields = () => {
 			authFieldsEl.empty();
@@ -394,7 +425,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			}
 		};
 
-		new Setting(claudePanel)
+		new Setting(panel)
 			.setName('Authentication')
 			.setDesc('How to authenticate with Claude.')
 			.addDropdown(dropdown => dropdown
@@ -426,10 +457,10 @@ export class SynapseSettingTab extends PluginSettingTab {
 					}
 				}));
 
-		claudePanel.appendChild(authFieldsEl);
+		panel.appendChild(authFieldsEl);
 		renderAuthFields();
 
-		new Setting(claudePanel)
+		new Setting(panel)
 			.setName('Claude CLI location')
 			.setDesc('Custom path to the Claude CLI binary. Leave blank to auto-detect.')
 			.addText(text => text
@@ -442,8 +473,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 					await renderCliStatus();
 				}));
 
-		const cliStatusEl = claudePanel.createDiv({cls: 'setting-item-description synapse-settings-cli-status'});
-		const cliSkewEl = claudePanel.createDiv({cls: 'setting-item-description mod-warning synapse-settings-cli-skew'});
+		const cliStatusEl = panel.createDiv({cls: 'setting-item-description synapse-settings-cli-status'});
+		const cliSkewEl = panel.createDiv({cls: 'setting-item-description mod-warning synapse-settings-cli-skew'});
 		const renderCliStatus = async () => {
 			cliStatusEl.empty();
 			cliSkewEl.empty();
@@ -474,11 +505,11 @@ export class SynapseSettingTab extends PluginSettingTab {
 		void renderCliStatus();
 
 		// ── Local Model / BYOK Provider ─────────────────────────────
-		new Setting(claudePanel)
+		new Setting(panel)
 			.setName('Local & custom providers')
 			.setHeading();
 
-		const providerDescEl = claudePanel.createDiv({cls: 'setting-item-description synapse-settings-provider-desc'});
+		const providerDescEl = panel.createDiv({cls: 'setting-item-description synapse-settings-provider-desc'});
 
 		const updateProviderDesc = () => {
 			if (this.plugin.settings.providerPreset === 'ollama') {
@@ -493,7 +524,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 		};
 		updateProviderDesc();
 
-		const providerFieldsEl = claudePanel.createDiv();
+		const providerFieldsEl = panel.createDiv();
 
 		const renderProviderFields = () => {
 			providerFieldsEl.empty();
@@ -646,28 +677,26 @@ export class SynapseSettingTab extends PluginSettingTab {
 		};
 
 		renderProviderFields();
+	}
 
+	/** Render the Feature Map & Agents tab. */
+	private renderAgentsPanel(panel: HTMLElement): void {
 
-		// ══════════════════════════════════════════════════════════
-		// TAB 2: Feature Map & Agents
-		// ══════════════════════════════════════════════════════════
-		const agentsPanel = panels['agents']!;
-
-		new Setting(agentsPanel)
+		new Setting(panel)
 			.setName('Feature -> Agent map')
 			.setHeading();
-		agentsPanel.createEl('p', {
+		panel.createEl('p', {
 			text: 'Map each plugin feature to a specific agent persona. Lightweight features default to a Claude model out of the box.',
 			cls: 'setting-item-description',
 		});
 
 		const renderAgentsPanel = async () => {
 			const dynamicContainerId = 'synapse-agents-dynamic';
-			let dynamicContainer = agentsPanel.querySelector(`#${dynamicContainerId}`) as HTMLElement;
+			let dynamicContainer = panel.querySelector(`#${dynamicContainerId}`) as HTMLElement;
 			if (dynamicContainer) {
 				dynamicContainer.empty();
 			} else {
-				dynamicContainer = agentsPanel.createDiv({attr: {id: dynamicContainerId}});
+				dynamicContainer = panel.createDiv({attr: {id: dynamicContainerId}});
 			}
 
 			const vaultAgents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
@@ -734,13 +763,12 @@ export class SynapseSettingTab extends PluginSettingTab {
 			}
 		};
 		void renderAgentsPanel();
+	}
 
-		// ══════════════════════════════════════════════════════════
-		// TAB 3: Capabilities
-		// ══════════════════════════════════════════════════════════
-		const capPanel = panels['capabilities']!;
+	/** Render the Capabilities tab. */
+	private renderCapabilitiesPanel(panel: HTMLElement): void {
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Synapse folder')
 			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/`)
 			.addButton(button => button
@@ -785,7 +813,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Auto-update working directory')
 			.setDesc('Automatically change the working directory to the active note\'s parent folder when switching notes.')
 			.addToggle(toggle => toggle
@@ -795,7 +823,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Auto-include note images')
 			.setDesc('Automatically attach images embedded in the active note when sending a message.')
 			.addToggle(toggle => toggle
@@ -805,7 +833,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Request timeout')
 			.setDesc('Custom request timeout in seconds. 0 uses an adaptive default based on vault size.')
 			.addText(text => {
@@ -823,7 +851,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Max note images')
 			.setDesc('Maximum number of note-embedded images to auto-attach per message.')
 			.addText(text => {
@@ -841,9 +869,9 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(capPanel).setName('Chat run guardrails').setHeading();
+		new Setting(panel).setName('Chat run guardrails').setHeading();
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Turn limit')
 			.setDesc('Auto-cancel a chat run once it reaches this many agent turns (tool-use steps), showing why. Distinct from the raw SDK turn cap. 0 = off (no limit).')
 			.addText(text => {
@@ -864,7 +892,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Token budget')
 			.setDesc('Auto-cancel a chat run once its cumulative token usage (input + output) reaches this amount. 0 = off (no limit).')
 			.addText(text => {
@@ -881,7 +909,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(capPanel)
+		new Setting(panel)
 			.setName('Dollar budget (USD)')
 			.setDesc('Flag a chat run once its cost reaches this amount. Cost is only reported by the SDK after a run finishes, so this cannot stop a run in-flight — it surfaces an "over budget" notice once the total is known. Use the turn or token limit above for real-time auto-cancellation. 0 = off (no limit).')
 			.addText(text => {
@@ -899,12 +927,12 @@ export class SynapseSettingTab extends PluginSettingTab {
 					});
 			});
 
-		// ══════════════════════════════════════════════════════════
-		// TAB 4: Tools
-		// ══════════════════════════════════════════════════════════
-		const toolsPanel = panels['tools']!;
+	}
 
-		new Setting(toolsPanel)
+	/** Render the Tools tab. */
+	private renderToolsPanel(panel: HTMLElement): void {
+
+		new Setting(panel)
 			.setName('Tools approval')
 			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs. For unattended runs — triggers and batch loops, which have no one to ask — "ask" instead denies tool calls outright and logs the denial to that run\'s report, while "allow" runs them without asking. A trigger can override this to "allow" for just itself by setting toolApproval to allow in its own frontmatter, without changing this setting. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
 			.addDropdown(dropdown => dropdown
@@ -914,20 +942,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 					this.plugin.settings.toolApproval = value as 'ask' | 'allow';
 					await this.plugin.saveSettings();
 				}));
-
-
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 5: Bots
-		// ══════════════════════════════════════════════════════════
-		const botsPanel = panels['bots']!;
-		this.renderBotsPanel(botsPanel);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 6: Triggers
-		// ══════════════════════════════════════════════════════════
-		const triggersPanel = panels['triggers']!;
-		void this.renderTriggersPanel(triggersPanel);
 	}
 
 	/** Render the Bots settings tab (Telegram section). */
