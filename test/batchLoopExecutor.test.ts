@@ -112,6 +112,7 @@ function makePlugin(inlineChatImpl: InlineChatImpl) {
 	const inlineChat = vi.fn(inlineChatImpl);
 	const plugin = {
 		app,
+		settings: {toolApproval: 'ask' as const},
 		agentService: {inlineChat},
 	};
 	return {app, plugin, inlineChat};

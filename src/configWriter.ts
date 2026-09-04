@@ -171,6 +171,11 @@ export async function scanTriggers(app: App, triggersFolder: string): Promise<Tr
 		const rawEnabled = typeof meta['enabled'] === 'string' ? meta['enabled'] : undefined;
 		const enabled = rawEnabled === 'false' ? false : true;
 
+		// Parse toolApproval field: only 'allow' is meaningful (per-trigger opt-in into
+		// bypassPermissions, issue #151). Any other/absent value means "not opted in" —
+		// this trigger follows the global settings.toolApproval.
+		const toolApproval = meta['toolApproval'] === 'allow' ? 'allow' as const : undefined;
+
 		triggers.push({
 			name: (typeof meta['name'] === 'string' && meta['name']) ? meta['name'] : child.basename,
 			description: (typeof meta['description'] === 'string' ? meta['description'] : '') || '',
@@ -180,6 +185,7 @@ export async function scanTriggers(app: App, triggersFolder: string): Promise<Tr
 			model: (typeof meta['model'] === 'string' && meta['model']) || undefined,
 			agent: (typeof meta['agent'] === 'string' && meta['agent']) || undefined,
 			write,
+			toolApproval,
 			enabled,
 			body: body.trim(),
 			filePath: child.path,
@@ -313,6 +319,7 @@ export async function writeTrigger(
 		['model', config.model],
 		['agent', config.agent],
 		['write', config.write === 'frontmatter' ? 'frontmatter' : config.write === true ? 'true' : undefined],
+		['toolApproval', config.toolApproval === 'allow' ? 'allow' : undefined],
 		['enabled', config.enabled === false ? 'false' : undefined],
 	];
 	const content = buildMarkdown(fields, config.body);

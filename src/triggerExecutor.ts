@@ -90,6 +90,8 @@ export async function executeTrigger(
 			write: trigger.write,
 			logLabel: `Trigger "${trigger.name}"`,
 			appendReport: (result, isError) => appendToReport(plugin, trigger, result, isError),
+			surface: 'trigger',
+			toolApprovalOverrideAllow: trigger.toolApproval === 'allow',
 		});
 
 		debugTrace(`[synapse] Trigger "${trigger.name}" executed successfully for ${filePath}`);

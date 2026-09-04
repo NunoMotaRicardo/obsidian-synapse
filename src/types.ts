@@ -30,6 +30,15 @@ export interface TriggerConfig {
 	agent?: string;
 	/** Whether the trigger may write back. false = read-only, true = full write, 'frontmatter' = frontmatter-only. */
 	write?: boolean | 'frontmatter';
+	/**
+	 * Per-trigger opt-in override of `settings.toolApproval` for this trigger's own runs (issue
+	 * #151). `'allow'` grants this trigger `bypassPermissions` even when the global setting is
+	 * `'ask'`, so one trigger can be trusted with tool calls without loosening approval everywhere.
+	 * Absent (the common case) means "not opted in" — this trigger follows the global setting.
+	 * There is no override in the other direction: a trigger cannot force `'ask'` when the global
+	 * setting is `'allow'`.
+	 */
+	toolApproval?: 'allow';
 	/** Whether the trigger is active. Defaults to true when omitted. */
 	enabled?: boolean;
 	/** Prompt/instructions from the markdown body. */
