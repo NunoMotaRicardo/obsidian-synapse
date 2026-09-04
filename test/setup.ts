@@ -264,10 +264,55 @@ export async function readVaultFile(app: App, path: string): Promise<string> {
 	return app.vault.read(abstractFile);
 }
 
+/**
+ * Faithful re-implementation of Obsidian's documented `debounce()` contract (real
+ * Obsidian's own implementation lives in its closed-source `app.js`, not in this repo
+ * or `node_modules/obsidian`, which ships types only). `resetTimer: true` restarts the
+ * timeout on every call (classic trailing-edge debounce — fires once, `timeout`ms after
+ * the *last* call); `resetTimer: false` schedules on the first call and lets later calls
+ * before the timeout update the pending args without pushing the fire time out further.
+ * Used by `settings.ts`'s provider Base URL / API key debouncing (#148) and exercised by
+ * `test/settingsDebounce.test.ts`.
+ */
+function debounceForMock<T extends unknown[]>(cb: (...args: T) => void, timeout = 100, resetTimer = false) {
+	let timerId: ReturnType<typeof setTimeout> | null = null;
+	let lastArgs: T;
+	const debounced = ((...args: T) => {
+		lastArgs = args;
+		if (resetTimer && timerId !== null) {
+			clearTimeout(timerId);
+			timerId = null;
+		}
+		if (timerId === null) {
+			timerId = setTimeout(() => {
+				timerId = null;
+				cb(...lastArgs);
+			}, timeout);
+		}
+		return debounced;
+	}) as ((...args: T) => typeof debounced) & {cancel: () => typeof debounced; run: () => void};
+	debounced.cancel = () => {
+		if (timerId !== null) {
+			clearTimeout(timerId);
+			timerId = null;
+		}
+		return debounced;
+	};
+	debounced.run = () => {
+		if (timerId !== null) {
+			clearTimeout(timerId);
+			timerId = null;
+			cb(...lastArgs);
+		}
+	};
+	return debounced;
+}
+
 // Global mock for the Obsidian API since it's only available inside the Obsidian app.
 vi.mock('obsidian', () => {
 	return {
 		normalizePath: normalizePathForMock,
+		debounce: debounceForMock,
 		TFile,
 		TFolder,
 		TAbstractFile,
