@@ -1226,6 +1226,33 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
 	};
 }
 
+/**
+ * Auto-approving `CanUseTool` for `inlineChat()` call sites that request only the read-only
+ * vault-tool set — `['Read']` or `['Read', 'Glob', 'Grep']` on the SDK path, which
+ * `vaultTools` (`read_note`/`list_notes`/`search_notes`, `src/vaultTools.ts`) mirror on the
+ * local-model branch. Introduced by #167 to make `inlineChat()`'s local-model branch reachable
+ * for `searchPanel.ts` (`maxTurns: 40`) without opening one approval modal per tool call.
+ *
+ * This is deliberately **not** a new permission concept, and is narrower than #151's
+ * `resolveToolApprovalPolicy()` (`src/runExecutor.ts`), which governs unattended runs that may
+ * request write-capable tools and therefore must fail closed (`'ask'` == deny with no human to
+ * ask). The read-only case is different: a verified spike against the live CLI showed the Agent
+ * SDK path *never invokes* `canUseTool` for `Read`/`Glob`/`Grep` at all — it auto-approves them
+ * before the callback would even fire — while a write tool (`Write`) still goes through
+ * `canUseTool` and is denied with no attended handler present. `vaultTools` are genuinely
+ * read-only (`app.vault.read()` / `getFiles()` / `getMarkdownFiles()` only — no
+ * `modify`/`create`/`delete`/`rename`), so this handler reproduces the Claude path's own
+ * shipped behavior for the local-model path rather than inventing a laxer one. See
+ * "Tool approval for inlineChat()'s read-only callers" in `.docs/specs/agent-service.md`.
+ *
+ * Only wire this into a call site whose `tools` option is restricted to that read-only set.
+ * `inlineChat()` forwards the same `canUseTool` to the raw Claude-path `query()` call too, so an
+ * always-allow handler is only safe because the model can never be offered a tool outside that
+ * set in the first place — it must not be reused for a call site that also offers write-capable
+ * tools (those stay on #151's fail-closed `resolveToolApprovalPolicy()` path instead).
+ */
+export const autoApproveReadOnlyTools: CanUseTool = async () => ({behavior: 'allow'});
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;

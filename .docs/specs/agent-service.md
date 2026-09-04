@@ -663,14 +663,79 @@ gave the same models the full ReAct kit; `inlineChat()`'s local branch gave them
   calls, but extending to MCP is left as a separate question.
 
 **Caller reachability as of #150 — file-boundary note.** #150 was scoped to `agentService.ts`
-only; it did not touch `editorMenu.ts`, `editModal.ts` or `searchPanel.ts`. As of this change,
-*none* of `inlineChat()`'s callers pass `app` or `canUseTool`, so the new capability exists but is
-not yet reachable from any UI call site — every existing call still gets the pre-#150 bare one-shot
-on a local model, satisfying AC4 ("with no `App` instance available, no tools are offered and
-nothing crashes") by construction rather than by an explicit check. Wiring `app`/`canUseTool` into
-whichever specific call sites should get vault tools (search is the obvious first candidate, since
-it already requests real-SDK-path tools via `SEARCH_TOOLS`) is a follow-up issue against those
-files.
+only; it did not touch `editorMenu.ts`, `editModal.ts` or `searchPanel.ts`. As of that change,
+*none* of `inlineChat()`'s callers passed `app` or `canUseTool`, so the new capability existed but
+was not yet reachable from any UI call site — every existing call still got the pre-#150 bare
+one-shot on a local model. #167 (below) wires the two call sites that actually request tools on
+the SDK path.
+
+### Wiring `inlineChat()`'s callers (issue #167)
+
+#150 left every `inlineChat()` caller unreachable — see the file-boundary note above. Of the ~22
+call sites, only two genuinely request tools on the SDK path and should offer the local-model
+analogue: `searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`,
+`maxTurns: 40`). The rest pass `tools: []` deliberately — one-shot generation actions (create
+note, create canvas, edit selection) that have no tools on the Claude path either — and are
+untouched.
+
+**The blocking question this issue had to resolve: what approves a local tool call for a caller
+whose UI is attended but whose turn budget (`maxTurns: 40`) makes per-call approval unusable.**
+#150's `inlineChat()` gate is deliberately fail-closed — `supportsTools && app && canUseTool` all
+required, with no "unattended by design" fallback the way `Session.send()`/`triggerExecutor.ts`
+have — so wiring search naively (reusing the chat panel's `ToolApprovalModal`-backed
+`canUseTool`) would mean up to 40 approval modals for a single search. Approving each call
+individually was rejected as unusable UX; running fully ungated (no `canUseTool` at all) would
+have meant reintroducing exactly the silent-fail-open pattern #150's method comment explicitly
+rules out.
+
+**Resolution: `autoApproveReadOnlyTools`, a dedicated always-allow `CanUseTool` — not a new
+"attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()`
+either.** This is deliberately narrower than both:
+
+- It is **not** #151's policy (`src/runExecutor.ts`, "Tool approval policy" — governs
+  `triggerExecutor.ts`/`batchLoopExecutor.ts`'s unattended runs, where `'ask'` means "no human to
+  ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
+  is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
+  the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only vs.
+  write-capable) and are kept as two separate mechanisms rather than unified, so neither
+  accidentally inherits the other's assumptions.
+- It is **not** a new "attended-but-automated" policy tier either, despite the issue framing it
+  that way initially. A verified spike against the live CLI (run for #151, reused here since it
+  answers the same question) showed the Agent SDK path *never invokes* `canUseTool` for
+  `Read`/`Glob`/`Grep` at all — the CLI auto-approves them before the callback would even fire —
+  while a write tool (`Write`) still goes through `canUseTool` and is denied when there's no
+  attended handler. `vaultTools` (`read_note`/`list_notes`/`search_notes`) are the local-path
+  analogue of `Read`/`Glob`/`Grep` and are genuinely read-only (`app.vault.read()` / `getFiles()`
+  / `getMarkdownFiles()` only — never `modify`/`create`/`delete`/`rename`). So auto-approving them
+  on the local path reproduces the Claude path's own shipped behavior for the same caller, rather
+  than inventing a laxer policy next to it. `searchPanel.ts` already runs `bypassPermissions` +
+  `allowDangerouslySkipPermissions` on its advanced-search SDK path when `settings.toolApproval
+  === 'allow'` — the local path granting exactly the read-only three is strictly less permissive
+  than what search already does on Claude in that mode.
+- `autoApproveReadOnlyTools` (`agentService.ts`, exported) is a plain `CanUseTool` that resolves
+  `{behavior: 'allow'}` unconditionally, with no per-tool-name check inside it. That is safe only
+  because of where it is wired: `inlineChat()` forwards the same `canUseTool` to the raw Claude-
+  path `query()` call too (it is a single option, not two), so an always-allow handler is only
+  safe at a call site whose `tools` option is *already* restricted to the read-only set — the
+  model can never be offered anything else to call it for. Its doc comment says this explicitly;
+  it must not be reused at a call site that also offers write-capable tools.
+- Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both now pass
+  `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing `tools:
+  SEARCH_TOOLS`. No second `CanUseTool -> LocalToolApprovalHandler` adapter was added —
+  `adaptCanUseToolToLocalApproval()` (shared since #150) still does that translation in exactly
+  one place; `autoApproveReadOnlyTools` only supplies what `canUseTool` resolves to.
+
+**`editorMenu.ts`'s two `tools: ['Read']` sites (`askAboutImage()`, `extractImageContent()`) are
+deliberately left unwired — not an oversight.** Both send an absolute OS path to an *image* file
+and rely on Claude's native multimodal `Read` tool to view it. `vaultTools`'s `read_note` is not
+an analogue for that: it resolves only vault-relative paths (`app.vault.getAbstractFileByPath()`)
+and returns `app.vault.read()` as UTF-8 text — an absolute OS path would resolve to "File not
+found", and even a resolvable path would return raw bytes/garbled text, not a vision read. More
+fundamentally, `inlineChat()` has no `images` parameter at all (unlike `Session.send()`, which
+does — see "Attachment delivery" above) — no image data reaches the local-model branch from these
+two call sites by any means today, so wiring vault tools in would add spurious failed tool calls
+without fixing the actual gap (giving `inlineChat()` an `images` parameter is a separate,
+larger feature, out of scope here).
 
 ## Query metadata cache (issue #130)
 
