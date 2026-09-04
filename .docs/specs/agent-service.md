@@ -629,6 +629,56 @@ Approving `read_note` looks identical whether the model is Claude or a local/BYO
   vault tools execute against) and ignored on the Agent SDK path, whose own tools run inside the
   CLI process.
 
+## Query metadata cache (issue #130)
+
+Capture-and-cache, not a persistent query — see
+`.docs/decisions/2026-09-04-persistent-query-cache.md` for the full decision, including an
+empirical correction to when during a turn the capture is actually safe.
+
+`Session` holds a `QueryMetadataCache` (`{contextUsage?, commands?, agents?}`) refreshed by
+`refreshQueryMetadataCache(query, prev, onDebug?)` — an exported, independently-testable
+function (`test/queryMetadataCache.test.ts`) that calls `Query.getContextUsage({detail:
+'summary'})`, `Query.supportedCommands()`, and `Query.supportedAgents()` together via
+`Promise.all`, and either returns a fresh cache (all three succeeded) or the **unchanged**
+`prev` cache (any one rejected) — never throws, always emits one `debugTrace()` line on
+failure via the optional `onDebug` callback.
+
+**Timing, not incidental.** These are control requests, only answerable while the turn's
+`Query` handle's underlying CLI process is still alive. For this codebase's single-turn
+(string-`prompt`) `query()` model, that window closes at the terminal `SDKResultMessage` —
+calling any of the three control requests at or after that message always rejects (`Query
+closed before response received` / `ProcessTransport is not ready for writing`), confirmed
+empirically. `Session.send()` therefore calls `refreshQueryMetadataCache()` once per
+non-partial `assistant` SDKMessage in the `for await` loop — there can be more than one per
+turn in a tool-loop conversation — with each call overwriting the previous, so the cache ends
+up holding whatever was captured at the *last* `assistant` message of the turn. A turn with no
+`assistant` messages at all (e.g. an immediate error) leaves the cache untouched.
+
+`'detail': 'summary'` is used deliberately (not `'full'`, the SDK default) — it answers from
+the last response's usage and local estimates, without the per-category token-count API calls
+`'full'` makes, keeping this cheap enough to call once per `assistant` message.
+
+**Public surface**, all on `Session`:
+
+- `get cachedContextUsage(): SDKControlGetContextUsageResponse | undefined` — `totalTokens`,
+  `maxTokens`, `percentage`, model, and a per-category breakdown (`sdk.d.ts:3586`).
+  `undefined` before the first successful capture.
+- `get cachedSupportedCommands(): SlashCommand[] | undefined` — the CLI's actual loaded
+  slash-command/skill list.
+- `get cachedSupportedAgents(): AgentInfo[] | undefined` — the CLI's actual loaded subagent
+  list.
+- A `session.metadata` `SessionEvent` (`data` is a shallow copy of the current
+  `QueryMetadataCache`) dispatched once per capture *attempt* (successful or not, so the view
+  can re-render on a no-op refresh too) — `synapseView.ts` reacts by re-reading the getters
+  above rather than trusting the event payload as authoritative, since `Session` is the single
+  owner of the cache.
+
+Never populated on the BYOK local-model branch (`executeLocalProviderQuery()`) — that path
+never touches a `Query` handle at all, so `cachedContextUsage` stays `undefined` for the entire
+conversation on a local model, by construction rather than by an explicit gate. See
+`chat-view.md`'s "Context-window gauge and live command/agent lists" for how the view consumes
+this cache (including the directory-scan fallback for a session that hasn't sent a turn yet).
+
 ## Connection error handling
 
 When `chat()` or `inlineChat()` fails with a connection/network error, the service fires its

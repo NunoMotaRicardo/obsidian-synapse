@@ -1,8 +1,8 @@
 import {normalizePath, TFile} from 'obsidian';
 import type {App} from 'obsidian';
-import type {ModelInfo} from '../agentService';
+import type {ModelInfo, SlashCommand, AgentInfo} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
-import type {AgentConfig, ChatAttachment, ChatMessage} from '../types';
+import type {AgentConfig, ChatAttachment, ChatMessage, SkillInfo} from '../types';
 import {IMAGE_EXTS} from '../types';
 import {buildBudgetedHistory, type LocalHistoryMessage} from '../providerModels';
 
@@ -656,4 +656,66 @@ export function decideWorkingDirAutoUpdate(params: {
 	currentWorkingDir: string;
 }): boolean {
 	return params.newDir !== params.currentWorkingDir;
+}
+
+/**
+ * Map the CLI's live `supportedCommands()` list (issue #130) into the `SkillInfo` shape the
+ * slash-command popup (`inputArea.ts`) already renders. `SlashCommand` has no vault folder —
+ * `folderPath` is set to `''`, which is never read for CLI-sourced entries (only ever
+ * populated/consumed for the directory-scan fallback's own bookkeeping).
+ */
+export function mapSlashCommandsToSkillInfo(commands: SlashCommand[]): SkillInfo[] {
+	return commands.map(c => ({
+		name: c.name,
+		description: c.description,
+		folderPath: '',
+	}));
+}
+
+/**
+ * Map the CLI's live `supportedAgents()` list (issue #130) into the `AgentConfig` shape the
+ * agent picker (`configToolbar.ts`) already renders/selects from. `AgentInfo` has no
+ * instructions body or vault file — `instructions` falls back to `description` (used for the
+ * dropdown's tooltip), `filePath` is `''` (never read for CLI-sourced entries), and
+ * `skills`/`tools` are left `undefined` because `AgentInfo` carries no equivalent data.
+ *
+ * **That last point makes this mapping lossy, so callers must not use it alone for an agent
+ * the vault also knows about.** `applyAgentToolsAndSkills()` reads `skills: undefined` as
+ * "enable all", so substituting this result for a scanned `AgentConfig` that declared
+ * `skills: [...]` would silently widen a deliberately narrowed agent.
+ * `configToolbar.ts#getEffectiveAgents()` therefore merges by name — the CLI decides which
+ * agents exist, the directory scan supplies the config for those it also knows.
+ */
+export function mapAgentInfoToAgentConfig(agents: AgentInfo[]): AgentConfig[] {
+	return agents.map(a => ({
+		name: a.name,
+		description: a.description,
+		...(a.model ? {model: a.model} : {}),
+		instructions: a.description,
+		filePath: '',
+	}));
+}
+
+/**
+ * Reconcile the CLI's live agent list with the vault directory scan (issue #130).
+ *
+ * The CLI decides **membership** — it is authoritative about which agents actually loaded,
+ * so an agent the scan found but the CLI did not is genuinely unavailable and is dropped.
+ * The scan supplies the **config** for any agent present in both, because `AgentInfo` has no
+ * `tools`/`skills`/`instructions` and substituting the lossy mapping would discard a vault
+ * agent's declared restrictions — see `mapAgentInfoToAgentConfig()`.
+ */
+export function mergeLiveAgents(live: AgentInfo[], scanned: AgentConfig[]): AgentConfig[] {
+	const byName = new Map(scanned.map(a => [a.name, a]));
+	return mapAgentInfoToAgentConfig(live).map(a => byName.get(a.name) ?? a);
+}
+
+/**
+ * Reconcile the CLI's live slash-command list with the vault skill scan (issue #130), on the
+ * same rule as `mergeLiveAgents()`: the CLI decides membership, the scan supplies the config
+ * so a vault skill keeps its `folderPath` rather than being flattened to `''`.
+ */
+export function mergeLiveSkills(live: SlashCommand[], scanned: SkillInfo[]): SkillInfo[] {
+	const byName = new Map(scanned.map(s => [s.name, s]));
+	return mapSlashCommandsToSkillInfo(live).map(s => byName.get(s.name) ?? s);
 }

@@ -649,7 +649,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		const query = value.slice(i + 1, caret).toLowerCase();
 		// Only suggest skills actually loaded into this session — an agent's `skills:`
 		// restriction narrows `enabledSkills` below the full discovered `this.skills` set.
-		const matches = this.skills.filter(s => this.enabledSkills.has(s.name) && s.name.toLowerCase().startsWith(query));
+		// Live CLI supportedCommands() (issue #130) when the session has captured one,
+		// else the `_synapse/skills/` directory scan — see `getEffectiveSkills()`.
+		const matches = this.getEffectiveSkills().filter(s => this.enabledSkills.has(s.name) && s.name.toLowerCase().startsWith(query));
 		if (matches.length === 0) {
 			this.closeSkillPopup();
 			return;

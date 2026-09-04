@@ -183,6 +183,8 @@ export class SynapseView extends ItemView {
 	modelIconEl!: HTMLSpanElement;
 	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
+	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
+	contextIndicatorEl!: HTMLElement;
 	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;
@@ -453,11 +455,13 @@ export class SynapseView extends ItemView {
 	}
 
 	updateConfigUI(): void {
-		// Agents
+		// Agents — sourced from the live CLI's supportedAgents() (issue #130) when a session
+		// has captured one, else the directory scan; see `getEffectiveAgents()`.
+		const agents = this.getEffectiveAgents();
 		this.agentSelect.empty();
 		const noAgent = this.agentSelect.createEl('option', {text: 'Auto', attr: {value: ''}});
 		noAgent.value = '';
-		for (const agent of this.agents) {
+		for (const agent of agents) {
 			const opt = this.agentSelect.createEl('option', {text: agent.name});
 			opt.value = agent.name;
 			opt.title = agent.instructions;
@@ -465,9 +469,9 @@ export class SynapseView extends ItemView {
 		if (this.selectedAgent === '') {
 			this.agentSelect.value = '';
 			this.agentSelect.title = '';
-		} else if (this.selectedAgent && this.agents.some(a => a.name === this.selectedAgent)) {
+		} else if (this.selectedAgent && agents.some(a => a.name === this.selectedAgent)) {
 			this.agentSelect.value = this.selectedAgent;
-			const selAgent = this.agents.find(a => a.name === this.selectedAgent);
+			const selAgent = agents.find(a => a.name === this.selectedAgent);
 			this.agentSelect.title = selAgent ? selAgent.instructions : '';
 		} else {
 			this.selectedAgent = '';
@@ -476,7 +480,7 @@ export class SynapseView extends ItemView {
 		}
 
 		// Auto-select agent's preferred model
-		const selectedAgentConfig = this.agents.find(a => a.name === this.selectedAgent);
+		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
 		const resolvedModel = this.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
 		if (resolvedModel) {
 			this.selectedModel = resolvedModel;
@@ -494,7 +498,7 @@ export class SynapseView extends ItemView {
 		}
 
 		// Apply agent's tools and skills filter
-		const selectedAgentForFilter = this.agents.find(a => a.name === this.selectedAgent);
+		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
 
@@ -837,6 +841,10 @@ export class SynapseView extends ItemView {
 
 		this.configDirty = false;
 		this.registerSessionEvents();
+		// A rebuilt Session starts with an empty query-metadata cache (issue #130) — hide
+		// the gauge and fall back to the directory scan for agents/skills until this
+		// session's own first turn captures fresh values.
+		this.updateContextIndicator();
 		this.updateToolbarLock();
 
 		// Add resumed sessions to the list immediately; brand-new sessions are added
@@ -954,6 +962,11 @@ export class SynapseView extends ItemView {
 					this.finalizeReasoning();
 				}
 				this.finalizeStreamingMessage();
+				// Agent/skill lists refresh here rather than on `session.metadata` (issue
+				// #130): that event fires once per `assistant` message, and `updateConfigUI()`
+				// mutates session configuration (see the `session.metadata` case). The cache
+				// is one turn stale by design, so end-of-turn is the natural refresh point.
+				this.updateConfigUI();
 				break;
 			case 'session.error': {
 				const errMsg = (data as {message?: string; error?: string}).message ?? (data as {error?: string}).error ?? '';
@@ -1063,6 +1076,22 @@ export class SynapseView extends ItemView {
 					error?: string;
 				});
 				break;
+			case 'session.metadata':
+				// Capture-and-cache refresh (issue #130) — Session already holds the
+				// authoritative cache (`cachedContextUsage`/`cachedSupportedCommands`/
+				// `cachedSupportedAgents`); this event just tells the view it's time to
+				// re-read those getters.
+				//
+				// Only the read-only gauge refreshes here. This event fires once per
+				// `assistant` message, i.e. repeatedly *mid-turn*, and `updateConfigUI()`
+				// is not a read-only render: it rebuilds the agent `<select>`, resets
+				// `selectedAgent` when the newly-preferred list doesn't contain the current
+				// selection, and re-runs `applyAgentToolsAndSkills()`, which rewrites
+				// `enabledSkills`. Doing that while a turn is in flight would mutate the
+				// session's own configuration underneath it. The agent/skill lists refresh
+				// on `session.idle` instead.
+				this.updateContextIndicator();
+				break;
 		}
 	}
 
@@ -1077,13 +1106,15 @@ export class SynapseView extends ItemView {
 			this.handleSessionEvent(event);
 		}
 
-		// Register typed handlers for future events. The onEvent handler in
-		// buildSessionConfig now delegates directly to handleSessionEvent,
-		// so events arriving after this point are handled twice only if both
-		// fire — but since onEvent fires for *all* events and the typed
-		// handlers are more specific, they complement each other. We keep
-		// the typed handlers for type-safety and because resumeSession paths
-		// don't go through buildSessionConfig's onEvent.
+		// Register typed handlers for future events.
+		//
+		// **This list is the only live delivery path, so an event type missing from it is
+		// silently never handled.** `ensureSession()`'s `onEvent` callback does not delegate
+		// to `handleSessionEvent` — it only *buffers* events until this method runs, and once
+		// `earlyEventBuffer` is swapped for `EMPTY_EVENT_BUFFER` above it drops everything it
+		// receives. (A previous version of this comment claimed onEvent delegated directly;
+		// it does not, and #130's `session.metadata` was dead on arrival because of it.)
+		// Add every new SessionEvent type here.
 		this.eventUnsubscribers.push(
 			session.on('session.init', (event) => { this.handleSessionEvent(event); }),
 			session.on('assistant.turn_start', (event) => { this.handleSessionEvent(event); }),
@@ -1100,6 +1131,7 @@ export class SynapseView extends ItemView {
 			session.on('skill.invoked', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_complete', (event) => { this.handleSessionEvent(event); }),
+			session.on('session.metadata', (event) => { this.handleSessionEvent(event); }),
 		);
 	}
 
@@ -1117,6 +1149,7 @@ export class SynapseView extends ItemView {
 			} catch { /* ignore */ }
 			this.currentSession = null;
 		}
+		this.updateContextIndicator();
 	}
 
 	async disconnectAllSessions(): Promise<void> {
@@ -1164,6 +1197,7 @@ export class SynapseView extends ItemView {
 		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
 		this.selectedModel = '';
 		this.updateConfigUI();
+		this.updateContextIndicator();
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];

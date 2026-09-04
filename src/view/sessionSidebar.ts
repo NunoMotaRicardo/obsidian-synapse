@@ -582,6 +582,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// Re-attach foreground event routing
 		this.registerSessionEvents();
 
+		// Restored session carries whatever query-metadata cache (#130) it last captured
+		// while backgrounded — reflect it (or its absence) immediately rather than waiting
+		// for this session's next turn.
+		this.updateContextIndicator();
+
 		// Lock toolbar since session is active
 		this.updateToolbarLock();
 
@@ -906,6 +911,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.currentSessionId = sessionId;
 			this.configDirty = false;
 			this.registerSessionEvents();
+			// A cold-resumed session is a brand-new Session object with an empty
+			// query-metadata cache (#130) even though the CLI conversation itself is old —
+			// hide the gauge until this session's own first turn captures a fresh value.
+			this.updateContextIndicator();
 			this.updateToolbarLock();
 
 			// Restore the agent that was used in this session

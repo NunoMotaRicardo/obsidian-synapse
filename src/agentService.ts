@@ -139,6 +139,9 @@ import type {
 	ElicitationResult,
 	EffortLevel,
 	ModelInfo as SDKModelInfo,
+	SlashCommand,
+	AgentInfo,
+	SDKControlGetContextUsageResponse,
 } from '@anthropic-ai/claude-agent-sdk';
 // zod is a transitive dependency of @anthropic-ai/claude-agent-sdk; declaring it
 // directly in package.json is a dependency-manifest change out of scope for this
@@ -149,6 +152,7 @@ import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
 import {vaultTools} from './vaultTools';
+import {debugTrace} from './debug';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
@@ -186,6 +190,9 @@ export type {
 	ResolvedCliPath,
 	CliPathSource,
 	SDKModelInfo,
+	SlashCommand,
+	AgentInfo,
+	SDKControlGetContextUsageResponse,
 };
 
 export type SessionConfig = Options & {
@@ -1101,6 +1108,59 @@ export function resolveResumeSessionId(sessionId: string, configResume: string |
 	return sessionId || configResume || undefined;
 }
 
+/**
+ * Cached, one-turn-stale snapshot of the three `Query` control-request answers a live
+ * per-turn `Query` handle can serve (issue #130): context-window usage, the CLI's actual
+ * slash-command list, and its actual subagent list. See
+ * `.docs/decisions/2026-09-04-persistent-query-cache.md` for why this is capture-and-cache
+ * rather than a persistent streaming-input `query()`, and exactly when during a turn the
+ * capture is safe to attempt.
+ */
+export interface QueryMetadataCache {
+	contextUsage?: SDKControlGetContextUsageResponse;
+	commands?: SlashCommand[];
+	agents?: AgentInfo[];
+}
+
+/**
+ * Attempt to refresh `QueryMetadataCache` from a live `Query` handle.
+ *
+ * **Timing is load-bearing, not incidental.** Empirical testing for #130 established that
+ * these control requests only succeed while the underlying CLI process is still alive —
+ * which, for the single-turn `query()` this codebase uses (a fresh process per `send()`,
+ * see "Agent SDK model" in `agent-service.md`), means *any* point before the stream's
+ * terminal `SDKResultMessage` is delivered to the consumer. Calling this at or after that
+ * message (the intuitive "end of turn" moment) always fails — `getContextUsage()` throws
+ * `Query closed before response received` because the transport has already closed by the
+ * time `result` reaches the `for await` loop. `Session.send()` therefore calls this once per
+ * non-partial `assistant` SDKMessage (there can be more than one in a tool-loop turn), each
+ * call overwriting the previous — so the cache ends up holding whatever was captured at the
+ * *last* `assistant` message of the turn, the closest available approximation of "end of
+ * turn while still live".
+ *
+ * **Degrades safely.** Any rejection (older CLI without control-protocol support, a process
+ * that's already exited, etc.) is caught here and swallowed: the *previous* cache (`prev`)
+ * is returned unchanged, a debug-level trace is emitted, and nothing is thrown into the
+ * turn. A turn must never fail because a metrics call failed.
+ */
+export async function refreshQueryMetadataCache(
+	query: Pick<Query, 'getContextUsage' | 'supportedCommands' | 'supportedAgents'>,
+	prev: QueryMetadataCache,
+	onDebug?: (message: string) => void,
+): Promise<QueryMetadataCache> {
+	try {
+		const [contextUsage, commands, agents] = await Promise.all([
+			query.getContextUsage({detail: 'summary'}),
+			query.supportedCommands(),
+			query.supportedAgents(),
+		]);
+		return {contextUsage, commands, agents};
+	} catch (e) {
+		onDebug?.(`[synapse] query metadata capture failed (cache left unchanged): ${e instanceof Error ? e.message : String(e)}`);
+		return prev;
+	}
+}
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;
@@ -1129,6 +1189,14 @@ export class Session {
 	 * same as the `AbortError` case (expected, not a failure to report) whenever this is set.
 	 */
 	private userInterruptRequested = false;
+	/**
+	 * Capture-and-cache snapshot of `getContextUsage()`/`supportedCommands()`/`supportedAgents()`
+	 * (issue #130) — refreshed from `this.currentQuery` once per non-partial `assistant` message
+	 * during `send()`, never touched otherwise. One turn stale by design; see
+	 * `refreshQueryMetadataCache()`'s doc comment and
+	 * `.docs/decisions/2026-09-04-persistent-query-cache.md`.
+	 */
+	private queryMetadata: QueryMetadataCache = {};
 	private handlers: Map<string, SessionEventHandler[]> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
@@ -1167,6 +1235,33 @@ export class Session {
 
 	get sessionId(): string {
 		return this._sessionId;
+	}
+
+	/**
+	 * Last captured context-window usage breakdown (issue #130), or `undefined` before the
+	 * first successful capture (no turn has completed yet, or every capture attempt so far
+	 * has failed). One turn stale — see `queryMetadata`'s doc comment.
+	 */
+	get cachedContextUsage(): SDKControlGetContextUsageResponse | undefined {
+		return this.queryMetadata.contextUsage;
+	}
+
+	/**
+	 * Last captured slash-command list from the CLI (issue #130), or `undefined` before the
+	 * first successful capture. Callers should fall back to the vault directory scan
+	 * (`scanSkills()`) when this is `undefined` — see `chat-view.md`.
+	 */
+	get cachedSupportedCommands(): SlashCommand[] | undefined {
+		return this.queryMetadata.commands;
+	}
+
+	/**
+	 * Last captured subagent list from the CLI (issue #130), or `undefined` before the first
+	 * successful capture. Callers should fall back to the vault directory scan (`scanAgents()`)
+	 * when this is `undefined` — see `chat-view.md`.
+	 */
+	get cachedSupportedAgents(): AgentInfo[] | undefined {
+		return this.queryMetadata.agents;
 	}
 
 	/**
@@ -1336,6 +1431,21 @@ export class Session {
 						const event = this.convertToSessionEvent(sdkMsg);
 						if (event) {
 							this.dispatch(event);
+						}
+
+						// Capture-and-cache (issue #130): refresh context usage / supported
+						// commands / supported agents while the process is still known to be
+						// alive. Must run on a non-terminal message — see
+						// `refreshQueryMetadataCache()`'s doc comment for why the terminal
+						// `result` message is too late. Non-blocking of turn success: a
+						// rejected control request leaves `this.queryMetadata` unchanged.
+						if (sdkMsg.type === 'assistant' && this.currentQuery) {
+							this.queryMetadata = await refreshQueryMetadataCache(
+								this.currentQuery,
+								this.queryMetadata,
+								(message) => debugTrace(message),
+							);
+							this.dispatch({type: 'session.metadata', data: {...this.queryMetadata}});
 						}
 					}
 				} finally {
