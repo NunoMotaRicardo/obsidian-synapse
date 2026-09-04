@@ -4,23 +4,27 @@
  * per file and recording results.
  *
  * User-initiated (command palette), plugin-orchestrated iteration — mirrors
- * `src/triggerExecutor.ts`'s model-routing and report-writing pattern. This is
- * the foundational slice (#73) of the Tier-2 batch-loops feature (#66).
- * Budget caps and true in-flight cancellation (#74) build on the extension
- * points (`onProgress`, `BatchLoopHandle`) that #73 left in place for them.
- * The plain per-file `Notice`s from #73/#74 have been replaced by a dedicated
- * progress modal (`BatchLoopProgressModal`, #75) that shows live progress and
- * elapsed budget for the duration of the run.
+ * `src/triggerExecutor.ts`'s model-routing and report-writing pattern (both
+ * are thin callers over the shared pipeline in `src/runExecutor.ts`, issue
+ * #154). This is the foundational slice (#73) of the Tier-2 batch-loops
+ * feature (#66). Budget caps and true in-flight cancellation (#74) build on
+ * the extension points (`onProgress`, `BatchLoopHandle`) that #73 left in
+ * place for them. The plain per-file `Notice`s from #73/#74 have been
+ * replaced by a dedicated progress modal (`BatchLoopProgressModal`, #75) that
+ * shows live progress and elapsed budget for the duration of the run.
+ *
+ * Budget/turn-cap enforcement (this file, `budget.ts`) is batch-loop-only —
+ * see the "Budget" note in `.docs/specs/run-executor.md` for why triggers
+ * deliberately stay exempt.
  */
 
 import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
-import type {SDKResultMessage} from './agentService';
-import {SYNAPSE_FOLDER, REPORTS_FOLDER, getVaultBasePath, getSynapsePluginConfig, todayString} from './vaultPaths';
-import {ensureFolder} from './configWriter';
+import type {SDKMessage, SDKResultMessage} from './agentService';
+import {SYNAPSE_FOLDER, REPORTS_FOLDER, todayString} from './vaultPaths';
 import type {Budget, BudgetUsage} from './budget';
 import {parseBudgetInput as parseBudgetInputShared, describeBudget, budgetExceeded} from './budget';
-import {lockManager} from './lockManager';
+import {runItem, appendReportBlock, type ReportTarget} from './runExecutor';
 import {debugTrace} from './debug';
 import {BatchLoopProgressModal} from './modals/batchLoopProgressModal';
 import {VaultScopeModal} from './modals/vaultScopeModal';
@@ -124,67 +128,29 @@ export function resolveScopeToFiles(app: App, paths: string[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Template substitution
+// Report writing
 // ---------------------------------------------------------------------------
 
-/** Replace `{{file}}` in the instruction with the vault-relative file path. */
-function substituteTemplate(instruction: string, filePath: string): string {
-	return instruction.replace(/\{\{file\}\}/g, filePath);
+/** Today's batch-loop report target: `_synapse/reports/batch-loop-YYYY-MM-DD.md`. */
+function reportTarget(): ReportTarget {
+	const today = todayString();
+	return {
+		path: normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`),
+		heading: `# ${REPORT_NAME} — ${today}`,
+	};
 }
 
-// ---------------------------------------------------------------------------
-// Report writing (mirrors triggerExecutor.ts's appendToReport)
-// ---------------------------------------------------------------------------
-
 /**
- * Create-or-append `block` to today's batch-loop report file, creating the
- * file (and its `# batch-loop — YYYY-MM-DD` heading) if this is the first
- * entry written for today. Shared by `appendToReport()` (per-file result
- * entries) and `appendRunSummary()` (early-stop run summary entries) — only
- * the block content differs between them.
+ * Append a result block to today's batch-loop report file, under a
+ * `## <filePath>` heading identifying which file it's for. Shared by the
+ * per-file success/error path (via `runItem()`'s `appendReport` hook and the
+ * per-file `catch` block) and `appendRunSummary()` (early-stop run summary
+ * entries) — only the block content differs between them.
  *
- * Uses vault.read()/vault.modify() (not `adapter.read`/`write`) so the
- * Obsidian cache and internal file queue stay consistent — same rationale as
- * the trigger executor's `appendToReport()`.
- *
- * The whole read-modify-write is wrapped in `lockManager.withLock` on the
- * report path so a batch loop's per-file/run-summary appends can't interleave
- * with another plugin-initiated write to the same day's report (e.g. a
- * trigger reporting to the same file, or another batch-loop run). A
- * `LockAcquisitionError` (wedged holder) propagates to the caller — batch
+ * Does not catch `LockAcquisitionError` — it propagates to the caller. Batch
  * loop per-file errors are already caught and reported per-file by
  * `runBatchLoop()`'s loop body, so a lock timeout here surfaces the same way
  * an ordinary write failure would.
- */
-async function appendBlockToReport(plugin: SynapsePlugin, block: string): Promise<void> {
-	const app = plugin.app;
-
-	const today = todayString();
-	const reportPath = normalizePath(`${REPORTS_FOLDER}/${REPORT_NAME}-${today}.md`);
-	const heading = `# ${REPORT_NAME} — ${today}`;
-
-	await lockManager.withLock(reportPath, async () => {
-		await ensureFolder(app, REPORTS_FOLDER);
-
-		const exists = await app.vault.adapter.exists(reportPath);
-		if (!exists) {
-			await app.vault.create(reportPath, `${heading}\n\n${block}\n`);
-		} else {
-			const tfile = app.vault.getAbstractFileByPath(reportPath);
-			if (!(tfile instanceof TFile)) {
-				throw new Error(`[synapse] Batch loop report path is not a file: ${reportPath}`);
-			}
-			const current = await app.vault.read(tfile);
-			await app.vault.modify(tfile, `${current}\n${block}\n`);
-		}
-	});
-}
-
-/**
- * Append a result block to today's batch-loop report file.
- *
- * Report path: `_synapse/reports/batch-loop-YYYY-MM-DD.md`. See
- * `appendBlockToReport()` for the shared create-or-append logic.
  */
 async function appendToReport(
 	plugin: SynapsePlugin,
@@ -194,59 +160,7 @@ async function appendToReport(
 ): Promise<void> {
 	const entryHeading = `## ${filePath}`;
 	const block = isError ? `${entryHeading}\n\n### Error\n\n${result}` : `${entryHeading}\n\n${result}`;
-	await appendBlockToReport(plugin, block);
-}
-
-// ---------------------------------------------------------------------------
-// Model execution
-// ---------------------------------------------------------------------------
-
-/**
- * Execute the instruction for a single file via AgentService.inlineChat().
- * Same routing pattern as `executeTrigger()`'s Claude path — this slice
- * always routes through Claude (local-model routing for batch loops is not
- * in scope for #73).
- *
- * `abortController` is passed straight through to `inlineChat()` (which
- * threads it into `sendAndWaitWithAbort()`), so `BatchLoopHandle.stop()` can
- * abort this specific in-flight query rather than only stopping the loop
- * between files (#74/AC-4). `onResult` is invoked with the file's
- * `SDKResultMessage`, when one arrives, so the caller can accumulate
- * usage/cost for budget enforcement (#74/AC-2).
- */
-async function runOnFile(
-	plugin: SynapsePlugin,
-	instruction: string,
-	filePath: string,
-	abortController: AbortController,
-	onResult?: (result: SDKResultMessage) => void,
-): Promise<string> {
-	if (!plugin.agentService) {
-		throw new Error('AgentService is not initialized.');
-	}
-
-	const prompt = substituteTemplate(instruction, filePath);
-
-	const basePath = getVaultBasePath(plugin.app);
-
-	const result = await plugin.agentService.inlineChat({
-		prompt,
-		// Claude Code preset supplies the default tool-usage system prompt so the
-		// loop can read the target file referenced by the substituted path.
-		systemPrompt: {type: 'preset', preset: 'claude_code'},
-		cwd: basePath,
-		plugins: getSynapsePluginConfig(plugin.app),
-		maxTurns: 10,
-		permissionMode: 'default',
-		abortController,
-		onEvent: onResult ? (msg) => {
-			if (msg.type === 'result') {
-				onResult(msg);
-			}
-		} : undefined,
-	});
-
-	return result.content ?? '';
+	await appendReportBlock(plugin.app, reportTarget(), block);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +262,7 @@ async function appendRunSummary(
 
 	const block = `### Run summary\n\n- Status: ${reasonText}\n- Files processed: ${processed}\n- Files failed: ${failed}\n- Files skipped/remaining: ${skipped}\n- Total files in scope: ${total}${usageLine}`;
 
-	await appendBlockToReport(plugin, block);
+	await appendReportBlock(plugin.app, reportTarget(), block);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +284,7 @@ async function appendRunSummary(
  *   means unlimited (matches #73's original behavior).
  * - Cancellation via `handle.stop()` is checked between files *and* aborts
  *   whichever file is currently in flight, via the `AbortController` passed
- *   to `runOnFile()`/`inlineChat()` (#74/AC-4).
+ *   to `runItem()`/`inlineChat()` (#74/AC-4).
  * - When the run stops early (budget exhaustion or cancellation), a run
  *   summary is appended to the report recording files processed vs. skipped
  *   and why (#74/AC-3, AC-5), in addition to the `Notice`.
@@ -435,11 +349,20 @@ export async function runBatchLoop(
 		handle.setActiveController(fileController);
 
 		try {
-			const result = await runOnFile(plugin, instruction, filePath, fileController, (resultMsg) => {
-				usage.totalTokens += totalTokensForResult(resultMsg.usage);
-				usage.totalCostUsd += resultMsg.total_cost_usd;
+			await runItem({
+				plugin,
+				filePath,
+				body: instruction,
+				logLabel: `Batch loop file "${filePath}"`,
+				appendReport: (result, isError) => appendToReport(plugin, filePath, result, isError),
+				abortController: fileController,
+				onEvent: (msg: SDKMessage) => {
+					if (msg.type === 'result') {
+						usage.totalTokens += totalTokensForResult(msg.usage);
+						usage.totalCostUsd += msg.total_cost_usd;
+					}
+				},
 			});
-			await appendToReport(plugin, filePath, result);
 			processed++;
 			debugTrace(`[synapse] Batch loop processed ${filePath} (${index}/${total})`);
 			// Report again with post-file usage so a live UI reflects this

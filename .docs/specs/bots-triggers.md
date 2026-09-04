@@ -119,7 +119,13 @@ and reloads trigger configs with a 1-second debounce.
 ### Trigger executor (`src/triggerExecutor.ts`)
 
 Receives a matched `TriggerConfig` and the triggering file path, runs the model, applies write
-modes, and records execution.
+modes, and records execution. Since issue #154 this is a thin caller over the shared pipeline in
+`src/runExecutor.ts` (see [run-executor.md](run-executor.md)) — this module supplies the
+trigger-specific pieces: the report identity/format keyed by trigger name, the trigger's `write`
+mode and optional `model`/`agent`, and the `triggerLastFired` stamp. Substitute → route Claude vs.
+local → run → apply write mode is owned by `runExecutor.ts`; no budget/turn-cap enforcement here —
+see the "Budget/turn-cap divergence" note in [run-executor.md](run-executor.md) for why triggers
+deliberately stay exempt.
 
 **Entry point:**
 ```ts
@@ -165,8 +171,8 @@ The `_synapse/reports/` folder is created automatically if missing.
 **Error handling:** errors are logged to console (`console.error`) and appended to the report
 file under an `## Error` heading (so failures are visible in the vault).
 
-**Concurrent writes:** `applyWriteMode()` (both the `true` full-file replace and the
-`'frontmatter'` merge) and `appendToReport()` acquire the per-path advisory lock from
+**Concurrent writes:** the write-back lock (`true`/`'frontmatter'` write modes) and the report-append
+lock (`runExecutor.ts`'s `appendReportBlock()`) each acquire the per-path advisory lock from
 [lock-manager.md](lock-manager.md) around their vault mutation, so two triggers (or a trigger and
 a batch loop) that target the same file or report can't interleave `vault.read()`/`vault.modify()`
 and clobber each other. If the lock times out on a wedged holder (`LockAcquisitionError`), the
