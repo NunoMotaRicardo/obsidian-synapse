@@ -13,6 +13,18 @@
   delivered as `{type: 'preset', preset: 'claude_code', append: ...}` — appended to Claude
   Code's default prompt so unattended tool use (with `bypassPermissions`) keeps working.
 - Runs only while Obsidian is open and connected.
+- **Tool approval policy — deliberately not `settings.toolApproval` (issue #151).** Every bot
+  session runs `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions: true`
+  unconditionally, in `buildBotSessionConfig()`. This is a standing exception to the unified policy
+  triggers and batch loops now follow (see "Tool approval policy" under
+  [run-executor.md](run-executor.md)): the bot's whole purpose is unattended remote control of the
+  vault from a phone, and unlike a trigger it has no per-message frontmatter to opt back into
+  `'allow'` with — so making the bot follow `'ask'` would silently stop it from writing the moment
+  someone flips the global setting for an unrelated reason (e.g. wanting search/editor actions to
+  prompt), with no way to recover write access for just the bot. The bot's actual safety control is
+  the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`) — see
+  [SECURITY.md](../../SECURITY.md) #1. A bot-specific approval setting is a possible follow-up, not
+  something this issue does silently.
 
 ## Triggers (`_synapse/triggers/`)
 
@@ -36,6 +48,7 @@ Frontmatter fields:
 | `model` | string | no | session default | Model alias (`sonnet`, `haiku`) or local model ID |
 | `agent` | string | no | — | Agent name to use for execution |
 | `write` | boolean or `'frontmatter'` | no | `false` | Whether the trigger may write back |
+| `toolApproval` | `'allow'` | no | — (follows `settings.toolApproval`) | Per-trigger opt-in into unattended tool calls without asking, overriding a global `'ask'` for just this trigger (issue #151) |
 | `enabled` | boolean | no | `true` | Set to `false` to disable without deleting |
 
 Body: prompt/instructions executed when the trigger fires. Template variables `{{file}}` and
@@ -51,6 +64,10 @@ substitute — each execution only ever sees one file.
 - `event` must be one of the four valid values; invalid values cause the trigger to be skipped.
 - `enabled` defaults to `true` when the field is omitted.
 - `write` defaults to `false` when omitted.
+- `toolApproval` only recognizes the literal value `'allow'`; anything else (including omission,
+  the common case) means "not opted in" — the trigger follows `settings.toolApproval` like every
+  other unattended run. There is no frontmatter value that forces `'ask'` when the global setting
+  is `'allow'`.
 
 ### Event types
 
@@ -122,9 +139,10 @@ Receives a matched `TriggerConfig` and the triggering file path, runs the model,
 modes, and records execution. Since issue #154 this is a thin caller over the shared pipeline in
 `src/runExecutor.ts` (see [run-executor.md](run-executor.md)) — this module supplies the
 trigger-specific pieces: the report identity/format keyed by trigger name, the trigger's `write`
-mode and optional `model`/`agent`, and the `triggerLastFired` stamp. Substitute → route Claude vs.
-local → run → apply write mode is owned by `runExecutor.ts`; no budget/turn-cap enforcement here —
-see the "Budget/turn-cap divergence" note in [run-executor.md](run-executor.md) for why triggers
+mode and optional `model`/`agent`, its `toolApproval: allow` frontmatter opt-in (issue #151), and
+the `triggerLastFired` stamp. Substitute → route Claude vs. local → run → apply write mode → apply
+tool-approval policy is owned by `runExecutor.ts`; no budget/turn-cap enforcement here — see the
+"Budget/turn-cap divergence" note in [run-executor.md](run-executor.md) for why triggers
 deliberately stay exempt.
 
 **Entry point:**
@@ -143,7 +161,12 @@ executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string):
   `model`, `agent` from trigger, `systemPrompt: {type: 'preset', preset: 'claude_code'}` (the
   default tool-usage prompt, so the trigger can read the affected files), `cwd` set to vault
   root (absolute basePath), `plugins` set to the `_synapse/` local plugin path (same pattern
-  as bots and editor actions), `maxTurns: 10`, `permissionMode: 'default'`.
+  as bots and editor actions), `maxTurns: 10`, plus the resolved tool-approval policy (issue
+  #151 — see "Tool approval policy" in [run-executor.md](run-executor.md)): `permissionMode:
+  'bypassPermissions'` (+ `allowDangerouslySkipPermissions: true`) when `settings.toolApproval`
+  is `'allow'` or the trigger opted in via `toolApproval: allow`; otherwise `permissionMode:
+  'default'` plus a `canUseTool` that denies every approval-requiring call and records it into
+  this trigger's report.
 - `trigger.model` resolves to a local model → `executeLocalProviderQuery()` with file content
   prepended to the prompt as context, equipped with:
   - Built-in vault tools (`read_note`, `list_notes`, `search_notes`) from `vaultTools`.
@@ -170,6 +193,14 @@ The `_synapse/reports/` folder is created automatically if missing.
 
 **Error handling:** errors are logged to console (`console.error`) and appended to the report
 file under an `## Error` heading (so failures are visible in the vault).
+
+**Tool call refusals (issue #151):** when the resolved tool-approval policy is `'ask'` (the
+default) and the model attempts one or more approval-requiring tool calls, each is denied and the
+denial is appended to the trigger's report — regardless of `write` mode, so a refusal is visible
+even when a `write: true`/`'frontmatter'` trigger's main result went to the target file instead of
+the report. This is what makes a `false`/silent outcome impossible: previously a trigger whose
+prompt asked the model to also use a write tool would have that call silently refused with nothing
+recorded anywhere. See "Tool approval policy" in [run-executor.md](run-executor.md).
 
 **Concurrent writes:** the write-back lock (`true`/`'frontmatter'` write modes) and the report-append
 lock (`runExecutor.ts`'s `appendReportBlock()`) each acquire the per-path advisory lock from
