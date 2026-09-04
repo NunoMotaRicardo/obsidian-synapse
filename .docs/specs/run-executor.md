@@ -86,6 +86,60 @@ decision is caller-specific and stays in the caller's own `appendReport` wrapper
   catches and reports per-file failures, so a lock timeout there surfaces the same way an ordinary
   write failure would.
 
+## Tool approval policy (issue #151)
+
+Before this issue, the Claude branch (`executeWithClaude()`) always ran with `permissionMode:
+'default'` and no `canUseTool` — in the Agent SDK, `'default'` means "ask", and with no callback
+and no UI there is nobody to ask, so any approval-requiring tool call (`Write`, `Edit`, ...) was
+silently refused. Read-only tools generally passed; the model's own text response is what
+`applyWriteMode()` persists, so the common case (a trigger whose only job is to *report* on a
+file) worked by coincidence — but a trigger whose prompt also asked the model to use a write tool
+would have that call refused with nothing recorded anywhere. Batch loops had the identical gap.
+
+The fix makes the mapping from `settings.toolApproval` to what the SDK is handed explicit and
+shared by both callers:
+
+```ts
+type ToolApprovalPolicy = 'allow' | 'ask';
+resolveToolApprovalPolicy(plugin: SynapsePlugin, overrideAllow?: boolean): ToolApprovalPolicy
+```
+
+- **`'allow'`** (global `settings.toolApproval === 'allow'`, or a trigger's own `toolApproval:
+  allow` frontmatter opt-in) → `permissionMode: 'bypassPermissions'` +
+  `allowDangerouslySkipPermissions: true`. Matches the pattern already used by
+  `editorMenu.ts`/`editModal.ts`/`searchPanel.ts` for the same setting's interactive surfaces.
+- **`'ask'`** (the default) → `permissionMode: 'default'` plus a `canUseTool` that **denies every
+  call it's invoked for** and records the tool name into an in-memory `refusals` list for that run.
+  This is the asymmetry the issue calls out: in an interactive surface `'ask'` means "a human
+  decides"; in an unattended run there is no human, so `'ask'` can only mean "deny" — but
+  unlike before, the denial is no longer silent.
+
+If `refusals` is non-empty after the run, `runItem()` appends a report block
+(`formatToolRefusalsReportBlock()`) via the caller's `appendReport` — **unconditionally**,
+regardless of `write` mode. This is deliberate: a `write: true`/`'frontmatter'` trigger's main
+result goes to the target file/frontmatter, not the report, so without this the refusal would be
+invisible again even though the main pipeline "worked". The report block is always appended in
+*addition* to whatever `applyWriteMode()` already did, not instead of it.
+
+**Per-trigger opt-in, no reverse override.** A trigger's frontmatter `toolApproval: allow`
+(`TriggerConfig.toolApproval`, round-tripped by `scanTriggers()`/`writeTrigger()` in
+`configWriter.ts`) escalates just that trigger to `'allow'` even when the global setting is
+`'ask'`. There is no frontmatter value that does the reverse (force `'ask'` when the global setting
+is `'allow'`) — the issue only asked for the permissive-mode opt-in. Batch loops have no per-run
+config surface equivalent to a trigger's frontmatter, so `resolveToolApprovalPolicy()`'s
+`overrideAllow` is trigger-only; batch loops always pass `undefined` and follow the global setting
+directly.
+
+**Local-model routing is out of scope, deliberately.** `executeWithLocalModel()` /
+`executeLocalProviderQuery()` are unchanged by this issue — offering vault tools to a local model
+with no approval handler at all (unattended-by-default) is issue #142's follow-up, referenced but
+explicitly deferred by #151's issue body. `routeAndRun()`'s `policy` parameter therefore only
+affects the Claude branch.
+
+**Telegram bot is a deliberate, separate exception**, not driven by this policy at all — see
+"Tool approval policy — deliberately not `settings.toolApproval`" under
+[bots-triggers.md](bots-triggers.md) and [SECURITY.md](../../SECURITY.md) #1.
+
 ## Budget/turn-cap divergence — resolved
 
 `batchLoopExecutor.ts` enforces an optional per-run budget (`budget.ts`'s `Budget`/`BudgetUsage`,

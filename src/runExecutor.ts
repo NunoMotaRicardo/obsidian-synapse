@@ -22,11 +22,16 @@
  * Model: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small,
  * focused extractions of exactly the logic that was duplicated, not a new
  * abstraction layer on top of it.
+ *
+ * Unattended tool-approval policy (issue #151): this is also the one place that maps
+ * `settings.toolApproval` to what the Claude branch (`executeWithClaude()`) hands the SDK, so
+ * triggers and batch loops agree on what "ask" and "allow" mean. See `resolveToolApprovalPolicy()`
+ * and the "Tool approval policy" section of `.docs/specs/run-executor.md`.
  */
 
 import {App, TFile, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
-import type {SDKMessage} from './agentService';
+import type {SDKMessage, PermissionHandler, PermissionResult} from './agentService';
 import {getVaultBasePath, getSynapsePluginConfig, REPORTS_FOLDER} from './vaultPaths';
 import {parseFrontmatter, modifyArtifact, ensureFolder} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
@@ -108,6 +113,76 @@ export async function appendReportBlock(app: App, target: ReportTarget, block: s
 }
 
 // ---------------------------------------------------------------------------
+// Tool approval policy (issue #151)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolved unattended tool-approval decision for one run: `'allow'` maps to
+ * `bypassPermissions` (the model's tool calls proceed without asking);
+ * `'ask'` maps to `permissionMode: 'default'` plus a `canUseTool` that always
+ * denies — there is no human in an unattended run to ask, so "ask" can only
+ * mean "deny" (see `.docs/specs/run-executor.md`).
+ */
+export type ToolApprovalPolicy = 'allow' | 'ask';
+
+/**
+ * Resolve the effective policy for one run: `overrideAllow` (a trigger's
+ * `toolApproval: allow` frontmatter opt-in) wins over a global `'ask'`
+ * setting; there is no override in the other direction (a trigger cannot
+ * force `'ask'` when the global setting is already `'allow'`). Batch loops
+ * never pass `overrideAllow` — they have no per-item config to opt in from —
+ * so they always follow the global setting directly.
+ */
+export function resolveToolApprovalPolicy(plugin: SynapsePlugin, overrideAllow?: boolean): ToolApprovalPolicy {
+	if (plugin.settings.toolApproval === 'allow' || overrideAllow) return 'allow';
+	return 'ask';
+}
+
+/** One tool call denied by the `'ask'` policy's `canUseTool`, recorded for the run's report. */
+export interface ToolRefusal {
+	toolName: string;
+}
+
+/**
+ * Build the report block for a run whose `'ask'`-policy `canUseTool` denied one or more tool
+ * calls — this is what makes AC "silence is no longer a possible outcome" true: a refused tool
+ * call always lands in the report file, not just a console warning nobody sees.
+ *
+ * `surface` tailors the escape-hatch hint: triggers can opt in per-trigger via frontmatter; batch
+ * loops have no per-run config surface to opt in from, so only the global setting is mentioned.
+ */
+export function formatToolRefusalsReportBlock(refusals: ToolRefusal[], surface: 'trigger' | 'batch-loop'): string {
+	const count = refusals.length;
+	const items = refusals.map(r => `- \`${r.toolName}\``).join('\n');
+	const overrideHint = surface === 'trigger'
+		? 'Add `toolApproval: allow` to this trigger\'s frontmatter to allow it for just this trigger, or set '
+		: 'Set ';
+	return [
+		`**Tool approval:** ${count} tool call${count === 1 ? '' : 's'} denied — the Tools approval setting is "Ask", and unattended runs have no one to approve a request.`,
+		items,
+		`${overrideHint}Settings → Synapse → Tools → Tools approval to "Allow (auto-approve)" to run unattended tool calls without asking.`,
+	].join('\n\n');
+}
+
+/**
+ * `CanUseTool` for the `'ask'` policy: denies every tool call it's invoked for (the SDK only
+ * invokes it for approval-requiring tools — read-only tools like `Read`/`Glob` pass without a
+ * callback even under `permissionMode: 'default'`) and records the denial into `refusals` so the
+ * caller can report it. Mutates `refusals` in place rather than returning a value, since
+ * `CanUseTool` is called by the SDK an arbitrary number of times over the course of one query.
+ */
+function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
+	return async (toolName) => {
+		refusals.push({toolName});
+		const result: PermissionResult = {
+			behavior: 'deny',
+			message: 'Synapse: unattended runs deny tool calls while tools approval is "ask" — there is no one to ask. See this run\'s report for how to allow it.',
+		};
+		return result;
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Model execution — route Claude vs. local model
 // ---------------------------------------------------------------------------
 
@@ -185,6 +260,12 @@ async function executeWithLocalModel(
 	}
 }
 
+/** Result of routing+running one item's prompt: the model's text plus any tool denials to report. */
+interface RunResult {
+	content: string;
+	refusals: ToolRefusal[];
+}
+
 /**
  * Execute the prompt via the Claude Agent SDK (`AgentService.inlineChat`).
  *
@@ -193,17 +274,29 @@ async function executeWithLocalModel(
  * batch-loop-only, for cancellation and usage accumulation) but are
  * harmless no-ops for the other, so this stays a single shared call site
  * rather than two near-identical ones.
+ *
+ * `policy` (issue #151) decides what the run is handed: `'allow'` maps to
+ * `bypassPermissions` (+ `allowDangerouslySkipPermissions`, matching the
+ * `toolApproval === 'allow'` pattern already used by `editorMenu.ts`/
+ * `editModal.ts`/`searchPanel.ts`); `'ask'` keeps `permissionMode: 'default'`
+ * but adds a `canUseTool` that denies every approval-requiring call and
+ * records it into `refusals`, so a refusal is never silent.
  */
 async function executeWithClaude(
 	plugin: SynapsePlugin,
 	prompt: string,
+	policy: ToolApprovalPolicy,
 	options: {model?: string; agent?: string; abortController?: AbortController; onEvent?: (msg: SDKMessage) => void} = {},
-): Promise<string> {
+): Promise<RunResult> {
 	if (!plugin.agentService) {
 		throw new Error('AgentService is not initialized.');
 	}
 
 	const basePath = getVaultBasePath(plugin.app);
+	const refusals: ToolRefusal[] = [];
+	const permissionOptions = policy === 'allow'
+		? {permissionMode: 'bypassPermissions' as const, allowDangerouslySkipPermissions: true}
+		: {permissionMode: 'default' as const, canUseTool: makeDenyingCanUseTool(refusals)};
 
 	const result = await plugin.agentService.inlineChat({
 		prompt,
@@ -216,34 +309,40 @@ async function executeWithClaude(
 		cwd: basePath,
 		plugins: getSynapsePluginConfig(plugin.app),
 		maxTurns: 10,
-		permissionMode: 'default',
+		...permissionOptions,
 		abortController: options.abortController,
 		onEvent: options.onEvent,
 	});
 
-	return result.content ?? '';
+	return {content: result.content ?? '', refusals};
 }
 
 /**
  * Route to a local model if `model` names one known to the running
  * `AgentService`, otherwise route to Claude. Mirrors the routing decision
  * `AgentService.inlineChat()` itself makes for chat-view queries.
+ *
+ * `policy` only affects the Claude branch — local-model routing's tool-
+ * approval gap (issue #142's follow-up, referenced by #151) is deliberately
+ * out of scope here; see the module doc comment.
  */
 async function routeAndRun(
 	plugin: SynapsePlugin,
 	prompt: string,
 	filePath: string,
+	policy: ToolApprovalPolicy,
 	options: {model?: string; agent?: string; abortController?: AbortController; onEvent?: (msg: SDKMessage) => void} = {},
-): Promise<string> {
+): Promise<RunResult> {
 	const useLocalModel =
 		options.model !== undefined &&
 		options.model !== '' &&
 		plugin.agentService?.isLocalModel(options.model) === true;
 
 	if (useLocalModel) {
-		return executeWithLocalModel(plugin, prompt, filePath, options.model);
+		const content = await executeWithLocalModel(plugin, prompt, filePath, options.model);
+		return {content, refusals: []};
 	}
-	return executeWithClaude(plugin, prompt, options);
+	return executeWithClaude(plugin, prompt, policy, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +480,18 @@ export interface RunItemOptions {
 	abortController?: AbortController;
 	/** Batch-loop-only: forwarded to `inlineChat()` to accumulate usage/cost. */
 	onEvent?: (msg: SDKMessage) => void;
+	/**
+	 * Which surface this run is for — tailors the escape-hatch hint in a tool-refusal report
+	 * block (see `formatToolRefusalsReportBlock()`). Triggers can opt in per-trigger via
+	 * frontmatter; batch loops can't, so only the global setting is mentioned for them.
+	 */
+	surface: 'trigger' | 'batch-loop';
+	/**
+	 * Trigger-only: this trigger's `toolApproval: allow` frontmatter opt-in (issue #151).
+	 * Batch loops never set this — they always follow `settings.toolApproval` directly. See
+	 * `resolveToolApprovalPolicy()`.
+	 */
+	toolApprovalOverrideAllow?: boolean;
 }
 
 /**
@@ -389,12 +500,19 @@ export interface RunItemOptions {
  * mode (persisting the result to the target file, its frontmatter, or the
  * report).
  *
+ * Tool-approval policy (issue #151): resolved once per run via
+ * `resolveToolApprovalPolicy()` and handed to the Claude branch. If the resolved policy is
+ * `'ask'` and one or more tool calls were denied, a report block recording those denials is
+ * always appended — regardless of `write` mode, so a refusal is visible even when the run's
+ * main result went to the target file/frontmatter rather than the report.
+ *
  * Does not catch execution errors — see the module doc comment for why.
  */
 export async function runItem(options: RunItemOptions): Promise<void> {
 	const prompt = substituteTemplates(options.body, options.filePath, {aliasFiles: options.aliasFiles});
+	const policy = resolveToolApprovalPolicy(options.plugin, options.toolApprovalOverrideAllow);
 
-	const result = await routeAndRun(options.plugin, prompt, options.filePath, {
+	const {content: result, refusals} = await routeAndRun(options.plugin, prompt, options.filePath, policy, {
 		model: options.model,
 		agent: options.agent,
 		abortController: options.abortController,
@@ -409,4 +527,8 @@ export async function runItem(options: RunItemOptions): Promise<void> {
 		logLabel: options.logLabel,
 		appendReport: options.appendReport,
 	});
+
+	if (refusals.length > 0) {
+		await options.appendReport(formatToolRefusalsReportBlock(refusals, options.surface));
+	}
 }

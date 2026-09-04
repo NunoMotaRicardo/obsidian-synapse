@@ -35,6 +35,14 @@ which silently drops messages from senders not on the list). Keep that list shor
 token secret, and treat everyone on the allowlist as someone you'd hand your vault to unsupervised
 — because that's what adding them does.
 
+This is a deliberate, standing exception to the **tool approval** setting described in #3 below:
+triggers and batch loops (`src/runExecutor.ts`) honour `toolApproval` — `'ask'` denies a tool call
+and logs the refusal to the run's report, since there's no one to actually ask — but the Telegram
+bot does not, on purpose (issue #151). The bot's remote-control use case has no equivalent of a
+per-trigger opt-in to recover write access with if the global setting were flipped to `'ask'` for
+an unrelated reason, so it stays unconditionally `bypassPermissions`, gated only by the allowlist
+above.
+
 ### 2. MCP servers are arbitrary local processes
 
 MCP server entries in a vault's `_synapse/.mcp.json` are started by spawning the configured
@@ -56,6 +64,13 @@ The **tool approval** setting, when set to allow, flips the agent session used b
 the agent reads, writes, or deletes a file, or runs a tool. It's the same trade-off as the
 Telegram bot above (speed and flow over a human in the loop) but scoped to the desktop UI, where
 you're the one at the keyboard. Understand what you're turning off before you turn it on.
+
+The same setting also drives triggers and batch loops (`src/runExecutor.ts`, issue #151): `allow`
+lets them write without asking, same as above; `ask` (the default) denies their tool calls instead
+of prompting, since a standing trigger or an unattended batch run has no one at the keyboard to
+prompt — see [.docs/specs/run-executor.md](.docs/specs/run-executor.md). A single trigger can be
+opted into `allow` independently via a `toolApproval: allow` field in its own frontmatter, without
+loosening the global setting for everything else.
 
 ## Other things worth knowing
 

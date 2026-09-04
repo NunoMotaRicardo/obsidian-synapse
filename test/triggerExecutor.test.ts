@@ -40,7 +40,7 @@ function makeTrigger(overrides: Partial<TriggerConfig> = {}): TriggerConfig {
 	};
 }
 
-function makePlugin(inlineChatImpl?: InlineChatImpl) {
+function makePlugin(inlineChatImpl?: InlineChatImpl, toolApproval: 'ask' | 'allow' = 'ask') {
 	const app = createMockApp() as unknown as App;
 	// appendToReport/ensureReportsFolder needs `_synapse` to already exist —
 	// `createFolder` (mirroring real Obsidian) requires the immediate parent
@@ -50,7 +50,7 @@ function makePlugin(inlineChatImpl?: InlineChatImpl) {
 	const inlineChat = vi.fn(inlineChatImpl ?? (async () => ({content: 'claude result', sessionId: 'session-1'})));
 	const plugin = {
 		app,
-		settings: {triggerLastFired: {} as Record<string, number>},
+		settings: {triggerLastFired: {} as Record<string, number>, toolApproval},
 		saveSettings: vi.fn(async () => {}),
 		agentService: {
 			isLocalModel: vi.fn(() => false),
@@ -287,5 +287,83 @@ describe('executeTrigger — local model routing', () => {
 		const report = await readReport(app, trigger.name);
 		expect(report).toContain('## Error');
 		expect(report).toContain('connection refused');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Tool approval policy (issue #151)
+// ---------------------------------------------------------------------------
+
+describe('executeTrigger — unattended tool approval policy (#151)', () => {
+	/**
+	 * Stand-in for a Claude turn that attempts one tool call (`Write`) via
+	 * `inlineChat`'s `canUseTool`, mirroring what the real SDK does: invoke
+	 * `canUseTool` for an approval-requiring tool, then let the outcome shape the
+	 * model's final text. Also records what `inlineChat` was actually called
+	 * with, so tests can assert on `permissionMode`/`allowDangerouslySkipPermissions`.
+	 */
+	function makeToolCallingInlineChat(calls: InlineChatOptions[]): InlineChatImpl {
+		return async (options) => {
+			calls.push(options);
+			if (options.canUseTool) {
+				const decision = await options.canUseTool('Write', {file_path: 'notes/target.md'}, {
+					signal: new AbortController().signal,
+					toolUseID: 'tool-1',
+					requestId: 'tool-1',
+				});
+				if (decision?.behavior === 'deny') {
+					return {content: 'I was not able to write the file.', sessionId: 's1'};
+				}
+			}
+			return {content: 'Wrote the file successfully.', sessionId: 's1'};
+		};
+	}
+
+	it('ask mode (default): a refused tool call is logged into the report — silence is not a possible outcome', async () => {
+		const calls: InlineChatOptions[] = [];
+		const {app, plugin} = makePlugin(makeToolCallingInlineChat(calls), 'ask');
+		const trigger = makeTrigger({write: false});
+
+		await executeTrigger(asPlugin(plugin), trigger, 'notes/target.md');
+
+		// The call was handed permissionMode: 'default' plus a canUseTool, not bypassPermissions.
+		expect(calls[0]?.permissionMode).toBe('default');
+		expect(calls[0]?.canUseTool).toBeTypeOf('function');
+
+		const report = await readReport(app, trigger.name);
+		expect(report).toContain('Tool approval');
+		expect(report).toContain('Write');
+		expect(report).toContain('denied');
+	});
+
+	it('allow mode: no tool call is refused, and the report contains no refusal note', async () => {
+		const calls: InlineChatOptions[] = [];
+		const {app, plugin} = makePlugin(makeToolCallingInlineChat(calls), 'allow');
+		const trigger = makeTrigger({write: false});
+
+		await executeTrigger(asPlugin(plugin), trigger, 'notes/target.md');
+
+		expect(calls[0]?.permissionMode).toBe('bypassPermissions');
+		expect(calls[0]?.allowDangerouslySkipPermissions).toBe(true);
+		expect(calls[0]?.canUseTool).toBeUndefined();
+
+		const report = await readReport(app, trigger.name);
+		expect(report).toContain('Wrote the file successfully.');
+		expect(report).not.toContain('Tool approval');
+	});
+
+	it("a trigger's toolApproval: allow frontmatter opt-in overrides a global 'ask' setting for just that trigger", async () => {
+		const calls: InlineChatOptions[] = [];
+		const {app, plugin} = makePlugin(makeToolCallingInlineChat(calls), 'ask');
+		const trigger = makeTrigger({write: false, toolApproval: 'allow'});
+
+		await executeTrigger(asPlugin(plugin), trigger, 'notes/target.md');
+
+		expect(calls[0]?.permissionMode).toBe('bypassPermissions');
+		expect(calls[0]?.canUseTool).toBeUndefined();
+
+		const report = await readReport(app, trigger.name);
+		expect(report).toContain('Wrote the file successfully.');
+		expect(report).not.toContain('Tool approval');
 	});
 });

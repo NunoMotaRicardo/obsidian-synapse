@@ -253,6 +253,10 @@ export default tseslint.config(
 					// worse than natural lowercase continuation
 					'_synapse/triggers/', // literal (lowercase) vault folder path, not prose —
 					// the rule's suggested fix would incorrectly capitalize it to "_Synapse/…"
+					'setting toolApproval to allow in its own frontmatter', // `enforceCamelCaseLower`
+					// would otherwise want the literal camelCase frontmatter field name
+					// `toolApproval` lowercased to "toolapproval", which is wrong — it has to
+					// match the actual key `configWriter.ts`/`TriggerConfig.toolApproval` reads (#151)
 				],
 			}],
 		},

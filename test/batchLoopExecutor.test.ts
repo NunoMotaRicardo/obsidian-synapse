@@ -105,13 +105,14 @@ function resultMessage(overrides: {inputTokens?: number; outputTokens?: number; 
 	};
 }
 
-function makePlugin(inlineChatImpl: InlineChatImpl) {
+function makePlugin(inlineChatImpl: InlineChatImpl, toolApproval: 'ask' | 'allow' = 'ask') {
 	const app = createMockApp() as unknown as App;
 	seedFolder(app, '_synapse');
 
 	const inlineChat = vi.fn(inlineChatImpl);
 	const plugin = {
 		app,
+		settings: {toolApproval},
 		agentService: {inlineChat},
 	};
 	return {app, plugin, inlineChat};
@@ -354,5 +355,63 @@ describe('runBatchLoop — cancellation', () => {
 		await runBatchLoop(asPlugin(plugin), ['a.md'], '{{file}}', handle);
 
 		expect(capturedController?.signal.aborted).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Tool approval policy (issue #151)
+// ---------------------------------------------------------------------------
+
+describe('runBatchLoop — unattended tool approval policy (#151)', () => {
+	/**
+	 * Stand-in for a Claude turn that attempts one tool call (`Write`) via
+	 * `inlineChat`'s `canUseTool`, mirroring what the real SDK does — see the
+	 * matching helper in `test/triggerExecutor.test.ts`.
+	 */
+	function makeToolCallingInlineChat(calls: InlineChatOptions[]): InlineChatImpl {
+		return async (options) => {
+			calls.push(options);
+			if (options.canUseTool) {
+				const decision = await options.canUseTool('Write', {file_path: 'a.md'}, {
+					signal: new AbortController().signal,
+					toolUseID: 'tool-1',
+					requestId: 'tool-1',
+				});
+				if (decision?.behavior === 'deny') {
+					return {content: 'I was not able to write the file.', sessionId: 's1'};
+				}
+			}
+			return {content: 'Wrote the file successfully.', sessionId: 's1'};
+		};
+	}
+
+	it('ask mode (default): a refused tool call is logged into the report for that file', async () => {
+		const calls: InlineChatOptions[] = [];
+		const {app, plugin} = makePlugin(makeToolCallingInlineChat(calls), 'ask');
+
+		await runBatchLoop(asPlugin(plugin), ['a.md'], '{{file}}', new BatchLoopHandle());
+
+		expect(calls[0]?.permissionMode).toBe('default');
+		expect(calls[0]?.canUseTool).toBeTypeOf('function');
+
+		const report = await readTodaysReport(app);
+		expect(report).toContain('Tool approval');
+		expect(report).toContain('Write');
+		expect(report).toContain('denied');
+	});
+
+	it('allow mode: no tool call is refused, and the report contains no refusal note', async () => {
+		const calls: InlineChatOptions[] = [];
+		const {app, plugin} = makePlugin(makeToolCallingInlineChat(calls), 'allow');
+
+		await runBatchLoop(asPlugin(plugin), ['a.md'], '{{file}}', new BatchLoopHandle());
+
+		expect(calls[0]?.permissionMode).toBe('bypassPermissions');
+		expect(calls[0]?.allowDangerouslySkipPermissions).toBe(true);
+		expect(calls[0]?.canUseTool).toBeUndefined();
+
+		const report = await readTodaysReport(app);
+		expect(report).toContain('Wrote the file successfully.');
+		expect(report).not.toContain('Tool approval');
 	});
 });

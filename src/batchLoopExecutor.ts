@@ -355,6 +355,7 @@ export async function runBatchLoop(
 				body: instruction,
 				logLabel: `Batch loop file "${filePath}"`,
 				appendReport: (result, isError) => appendToReport(plugin, filePath, result, isError),
+				surface: 'batch-loop',
 				abortController: fileController,
 				onEvent: (msg: SDKMessage) => {
 					if (msg.type === 'result') {
