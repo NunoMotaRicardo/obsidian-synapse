@@ -2,8 +2,7 @@
  * runtime-manager — resolves the Claude CLI binary and builds a clean
  * subprocess environment.
  *
- * Extracted from `src/copilot.ts` so the resolution chain stays separate from
- * the SDK consumer. This module touches only `node:*` builtins and values
+ * Kept separate from the SDK consumer so the resolution chain stands alone. This module touches only `node:*` builtins and values
  * passed in by the caller — it must NOT import `@anthropic-ai/claude-agent-sdk`.
  * `AgentService` stays the sole SDK consumer and calls into here for path
  * resolution.

@@ -5,7 +5,7 @@ import {DEFAULT_SETTINGS} from '../src/settings';
 // Legacy settings-key tolerance (issue #106)
 //
 // `contextTier` and `reasoningSummary` were removed from `SynapseSettings`
-// (they were Copilot-SDK-era no-ops, never wired to the Agent SDK). Existing
+// (they were pre-Agent-SDK no-ops, never wired to the Agent SDK). Existing
 // `data.json` files written by older plugin versions still contain those
 // keys. `SynapsePlugin.loadSettings()` merges persisted data over
 // `DEFAULT_SETTINGS` via `Object.assign({}, DEFAULT_SETTINGS, raw)` — this
@@ -19,7 +19,7 @@ describe('legacy settings key tolerance', () => {
 	const legacyRaw = {
 		authType: 'apiKey',
 		reasoningEffort: 'high',
-		// Removed Copilot-SDK-era keys, still present in old data.json files:
+		// Removed pre-Agent-SDK keys, still present in old data.json files:
 		contextTier: 'long_context',
 		reasoningSummary: 'detailed',
 	};

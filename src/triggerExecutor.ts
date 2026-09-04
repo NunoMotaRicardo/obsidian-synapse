@@ -26,7 +26,9 @@ import {debugTrace} from './debug';
  *
  * Supported variables:
  * - `{{file}}` — vault-relative path of the triggering file
- * - `{{files}}` — same (for future scheduled triggers with multiple files)
+ * - `{{files}}` — alias for `{{file}}`. Scheduled triggers with a `path` glob fan out to one
+ *   `executeTrigger()` call per matched file (see `TriggerScheduler.fire()` in `triggers.ts`),
+ *   so each execution only ever sees a single file — there is no list to substitute.
  */
 function substituteTemplates(body: string, filePath: string): string {
 	return body

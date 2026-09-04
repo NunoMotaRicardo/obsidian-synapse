@@ -95,7 +95,7 @@ vault scope, folder tree.
     default. Re-selecting the active level toggles back to `''`.
   - (issue #106) The menu previously also offered a **Reasoning summary** submenu
     (`settings.reasoningSummary`) and a **Long context** toggle (`settings.contextTier`).
-    Both were Copilot-SDK-era controls that were never actually passed to `query()` — they
+    Both were pre-Agent-SDK controls that were never actually passed to `query()` — they
     persisted a setting and updated the badge, but had zero effect on the session. They were
     removed rather than wired up: the Agent SDK's long-context equivalent is already covered by
     picking a `[1m]` model id from the existing model list (`sdkModelId()` in `agentService.ts`
@@ -491,7 +491,7 @@ exec tools regardless of the tool-approval setting.
 `formatErrorForChat()` (`synapseView.ts`), which currently just strips a leading `Error: `
 prefix. (The pre-engine-swap Ollama-specific `friendlyOllamaError()` pattern-matcher in
 `src/ollamaErrors.ts` — connection refused, model not found, OOM, etc. — was removed when the
-plugin moved off the Copilot SDK/BYOK-only model and has not been reinstated; `providerPreset`
+plugin moved to the Agent SDK and has not been reinstated; `providerPreset`
 still exists for BYOK local-provider routing in `providerModels.ts`, but chat error display is
 no longer preset-gated.)
 

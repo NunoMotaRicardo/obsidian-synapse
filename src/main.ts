@@ -188,7 +188,7 @@ export default class SynapsePlugin extends Plugin {
 			}
 		}
 
-		// Start trigger watcher (vault event detection — independent of copilot)
+		// Start trigger watcher (vault event detection — independent of the agent service)
 		try {
 			this.triggerWatcher = new TriggerWatcher(this);
 			await this.triggerWatcher.start();
@@ -196,7 +196,7 @@ export default class SynapsePlugin extends Plugin {
 			console.error('Synapse: failed to start trigger watcher', e);
 		}
 
-		// Start trigger scheduler (cron-based scheduling — independent of copilot)
+		// Start trigger scheduler (cron-based scheduling — independent of the agent service)
 		try {
 			this.triggerScheduler = new TriggerScheduler(this);
 			await this.triggerScheduler.start();

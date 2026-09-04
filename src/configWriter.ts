@@ -525,7 +525,7 @@ Frontmatter fields:
 - \`write\` (optional) — \`false\` (default), \`true\`, or \`'frontmatter'\` to allow writing back
 - \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
 
-Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` to reference the triggering file path (for event triggers) or \`{{files}}\` for the list of matched files (for scheduled triggers).
+Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` (or the equivalent \`{{files}}\`) to reference the triggering file's path. For scheduled triggers with a \`path\` glob, the trigger runs once per matched file, so each run still sees a single file path.
 
 Example — event trigger (auto-tag new notes in inbox):
 \`\`\`markdown

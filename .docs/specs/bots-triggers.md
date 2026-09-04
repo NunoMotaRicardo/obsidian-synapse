@@ -38,8 +38,11 @@ Frontmatter fields:
 | `write` | boolean or `'frontmatter'` | no | `false` | Whether the trigger may write back |
 | `enabled` | boolean | no | `true` | Set to `false` to disable without deleting |
 
-Body: prompt/instructions executed when the trigger fires. Template variables `{{file}}`
-(event triggers) and `{{files}}` (scheduled triggers) are substituted at execution time.
+Body: prompt/instructions executed when the trigger fires. Template variables `{{file}}` and
+`{{files}}` (an alias for `{{file}}`) are both substituted with the triggering file's
+vault-relative path at execution time. Scheduled triggers with a `path` glob fan out to one
+execution per matched file (see "Current status" below), so there is never a list of files to
+substitute — each execution only ever sees one file.
 
 ### Validation rules
 
@@ -85,7 +88,7 @@ and matches them against enabled event-based triggers loaded via `scanTriggers()
 
 **Lifecycle:**
 
-- Created in `main.ts` `onload()` after copilot initialization.
+- Created in `main.ts` `onload()` after the agent service is initialized.
 - `start()` loads trigger configs and registers vault listeners via `plugin.registerEvent()`.
 - `stop()` clears debounce timers. Vault listeners are cleaned up by Obsidian on unload.
 
@@ -96,8 +99,8 @@ and matches them against enabled event-based triggers loaded via `scanTriggers()
 3. For each enabled trigger with a matching `event` type:
    - If `path` glob is set, match against file path using `matchGlob()`.
    - If no `path`, the trigger matches all files.
-4. On match: `console.log('[synapse] Trigger "<name>" fired for <file>')`.
-   Actual execution is wired in a later issue (#51).
+4. On match: dispatches `executeTrigger(plugin, trigger, filePath)` (fire-and-forget; errors are
+   caught inside — see "Trigger executor" below for what execution does).
 
 **Glob matching (`matchGlob`):**
 
@@ -125,7 +128,9 @@ executeTrigger(plugin: SynapsePlugin, trigger: TriggerConfig, filePath: string):
 
 **Template substitution** — applied to `trigger.body` before the model call:
 - `{{file}}` → vault-relative file path of the triggering file
-- `{{files}}` → same (for scheduled triggers this would be a list; event triggers have one file)
+- `{{files}}` → alias for `{{file}}`, same substitution. Scheduled triggers with a `path` glob
+  run `executeTrigger()` once per matched file (see `TriggerScheduler.fire()` below), so each
+  execution only ever has one file to substitute — a list was never part of the execution model.
 
 **Model routing:**
 - `trigger.model` absent or resolves to a Claude model → `AgentService.inlineChat()` with
