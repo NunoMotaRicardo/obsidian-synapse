@@ -36,14 +36,32 @@ function read(relativePath: string): string {
 }
 
 describe('autoApproveReadOnlyTools', () => {
-	it('always resolves an allow decision, regardless of tool name/input', async () => {
-		const result = await autoApproveReadOnlyTools('read_note', {path: 'foo.md'}, {
+	const call = (toolName: string, input: Record<string, unknown> = {}) =>
+		autoApproveReadOnlyTools(toolName, input, {
 			signal: new AbortController().signal,
 			toolUseID: 'test-tool-use-id',
 			requestId: 'test-tool-use-id',
 		});
-		expect(result).toEqual({behavior: 'allow'});
-	});
+
+	it.each(['read_note', 'list_notes', 'search_notes', 'Read', 'Glob', 'Grep'])(
+		'allows the read-only tool %s',
+		async toolName => {
+			const result = await call(toolName, {path: 'foo.md'});
+			expect(result?.behavior).toBe('allow');
+		},
+	);
+
+	// The handler's safety must not rest on callers restricting `tools` correctly:
+	// inlineChat() forwards the same canUseTool to the raw Claude-path query(), so a
+	// blanket allow would grant writes to any future call site that wired it in next to
+	// a write-capable tool. It fails closed on the tool name instead.
+	it.each(['Write', 'Edit', 'Bash', 'NotebookEdit'])(
+		'denies %s even though the call site asked for auto-approval',
+		async toolName => {
+			const result = await call(toolName, {file_path: 'foo.md'});
+			expect(result?.behavior).toBe('deny');
+		},
+	);
 });
 
 describe('searchPanel.ts wiring (#167)', () => {

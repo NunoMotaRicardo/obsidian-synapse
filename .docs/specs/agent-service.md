@@ -688,7 +688,7 @@ individually was rejected as unusable UX; running fully ungated (no `canUseTool`
 have meant reintroducing exactly the silent-fail-open pattern #150's method comment explicitly
 rules out.
 
-**Resolution: `autoApproveReadOnlyTools`, a dedicated always-allow `CanUseTool` — not a new
+**Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool` — not a new
 "attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()`
 either.** This is deliberately narrower than both:
 
@@ -712,13 +712,16 @@ either.** This is deliberately narrower than both:
   `allowDangerouslySkipPermissions` on its advanced-search SDK path when `settings.toolApproval
   === 'allow'` — the local path granting exactly the read-only three is strictly less permissive
   than what search already does on Claude in that mode.
-- `autoApproveReadOnlyTools` (`agentService.ts`, exported) is a plain `CanUseTool` that resolves
-  `{behavior: 'allow'}` unconditionally, with no per-tool-name check inside it. That is safe only
-  because of where it is wired: `inlineChat()` forwards the same `canUseTool` to the raw Claude-
-  path `query()` call too (it is a single option, not two), so an always-allow handler is only
-  safe at a call site whose `tools` option is *already* restricted to the read-only set — the
-  model can never be offered anything else to call it for. Its doc comment says this explicitly;
-  it must not be reused at a call site that also offers write-capable tools.
+- `autoApproveReadOnlyTools` (`agentService.ts`, exported) is a `CanUseTool` that allows a tool
+  only if its name is in `READ_ONLY_TOOL_NAMES` (`Read`/`Glob`/`Grep` on the SDK path,
+  `read_note`/`list_notes`/`search_notes` on the local path) and **denies anything else**. The
+  check is in the handler rather than left to the caller on purpose: `inlineChat()` forwards the
+  same `canUseTool` to the raw Claude-path `query()` call too (it is a single option, not two),
+  so an unconditional always-allow handler would silently grant writes at any future call site
+  that wired it in alongside a write-capable tool. Restricting `tools` at the call site is still
+  the primary control; failing closed on the tool name keeps the guarantee in code rather than in
+  a doc comment. Call sites that legitimately need write-capable tools use #151's
+  `resolveToolApprovalPolicy()` instead.
 - Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both now pass
   `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing `tools:
   SEARCH_TOOLS`. No second `CanUseTool -> LocalToolApprovalHandler` adapter was added —

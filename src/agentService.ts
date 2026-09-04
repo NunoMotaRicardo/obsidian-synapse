@@ -1245,13 +1245,30 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
  * shipped behavior for the local-model path rather than inventing a laxer one. See
  * "Tool approval for inlineChat()'s read-only callers" in `.docs/specs/agent-service.md`.
  *
- * Only wire this into a call site whose `tools` option is restricted to that read-only set.
- * `inlineChat()` forwards the same `canUseTool` to the raw Claude-path `query()` call too, so an
- * always-allow handler is only safe because the model can never be offered a tool outside that
- * set in the first place — it must not be reused for a call site that also offers write-capable
- * tools (those stay on #151's fail-closed `resolveToolApprovalPolicy()` path instead).
+ * The read-only set is **enforced here**, not merely assumed of the caller: any tool outside
+ * `READ_ONLY_TOOL_NAMES` is denied. `inlineChat()` forwards the same `canUseTool` to the raw
+ * Claude-path `query()` call too, so a blanket always-allow handler would silently grant writes
+ * to any future call site that wired it in alongside a write-capable tool. Failing closed on the
+ * tool name keeps the guarantee in the code rather than in this comment. Call sites that
+ * legitimately need write-capable tools stay on #151's `resolveToolApprovalPolicy()` path.
  */
-export const autoApproveReadOnlyTools: CanUseTool = async () => ({behavior: 'allow'});
+const READ_ONLY_TOOL_NAMES = new Set([
+	// SDK path — searchPanel's SEARCH_TOOLS and editorMenu's ['Read'].
+	'Read', 'Glob', 'Grep',
+	// Local-model path — the `vaultTools` analogues (`src/vaultTools.ts`), verified read-only:
+	// they call only `vault.read()` / `getFiles()` / `getMarkdownFiles()`.
+	'read_note', 'list_notes', 'search_notes',
+]);
+
+export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
+	if (READ_ONLY_TOOL_NAMES.has(toolName)) {
+		return {behavior: 'allow', updatedInput: input};
+	}
+	return {
+		behavior: 'deny',
+		message: `Synapse: "${toolName}" is not one of the read-only tools this call site auto-approves.`,
+	};
+};
 
 // ── Session wrapper ─────────────────────────────────────────────
 
