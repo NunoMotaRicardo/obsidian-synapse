@@ -765,6 +765,20 @@ export class AgentService {
 	/**
 	 * Send a prompt and return the response text along with the session ID.
 	 * The session persists and can be resumed later.
+	 *
+	 * `app` (#150, mirroring #138's `Session.send()`) is only used in the local-model branch,
+	 * forwarded to `executeLocalProviderQuery()` as the `App` instance the three built-in vault
+	 * tools (`read_note`, `list_notes`, `search_notes`) execute against. `AgentService` holds no
+	 * `App` reference of its own (architecture rule: SDK/session plumbing stays UI-agnostic), so
+	 * each editor action/edit modal/search caller passes it per call.
+	 *
+	 * Unlike `Session.send()`, tools are only offered here when the caller *also* supplies
+	 * `canUseTool` — editor actions are one-shot rather than an ongoing attended conversation, so
+	 * there is no "unattended by design" precedent (`triggerExecutor.ts`) to fall back to running
+	 * ungated; every tool call this method makes must go through the same approval path as the
+	 * chat panel's, never a silent auto-approve. A caller with `app` but no `canUseTool` gets no
+	 * tools rather than an ungated one (fails closed, not "always denied" — the tool is simply
+	 * never offered, so the model degrades to the current bare one-shot instead of a broken loop).
 	 */
 	async inlineChat(options: {
 		prompt: string;
@@ -784,6 +798,7 @@ export class AgentService {
 		effort?: EffortLevel;
 		resume?: string;
 		cwd?: string;
+		app?: App;
 		onEvent?: (msg: SDKMessage) => void;
 		abortController?: AbortController;
 		signal?: AbortSignal;
@@ -795,10 +810,30 @@ export class AgentService {
 
 				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
 					const sysPrompt = options.systemMessage ?? (typeof options.systemPrompt === 'string' ? options.systemPrompt : undefined);
+
+					// Vault tools for inlineChat's local-model branch (#150) — same
+					// `supportsTools !== false` capability gate as `Session.send()` (#138) and
+					// `triggerExecutor.ts`. See the method doc comment above for why reachability
+					// also requires `canUseTool` here, unlike `Session.send()`.
+					//
+					// MCP tools are deliberately NOT offered here either, for the same
+					// spawn/teardown-cost reasoning as `Session.send()` — see its comment. That
+					// reasoning is about paying the cost once per turn in a back-and-forth
+					// conversation; it doesn't automatically carry over to inlineChat's one-shot
+					// calls, but extending to MCP is a separate question this issue leaves alone.
+					const modelInfo = this.getModels().find(m => m.id === options.model);
+					const supportsTools = modelInfo?.supportsTools !== false;
+					const localTools = (supportsTools && options.app && options.canUseTool) ? vaultTools : undefined;
+					const onApproveTool: LocalToolApprovalHandler | undefined = (localTools && options.canUseTool)
+						? adaptCanUseToolToLocalApproval(options.canUseTool, controller.signal)
+						: undefined;
+
 					const res = await executeLocalProviderQuery(this.providerConfig, {
 						prompt: options.prompt,
 						systemPrompt: sysPrompt,
 						model: options.model,
+						...(localTools ? {tools: localTools, app: options.app} : {}),
+						...(onApproveTool ? {onApproveTool} : {}),
 					});
 					if (!res.ok) throw new Error(res.error);
 					const localSessionId = `local-${Date.now()}`;
@@ -1161,6 +1196,36 @@ export async function refreshQueryMetadataCache(
 	}
 }
 
+/**
+ * Adapt an Agent SDK `CanUseTool` (the interactive approval handler already threaded through
+ * `SessionConfig`/`inlineChat()` — `ToolApprovalModal`/`permissionHandler`) into
+ * `providerModels.ts`'s neutral `LocalToolApprovalHandler` shape consulted by
+ * `executeLocalProviderQuery()`'s local-model tool loop (#138).
+ *
+ * `providerModels.ts` must not import view/SDK types, so this translation lives here — the one
+ * file that already imports both — and in exactly this one place. Both of the local-model
+ * branches that offer vault tools (`Session.send()` for the chat panel, `AgentService.inlineChat()`
+ * for editor actions/edit modal/search, #150) call this rather than each writing their own
+ * adapter.
+ */
+function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSignal): LocalToolApprovalHandler {
+	return async (toolName, input, context) => {
+		const result = await canUseTool(toolName, input, {
+			signal,
+			toolUseID: context.toolUseID,
+			requestId: context.toolUseID,
+			title: `${context.isRemoteEndpoint ? 'Remote' : 'Local'} model wants to use ${toolName}`,
+			description: context.isRemoteEndpoint
+				? `This sends data to ${context.endpoint} — a remote endpoint outside this machine.`
+				: `This runs locally against ${context.endpoint} and stays on this machine.`,
+		});
+		if (result && result.behavior === 'allow') {
+			return {allow: true};
+		}
+		return {allow: false, message: (result && result.behavior === 'deny') ? result.message : 'Denied by user'};
+	};
+}
+
 // ── Session wrapper ─────────────────────────────────────────────
 
 type SessionEventHandler = (event: SessionEvent) => void;
@@ -1356,27 +1421,12 @@ export class Session {
 					// Approval gate (#138): reuse the same `canUseTool` this session was built
 					// with (`SynapseView.buildSessionConfig()`'s `permissionHandler`, which opens
 					// `ToolApprovalModal`) rather than a second approval UI, per the issue's
-					// decision comment. `providerModels.ts` must not import view/SDK types, so
-					// the adapter — translating its neutral `LocalToolApprovalHandler` shape into
-					// an Agent-SDK `CanUseTool` call — lives here, the one file that already
-					// imports both.
+					// decision comment. The `CanUseTool` -> `LocalToolApprovalHandler` translation
+					// lives in `adaptCanUseToolToLocalApproval()` (shared with
+					// `AgentService.inlineChat()`, #150) rather than being duplicated here.
 					const canUseTool = queryOpts.canUseTool;
 					const onApproveTool: LocalToolApprovalHandler | undefined = (localTools && canUseTool)
-						? async (toolName, input, context) => {
-							const result = await canUseTool(toolName, input, {
-								signal: ctrl.signal,
-								toolUseID: context.toolUseID,
-								requestId: context.toolUseID,
-								title: `${context.isRemoteEndpoint ? 'Remote' : 'Local'} model wants to use ${toolName}`,
-								description: context.isRemoteEndpoint
-									? `This sends data to ${context.endpoint} — a remote endpoint outside this machine.`
-									: `This runs locally against ${context.endpoint} and stays on this machine.`,
-							});
-							if (result && result.behavior === 'allow') {
-								return {allow: true};
-							}
-							return {allow: false, message: (result && result.behavior === 'deny') ? result.message : 'Denied by user'};
-						}
+						? adaptCanUseToolToLocalApproval(canUseTool, ctrl.signal)
 						: undefined;
 
 					const res = await executeLocalProviderQuery(this.service.getProviderConfig()!, {

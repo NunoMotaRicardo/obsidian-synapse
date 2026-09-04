@@ -362,3 +362,169 @@ describe('Session#send — local-model tool wiring', () => {
 		expect(getFiles).not.toHaveBeenCalled();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// AgentService#inlineChat's local-model branch (#150) — applies the same
+// capability gate and canUseTool -> LocalToolApprovalHandler adapter #138 gave
+// Session#send() to the second call site (editor actions/edit modal/search).
+// Unlike Session#send(), reachability also requires `canUseTool`: inlineChat
+// callers are one-shot rather than an attended conversation, so there is no
+// "unattended by design" precedent to fall back to running tools ungated —
+// see the method's doc comment in agentService.ts.
+// ---------------------------------------------------------------------------
+describe('AgentService#inlineChat — local-model tool wiring', () => {
+	// `ensureConnected()` runs before the local-model branch and validates that
+	// `claudeLocation` exists on disk — point it at the running Node binary
+	// (guaranteed to exist) rather than a real Claude CLI install, which the
+	// local-model branch never touches.
+	function makeService(): AgentService {
+		return new AgentService({
+			providerConfig: {preset: 'openai', baseUrl: 'http://localhost:9999'},
+			claudeLocation: process.execPath,
+		});
+	}
+
+	function mockPlainCompletion(content = 'no tools used'): void {
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/v1/chat/completions')) {
+				return Promise.resolve(jsonResponse(200, {choices: [{message: {role: 'assistant', content}}]}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+	}
+
+	it('does not offer tools to a model the catalogue says cannot call them (supportsTools: false)', async () => {
+		const service = makeService();
+		service.setCustomModels([{id: 'no-tools-model', name: 'No Tools Model', supportsTools: false}]);
+		mockPlainCompletion();
+
+		const canUseTool = vi.fn().mockResolvedValue({behavior: 'allow', updatedInput: {}} satisfies PermissionResult);
+		await service.inlineChat({
+			prompt: 'hi',
+			model: 'no-tools-model',
+			app: {vault: {getFiles: () => []}} as never,
+			canUseTool,
+		});
+
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {tools?: unknown};
+		expect(body.tools).toBeUndefined();
+	});
+
+	it('does not offer tools when no App instance is supplied, and does not crash', async () => {
+		const service = makeService();
+		service.setCustomModels([{id: 'tool-model', name: 'Tool Model'}]);
+		mockPlainCompletion();
+
+		const canUseTool = vi.fn().mockResolvedValue({behavior: 'allow', updatedInput: {}} satisfies PermissionResult);
+		const result = await service.inlineChat({prompt: 'hi', model: 'tool-model', canUseTool});
+
+		expect(result.content).toBe('no tools used');
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {tools?: unknown};
+		expect(body.tools).toBeUndefined();
+	});
+
+	it('does not offer tools when no canUseTool is supplied, even with an App instance (fails closed rather than running ungated)', async () => {
+		const service = makeService();
+		service.setCustomModels([{id: 'tool-model', name: 'Tool Model'}]);
+		mockPlainCompletion();
+
+		const result = await service.inlineChat({
+			prompt: 'hi',
+			model: 'tool-model',
+			app: {vault: {getFiles: () => []}} as never,
+		});
+
+		expect(result.content).toBe('no tools used');
+		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
+		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {tools?: unknown};
+		expect(body.tools).toBeUndefined();
+	});
+
+	it('offers tools, and adapts canUseTool into the approval gate naming the endpoint, when both app and canUseTool are supplied', async () => {
+		const service = makeService();
+		service.setCustomModels([{id: 'tool-model', name: 'Tool Model'}]);
+
+		let call = 0;
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/v1/chat/completions')) {
+				call++;
+				if (call === 1) {
+					return Promise.resolve(jsonResponse(200, {
+						choices: [{
+							message: {
+								role: 'assistant',
+								content: '',
+								tool_calls: [{id: 'call_1', type: 'function', function: {name: 'list_notes', arguments: '{}'}}],
+							},
+						}],
+					}));
+				}
+				return Promise.resolve(jsonResponse(200, {choices: [{message: {role: 'assistant', content: 'done'}}]}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const canUseTool = vi.fn().mockImplementation(async (): Promise<PermissionResult> => {
+			return {behavior: 'allow', updatedInput: {}};
+		});
+		const getFiles = vi.fn().mockReturnValue([]);
+
+		const result = await service.inlineChat({
+			prompt: 'list my notes',
+			model: 'tool-model',
+			app: {vault: {getFiles}} as never,
+			canUseTool,
+		});
+
+		expect(result.content).toBe('done');
+		expect(canUseTool).toHaveBeenCalledTimes(1);
+		const [toolName, , options] = canUseTool.mock.calls[0] as [string, Record<string, unknown>, {description?: string}];
+		expect(toolName).toBe('list_notes');
+		// The approval prompt must name the endpoint the call is going to (#138 decision comment,
+		// reused here rather than re-implemented — #150).
+		expect(options.description).toContain('http://localhost:9999');
+		expect(getFiles).toHaveBeenCalledTimes(1);
+	});
+
+	it('denies the tool call when canUseTool returns deny, and the vault tool never runs', async () => {
+		const service = makeService();
+		service.setCustomModels([{id: 'tool-model', name: 'Tool Model'}]);
+
+		let call = 0;
+		mockedRequestUrl.mockImplementation(((request: unknown) => {
+			const req = request as {url: string};
+			if (req.url.endsWith('/v1/chat/completions')) {
+				call++;
+				if (call === 1) {
+					return Promise.resolve(jsonResponse(200, {
+						choices: [{
+							message: {
+								role: 'assistant',
+								content: '',
+								tool_calls: [{id: 'call_1', type: 'function', function: {name: 'list_notes', arguments: '{}'}}],
+							},
+						}],
+					}));
+				}
+				return Promise.resolve(jsonResponse(200, {choices: [{message: {role: 'assistant', content: 'ok, declined'}}]}));
+			}
+			return Promise.resolve(jsonResponse(404, {}));
+		}) as typeof requestUrl);
+
+		const canUseTool = vi.fn().mockResolvedValue({behavior: 'deny', message: 'Denied by user'} satisfies PermissionResult);
+		const getFiles = vi.fn().mockReturnValue([]);
+
+		await service.inlineChat({
+			prompt: 'list my notes',
+			model: 'tool-model',
+			app: {vault: {getFiles}} as never,
+			canUseTool,
+		});
+
+		expect(getFiles).not.toHaveBeenCalled();
+	});
+});
