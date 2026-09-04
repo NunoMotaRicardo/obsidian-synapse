@@ -183,6 +183,8 @@ export class SynapseView extends ItemView {
 	modelIconEl!: HTMLSpanElement;
 	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
+	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
+	contextIndicatorEl!: HTMLElement;
 	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;
@@ -453,11 +455,13 @@ export class SynapseView extends ItemView {
 	}
 
 	updateConfigUI(): void {
-		// Agents
+		// Agents — sourced from the live CLI's supportedAgents() (issue #130) when a session
+		// has captured one, else the directory scan; see `getEffectiveAgents()`.
+		const agents = this.getEffectiveAgents();
 		this.agentSelect.empty();
 		const noAgent = this.agentSelect.createEl('option', {text: 'Auto', attr: {value: ''}});
 		noAgent.value = '';
-		for (const agent of this.agents) {
+		for (const agent of agents) {
 			const opt = this.agentSelect.createEl('option', {text: agent.name});
 			opt.value = agent.name;
 			opt.title = agent.instructions;
@@ -465,9 +469,9 @@ export class SynapseView extends ItemView {
 		if (this.selectedAgent === '') {
 			this.agentSelect.value = '';
 			this.agentSelect.title = '';
-		} else if (this.selectedAgent && this.agents.some(a => a.name === this.selectedAgent)) {
+		} else if (this.selectedAgent && agents.some(a => a.name === this.selectedAgent)) {
 			this.agentSelect.value = this.selectedAgent;
-			const selAgent = this.agents.find(a => a.name === this.selectedAgent);
+			const selAgent = agents.find(a => a.name === this.selectedAgent);
 			this.agentSelect.title = selAgent ? selAgent.instructions : '';
 		} else {
 			this.selectedAgent = '';
@@ -476,7 +480,7 @@ export class SynapseView extends ItemView {
 		}
 
 		// Auto-select agent's preferred model
-		const selectedAgentConfig = this.agents.find(a => a.name === this.selectedAgent);
+		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
 		const resolvedModel = this.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
 		if (resolvedModel) {
 			this.selectedModel = resolvedModel;
@@ -494,7 +498,7 @@ export class SynapseView extends ItemView {
 		}
 
 		// Apply agent's tools and skills filter
-		const selectedAgentForFilter = this.agents.find(a => a.name === this.selectedAgent);
+		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
 
@@ -837,6 +841,10 @@ export class SynapseView extends ItemView {
 
 		this.configDirty = false;
 		this.registerSessionEvents();
+		// A rebuilt Session starts with an empty query-metadata cache (issue #130) — hide
+		// the gauge and fall back to the directory scan for agents/skills until this
+		// session's own first turn captures fresh values.
+		this.updateContextIndicator();
 		this.updateToolbarLock();
 
 		// Add resumed sessions to the list immediately; brand-new sessions are added
@@ -1063,6 +1071,14 @@ export class SynapseView extends ItemView {
 					error?: string;
 				});
 				break;
+			case 'session.metadata':
+				// Capture-and-cache refresh (issue #130) — Session already holds the
+				// authoritative cache (`cachedContextUsage`/`cachedSupportedCommands`/
+				// `cachedSupportedAgents`); this event just tells the view it's time to
+				// re-read those getters and re-render the bits that depend on them.
+				this.updateContextIndicator();
+				this.updateConfigUI();
+				break;
 		}
 	}
 
@@ -1117,6 +1133,7 @@ export class SynapseView extends ItemView {
 			} catch { /* ignore */ }
 			this.currentSession = null;
 		}
+		this.updateContextIndicator();
 	}
 
 	async disconnectAllSessions(): Promise<void> {
@@ -1164,6 +1181,7 @@ export class SynapseView extends ItemView {
 		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
 		this.selectedModel = '';
 		this.updateConfigUI();
+		this.updateContextIndicator();
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];

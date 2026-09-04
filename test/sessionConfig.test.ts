@@ -6,9 +6,9 @@ vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
 }));
 
-import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent} from '../src/view/sessionConfig';
+import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig} from '../src/view/sessionConfig';
 import {scanVaultStructure} from '../src/configWriter';
-import type {ModelInfo} from '../src/agentService';
+import type {ModelInfo, SlashCommand, AgentInfo} from '../src/agentService';
 import type {AgentConfig} from '../src/types';
 
 const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>;
@@ -165,5 +165,51 @@ describe('resolveModelForAgent', () => {
 
 	it('falls back when nothing matches at all', () => {
 		expect(resolveModelForAgent(makeAgent('gpt-4o'), models, 'fallback-id')).toBe('fallback-id');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// mapSlashCommandsToSkillInfo / mapAgentInfoToAgentConfig (issue #130) — map
+// the CLI's live supportedCommands()/supportedAgents() responses into the
+// shapes the slash-command popup (inputArea.ts) and agent picker
+// (configToolbar.ts) already render, so those call sites don't need to know
+// whether a given entry came from the CLI or the directory scan.
+// ---------------------------------------------------------------------------
+
+describe('mapSlashCommandsToSkillInfo', () => {
+	it('maps name/description and sets folderPath to the empty string', () => {
+		const commands: SlashCommand[] = [
+			{name: 'usage', description: 'Show usage', argumentHint: ''},
+			{name: 'cost', description: 'Show cost', argumentHint: '', aliases: ['stats']},
+		];
+		expect(mapSlashCommandsToSkillInfo(commands)).toEqual([
+			{name: 'usage', description: 'Show usage', folderPath: ''},
+			{name: 'cost', description: 'Show cost', folderPath: ''},
+		]);
+	});
+
+	it('maps an empty list to an empty list', () => {
+		expect(mapSlashCommandsToSkillInfo([])).toEqual([]);
+	});
+});
+
+describe('mapAgentInfoToAgentConfig', () => {
+	it('maps name/description, uses description as instructions, and sets filePath to the empty string', () => {
+		const agents: AgentInfo[] = [{name: 'Explore', description: 'Read-only exploration agent'}];
+		expect(mapAgentInfoToAgentConfig(agents)).toEqual([
+			{name: 'Explore', description: 'Read-only exploration agent', instructions: 'Read-only exploration agent', filePath: ''},
+		]);
+	});
+
+	it('carries the model field through when present', () => {
+		const agents: AgentInfo[] = [{name: 'Fast', description: 'Quick answers', model: 'haiku'}];
+		const result = mapAgentInfoToAgentConfig(agents);
+		expect(result[0]?.model).toBe('haiku');
+	});
+
+	it('omits model when absent rather than setting it to undefined explicitly', () => {
+		const agents: AgentInfo[] = [{name: 'Explore', description: 'No model binding'}];
+		const result = mapAgentInfoToAgentConfig(agents);
+		expect('model' in result[0]!).toBe(false);
 	});
 });

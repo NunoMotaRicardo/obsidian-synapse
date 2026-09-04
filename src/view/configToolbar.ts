@@ -1,11 +1,11 @@
 import {Menu, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
-import type {AgentConfig} from '../types';
+import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
 import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
-import {resolveModelForAgent} from './sessionConfig';
+import {resolveModelForAgent, mapAgentInfoToAgentConfig, mapSlashCommandsToSkillInfo} from './sessionConfig';
 
 /** Human label for a reasoning-effort level. 'none' reads as "Off". */
 function effortLabel(level: string): string {
@@ -29,6 +29,9 @@ declare module '../synapseView' {
 		updateCwdButton(): void;
 		openEditFromChat(): void;
 		resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined;
+		getEffectiveAgents(): AgentConfig[];
+		getEffectiveSkills(): SkillInfo[];
+		updateContextIndicator(): void;
 	}
 }
 
@@ -77,6 +80,11 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		setIcon(this.cwdBtnEl, 'hard-drive-download');
 		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
 		this.updateCwdButton();
+
+		// Context-window gauge (issue #130) — hidden until the first successful capture;
+		// only ever populated for the real Agent SDK path (BYOK local models never produce
+		// a Query control-request response). See `updateContextIndicator()`.
+		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator is-hidden'});
 
 		// Spacer to push debug toggle to the right
 		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
@@ -248,9 +256,10 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.configDirty = true;
 			return;
 		}
-		const agent = this.agents.find(a => a.name === agentName)
+		const effectiveAgents = this.getEffectiveAgents();
+		const agent = effectiveAgents.find(a => a.name === agentName)
 			// Fallback: case-insensitive match
-			?? this.agents.find(a => a.name.toLowerCase() === agentName.toLowerCase());
+			?? effectiveAgents.find(a => a.name.toLowerCase() === agentName.toLowerCase());
 		if (!agent) return; // No matching agent found — leave dropdown unchanged
 		this.selectedAgent = agent.name;
 		// Update the dropdown — set both .value and .selectedIndex for reliability
@@ -278,13 +287,14 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// This is the agent-declared restriction (AgentConfig.skills), independent
 		// from the removed manual toolbar toggle — all discovered skills are always
 		// available unless the selected agent explicitly restricts the set.
+		const effectiveSkills = this.getEffectiveSkills();
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
 			this.enabledSkills = new Set(
-				this.skills.filter(s => allowed.has(s.name)).map(s => s.name)
+				effectiveSkills.filter(s => allowed.has(s.name)).map(s => s.name)
 			);
 		} else {
-			this.enabledSkills = new Set(this.skills.map(s => s.name));
+			this.enabledSkills = new Set(effectiveSkills.map(s => s.name));
 		}
 
 		this.updateToolsBadge();
@@ -309,6 +319,53 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const label = `Working directory: ${vaultName}/${this.workingDir}`;
 		this.cwdBtnEl.setAttribute('title', label);
 		this.cwdBtnEl.toggleClass('is-active', true);
+	};
+
+	/**
+	 * The agent list to render/select from (issue #130): the live session's
+	 * `supportedAgents()` capture when one exists, else the `_synapse/agents/` directory
+	 * scan (`this.agents`). A session that has never sent a turn has no capture yet, so this
+	 * transparently returns the scan result — the pre-#130 fallback behavior is unchanged.
+	 */
+	proto.getEffectiveAgents = function(): AgentConfig[] {
+		const live = this.currentSession?.cachedSupportedAgents;
+		return live ? mapAgentInfoToAgentConfig(live) : this.agents;
+	};
+
+	/**
+	 * The skill/slash-command list to render/select from (issue #130): the live session's
+	 * `supportedCommands()` capture when one exists, else the `_synapse/skills/` directory
+	 * scan (`this.skills`). Same fallback guarantee as `getEffectiveAgents()`.
+	 */
+	proto.getEffectiveSkills = function(): SkillInfo[] {
+		const live = this.currentSession?.cachedSupportedCommands;
+		return live ? mapSlashCommandsToSkillInfo(live) : this.skills;
+	};
+
+	/**
+	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130) in the toolbar
+	 * gauge. Renders nothing — not a zero, not a placeholder — until the first successful
+	 * capture, and applies only to the real Agent SDK path: a BYOK local model's `Session`
+	 * never populates `cachedContextUsage`, so the indicator stays absent for the entire
+	 * conversation rather than showing a number that was never actually measured.
+	 */
+	proto.updateContextIndicator = function(): void {
+		const usage = this.currentSession?.cachedContextUsage;
+		if (!usage) {
+			this.contextIndicatorEl.addClass('is-hidden');
+			this.contextIndicatorEl.setText('');
+			return;
+		}
+		const pct = Math.round(usage.percentage);
+		this.contextIndicatorEl.removeClass('is-hidden');
+		this.contextIndicatorEl.setText(`${pct}% context`);
+		this.contextIndicatorEl.setAttribute(
+			'title',
+			`Context window: ~${usage.totalTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} tokens (${pct}%). ` +
+				'One turn stale — refreshed at the end of each turn.'
+		);
+		this.contextIndicatorEl.toggleClass('is-context-warning', usage.percentage >= 75 && usage.percentage < 90);
+		this.contextIndicatorEl.toggleClass('is-context-critical', usage.percentage >= 90);
 	};
 
 	proto.openEditFromChat = function(): void {

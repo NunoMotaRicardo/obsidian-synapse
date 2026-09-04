@@ -1,8 +1,8 @@
 import {normalizePath, TFile} from 'obsidian';
 import type {App} from 'obsidian';
-import type {ModelInfo} from '../agentService';
+import type {ModelInfo, SlashCommand, AgentInfo} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
-import type {AgentConfig, ChatAttachment, ChatMessage} from '../types';
+import type {AgentConfig, ChatAttachment, ChatMessage, SkillInfo} from '../types';
 import {IMAGE_EXTS} from '../types';
 import {buildBudgetedHistory, type LocalHistoryMessage} from '../providerModels';
 
@@ -656,4 +656,37 @@ export function decideWorkingDirAutoUpdate(params: {
 	currentWorkingDir: string;
 }): boolean {
 	return params.newDir !== params.currentWorkingDir;
+}
+
+/**
+ * Map the CLI's live `supportedCommands()` list (issue #130) into the `SkillInfo` shape the
+ * slash-command popup (`inputArea.ts`) already renders. `SlashCommand` has no vault folder —
+ * `folderPath` is set to `''`, which is never read for CLI-sourced entries (only ever
+ * populated/consumed for the directory-scan fallback's own bookkeeping).
+ */
+export function mapSlashCommandsToSkillInfo(commands: SlashCommand[]): SkillInfo[] {
+	return commands.map(c => ({
+		name: c.name,
+		description: c.description,
+		folderPath: '',
+	}));
+}
+
+/**
+ * Map the CLI's live `supportedAgents()` list (issue #130) into the `AgentConfig` shape the
+ * agent picker (`configToolbar.ts`) already renders/selects from. `AgentInfo` has no
+ * instructions body or vault file — `instructions` falls back to `description` (used for the
+ * dropdown's tooltip), `filePath` is `''` (never read for CLI-sourced entries), and
+ * `skills`/`tools` are left `undefined` (= "all enabled", the same default the directory-scan
+ * path uses when an agent doesn't declare a restriction — the CLI's `AgentInfo` carries no
+ * equivalent restriction data to narrow it further).
+ */
+export function mapAgentInfoToAgentConfig(agents: AgentInfo[]): AgentConfig[] {
+	return agents.map(a => ({
+		name: a.name,
+		description: a.description,
+		...(a.model ? {model: a.model} : {}),
+		instructions: a.description,
+		filePath: '',
+	}));
 }

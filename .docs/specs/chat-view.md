@@ -5,7 +5,7 @@ Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErro
 
 | File | Role |
 |---|---|
-| `configToolbar.ts` | Agent / model / reasoning-effort / tools / working-dir / debug controls |
+| `configToolbar.ts` | Agent / model / reasoning-effort / tools / working-dir / debug controls, context-window gauge |
 | `inputArea.ts` | Message input, slash-command skill popup, attachments, vault scope button |
 | `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
 | `sessionSidebar.ts` | Session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
@@ -349,6 +349,54 @@ vault scope, folder tree.
   and editor-menu variants), the edit modal, and advanced search all no-op when `sessionId` is
   empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
   builds.
+
+## Context-window gauge and live command/agent lists (issue #130)
+
+Capture-and-cache — `.docs/decisions/2026-09-04-persistent-query-cache.md`. `Session` (not the
+view) owns the cache; `synapseView.ts` only reads it via three getters and reacts to a
+`session.metadata` `SessionEvent`. See `agent-service.md`'s "Query metadata cache" for the
+`Session`-side mechanism and its one-turn-stale/timing caveats.
+
+- **The gauge** (`.synapse-context-indicator`, built in `configToolbar.ts`'s
+  `buildConfigToolbar()`, before the debug-toggle spacer): a small pill reading `"NN% context"`
+  with a tooltip giving the raw token counts (`~totalTokens / maxTokens`) and a note that the
+  figure is one turn stale. `updateContextIndicator()` reads
+  `this.currentSession?.cachedContextUsage` and:
+  - **Renders nothing** (`is-hidden`, empty text) when it's `undefined` — before any session has
+    captured a value, and for the entire conversation on a BYOK local model (see
+    `agent-service.md`: the local-provider branch never touches a `Query` handle, so
+    `cachedContextUsage` never becomes defined on that path). Never a placeholder `0%`.
+  - Adds `is-context-warning` at ≥75% and `is-context-critical` at ≥90% (percentage from the
+    SDK's own `SDKControlGetContextUsageResponse.percentage`, `sdk.d.ts:3586` — not recomputed
+    or estimated here).
+  - Called from `handleSessionEvent()`'s `'session.metadata'` case (after every capture
+    attempt, successful or not), and from every point `currentSession` identity changes —
+    `ensureSession()` (a `configDirty` rebuild starts a new `Session` with an empty cache),
+    `disconnectSession()`, `newConversation()`, and the sidebar's `restoreFromBackground()`/
+    `selectSession()` cold-resume path (`sessionSidebar.ts`) — so the gauge never shows a stale
+    session's numbers under a different session's tab.
+- **Slash-command popup and agent picker** prefer the live cache over the directory scan:
+  `getEffectiveSkills()`/`getEffectiveAgents()` (`configToolbar.ts`) return
+  `mapSlashCommandsToSkillInfo(session.cachedSupportedCommands)`/
+  `mapAgentInfoToAgentConfig(session.cachedSupportedAgents)` (`sessionConfig.ts`) when the
+  current session has captured a value, else the unchanged directory-scan result (`this.skills`
+  from `scanSkills()`, `this.agents` from `scanAgents()`). A session that has never sent a turn
+  has an empty cache, so this transparently falls through to the scan — the pre-#130 behavior
+  for that case is unchanged.
+  - `inputArea.ts`'s slash popup (`updateSkillPopup()`) filters `getEffectiveSkills()` (not
+    `this.skills` directly) by `enabledSkills`.
+  - `configToolbar.ts`'s `selectAgent()` looks up the chosen name in `getEffectiveAgents()`
+    (not `this.agents` directly); `updateConfigUI()` populates the `<select>` from the same.
+  - `applyAgentToolsAndSkills()` — the agent-declared `skills:` restriction filter — filters
+    `getEffectiveSkills()`, so a CLI-sourced skill list is restricted the same way a
+    scan-sourced one is.
+  - The mapping is lossy in one direction: `AgentInfo` (CLI) carries no `skills`/`tools`
+    restriction or markdown body, so a CLI-sourced `AgentConfig` entry always has
+    `skills: undefined`/`tools: undefined` (= "all enabled", the same default the scan path
+    uses for an agent that declares no restriction) and `instructions` falls back to
+    `description`. `SlashCommand` (CLI) has no vault folder, so a CLI-sourced `SkillInfo`
+    entry's `folderPath` is `''` — never read for those entries, since nothing in the popup or
+    picker resolves a folder path for display.
 
 ## Loop turn/cost thresholds (issue #88)
 
