@@ -3,9 +3,10 @@ import SynapsePlugin from "./main";
 import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, ProviderPreset} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
-
-/** Hardcoded vault folder for Synapse customization artifacts. */
-export const SYNAPSE_FOLDER = '_synapse';
+// Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
+// configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
+import {SYNAPSE_FOLDER} from "./vaultPaths";
+export {SYNAPSE_FOLDER};
 
 /** Helper to update a secure field in both runtime settings and local storage. */
 function updateSecureField(app: App, plugin: SynapsePlugin, key: keyof SynapseSettings, value: string): void {

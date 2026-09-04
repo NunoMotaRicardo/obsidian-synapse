@@ -9,7 +9,7 @@
 import {App, TFile, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
 import type {TriggerConfig} from './types';
-import {SYNAPSE_FOLDER} from './settings';
+import {getVaultBasePath, getSynapsePluginConfig, REPORTS_FOLDER, todayString} from './vaultPaths';
 import {parseFrontmatter, modifyArtifact} from './configWriter';
 import {executeLocalProviderQuery} from './providerModels';
 import {vaultTools} from './vaultTools';
@@ -37,23 +37,8 @@ function substituteTemplates(body: string, filePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Date helper
-// ---------------------------------------------------------------------------
-
-/** Return today's date as `YYYY-MM-DD`. */
-function todayString(): string {
-	const d = new Date();
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, '0');
-	const day = String(d.getDate()).padStart(2, '0');
-	return `${y}-${m}-${day}`;
-}
-
-// ---------------------------------------------------------------------------
 // Reports folder
 // ---------------------------------------------------------------------------
-
-const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 /**
  * Ensure `_synapse/reports/` exists in the vault, creating it if absent.
@@ -169,7 +154,7 @@ async function executeWithLocalModel(
 
 	// Start MCP bridge session — spawn servers from _synapse/.mcp.json and collect
 	// their tools to merge alongside built-in vault tools.
-	const vaultBasePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+	const vaultBasePath = getVaultBasePath(plugin.app);
 	const mcpSession = new McpBridgeSession();
 	let mcpTools: import('./providerModels').LocalTool[] = [];
 	if (supportsTools) {
@@ -211,9 +196,7 @@ async function executeWithClaude(
 		throw new Error('AgentService is not initialized.');
 	}
 
-	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
-	const normalizedBase = basePath.replace(/\\/g, '/');
-	const pluginsPath = `${normalizedBase}/_synapse/`;
+	const basePath = getVaultBasePath(plugin.app);
 
 	const result = await plugin.agentService.inlineChat({
 		prompt,
@@ -223,7 +206,7 @@ async function executeWithClaude(
 		// tool-usage system prompt so the trigger can read the affected files.
 		systemPrompt: {type: 'preset', preset: 'claude_code'},
 		cwd: basePath,
-		plugins: [{type: 'local', path: pluginsPath}],
+		plugins: getSynapsePluginConfig(plugin.app),
 		maxTurns: 10,
 		permissionMode: 'default',
 	});

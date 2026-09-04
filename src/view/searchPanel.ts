@@ -4,6 +4,7 @@ import type {SessionConfig} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
+import {getSynapsePluginConfig} from '../vaultPaths';
 
 /** Read-only file tools for vault search — no write/exec access needed. */
 const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
@@ -260,9 +261,6 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
-		const basePath = this.getVaultBasePath();
-		const pluginPath = `${basePath.replace(/\\/g, '/')}/_synapse/`;
-
 		// Self-improve detection hint + resilience hint for search sessions
 		const selfImproveBlock = buildSelfImproveHint(this.searchAgent || 'Auto');
 		const resilienceBlock = buildResilienceHint();
@@ -273,7 +271,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
 			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
-			plugins: [{type: 'local', path: pluginPath}],
+			plugins: getSynapsePluginConfig(this.app),
 			skills: Array.from(this.searchEnabledSkills),
 			// Search is read-only: expose only file-exploration tools. Enabled skills
 			// remain available (the `skills` option enables the Skill tool itself).

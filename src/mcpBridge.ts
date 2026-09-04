@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type {App} from 'obsidian';
 import type {LocalTool} from './providerModels';
+import {SYNAPSE_FOLDER} from './vaultPaths';
 
 // ---------------------------------------------------------------------------
 // Config types
@@ -84,7 +85,7 @@ export class McpBridgeSession {
 	 * Individual server errors are caught and logged — other servers continue.
 	 */
 	async start(vaultBasePath: string): Promise<LocalTool[]> {
-		const configPath = path.join(vaultBasePath, '_synapse', '.mcp.json');
+		const configPath = path.join(vaultBasePath, SYNAPSE_FOLDER, '.mcp.json');
 
 		let config: McpConfig;
 		try {

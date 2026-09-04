@@ -16,7 +16,7 @@
 import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type SynapsePlugin from './main';
 import type {SDKResultMessage} from './agentService';
-import {SYNAPSE_FOLDER} from './settings';
+import {SYNAPSE_FOLDER, REPORTS_FOLDER, getVaultBasePath, getSynapsePluginConfig, todayString} from './vaultPaths';
 import {ensureFolder} from './configWriter';
 import type {Budget, BudgetUsage} from './budget';
 import {parseBudgetInput as parseBudgetInputShared, describeBudget, budgetExceeded} from './budget';
@@ -38,7 +38,6 @@ import {UserInputModal} from './modals/userInputModal';
  */
 export const BATCH_LOOP_MAX_FILES = 50;
 
-const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 const REPORT_NAME = 'batch-loop';
 
 // ---------------------------------------------------------------------------
@@ -131,19 +130,6 @@ export function resolveScopeToFiles(app: App, paths: string[]): string[] {
 /** Replace `{{file}}` in the instruction with the vault-relative file path. */
 function substituteTemplate(instruction: string, filePath: string): string {
 	return instruction.replace(/\{\{file\}\}/g, filePath);
-}
-
-// ---------------------------------------------------------------------------
-// Date helper
-// ---------------------------------------------------------------------------
-
-/** Return today's date as `YYYY-MM-DD`. */
-function todayString(): string {
-	const d = new Date();
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, '0');
-	const day = String(d.getDate()).padStart(2, '0');
-	return `${y}-${m}-${day}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,9 +227,7 @@ async function runOnFile(
 
 	const prompt = substituteTemplate(instruction, filePath);
 
-	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
-	const normalizedBase = basePath.replace(/\\/g, '/');
-	const pluginsPath = `${normalizedBase}/_synapse/`;
+	const basePath = getVaultBasePath(plugin.app);
 
 	const result = await plugin.agentService.inlineChat({
 		prompt,
@@ -251,7 +235,7 @@ async function runOnFile(
 		// loop can read the target file referenced by the substituted path.
 		systemPrompt: {type: 'preset', preset: 'claude_code'},
 		cwd: basePath,
-		plugins: [{type: 'local', path: pluginsPath}],
+		plugins: getSynapsePluginConfig(plugin.app),
 		maxTurns: 10,
 		permissionMode: 'default',
 		abortController,
