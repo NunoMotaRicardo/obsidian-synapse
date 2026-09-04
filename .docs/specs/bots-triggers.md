@@ -88,7 +88,7 @@ and matches them against enabled event-based triggers loaded via `scanTriggers()
 
 **Lifecycle:**
 
-- Created in `main.ts` `onload()` after copilot initialization.
+- Created in `main.ts` `onload()` after the agent service is initialized.
 - `start()` loads trigger configs and registers vault listeners via `plugin.registerEvent()`.
 - `stop()` clears debounce timers. Vault listeners are cleaned up by Obsidian on unload.
 

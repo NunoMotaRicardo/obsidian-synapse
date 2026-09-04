@@ -61,7 +61,7 @@ three outcomes:
   is up but no model is loaded. The datalist is cleared (no stale entries from a previous
   Test).
 - **Network / auth / parse error** — `new Notice('Test failed: ' + error)`, same wording as
-  the existing Copilot-tab Test failure. Datalist is cleared. For the `ollama` preset,
+  the existing Claude-tab Test failure. Datalist is cleared. For the `ollama` preset,
   connection errors show a specific message: "Could not connect to Ollama. Make sure Ollama
   is running ("ollama serve") and the base URL is correct."
 
@@ -281,7 +281,7 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
 - `reasoningEffort: ''` means "model default" — never send the empty string to the SDK; the
   field is omitted from the session config instead.
 - (issue #106) `reasoningSummary` and `contextTier` were removed from `SynapseSettings` — they
-  were Copilot-SDK-era controls that were never actually passed to `query()` (persisted a
+  were pre-Agent-SDK controls that were never actually passed to `query()` (persisted a
   setting and updated a toolbar badge with no effect on the session). They are intentionally
   **not** re-added to the type, but old `data.json` files carrying those keys still load without
   error: `main.ts#loadSettings` merges persisted data over `DEFAULT_SETTINGS` via

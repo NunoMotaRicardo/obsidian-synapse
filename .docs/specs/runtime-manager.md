@@ -58,7 +58,7 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
      no line is rendered. This never blocks connecting or using the plugin.
 
 4. **Install guidance** (#4):
-   - When `initCopilot()` + `ensureConnected()` fails because no CLI was found, `main.ts` shows a platform-specific Obsidian `Notice` (long duration, 30s):
+   - When `initAgentService()` + `ensureConnected()` fails because no CLI was found, `main.ts` shows a platform-specific Obsidian `Notice` (long duration, 30s):
      - Windows: "No Claude CLI found. Install with `winget install Anthropic.ClaudeCode or npm install -g @anthropic-ai/claude-code`, then restart the plugin."
      - macOS/Linux: "No Claude CLI found. Install with `npm install -g @anthropic-ai/claude-code`, then restart the plugin."
    - The Notice lives in `main.ts`, keep UI dependencies out of `AgentService`.
