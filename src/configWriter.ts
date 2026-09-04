@@ -23,7 +23,12 @@ export function parseFrontmatter(content: string): {meta: Record<string, string 
 			const key = line.slice(0, idx).trim();
 			let val = line.slice(idx + 1).trim();
 			// Strip surrounding quotes (single or double)
-			if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+			if (val.startsWith('"') && val.endsWith('"')) {
+				// Double-quoted values are escaped by serializeFmField (`\` -> `\\`, `"` -> `\"`);
+				// undo that in a single left-to-right pass so a literal backslash immediately
+				// preceding an escaped quote (e.g. `\\\"`) is not mis-paired by a two-step replace.
+				val = val.slice(1, -1).replace(/\\(\\|")/g, '$1');
+			} else if (val.startsWith("'") && val.endsWith("'")) {
 				val = val.slice(1, -1);
 			}
 			if (key) {
