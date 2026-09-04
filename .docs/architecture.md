@@ -30,7 +30,7 @@ CLI process per query.
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
 | provider-models | [settings.md](settings.md) | `src/providerModels.ts` | Shared BYOK model-list fetch (`/v1/models`, `/api/tags`), used by Settings Test button and `onListModels` |
-| config-writer | [config-loader.md](config-loader.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
+| config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
 | chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
@@ -51,7 +51,7 @@ The `_synapse/` folder in the user's vault is registered as an SDK local plugin 
 
 No custom config loader. The plugin provides write-side utilities (`configWriter.ts`) for the
 self-improve feature and first-run seeding. A lightweight directory scan populates toolbar
-dropdowns (display-only). See [config-loader.md](config-loader.md) for details.
+dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
 
 ## Key dependency facts (June 2026)
 

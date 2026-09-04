@@ -1,7 +1,7 @@
 # Re-base customization model onto native Agent SDK primitives
 
 > Status: **functional decision agreed** (grill-me session, 2026-06-29). Scoped as sub-issues
-> under [#13](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/13).
+> under [#13](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/13).
 
 ## Context
 
@@ -31,7 +31,7 @@ exception is when going native would lose functionality the SDK cannot replicate
 | `prompts/*.prompt.md` | **Merged into skills** — each prompt becomes a `<name>/SKILL.md` | SDK skills serve the same slash-command template role; eliminates a redundant concept |
 | `skills/*/SKILL.md` | **Native** — SDK discovers from plugin `skills/` | Already the right format; just needed plugin registration |
 | `tools/mcp.json` | **Native** — becomes `.mcp.json` at plugin root, SDK discovers | Drop `${input:id}` secret resolution; users configure secrets via env vars (standard SDK pattern) |
-| `triggers/*.trigger.md` | **Deferred** — removed from this scope, revisited in [#14](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/14) | SDK hooks ≠ cron/glob background tasks; no SDK primitive for starting autonomous AI conversations from external events |
+| `triggers/*.trigger.md` | **Deferred** — removed from this scope, revisited in [#14](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/14) | SDK hooks ≠ cron/glob background tasks; no SDK primitive for starting autonomous AI conversations from external events |
 
 ### Folder layout
 
@@ -125,7 +125,7 @@ the new `_synapse/` layout.
   (file changes the agent makes, tool use, permissions). Plugin triggers fire at any time in
   response to vault activity (user edits, cron schedules) and start autonomous AI conversations.
   These are fundamentally different event models. Triggers also overlap with the planned loop
-  features ([#14](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/14)), making
+  features ([#14](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/14)), making
   the loop design the right place to reintroduce scheduled/event-driven background AI.
 - **Why drop MCP secret resolution:** the `${input:id}` → modal → localStorage flow was a
   Copilot SDK pattern. The standard SDK approach is environment variables. Dropping it simplifies
@@ -141,7 +141,7 @@ the new `_synapse/` layout.
 
 ## Scope / Non-goals
 
-- **Not designing loop/trigger features** — deferred to [#14](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/14).
+- **Not designing loop/trigger features** — deferred to [#14](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/14).
 - **Not migrating old vault artifacts** — clean break.
 - **Not adding new SDK features** (hooks, commands, subagent delegation) — this re-base makes
   the existing feature set native; new capabilities are future work.
@@ -193,7 +193,7 @@ Functional intent to turn into `.docs/specs/` updates and GitHub issues:
   parent migration decision that identified this re-base as the capability-expansion target.
 - [`../ai-customization-guide.md`](../ai-customization-guide.md) — the guide that must be
   rewritten to reflect the new native model.
-- [#13](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/13) — the tracking
+- [#13](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/13) — the tracking
   issue for this work.
-- [#14](https://github.com/NunoMotaRicardo/obsidian-claude-brain/issues/14) — backlog item for
+- [#14](https://github.com/NunoMotaRicardo/obsidian-synapse/issues/14) — backlog item for
   loop features, where triggers will be revisited.
