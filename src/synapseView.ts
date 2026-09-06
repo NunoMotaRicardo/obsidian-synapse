@@ -125,7 +125,6 @@ export class SynapseView extends ItemView {
 	// ── Turn-level metadata ────────────────────────────────────
 	turnStartTime = 0;
 	turnToolsUsed: string[] = [];
-	turnSkillsUsed: string[] = [];
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null = null;
 	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>();
 
@@ -1079,9 +1078,6 @@ export class SynapseView extends ItemView {
 				}
 				break;
 			}
-			case 'skill.invoked':
-				this.turnSkillsUsed.push(data.name as string);
-				break;
 			case 'session.compaction_complete':
 				this.addCompactionCompleteBlock(data);
 				break;
@@ -1147,7 +1143,6 @@ export class SynapseView extends ItemView {
 			session.on('session.error', (event) => { this.handleSessionEvent(event); }),
 			session.on('tool.execution_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('tool.execution_complete', (event) => { this.handleSessionEvent(event); }),
-			session.on('skill.invoked', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_complete', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.metadata', (event) => { this.handleSessionEvent(event); }),
 		);

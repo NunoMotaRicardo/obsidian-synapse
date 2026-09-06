@@ -172,6 +172,10 @@ vault scope, folder tree.
     transitions per task) for a multi-step vault-exploration prompt — `TodoWrite` was never
     emitted by that CLI/session. The panel rendered and updated live from the `TaskCreate`/
     `TaskUpdate` path.
+- **Message metadata footer (`renderMessageMetadata`)** (issues #88, #178): rendered below completed assistant
+  messages with chips for elapsed time (`turnStartTime`), token usage (`turnUsage`), and unique tools used
+  (`turnToolsUsed`). Early-returns when none of the three are present. The dead `skill.invoked` event and
+  its "skills used" chip were removed in issue #178 because the Claude Agent SDK provides no signal for skill invocation.
 - **Compaction events in debug view** (issues #5, #177, #181): when the debug toggle is on,
   the `session.compaction_complete` event renders an inline debug block in the chat
   (same visibility gating as tool calls via `.synapse-hide-debug`). It always renders as
