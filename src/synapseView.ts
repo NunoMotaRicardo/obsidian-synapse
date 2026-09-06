@@ -1083,17 +1083,7 @@ export class SynapseView extends ItemView {
 				this.turnSkillsUsed.push(data.name as string);
 				break;
 			case 'session.compaction_complete':
-				this.addCompactionCompleteBlock(data as {
-					success: boolean;
-					tokensRemoved?: number;
-					messagesRemoved?: number;
-					summaryContent?: string;
-					preCompactionTokens?: number;
-					postCompactionTokens?: number;
-					durationMs?: number;
-					trigger?: string;
-					error?: string;
-				});
+				this.addCompactionCompleteBlock(data);
 				break;
 			case 'session.metadata':
 				// Capture-and-cache refresh (issue #130) — Session already holds the

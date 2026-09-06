@@ -49,7 +49,7 @@ declare module '../synapseView' {
 		renderMessageMetadata(): void;
 		addToolCallBlock(toolCallId: string, toolName: string, args?: unknown): void;
 		completeToolCallBlock(toolCallId: string, success: boolean, result?: {content?: string; detailedContent?: string}, error?: {message: string}): void;
-		addCompactionCompleteBlock(data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string; error?: string}): void;
+		addCompactionCompleteBlock(data: {tokensRemoved?: number; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string}): void;
 		renderWelcome(): void;
 		updateSendButton(): void;
 		renderReasoningBlock(reasoning: string, parent: HTMLElement): Promise<void>;
@@ -751,39 +751,28 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	// ── Compaction debug blocks ─────────────────────────────────
 
-	proto.addCompactionCompleteBlock = function (data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string; error?: string}): void {
+	proto.addCompactionCompleteBlock = function (data: {tokensRemoved?: number; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string}): void {
 		if (!this.toolCallsContainer) return;
 
 		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
 		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
 		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
 		setIcon(iconEl, 'archive');
-		summary.createSpan({text: data.success ? 'Compaction complete' : 'Compaction failed'});
-		const statusEl = summary.createSpan({cls: `synapse-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
-		setIcon(statusEl, data.success ? 'check' : 'x');
+		summary.createSpan({text: 'Compaction complete'});
+		const statusEl = summary.createSpan({cls: 'synapse-tool-call-status is-success'});
+		setIcon(statusEl, 'check');
 
 		const body = details.createDiv({cls: 'synapse-compaction-body'});
 		const lines: string[] = [];
-		if (data.success) {
-			if (data.preCompactionTokens != null) lines.push(`Pre-compaction tokens: ${data.preCompactionTokens.toLocaleString()}`);
-			if (data.postCompactionTokens != null) lines.push(`Post-compaction tokens: ${data.postCompactionTokens.toLocaleString()}`);
-			const tokensRemoved = data.tokensRemoved ?? (data.preCompactionTokens != null && data.postCompactionTokens != null ? data.preCompactionTokens - data.postCompactionTokens : undefined);
-			if (tokensRemoved != null) lines.push(`Tokens removed: ${tokensRemoved.toLocaleString()}`);
-			if (data.durationMs != null) lines.push(`Duration: ${(data.durationMs / 1000).toFixed(1)}s`);
-			if (data.trigger != null) lines.push(`Trigger: ${data.trigger}`);
-			if (data.messagesRemoved != null) lines.push(`Messages removed: ${data.messagesRemoved}`);
-		} else {
-			if (data.error) lines.push(`Error: ${data.error}`);
-		}
+		if (data.preCompactionTokens != null) lines.push(`Pre-compaction tokens: ${data.preCompactionTokens.toLocaleString()}`);
+		if (data.postCompactionTokens != null) lines.push(`Post-compaction tokens: ${data.postCompactionTokens.toLocaleString()}`);
+		const tokensRemoved = data.tokensRemoved ?? (data.preCompactionTokens != null && data.postCompactionTokens != null ? data.preCompactionTokens - data.postCompactionTokens : undefined);
+		if (tokensRemoved != null) lines.push(`Tokens removed: ${tokensRemoved.toLocaleString()}`);
+		if (data.durationMs != null) lines.push(`Duration: ${(data.durationMs / 1000).toFixed(1)}s`);
+		if (data.trigger != null) lines.push(`Trigger: ${data.trigger}`);
 		if (lines.length > 0) {
 			const pre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: lines.join('\n')});
-		}
-		if (data.summaryContent) {
-			body.createDiv({cls: 'synapse-compaction-label', text: 'Summary'});
-			const summaryPre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
-			const displayText = data.summaryContent.length > MAX_DEBUG_DISPLAY_LEN ? data.summaryContent.slice(0, MAX_DEBUG_DISPLAY_LEN) + '\n… (truncated)' : data.summaryContent;
-			summaryPre.createEl('code', {text: displayText});
 		}
 
 		this.scrollToBottom();

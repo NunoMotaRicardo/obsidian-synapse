@@ -136,7 +136,6 @@ see the invariant below.
 
 `Session.convertToSessionEvent()` converts SDK `compact_boundary` system messages
 (`SDKCompactBoundaryMessage`) into `session.compaction_complete` events carrying:
-- `success: true` (explicitly set at the dispatch site so the view renderer does not infer it from optional fields)
 - `preCompactionTokens: compact_metadata.pre_tokens`
 - `postCompactionTokens: compact_metadata.post_tokens` (optional in the SDK)
 - `durationMs: compact_metadata.duration_ms` (optional in the SDK)
@@ -144,7 +143,9 @@ see the invariant below.
 
 The SDK emits `compact_boundary` only upon reaching the compaction boundary; there is no
 corresponding "compaction starting" signal from the SDK, so `session.compaction_start` is not
-dispatched.
+dispatched. There is also no failure payload: the SDK only ever emits this message on success,
+so the event carries no success/failure flag. If a failure signal is ever added to the SDK, the
+event should gain a field for it then rather than carrying a permanently-true one now.
 
 ## Attachment delivery (issue #77)
 

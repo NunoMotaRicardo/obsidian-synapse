@@ -334,7 +334,9 @@ describe('AgentService#resolveValidModel — resolvedModel matching', () => {
 // ---------------------------------------------------------------------------
 // Session#convertToSessionEvent — compact_boundary mapping (issue #177).
 // An SDKCompactBoundaryMessage carrying compact_metadata should map to a
-// populated `session.compaction_complete` event with `success: true`.
+// populated `session.compaction_complete` event. The SDK only emits
+// `compact_boundary` on success, so the payload carries no success/failure
+// flag (see #181).
 // ---------------------------------------------------------------------------
 
 describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
@@ -360,7 +362,6 @@ describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
 		expect(event).toEqual({
 			type: 'session.compaction_complete',
 			data: {
-				success: true,
 				preCompactionTokens: 150000,
 				postCompactionTokens: 45000,
 				durationMs: 3200,
@@ -384,7 +385,6 @@ describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
 		expect(event).toEqual({
 			type: 'session.compaction_complete',
 			data: {
-				success: true,
 				preCompactionTokens: 100000,
 				postCompactionTokens: undefined,
 				durationMs: undefined,

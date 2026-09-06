@@ -1777,7 +1777,6 @@ export class Session {
 					return {
 						type: 'session.compaction_complete',
 						data: {
-							success: true,
 							preCompactionTokens: meta?.pre_tokens,
 							postCompactionTokens: meta?.post_tokens,
 							durationMs: meta?.duration_ms,
