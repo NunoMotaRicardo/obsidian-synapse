@@ -605,49 +605,30 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			session.on('assistant.turn_start', () => {
 				if (bg.turnStartTime === 0) bg.turnStartTime = Date.now();
 			}),
-			session.on('assistant.reasoning_delta', (event) => {
-				// event.data is Record<string, unknown> (SessionEvent); the producer
-				// (agentService.ts) always sets deltaContent to a string.
-				if (typeof event.data.deltaContent === 'string') {
-					bg.streamingReasoning += event.data.deltaContent;
-				}
+			session.on('assistant.reasoning_delta', (data) => {
+				bg.streamingReasoning += data.deltaContent;
 				bg.reasoningComplete = false;
 			}),
-			session.on('assistant.reasoning', (event) => {
-				if (event.data.content) {
-					bg.streamingReasoning = event.data.content as string;
-				}
-				bg.reasoningComplete = bg.streamingReasoning.length > 0;
-			}),
-			session.on('assistant.message_delta', (event) => {
-				bg.streamingContent += (event.data.deltaContent ?? event.data.content ?? '') as string;
+			session.on('assistant.message_delta', (data) => {
+				bg.streamingContent += data.deltaContent;
 				// No DOM rendering — session is hidden
 			}),
-			session.on('assistant.message', (event) => {
-				if (typeof event.data.reasoningText === 'string' && event.data.reasoningText.length > 0) {
-					bg.streamingReasoning = event.data.reasoningText;
-					bg.reasoningComplete = true;
-				}
-				if (typeof event.data.content === 'string' && event.data.content !== bg.streamingContent) {
-					bg.streamingContent = event.data.content;
+			session.on('assistant.message', (data) => {
+				if (data.content !== bg.streamingContent) {
+					bg.streamingContent = data.content;
 				}
 			}),
-			session.on('assistant.usage', (event) => {
-				const d = event.data as Record<string, number | string | undefined>;
+			session.on('assistant.usage', (data) => {
+				// input + output only — `assistant.usage` never carries cache token fields
+				// (see `SessionEvents` in agentService.ts), so `turnUsage`'s cache fields stay
+				// at 0 rather than implying cache usage is tracked. Same as synapseView.ts's
+				// `handleSessionEvent()`.
 				if (!bg.turnUsage) {
-					bg.turnUsage = {
-						inputTokens: (d.inputTokens as number) ?? 0,
-						outputTokens: (d.outputTokens as number) ?? 0,
-						cacheReadTokens: (d.cacheReadTokens as number) ?? 0,
-						cacheWriteTokens: (d.cacheWriteTokens as number) ?? 0,
-						model: d.model as string | undefined,
-					};
+					bg.turnUsage = {inputTokens: data.inputTokens, outputTokens: data.outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, model: data.model};
 				} else {
-					bg.turnUsage.inputTokens += (d.inputTokens as number) ?? 0;
-					bg.turnUsage.outputTokens += (d.outputTokens as number) ?? 0;
-					bg.turnUsage.cacheReadTokens += (d.cacheReadTokens as number) ?? 0;
-					bg.turnUsage.cacheWriteTokens += (d.cacheWriteTokens as number) ?? 0;
-					if (d.model) bg.turnUsage.model = d.model as string;
+					bg.turnUsage.inputTokens += data.inputTokens;
+					bg.turnUsage.outputTokens += data.outputTokens;
+					if (data.model) bg.turnUsage.model = data.model;
 				}
 			}),
 			session.on('session.idle', () => {
@@ -683,11 +664,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				this.renderSessionList();
 				void this.loadSessions();
 			}),
-			session.on('session.error', (event) => {
+			session.on('session.error', (data) => {
 				bg.messages.push({
 					id: `i-${Date.now()}`,
 					role: 'info',
-					content: `Error: ${(event.data as {message?: string; error?: string}).message || (event.data as {message?: string; error?: string}).error || 'Unknown error'}`,
+					content: `Error: ${data.error || 'Unknown error'}`,
 					timestamp: Date.now(),
 				});
 				bg.isStreaming = false;
@@ -707,16 +688,15 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				bg.pendingTaskCreates.clear();
 				this.renderSessionList();
 			}),
-			session.on('tool.execution_start', (event) => {
-				const toolName = event.data.toolName as string;
+			session.on('tool.execution_start', (data) => {
+				const {toolName, toolCallId, input: toolInput} = data;
 				bg.turnToolsUsed.push(toolName);
-				const toolInput = (event.data as {input?: unknown}).input;
 				if (toolName === 'TodoWrite') {
 					const todos = parseTodoWritePayload(toolInput);
 					if (todos) bg.currentTodos = todos;
 				} else if (toolName === 'TaskCreate') {
 					const parsed = parseTaskCreateInput(toolInput);
-					if (parsed) bg.pendingTaskCreates.set(event.data.toolCallId as string, parsed);
+					if (parsed) bg.pendingTaskCreates.set(toolCallId, parsed);
 				} else if (toolName === 'TaskUpdate') {
 					const parsed = parseTaskUpdateInput(toolInput);
 					// Same untracked-field guard as the foreground path in synapseView.ts —
@@ -737,15 +717,12 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				}
 				// No DOM manipulation — hidden session
 			}),
-			session.on('tool.execution_complete', (event) => {
-				const toolName = event.data.toolName as string | undefined;
-				const toolCallId = event.data.toolCallId as string;
+			session.on('tool.execution_complete', (data) => {
+				const {toolName, toolCallId, result, error: toolError} = data;
 				if (toolName === 'TaskCreate' && bg.pendingTaskCreates.has(toolCallId)) {
 					const pending = bg.pendingTaskCreates.get(toolCallId)!;
 					bg.pendingTaskCreates.delete(toolCallId);
-					const toolError = event.data.error as {message: string} | undefined;
-					const resultText = (event.data.result as {content?: string} | undefined)?.content;
-					const taskId = !toolError ? parseTaskCreateResultId(resultText) : null;
+					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
 					if (taskId) {
 						bg.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
 					}

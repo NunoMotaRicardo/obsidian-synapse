@@ -182,6 +182,53 @@ dynamically based on the number of files in scope:
 - The result is compared against `providerRequestTimeout` (settings, seconds → ms) and the
   larger value is used.
 
+## Session event map (issue #179)
+
+`Session.dispatch()`/`Session.on()`, and `AgentService.createSession()`'s `onEvent` callback, are
+generic over `SessionEvents` — a `Record`-like interface mapping each dispatched event name (the
+exact string literals `Session.convertToSessionEvent()` and `Session.send()` use) to its payload
+type:
+
+```ts
+dispatch<K extends keyof SessionEvents>(type: K, data: SessionEvents[K]): void;
+on<K extends keyof SessionEvents>(type: K, handler: (data: SessionEvents[K]) => void): () => void;
+```
+
+An event name not in `SessionEvents`, or a payload that doesn't match the declared shape for that
+name, is a **compile error** at both the dispatch site and every `on()` call site — the compiler
+now owns the contract `test/sessionEventWiring.test.ts` used to guard by reading source text.
+That test is deleted as of this change (superseded, not just redundant — a source-text regex
+can't see a type error). Each payload type was derived from what the producer actually sends and
+what the consumer(s) actually read, not from what might be useful later; see `SessionEvents`'
+doc comment in `agentService.ts` for the full list.
+
+Two things fell out of writing the map against the real producers/consumers:
+
+- **`assistant.reasoning` was a dead event type.** Both registration sites (`synapseView.ts`'s
+  `registerSessionEvents()` and `sessionSidebar.ts`'s `registerBackgroundEvents()`) subscribed to
+  it, but nothing ever dispatched it — `assistant.reasoning_delta` (a different, live event) was
+  the only reasoning-related dispatch. It predates this change and was harmless (the equivalent
+  reconciliation happens via `assistant.message`), but a typed map has no "unreachable key" to
+  register for, so it's removed from `SessionEvents` and both registration sites.
+- **`assistant.message`'s payload never carried `reasoningText`.** Both view-side handlers read
+  `data.reasoningText` defensively, but no producer in `agentService.ts` ever sets it — the
+  dispatch is always `{content}`. Removed from both handlers along with the field.
+
+**Partial registration is intentional, not a gap to close.** `SessionEvents` describes every
+event a `Session` can dispatch; a given `session.on(...)` call site is free to subscribe to a
+subset (`registerBackgroundEvents()` deliberately omits `session.init`, `assistant.run_result`,
+`session.compaction_complete`, and `session.metadata` — see "Query metadata cache" below for how
+`session.metadata`'s omission there is compensated). `on()` is not exhaustiveness-checked against
+`SessionEvents`, and should not become so.
+
+The wrapped `{type, data}` shape (still exported as `SessionEvent`, now a discriminated union
+over `SessionEvents`) survives only where a single callback must handle every event
+type-erased — `AgentService.createSession()`'s `onEvent` parameter, and the early-event buffer /
+`handleSessionEvent()` dispatcher in `synapseView.ts` that both the buffer replay and the typed
+`session.on(...)` registrations feed into via a small per-key `forward()` wrapper. A handler
+registered directly via `Session.on()` never sees the wrapper — it gets `data` alone, typed to
+that one event's payload, with no cast at the call site.
+
 ## Session management
 
 `AgentService` wraps `listSessions()`, `deleteSession()`, `renameSession()` from the SDK for

@@ -17,6 +17,16 @@ vault scope, folder tree.
 
 ## Behavior contracts
 
+- **Session event wiring is compiler-checked (issue #179):** `registerSessionEvents()`
+  (`synapseView.ts`) and `registerBackgroundEvents()` (`sessionSidebar.ts`) both register against
+  `AgentService`'s `SessionEvents` map — an unknown event name or a handler expecting the wrong
+  payload shape is a build error, not a runtime silent-drop. `registerSessionEvents()`'s handlers
+  wrap `Session.on()`'s bare, per-event-typed `data` back into the `{type, data}` shape
+  `handleSessionEvent()` switches on (shared with the early-event-buffer replay); this is the only
+  place `SessionEvent` (the wrapped union) still appears on the view side.
+  `test/sessionEventWiring.test.ts`, the former source-text guard for this, was deleted in the
+  same change — the compiler now owns the contract it checked. See "Session event map" in
+  `agent-service.md`.
 - **Slash-command skill invocation (issue #91):** the Claude Agent SDK natively recognizes and
   invokes registered skills whenever a literal `/skillname` appears anywhere in the prompt text
   (mid-sentence or not), for every skill loaded into the session — no plugin-side parsing,
