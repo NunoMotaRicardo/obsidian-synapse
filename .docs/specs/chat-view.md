@@ -79,7 +79,7 @@ vault scope, folder tree.
     `configDirty`/session-continuity motivation for keeping a toggle. Removing it here is purely a
     consistency fix with the chat tab, not a response to either of those specific gaps.
 - Streaming: `buildSessionConfig()` sets `includePartialMessages: true` (issue #103), so the chat
-  panel — and only the chat panel; search/triggers/Telegram/batch loops stay one-shot — gets
+  panel — and only the chat panel; search/Telegram/batch loops stay one-shot — gets
   genuine token-level `assistant.message_delta`/`assistant.reasoning_delta` events as the model
   generates, not one lump per turn. The renderer doesn't care which mode produced a given delta:
   `appendDelta()`/`appendReasoningDelta()` just accumulate whatever arrives into
@@ -270,7 +270,7 @@ vault scope, folder tree.
   A compact `[Self-Improve]` detection block is appended to every session's system prompt
   (chat, search, and Telegram bot) via `buildSelfImproveHint()` in `sessionConfig.ts`.
   It teaches the active agent to recognize when the user expresses a customization preference
-  and propose creating or modifying a Synapse artifact (agent, prompt, skill, or trigger),
+  and propose creating or modifying a Synapse artifact (agent, prompt, or skill),
   always asking permission before writing. The block includes the current agent name for
   context. It is skipped when the user is already using the `improve-synapse` prompt
   (no double-activation).
@@ -369,7 +369,7 @@ vault scope, folder tree.
   to "fully seen" on cold session resume (`selectSession()`'s SDK-resume path) since a resumed
   session's replayed messages come straight from the CLI's own transcript, and carried through
   `BackgroundSession` on background-session save/restore.
-- Sessions are auto-named `<Agent>: <first message>`; trigger/search sessions are tagged.
+- Sessions are auto-named `<Agent>: <first message>`; search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched
   by the `Session` wrapper when the SDK delivers the id — see agent-service.md) adopts the id
