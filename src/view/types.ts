@@ -20,7 +20,6 @@ export interface BackgroundSession {
 	/** Turn-level metadata accumulated while streaming (even in background). */
 	turnStartTime: number;
 	turnToolsUsed: string[];
-	turnSkillsUsed: string[];
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null;
 	activeToolCalls: Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>;
 	/** Streaming component for Markdown rendering. */

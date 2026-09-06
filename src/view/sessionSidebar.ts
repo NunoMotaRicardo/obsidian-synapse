@@ -460,7 +460,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			unsubscribers: [],
 			turnStartTime: this.turnStartTime,
 			turnToolsUsed: [...this.turnToolsUsed],
-			turnSkillsUsed: [...this.turnSkillsUsed],
 			turnUsage: this.turnUsage ? {...this.turnUsage} : null,
 			activeToolCalls: new Map(this.activeToolCalls),
 			streamingComponent: this.streamingComponent,
@@ -516,7 +515,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.reasoningComplete = bg.reasoningComplete;
 		this.turnStartTime = bg.turnStartTime;
 		this.turnToolsUsed = bg.turnToolsUsed;
-		this.turnSkillsUsed = bg.turnSkillsUsed;
 		this.turnUsage = bg.turnUsage;
 		this.configDirty = false;
 		this.lastFullRenderLen = 0;
@@ -675,7 +673,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				bg.streamingComponent = null;
 				bg.turnStartTime = 0;
 				bg.turnToolsUsed = [];
-				bg.turnSkillsUsed = [];
 				bg.turnUsage = null;
 				bg.isStreaming = false;
 				bg.currentTodos = null;
@@ -754,9 +751,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 					}
 				}
 				// No DOM manipulation — hidden session
-			}),
-			session.on('skill.invoked', (event) => {
-				bg.turnSkillsUsed.push(event.data.name as string);
 			}),
 		);
 	};

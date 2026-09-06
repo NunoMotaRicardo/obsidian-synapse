@@ -542,7 +542,6 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		// Reset turn metadata
 		this.turnStartTime = 0;
 		this.turnToolsUsed = [];
-		this.turnSkillsUsed = [];
 		this.turnUsage = null;
 
 		this.isStreaming = false;
@@ -565,10 +564,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const hasTokens = this.turnUsage !== null;
 		const uniqueTools = [...new Set(this.turnToolsUsed)];
 		const hasTools = uniqueTools.length > 0;
-		const uniqueSkills = [...new Set(this.turnSkillsUsed)];
-		const hasSkills = uniqueSkills.length > 0;
 
-		if (!hasTime && !hasTokens && !hasTools && !hasSkills) return;
+		if (!hasTime && !hasTokens && !hasTools) return;
 
 		const footer = this.streamingWrapperEl.createDiv({cls: 'synapse-msg-metadata'});
 
@@ -608,16 +605,6 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			const toolLabel = uniqueTools.length === 1 ? '1 tool' : `${uniqueTools.length} tools`;
 			toolSpan.appendText(toolLabel);
 			toolSpan.setAttribute('title', uniqueTools.join('\n'));
-		}
-
-		// Skills used
-		if (hasSkills) {
-			const skillSpan = footer.createSpan({cls: 'synapse-metadata-item synapse-metadata-tools'});
-			const skillIcon = skillSpan.createSpan({cls: 'synapse-metadata-icon'});
-			setIcon(skillIcon, 'wand-2');
-			const skillLabel = uniqueSkills.length === 1 ? '1 skill' : `${uniqueSkills.length} skills`;
-			skillSpan.appendText(skillLabel);
-			skillSpan.setAttribute('title', uniqueSkills.join('\n'));
 		}
 	};
 
