@@ -172,13 +172,14 @@ vault scope, folder tree.
     transitions per task) for a multi-step vault-exploration prompt — `TodoWrite` was never
     emitted by that CLI/session. The panel rendered and updated live from the `TaskCreate`/
     `TaskUpdate` path.
-- **Compaction events in debug view** (issue #5): when the debug toggle is on,
-  `session.compaction_start` and `session.compaction_complete` events render inline debug
-  blocks in the chat (same visibility gating as tool calls via `.synapse-hide-debug`).
-  `compaction_start` shows the pre-compaction token breakdown (conversation / system / tool
-  definition tokens). `compaction_complete` shows success/failure, tokens removed, messages
-  removed, and the summary content. These are handled in `handleSessionEvent()` alongside
-  existing event types.
+- **Compaction events in debug view** (issues #5, #177, #181): when the debug toggle is on,
+  the `session.compaction_complete` event renders an inline debug block in the chat
+  (same visibility gating as tool calls via `.synapse-hide-debug`). It always renders as
+  "Compaction complete" — the SDK only emits `compact_boundary` on success, so there is no
+  failure payload to render — and displays pre-compaction tokens, post-compaction tokens,
+  tokens removed, duration, and trigger type sourced from SDK `compact_metadata`. Handled in
+  `handleSessionEvent()`. Note: `session.compaction_start` was removed in #177 because the SDK
+  only emits `compact_boundary` at the compaction boundary without an earlier start event.
 - Session restore: resume by id with the full current session config, re-select agent via
   `session.rpc.agent.select`, replay history from `AgentService.getSessionMessages()` (wraps the
   SDK's `getSessionMessages()`, called with no `dir` filter so it searches all project

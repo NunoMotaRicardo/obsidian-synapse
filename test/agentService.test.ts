@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, AgentService, mapSdkModel} from '../src/agentService';
+import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, AgentService, Session, mapSdkModel} from '../src/agentService';
 import type {SDKModelInfo} from '../src/agentService';
 
 // ---------------------------------------------------------------------------
@@ -330,3 +330,67 @@ describe('AgentService#resolveValidModel — resolvedModel matching', () => {
 		expect(service.resolveValidModel('sonnet')).toBe('my-sonnet-mirror');
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Session#convertToSessionEvent — compact_boundary mapping (issue #177).
+// An SDKCompactBoundaryMessage carrying compact_metadata should map to a
+// populated `session.compaction_complete` event. The SDK only emits
+// `compact_boundary` on success, so the payload carries no success/failure
+// flag (see #181).
+// ---------------------------------------------------------------------------
+
+describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
+	function convert(msg: unknown): unknown {
+		const session = new Session(new AgentService(), {});
+		return (session as unknown as {convertToSessionEvent: (m: unknown) => unknown}).convertToSessionEvent(msg);
+	}
+
+	it('maps a compact_boundary message with full metadata into a populated session.compaction_complete payload', () => {
+		const event = convert({
+			type: 'system',
+			subtype: 'compact_boundary',
+			compact_metadata: {
+				trigger: 'manual',
+				pre_tokens: 150000,
+				post_tokens: 45000,
+				duration_ms: 3200,
+			},
+			uuid: 'mock-uuid',
+			session_id: 'mock-session',
+		});
+
+		expect(event).toEqual({
+			type: 'session.compaction_complete',
+			data: {
+				preCompactionTokens: 150000,
+				postCompactionTokens: 45000,
+				durationMs: 3200,
+				trigger: 'manual',
+			},
+		});
+	});
+
+	it('passes through undefined for optional metadata fields when omitted from the SDK message', () => {
+		const event = convert({
+			type: 'system',
+			subtype: 'compact_boundary',
+			compact_metadata: {
+				trigger: 'auto',
+				pre_tokens: 100000,
+			},
+			uuid: 'mock-uuid',
+			session_id: 'mock-session',
+		});
+
+		expect(event).toEqual({
+			type: 'session.compaction_complete',
+			data: {
+				preCompactionTokens: 100000,
+				postCompactionTokens: undefined,
+				durationMs: undefined,
+				trigger: 'auto',
+			},
+		});
+	});
+});
+
