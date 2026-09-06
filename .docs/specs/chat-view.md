@@ -27,6 +27,20 @@ vault scope, folder tree.
   `test/sessionEventWiring.test.ts`, the former source-text guard for this, was deleted in the
   same change — the compiler now owns the contract it checked. See "Session event map" in
   `agent-service.md`.
+- **View-injection wiring is source-guarded, not compiler-checked (issue #180):** each
+  `src/view/*.ts` file injects its methods into `SynapseView` via declaration merging
+  (`declare module '../synapseView' { interface SynapseView { ... } }`) plus a prototype
+  assignment inside an exported `installX(ViewClass)` function called from the bottom of
+  `synapseView.ts`. Because the assignment target is cast to `SynapseView`, the compiler catches
+  an undeclared name or a signature mismatch, but not (a) a method declared with no matching
+  `proto.<name> =` assignment — the call site compiles clean and throws "is not a function" at
+  runtime — or (b) a view file whose `installX(SynapseView)` call is missing from
+  `synapseView.ts`, so none of its methods ever attach. Unlike the session-event seam above, this
+  gap has no compiler-checked replacement (that would require converting the injection pattern to
+  real composition — tracked separately, #176 — not done here). `test/viewInjectionWiring.test.ts`
+  reads `src/view/*.ts` and `src/synapseView.ts` as text and asserts both invariants: every
+  declared method has a same-file `proto.` assignment, and every exported `install*` has a call in
+  `synapseView.ts`. Files are discovered from disk, so a sixth view file is covered automatically.
 - **Slash-command skill invocation (issue #91):** the Claude Agent SDK natively recognizes and
   invokes registered skills whenever a literal `/skillname` appears anywhere in the prompt text
   (mid-sentence or not), for every skill loaded into the session — no plugin-side parsing,
