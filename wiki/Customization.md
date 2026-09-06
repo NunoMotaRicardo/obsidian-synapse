@@ -24,8 +24,6 @@ _synapse/                 ← registered as an SDK local plugin on every session
     <name>/
       SKILL.md            ← skill instructions (invocable via /name)
       ...optional resources...
-  triggers/
-    *.md                  ← trigger definitions (event- or schedule-based)
   .mcp.json               ← MCP server configs (SDK-native format)
 ```
 
@@ -138,96 +136,10 @@ You can also invoke skills directly in chat with `/name`.
 
 ---
 
-## 4. Triggers (`_synapse/triggers/*.md`)
-
-Triggers automate vault operations. Each trigger is a markdown file with frontmatter metadata
-and a prompt body. They fire either in response to vault events or on a cron schedule.
-
-### Format
-
-```markdown
----
-name: auto-tag-inbox
-description: Automatically tag new notes dropped into the inbox
-event: file-created       # or: schedule: "0 9 * * *"
-path: inbox/**            # optional glob filter
-model: qwen3:8b           # optional: local model for cheap one-shot
-agent: General            # optional: agent to use
-write: frontmatter        # false (report) | true (replace) | frontmatter (merge YAML)
-toolApproval: allow       # optional: let this trigger use tools without asking
-enabled: true
----
-Read the content of {{file}} and return YAML tags suitable for its frontmatter.
-```
-
-### Event types
-
-| Event | Fires when |
-|---|---|
-| `file-created` | A new file is created |
-| `file-modified` | An existing file is saved with changes |
-| `file-deleted` | A file is deleted or trashed |
-| `file-renamed` | A file is moved or renamed |
-
-### Schedule format
-
-Standard five-field cron expressions: `minute hour day-of-month month day-of-week`.
-
-Examples:
-- `0 9 * * *` — daily at 9:00 AM
-- `0 8 * * 1` — every Monday at 8:00 AM
-
-### Write modes
-
-| `write` value | Output |
-|---|---|
-| `false` (default) | Appends result to `_synapse/reports/<name>-YYYY-MM-DD.md` |
-| `true` | Replaces the triggering file's entire content with the model response |
-| `'frontmatter'` | Parses response as YAML, merges keys into existing frontmatter |
-
-### Tool approval
-
-Triggers run unattended, so there is nobody to answer an approval prompt. The **Tools approval**
-setting therefore means something different for them than it does for editor actions:
-
-| Setting | Effect on a trigger |
-|---|---|
-| **Allow (auto-approve)** | Tool calls run without asking |
-| **Ask (require approval)** (default) | Tool calls are **denied**, and each denial is recorded in the trigger's report |
-
-Read-only work is unaffected either way — the model can still read the files it needs. Only tools
-that would normally prompt (writing or editing a file, running a command) are denied.
-
-Add `toolApproval: allow` to one trigger's frontmatter to grant just that trigger tool access
-without loosening the global setting. There is no override in the other direction: a trigger
-cannot force approval prompts when the global setting is already **Allow (auto-approve)**.
-
-### Model routing
-
-If `model` points to a Claude alias (or is omitted), the trigger runs as a full Claude session
-via `AgentService.inlineChat()`. If `model` points to a local model, it runs as a one-shot
-`executeLocalProviderQuery()` call, with built-in vault tools and any configured MCP servers
-available for tool calling.
-
-### Built-in vault tools (available to local models in triggers)
-
-| Tool | Description |
-|---|---|
-| `read_note` | Read a note's content by path |
-| `list_notes` | List notes in a folder |
-| `search_notes` | Search notes by query |
-
-### Self-improve: creating triggers from chat
-
-> "Remind me every Monday to review my weekly project notes"
-> → Synapse offers to create a `weekly-review` trigger in `_synapse/triggers/`
-
----
-
-## 5. MCP servers (`_synapse/.mcp.json`)
+## 4. MCP servers (`_synapse/.mcp.json`)
 
 Configures MCP servers that the Claude Agent SDK discovers natively for Claude sessions,
-and that the MCP bridge spawns for local-model trigger sessions.
+and that the MCP bridge spawns for local-model batch-loop sessions.
 
 ### Format
 
@@ -259,7 +171,7 @@ All configured MCP servers are always available; remove a server from the file t
 
 ---
 
-## 6. How the SDK discovers your customizations
+## 5. How the SDK discovers your customizations
 
 On every chat session or query, Synapse passes `_synapse/` to the Claude Agent SDK as a
 **local plugin**:
@@ -278,7 +190,7 @@ No explicit reload is needed after writing a new artifact — the next query pic
 
 ---
 
-## 7. The self-improve workflow
+## 6. The self-improve workflow
 
 The self-improve system lets you teach Synapse how to behave using plain language in chat.
 Synapse recognizes customization intent and offers to create or modify `_synapse/` artifacts.
@@ -286,10 +198,10 @@ Synapse recognizes customization intent and offers to create or modify `_synapse
 **How it works:**
 
 1. You express a preference or behavioral wish in chat (e.g. "use Zettelkasten format for
-   research notes" or "always check my inbox trigger is enabled").
+   research notes" or "be more concise in your replies").
 2. Synapse's system prompt includes a `[Self-Improve]` detection block that teaches the
    active agent to recognize this intent.
-3. The agent proposes creating or modifying an agent, skill, or trigger artifact.
+3. The agent proposes creating or modifying an agent or skill artifact.
 4. The agent always asks for confirmation before writing to `_synapse/`.
 5. On confirmation, it writes the artifact using the correct SDK-native format.
 6. The next query picks up the new artifact automatically.
@@ -302,18 +214,12 @@ write capabilities.
 
 ---
 
-## 8. Settings integration
+## 7. Settings integration
 
 ### Initialize button (Settings → Capabilities)
 
 Creates the `_synapse/` folder structure and seeds the five default agents and the
 `improve-synapse` skill. Safe to run on an existing vault — it does not overwrite existing files.
-
-### Trigger management (Settings → Triggers)
-
-Lists all triggers found in `_synapse/triggers/`. Provides an enable/disable toggle (writes
-`enabled: false` to the trigger's frontmatter), shows the last-fired timestamp, and an **Open
-triggers folder** button.
 
 ### Feature → Agent map (Settings → Feature Map & Agents)
 
@@ -322,7 +228,7 @@ Settings — the plugin writes the change to the agent's `.md` file frontmatter.
 
 ---
 
-## 9. Tips and patterns
+## 8. Tips and patterns
 
 ### Keep agents focused
 
@@ -334,22 +240,6 @@ the right agent to each context (chat vs. inline vs. vision vs. Telegram).
 Skills compose cleanly: enable multiple skills per session to layer behaviours (e.g.
 `harvard-citations` + `literature-synthesis`). Keep skill prompts focused and actionable.
 
-### Use triggers for recurring vault maintenance
-
-Triggers run unattended. Use local models (Ollama/Foundry Local) for cheap high-frequency
-triggers (auto-tagging, daily lint) and Claude for agentic ones (weekly research digest).
-
-### Scope triggers with path globs
-
-A trigger without a `path` glob fires for every file event. Always scope triggers to avoid
-running on unintended files:
-
-```yaml
-path: inbox/**          # only files under inbox/
-path: projects/*.md     # only top-level project notes
-path: research/**/*.md  # all md files under research/
-```
-
 ### Version-control `_synapse/`
 
 Commit `_synapse/` to git (if your vault is a repo) to track customization history and share
@@ -357,16 +247,14 @@ configurations between machines.
 
 ---
 
-## 10. Suggested reading
+## 9. Suggested reading
 
 - [`Local-Models-ReAct.md`](Local-Models-ReAct.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
 - [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md) —
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.
 - [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md) —
   the migration decision that introduced the agent-first routing model.
-- [`.docs/specs/bots-triggers.md`](../.docs/specs/bots-triggers.md) — technical spec for the trigger
-  system (parse rules, glob matching, cron format, write modes).
 - [`.docs/specs/config-writer.md`](../.docs/specs/config-writer.md) — technical spec for config-writer
-  (`writeAgent`, `writeSkill`, `writeTrigger`, etc.).
+  (`writeAgent`, `writeSkill`, etc.).
 - [Claude Agent SDK documentation](https://docs.anthropic.com/en/docs/claude-code/sdk) —
   authoritative reference for `AgentDefinition` fields, `Options`, MCP config, and skills.

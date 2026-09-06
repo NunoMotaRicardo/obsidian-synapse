@@ -1,6 +1,6 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, debounce, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
-import {scanAgents, scanTriggers, modifyArtifact, ensureImproveSynapseSkill} from "./configWriter";
+import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
 import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, ProviderPreset} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
@@ -83,8 +83,6 @@ export interface SynapseSettings {
 	telegramDefaultAgent: string;
 	/** Custom request timeout in seconds (0 = use adaptive default). */
 	providerRequestTimeout?: number;
-	/** Timestamps (epoch ms) of the last time each trigger fired, keyed by trigger name. */
-	triggerLastFired: Record<string, number>;
 
 	/**
 	 * Interactive Tier-1 loop guardrails (issue #88): opt-in per-run turn/cost
@@ -164,7 +162,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	telegramAllowedUsers: '',
 	telegramDefaultAgent: '',
 	providerRequestTimeout: 0,
-	triggerLastFired: {},
 	loopTurnThreshold: 0,
 	loopTokenThreshold: 0,
 	loopCostThresholdUsd: 0,
@@ -324,14 +321,13 @@ export class SynapseSettingTab extends PluginSettingTab {
 		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
 		const panels: Record<string, HTMLElement> = {};
 		const tabButtons: Record<string, HTMLElement> = {};
-		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots', 'triggers'] as const;
+		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots'] as const;
 		const tabLabels: Record<string, string> = {
 			claude: 'Claude',
 			agents: 'Feature Map & Agents',
 			capabilities: 'Capabilities',
 			tools: 'Tools',
 			bots: 'Bots',
-			triggers: 'Triggers',
 		};
 
 		const switchSettingsTab = (id: string) => {
@@ -389,12 +385,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════════════════════════
 		const botsPanel = panels['bots']!;
 		this.renderBotsPanel(botsPanel);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 6: Triggers
-		// ══════════════════════════════════════════════════════════
-		const triggersPanel = panels['triggers']!;
-		void this.renderTriggersPanel(triggersPanel);
 	}
 
 	/** Render the Claude tab (auth, CLI location, local & custom BYOK provider). */
@@ -777,7 +767,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					try {
 						const base = normalizePath(SYNAPSE_FOLDER);
 
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse', '/triggers']) {
+						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse']) {
 							const dir = normalizePath(`${base}${sub}`);
 							if (!this.app.vault.getAbstractFileByPath(dir)) {
 								await this.app.vault.createFolder(dir);
@@ -934,7 +924,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(panel)
 			.setName('Tools approval')
-			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs. For unattended runs — triggers and batch loops, which have no one to ask — "ask" instead denies tool calls outright and logs the denial to that run\'s report, while "allow" runs them without asking. A trigger can override this to "allow" for just itself by setting toolApproval to allow in its own frontmatter, without changing this setting. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
+			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs. For unattended runs — batch loops, which have no one to ask — "ask" instead denies tool calls outright and logs the denial to that run\'s report, while "allow" runs them without asking. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
 			.addDropdown(dropdown => dropdown
 				.addOptions({allow: 'Allow (auto-approve)', ask: 'Ask (require approval)'})
 				.setValue(this.plugin.settings.toolApproval)
@@ -1082,102 +1072,4 @@ export class SynapseSettingTab extends PluginSettingTab {
 		});
 	}
 
-	/** Render the Triggers settings tab. */
-	private async renderTriggersPanel(panel: HTMLElement): Promise<void> {
-		const triggersFolder = normalizePath(`${SYNAPSE_FOLDER}/triggers`);
-
-		new Setting(panel)
-			.setName('Triggers')
-			.setHeading()
-			.addButton(button => button
-				.setButtonText('Open triggers folder')
-				.onClick(() => {
-					const folder = this.app.vault.getAbstractFileByPath(triggersFolder);
-					if (folder) {
-						const leaves = this.app.workspace.getLeavesOfType('file-explorer');
-						const leaf = leaves[0];
-						if (leaf) {
-							void this.app.workspace.revealLeaf(leaf);
-							(leaf.view as unknown as {revealInFolder?: (f: unknown) => void}).revealInFolder?.(folder);
-						}
-					} else {
-						new Notice('Triggers folder not found. Initialize the Synapse folder first using the capabilities tab.');
-					}
-				}));
-
-		panel.createEl('p', {
-			text: 'Triggers fire automatically in response to vault events or on a schedule. Each trigger is a Markdown file in _synapse/triggers/.',
-			cls: 'setting-item-description',
-		});
-
-		const listContainer = panel.createDiv({cls: 'synapse-triggers-list'});
-
-		const renderList = async () => {
-			listContainer.empty();
-
-			const triggers = await scanTriggers(this.app, triggersFolder);
-
-			if (triggers.length === 0) {
-				listContainer.createEl('p', {
-					text: 'No triggers found. Create .md files in _synapse/triggers/.',
-					cls: 'setting-item-description',
-				});
-				return;
-			}
-
-			for (const trigger of triggers) {
-				// Build type badge
-				let typeBadge = '';
-				if (trigger.event) {
-					typeBadge = `event: ${trigger.event}`;
-				} else if (trigger.schedule) {
-					typeBadge = `schedule: ${trigger.schedule}`;
-				}
-
-				// Build description parts
-				const descParts: string[] = [];
-				if (trigger.description) descParts.push(trigger.description);
-				if (typeBadge) descParts.push(typeBadge);
-				if (trigger.model) descParts.push(`model: ${trigger.model}`);
-
-				const lastFiredMs = this.plugin.settings.triggerLastFired[trigger.name];
-				const lastFiredText = lastFiredMs ? formatRelativeTime(lastFiredMs) : 'Never';
-				descParts.push(`Last fired: ${lastFiredText}`);
-
-				new Setting(listContainer)
-					.setName(trigger.name)
-					.setDesc(descParts.join(' · '))
-					.addToggle(toggle => toggle
-						.setValue(trigger.enabled ?? true)
-						.setTooltip(trigger.enabled ?? true ? 'Enabled' : 'Disabled')
-						.onChange(async (value) => {
-							await modifyArtifact(this.app, trigger.filePath, {enabled: value});
-							await this.plugin.saveSettings();
-						}));
-			}
-		};
-
-		await renderList();
-	}
-}
-
-/** Format a Unix epoch timestamp (ms) as a human-readable relative time string. */
-function formatRelativeTime(timestamp: number): string {
-	const diffMs = Date.now() - timestamp;
-	if (diffMs < 0) return 'Just now';
-
-	const seconds = Math.floor(diffMs / 1000);
-	if (seconds < 60) return 'Just now';
-
-	const minutes = Math.floor(seconds / 60);
-	if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-
-	const hours = Math.floor(minutes / 60);
-	if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-
-	const days = Math.floor(hours / 24);
-	if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-
-	const months = Math.floor(days / 30);
-	return `${months} month${months === 1 ? '' : 's'} ago`;
 }

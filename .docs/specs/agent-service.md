@@ -11,7 +11,7 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
   and invoke `query()` from the Agent SDK.
 - Manage session list/delete/rename via `listSessions()`, `deleteSession()`, `renameSession()`.
 - One-shot helpers: `chat()` (ephemeral, no session) and `inlineChat()` (persisted session)
-  used by editor actions, search, triggers, and bots.
+  used by editor actions, search, batch loops, and bots.
   - `chat()` defaults to a pure text transform (`maxTurns: 1`, `tools: []`, `permissionMode:
     'plan'`).
   - `inlineChat()` defaults to **agentic** behavior: `maxTurns` falls back to
@@ -39,7 +39,7 @@ Key query option fields used:
 | `model` | toolbar / agent frontmatter / settings |
 | `reasoningEffort` | settings + toolbar reasoning menu (brain icon), only when the model supports it |
 | `infiniteSessions` | settings `infiniteSessionsEnabled`; omitted when `true` (SDK default) |
-| `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots, triggers, batch loops); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
+| `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots, batch loops); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
 | `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: ...}`) |
 | `skills` | enabled skill names array from toolbar |
 | `canUseTool` | tool-approval modal or `approveAll` |
@@ -286,7 +286,7 @@ It used to also stamp every model with a hardcoded `limits: {max_context_window_
 (wrong for 1M-context variants, and unread by any consumer) and a blanket `vision: true`/
 `tools: true` (invented — the SDK's `ModelInfo` has no vision or tool-support field at all). Both
 are gone (#105); absent beats wrong. Consumers that read `supportsTools` already treat absence as
-"assume supported" (`triggerExecutor.ts`: `modelInfo?.supportsTools !== false`), so Claude models
+"assume supported" (`runExecutor.ts`: `modelInfo?.supportsTools !== false`), so Claude models
 keep working exactly as before. `ModelInfo.capabilities.limits` stays typed as an open
 `Record<string, unknown>` bag (not currently populated for Claude models) rather than removed
 outright, because `synapseView.ts` reads a `limits['vision'].max_prompt_images` shape that some
@@ -322,7 +322,7 @@ surface a friendlier chat message — see `chat-view.md`.
 
 The interactive chat panel's `SessionConfig` (`SynapseView.buildSessionConfig()`) sets
 `includePartialMessages: true`. Only the chat panel does this — `chat()`, `inlineChat()`, and
-every unattended caller that goes through them (search, editor text actions, triggers, the
+every unattended caller that goes through them (search, editor text actions, the
 Telegram bot, batch loops) collect full text via `collectText()`/their own accumulation loop and
 never read `includePartialMessages`, so they get no extra `stream_event` volume.
 

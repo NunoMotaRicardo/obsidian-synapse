@@ -3,11 +3,11 @@
 ## Overview
 
 An in-memory, per-file **advisory** write lock that serializes plugin-initiated writes to the same
-vault-relative path, so concurrent triggers, batch loops, and self-improve/config writes do not
+vault-relative path, so concurrent batch loops and self-improve/config writes do not
 interleave `vault.read()`/`vault.modify()` and clobber one another.
 
 Advisory and in-process: the lock only guards writes that go **through the plugin's own code
-paths** (`configWriter.ts`, `triggerExecutor.ts`, `batchLoopExecutor.ts` report appends). It does
+paths** (`configWriter.ts`, `batchLoopExecutor.ts` report appends). It does
 **not** — and cannot — guard writes the Claude CLI performs directly via its own file tools during
 an `inlineChat()` run, nor a user's manual edits in the Obsidian editor. Those are outside the
 plugin's write surface. The lock's job is narrow: stop the plugin from racing *itself* when two of
@@ -50,18 +50,11 @@ isLocked(path: string): boolean
 ## Integration points
 
 - **`configWriter.ts`** — every function that mutates a vault file wraps its `vault.create`/
-  `vault.modify`/`vault.trash` in `withLock(targetPath, …)`: `writeAgent`, `writeTrigger`,
+  `vault.modify`/`vault.trash` in `withLock(targetPath, …)`: `writeAgent`,
   `writeSkill`, `modifyArtifact`, `deleteArtifact`. Read-only scans (`scanAgents`, etc.) and
   `ensureFolder` are not locked.
-- **`triggerExecutor.ts`** — `applyWriteMode` (both `write: true` full-file replace and
-  `write: 'frontmatter'` merge, the latter via `modifyArtifact`'s own lock) and `appendToReport`
-  acquire the lock on their target path. On a `LockAcquisitionError`, the executor degrades
-  gracefully: `console.warn` (with the `[synapse]` prefix) and, where a report exists to fall back
-  to, appends a note there instead — rather than throwing out of `executeTrigger`. `appendToReport`
-  itself is the last line of defense; if *its* lock acquisition times out, the entry is dropped
-  with a `console.warn` (there is nowhere further to degrade to).
 - **`batchLoopExecutor.ts`** — report appends (`appendBlockToReport`, used by both `appendToReport`
-  and `appendRunSummary`) acquire the lock on the report path, so a batch-loop run and a trigger
+  and `appendRunSummary`) acquire the lock on the report path, so two batch-loop runs
   writing the same day's report do not interleave. A timeout here is not specially caught; it
   propagates like any other write failure into `runBatchLoop()`'s existing per-file error handling
   (counted as a failed file, logged, with a best-effort error-report append of its own).
@@ -81,9 +74,8 @@ isLocked(path: string): boolean
 
 Implemented (issue #68). `src/lockManager.ts` exports the `lockManager` singleton
 (`withLock`/`isLocked`) and `LockAcquisitionError`; integrated into `configWriter.ts`
-(`writeAgent`, `writeTrigger`, `writeSkill`, `modifyArtifact`, `deleteArtifact`),
-`triggerExecutor.ts` (`applyWriteMode`, `appendToReport`), and `batchLoopExecutor.ts`
+(`writeAgent`, `writeSkill`, `modifyArtifact`, `deleteArtifact`) and `batchLoopExecutor.ts`
 (`appendBlockToReport`). Unit tests in `test/lockManager.test.ts` cover FIFO serialization,
 independent-path concurrency, release-on-throw, and the timeout/`LockAcquisitionError` path.
-Foundation for the multi-writer safety of triggers (`bots-triggers.md`), batch loops
-(`batch-loops.md`), and future Tier-1 autonomous loops (#67).
+Foundation for the multi-writer safety of batch loops (`batch-loops.md`) and future Tier-1
+autonomous loops (#67).

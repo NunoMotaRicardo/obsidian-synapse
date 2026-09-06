@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, TFolder} from 'obsidian';
-import type {AgentConfig, SkillInfo, TriggerConfig, TriggerEvent} from './types';
+import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
 
@@ -120,80 +120,6 @@ export async function scanSkills(app: App, skillsFolder: string): Promise<SkillI
 	return skills;
 }
 
-/** Valid event values for trigger frontmatter. */
-const VALID_TRIGGER_EVENTS: ReadonlySet<string> = new Set<TriggerEvent>([
-	'file-created', 'file-modified', 'file-deleted', 'file-renamed',
-]);
-
-/**
- * Lightweight scan for trigger configurations in the given vault folder.
- * Reads file names and frontmatter metadata for UI display.
- * Validates that `event` and `schedule` are mutually exclusive — skips invalid triggers.
- */
-export async function scanTriggers(app: App, triggersFolder: string): Promise<TriggerConfig[]> {
-	const folder = normalizePath(triggersFolder);
-	const triggers: TriggerConfig[] = [];
-	const abstract = app.vault.getAbstractFileByPath(folder);
-	if (!(abstract instanceof TFolder)) return triggers;
-
-	const triggerFiles = abstract.children.filter(
-		(child): child is TFile => child instanceof TFile && child.extension === 'md'
-	);
-	const contents = await Promise.all(triggerFiles.map(f => app.vault.read(f)));
-
-	for (let i = 0; i < triggerFiles.length; i++) {
-		const child = triggerFiles[i]!;
-		const content = contents[i]!;
-		const {meta, body} = parseFrontmatter(content);
-
-		const rawEvent = typeof meta['event'] === 'string' ? meta['event'] : undefined;
-		const rawSchedule = typeof meta['schedule'] === 'string' ? meta['schedule'] : undefined;
-
-		// Validate mutual exclusivity: event and schedule cannot both be present
-		if (rawEvent && rawSchedule) {
-			console.warn(`Synapse: trigger "${child.basename}" has both event and schedule — skipping`);
-			continue;
-		}
-
-		// Validate event value if present
-		if (rawEvent && !VALID_TRIGGER_EVENTS.has(rawEvent)) {
-			console.warn(`Synapse: trigger "${child.basename}" has invalid event "${rawEvent}" — skipping`);
-			continue;
-		}
-
-		// Parse write field: boolean or 'frontmatter'
-		const rawWrite = typeof meta['write'] === 'string' ? meta['write'] : undefined;
-		let write: boolean | 'frontmatter' = false;
-		if (rawWrite === 'true') write = true;
-		else if (rawWrite === 'frontmatter') write = 'frontmatter';
-
-		// Parse enabled field: defaults to true when omitted
-		const rawEnabled = typeof meta['enabled'] === 'string' ? meta['enabled'] : undefined;
-		const enabled = rawEnabled === 'false' ? false : true;
-
-		// Parse toolApproval field: only 'allow' is meaningful (per-trigger opt-in into
-		// bypassPermissions, issue #151). Any other/absent value means "not opted in" —
-		// this trigger follows the global settings.toolApproval.
-		const toolApproval = meta['toolApproval'] === 'allow' ? 'allow' as const : undefined;
-
-		triggers.push({
-			name: (typeof meta['name'] === 'string' && meta['name']) ? meta['name'] : child.basename,
-			description: (typeof meta['description'] === 'string' ? meta['description'] : '') || '',
-			event: rawEvent as TriggerEvent | undefined,
-			schedule: rawSchedule || undefined,
-			path: (typeof meta['path'] === 'string' && meta['path']) || undefined,
-			model: (typeof meta['model'] === 'string' && meta['model']) || undefined,
-			agent: (typeof meta['agent'] === 'string' && meta['agent']) || undefined,
-			write,
-			toolApproval,
-			enabled,
-			body: body.trim(),
-			filePath: child.path,
-		});
-	}
-	return triggers;
-}
-
 /** Configuration for writing a skill artifact (SKILL.md inside a named subfolder). */
 export interface SkillWriteConfig {
 	name: string;
@@ -293,36 +219,6 @@ export async function writeAgent(
 		['skills', config.skills],
 	];
 	const content = buildMarkdown(fields, config.instructions);
-	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
-	return filePath;
-}
-
-/**
- * Write a trigger configuration as `<kebab-name>.md`.
- * Returns the vault-relative path of the created file.
- */
-export async function writeTrigger(
-	app: App,
-	folder: string,
-	config: Omit<TriggerConfig, 'filePath'>,
-): Promise<string> {
-	await ensureFolder(app, folder);
-	const slug = toKebab(config.name);
-	const filePath = normalizePath(`${folder}/${slug}.md`);
-
-	const fields: [string, string | string[] | boolean | undefined][] = [
-		['name', config.name],
-		['description', config.description],
-		['event', config.event],
-		['schedule', config.schedule],
-		['path', config.path],
-		['model', config.model],
-		['agent', config.agent],
-		['write', config.write === 'frontmatter' ? 'frontmatter' : config.write === true ? 'true' : undefined],
-		['toolApproval', config.toolApproval === 'allow' ? 'allow' : undefined],
-		['enabled', config.enabled === false ? 'false' : undefined],
-	];
-	const content = buildMarkdown(fields, config.body);
 	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
 	return filePath;
 }
@@ -445,11 +341,11 @@ export function scanVaultStructure(
 // ---------------------------------------------------------------------------
 
 export const IMPROVE_SYNAPSE_SKILL_NAME = 'improve-synapse';
-export const IMPROVE_SYNAPSE_SKILL_DESC = 'Comprehensive reference and guide for creating and modifying Synapse vault-local customization artifacts (agents, skills, and triggers) in _synapse/';
+export const IMPROVE_SYNAPSE_SKILL_DESC = 'Comprehensive reference and guide for creating and modifying Synapse vault-local customization artifacts (agents and skills) in _synapse/';
 
 export const IMPROVE_SYNAPSE_SKILL_BODY = `# Improve Synapse Skill
 
-Use this skill when the user asks to create, modify, or manage Synapse customization artifacts (agents, skills, and triggers) in your Obsidian vault.
+Use this skill when the user asks to create, modify, or manage Synapse customization artifacts (agents and skills) in your Obsidian vault.
 
 ## Vault Folder Structure
 
@@ -457,7 +353,6 @@ Use this skill when the user asks to create, modify, or manage Synapse customiza
 _synapse/
   agents/*.md
   skills/<name>/SKILL.md
-  triggers/*.md
   .mcp.json
 \`\`\`
 
@@ -521,63 +416,7 @@ description: Teaches the agent to format references according to APA 7th edition
 When this skill is active or invoked, format all references and in-text citations following APA 7th edition standard rules.
 \`\`\`
 
-### 3. Triggers
-File location: \`_synapse/triggers/<kebab-name>.md\`
-
-Triggers run automatically — either in response to vault events or on a schedule. Each trigger specifies when to fire, what scope to operate on, and which model to use.
-
-Frontmatter fields:
-- \`name\` (required) — trigger identifier
-- \`description\` (required) — short summary of what this trigger does
-- \`event\` (required for event triggers) — one of: \`file-created\`, \`file-modified\`, \`file-deleted\`, \`file-renamed\`
-- \`schedule\` (required for scheduled triggers) — cron expression (e.g. \`0 9 * * *\` for daily at 9am)
-- \`path\` (optional) — glob pattern to scope which files the trigger applies to (e.g. \`inbox/**\`, \`projects/*.md\`)
-- \`model\` (optional) — model alias to use (\`sonnet\`, \`haiku\`, or a local model like \`qwen3:8b\`). Omit for the session default. Claude models run as full agentic loops with tool access. Local models that support tool calling run a ReAct loop equipped with the built-in vault tools (\`read_note\`, \`list_notes\`, \`search_notes\`) plus any MCP-bridged tools configured in \`_synapse/.mcp.json\`; local models without tool-calling support run as cheap one-shot calls.
-- \`agent\` (optional) — name of an agent to use for this trigger
-- \`write\` (optional) — \`false\` (default), \`true\`, or \`'frontmatter'\` to allow writing back
-- \`enabled\` (optional) — \`true\` (default) or \`false\` to disable without deleting
-
-Body: The prompt/instructions executed when the trigger fires. Use \`{{file}}\` (or the equivalent \`{{files}}\`) to reference the triggering file's path. For scheduled triggers with a \`path\` glob, the trigger runs once per matched file, so each run still sees a single file path.
-
-Example — event trigger (auto-tag new notes in inbox):
-\`\`\`markdown
----
-name: auto-tag-inbox
-description: Automatically tag new notes dropped into the inbox folder
-event: file-created
-path: inbox/**
-model: qwen3:8b
----
-
-Read the content of {{file}} and add relevant topic tags to its frontmatter \`tags:\` property. Use existing tags from the vault when possible.
-\`\`\`
-
-Example — scheduled trigger (daily vault lint):
-\`\`\`markdown
----
-name: daily-vault-lint
-description: Find orphan notes and dead links every morning
-schedule: 0 9 * * *
-model: qwen3:8b
----
-
-Scan the vault for orphan notes (no inbound links) and dead links (references to non-existent notes). Write a summary to \`_synapse/reports/vault-lint.md\`.
-\`\`\`
-
-Example — Claude-powered research trigger:
-\`\`\`markdown
----
-name: research-digest
-description: Weekly research digest on tracked topics
-schedule: 0 8 * * 1
-model: sonnet
-agent: General
----
-
-Review the notes in \`research/topics/\` for tracked research topics. Search for recent developments, summarize findings, and append updates to each topic note.
-\`\`\`
-
-### 4. MCP Servers Configuration
+### 3. MCP Servers Configuration
 File location: \`_synapse/.mcp.json\`
 
 Contains standard Model Context Protocol (MCP) server configurations.
@@ -590,7 +429,6 @@ Contains standard Model Context Protocol (MCP) server configurations.
 2. **Select Artifact Type**:
    - Create an **Agent** if defining a full persistent persona with specific instruction sets or tool restrictions.
    - Create a **Skill** if adding specific procedures, domain knowledge, workflows, or slash commands.
-   - Create a **Trigger** if the user wants something to happen automatically — either when files change (event trigger) or on a schedule (cron trigger). Choose a local model for cheap operations and Claude for complex agentic tasks.
 3. **Propose Changes**: Show the proposed frontmatter and content to the user.
 4. **Write Artifact**: Once approved, write the file to the corresponding location under \`_synapse/\`.
 `;

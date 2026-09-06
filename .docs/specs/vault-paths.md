@@ -19,12 +19,12 @@ Source: `src/vaultPaths.ts`.
 
 ```ts
 // Hardcoded vault folder for Synapse customization artifacts (agents, skills,
-// triggers, reports, .mcp.json). Canonical definition — settings.ts re-exports
+// reports, .mcp.json). Canonical definition — settings.ts re-exports
 // it so configWriter.ts's existing `import {SYNAPSE_FOLDER} from './settings'`
 // keeps working unmodified (see Invariants).
 export const SYNAPSE_FOLDER = '_synapse';
 
-// Vault-relative folder where triggers/batch-loops append their run reports.
+// Vault-relative folder where batch loops append their run reports.
 export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 // Structurally compatible with agentService.ts's SdkPluginConfig (a strict
@@ -94,29 +94,28 @@ export function todayString(): string
   `.mcp.json` config-path join.
 - **`synapseView.ts`** — `SynapseView.getVaultBasePath()` (public method, called throughout
   `view/*` prototype-extension modules) delegates to `getVaultBasePath(this.app)`;
-  `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill/trigger
+  `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill
   scan paths.
-- **`triggerExecutor.ts`** — `executeWithClaude` uses `getVaultBasePath`/`getSynapsePluginConfig`;
-  `executeWithLocalModel` (MCP bridge start) uses `getVaultBasePath`; `REPORTS_FOLDER`/
-  `todayString` in the report-append path.
-- **`triggers.ts`** — `SYNAPSE_FOLDER` for the triggers-folder watch path and the `_synapse/`
-  feedback-loop exclusion.
+- **`runExecutor.ts`** (from #154's extraction of the trigger and batch-loop executors, and the
+  sole surviving caller since #188 removed the trigger executor) — `executeWithClaude` uses
+  `getVaultBasePath`/`getSynapsePluginConfig`; `executeWithLocalModel` (MCP bridge start) uses
+  `getVaultBasePath`; `REPORTS_FOLDER`/`todayString` in the report-append path.
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 
 **Not touched:** `configWriter.ts` (out of scope for #153 — see Design decisions). Its `_synapse`
 occurrences at line 436+ are seeded skill prose (user-facing markdown describing the folder layout
-to the vault reader), not path derivation. Similarly left alone: UI copy strings in `settings.ts`
-(trigger-tab descriptions) and the self-improve system-prompt text built in `view/sessionConfig.ts`
-— both describe the folder layout to a human/model reader rather than resolving a path, and
-templating them buys nothing while risking a copy change the acceptance criteria didn't ask for.
+to the vault reader), not path derivation. Similarly left alone: the self-improve system-prompt
+text built in `view/sessionConfig.ts` — it describes the folder layout to a human/model reader
+rather than resolving a path, and templating it buys nothing while risking a copy change the
+acceptance criteria didn't ask for.
 
 ## Invariants
 
 - `getVaultBasePath` never returns `undefined`/`null` — either a non-empty `string`, or it throws.
 - `SYNAPSE_FOLDER` and `REPORTS_FOLDER` are each defined exactly once (`vaultPaths.ts`); every
   other module imports them rather than redefining.
-- `todayString()` is defined exactly once (`vaultPaths.ts`); `triggerExecutor.ts` and
-  `batchLoopExecutor.ts` (its two prior duplicates) both import it.
+- `todayString()` is defined exactly once (`vaultPaths.ts`); imported by `runExecutor.ts` (the
+  trigger and batch-loop executors' shared successor, #154 — see [run-executor.md](run-executor.md)).
 - No inline `_synapse` string literal or `basePath` cast remains outside `vaultPaths.ts`,
   `configWriter.ts` (out of scope, prose only — see Integration points), and prose
   comments/user-facing copy elsewhere.

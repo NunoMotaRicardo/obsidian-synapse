@@ -9,12 +9,12 @@ import {executeLocalProviderQuery, isLoopbackEndpoint, type LocalTool} from '../
 // `executeLocalProviderQuery`), so the ReAct loop degenerated to a single
 // completion. Two things had to be true before wiring tools into chat:
 //
-//   1. Tool execution needed an approval gate — the trigger path
-//      (`triggerExecutor.ts`) runs unattended by design, but `Session.send()`
+//   1. Tool execution needed an approval gate — the batch-loop path
+//      (`runExecutor.ts`) runs unattended by design, but `Session.send()`
 //      serves the interactive chat panel, which already gates the real Agent
 //      SDK path via `canUseTool`/`ToolApprovalModal`.
 //   2. Tools should only be offered to a model whose catalogue doesn't say
-//      "no tools" — the same `supportsTools !== false` test triggers use.
+//      "no tools" — the same `supportsTools !== false` test batch loops use.
 //
 // This file covers both: the approval gate itself (in `providerModels.ts`,
 // since that's where the tool-execution loop lives) and the capability gate
@@ -199,7 +199,7 @@ describe('executeLocalProviderQuery — tool approval gate', () => {
 		);
 	});
 
-	it('runs the tool directly with no gate when onApproveTool is omitted (unchanged trigger-path behaviour)', async () => {
+	it('runs the tool directly with no gate when onApproveTool is omitted (unchanged batch-loop-path behaviour)', async () => {
 		makeToolCallThenFinalMock('read_note');
 		const {tool, execute} = makeSpyTool('read_note');
 
@@ -271,7 +271,7 @@ describe('Session#send — local-model tool wiring', () => {
 		expect(body.tools).toBeUndefined();
 	});
 
-	it('offers tools to a model with no capability info (unknown defaults to allowed, same test as triggerExecutor.ts)', async () => {
+	it('offers tools to a model with no capability info (unknown defaults to allowed, same test as runExecutor.ts)', async () => {
 		const service = makeService();
 		service.setCustomModels([{id: 'unknown-caps-model', name: 'Unknown Caps Model'}]);
 		mockPlainCompletion();

@@ -260,9 +260,9 @@ interface DerivedCapabilities {
  *     change). A bare OpenAI-shaped `{id, object, created, owned_by}` catalogue — which is what
  *     OpenAI's own `/v1/models` and Azure's `/openai/v1/models` both return, i.e. the common case
  *     for the two flagship presets, not an edge case — carries no information either way, and
- *     `triggerExecutor.ts`'s `supportsTools = modelInfo?.supportsTools !== false` treats anything
+ *     `runExecutor.ts`'s `supportsTools = modelInfo?.supportsTools !== false` treats anything
  *     but a hard `false` as "equip the model with vault tools and start the MCP bridge". Defaulting
- *     unknown to `false` would silently strip every trigger's tools with no error on exactly the
+ *     unknown to `false` would silently strip every batch loop's tools with no error on exactly the
  *     backends most users are on — a worse, less debuggable failure than the opaque call-time
  *     tool-call rejection an over-eager `true` risks on the minority of backends that both omit
  *     this field and genuinely can't call tools. Ollama's own `false` default is not a
@@ -717,7 +717,7 @@ export async function executeLocalProviderQuery(
 		images?: Array<{mimeType: string; base64: string}>;
 		/**
 		 * Prior conversation turns (#135), oldest first. Optional and omitted by one-shot
-		 * callers (triggers, inline edits, the in-process delegation tools) that have no
+		 * callers (batch loops, inline edits, the in-process delegation tools) that have no
 		 * ongoing conversation to carry — see `.docs/specs/agent-service.md` "BYOK local
 		 * provider conversation history" for which call sites pass this and why. Budgeted to a
 		 * character budget (see `computeHistoryCharBudget`) and mapped to wire messages the
@@ -726,7 +726,7 @@ export async function executeLocalProviderQuery(
 		history?: LocalHistoryMessage[];
 		/**
 		 * Approval gate consulted before each tool call executes (#138). Optional and omitted by
-		 * the trigger path (`triggerExecutor.ts`), which runs unattended by design and is
+		 * the batch-loop path (`runExecutor.ts`), which runs unattended by design and is
 		 * unchanged by this parameter — when absent, a tool call runs immediately, exactly as
 		 * before. The chat panel (`agentService.ts#Session.send()`) always supplies one so
 		 * interactive tool use is consented to the same way the Agent SDK path already gates it.

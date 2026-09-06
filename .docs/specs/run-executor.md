@@ -2,16 +2,23 @@
 
 ## Overview
 
-`src/runExecutor.ts` is the shared per-item run pipeline behind the two "run a prompt against a
-file, then persist the result" surfaces: the trigger executor
-([bots-triggers.md](bots-triggers.md)) and the batch loop executor
-([batch-loops.md](batch-loops.md)). Before issue #154 the two independently implemented the same
-five steps — substitute template variables, route Claude vs. a local model, run, apply a write
-mode, append a report entry — with only incidental differences in report formatting and which
-optional features (local-model routing, budgets) each surface exposed. This module owns that
-pipeline; `triggerExecutor.ts`/`batchLoopExecutor.ts` are thin callers that supply what's actually
+`src/runExecutor.ts` is the shared per-item run pipeline behind "run a prompt against a file, then
+persist the result" surfaces. Before issue #154 it had two independent implementations — the
+(now-removed) trigger executor and the batch loop executor ([batch-loops.md](batch-loops.md)) —
+duplicating the same five steps: substitute template variables, route Claude vs. a local model,
+run, apply a write mode, append a report entry, with only incidental differences in report
+formatting and which optional features (local-model routing, budgets) each surface exposed. This
+module owns that pipeline; `batchLoopExecutor.ts` is a thin caller that supplies what's actually
 different: which file(s) to run over, where the prompt body comes from, how a report block is
-formatted, and (batch loops only) budget/cancellation/progress orchestration across many items.
+formatted, and budget/cancellation/progress orchestration across many items.
+
+**Issue #188 removed the trigger system** (`src/triggers.ts`, `src/triggerExecutor.ts`) —
+`batchLoopExecutor.ts` is now this module's only caller. The trigger-shaped generality described
+below (`aliasFiles`/`{{files}}`, the `surface: 'trigger' | 'batch-loop'` union, per-item
+`toolApproval` override, write modes as a "trigger-only concept") is unreachable dead weight left
+deliberately untouched for the follow-up, issue #189, rather than mixed into this removal — see the
+epic (#187) for why. Treat the trigger-specific detail in this doc as historical until #189 either
+collapses or repurposes it.
 
 Model for this extraction: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small, focused
 modules that extract exactly the logic that was duplicated, not a new abstraction layer on top of
@@ -51,11 +58,11 @@ runItem(options: RunItemOptions): Promise<void>
    triggers vs. a `## <filePath>` sub-heading for batch loops, whose report is shared across many
    files in one run) are the one genuinely caller-specific piece of the pipeline.
 
-`runItem()` does **not** catch execution errors — the two callers need different failure handling:
-`triggerExecutor.ts` always converts a failure into a report entry; `batchLoopExecutor.ts` must
-first distinguish a genuine per-file failure from a mid-flight cancellation (`handle.stop()`
-aborting the in-flight query). Catching inside `runItem()` would force one behavior on both, so the
-error is left to propagate and each caller decides in its own `try`/`catch`.
+`runItem()` does **not** catch execution errors — this was a deliberate two-caller design
+(`triggerExecutor.ts` always converted a failure into a report entry; `batchLoopExecutor.ts` must
+first distinguish a genuine per-file failure from a mid-flight cancellation, i.e. `handle.stop()`
+aborting the in-flight query). With the trigger caller removed (#188), only the batch-loop
+distinction still applies, but the error is still left to propagate rather than caught here.
 
 ## Report append primitive
 
@@ -74,17 +81,16 @@ line). Uses `vault.read()`/`vault.modify()` (not `adapter.read`/`write`) so the 
 internal file queue stay consistent, ensures `_synapse/reports/` exists first (via
 `configWriter.ts`'s `ensureFolder()`), and wraps the whole read-modify-write in the per-path
 advisory lock from [lock-manager.md](lock-manager.md) so concurrent appends to the same report file
-(two triggers, a trigger and a batch loop, or two batch-loop runs) can't interleave and clobber
-each other.
+(two batch-loop runs) can't interleave and clobber each other.
 
 `appendReportBlock()` does **not** catch `LockAcquisitionError` — that degrade-or-propagate
 decision is caller-specific and stays in the caller's own `appendReport` wrapper:
 
-- `triggerExecutor.ts` catches it and degrades gracefully (`console.warn`, drops the entry) so a
-  wedged holder can't block `executeTrigger()` forever.
 - `batchLoopExecutor.ts` lets it propagate — the per-file loop body in `runBatchLoop()` already
   catches and reports per-file failures, so a lock timeout there surfaces the same way an ordinary
   write failure would.
+- (Historical: `triggerExecutor.ts`, removed in #188, caught it and degraded gracefully —
+  `console.warn`, drops the entry — so a wedged holder couldn't block `executeTrigger()` forever.)
 
 ## Tool approval policy (issue #151)
 
@@ -121,14 +127,13 @@ result goes to the target file/frontmatter, not the report, so without this the 
 invisible again even though the main pipeline "worked". The report block is always appended in
 *addition* to whatever `applyWriteMode()` already did, not instead of it.
 
-**Per-trigger opt-in, no reverse override.** A trigger's frontmatter `toolApproval: allow`
-(`TriggerConfig.toolApproval`, round-tripped by `scanTriggers()`/`writeTrigger()` in
-`configWriter.ts`) escalates just that trigger to `'allow'` even when the global setting is
-`'ask'`. There is no frontmatter value that does the reverse (force `'ask'` when the global setting
-is `'allow'`) — the issue only asked for the permissive-mode opt-in. Batch loops have no per-run
-config surface equivalent to a trigger's frontmatter, so `resolveToolApprovalPolicy()`'s
-`overrideAllow` is trigger-only; batch loops always pass `undefined` and follow the global setting
-directly.
+**Per-item opt-in, no reverse override (historical).** `resolveToolApprovalPolicy()`'s
+`overrideAllow` parameter existed for a trigger's frontmatter `toolApproval: allow`
+(`TriggerConfig.toolApproval`, round-tripped by `scanTriggers()`/`writeTrigger()`), which escalated
+just that trigger to `'allow'` even when the global setting was `'ask'`. Triggers are gone (#188);
+batch loops have no per-run config surface equivalent, so they always pass `undefined` and follow
+the global setting directly. `overrideAllow` itself is left in place pending #189's cleanup of this
+module's now-single-caller shape.
 
 **Local-model routing is out of scope, deliberately.** `executeWithLocalModel()` /
 `executeLocalProviderQuery()` are unchanged by this issue — offering vault tools to a local model
@@ -138,41 +143,22 @@ affects the Claude branch.
 
 **Telegram bot is a deliberate, separate exception**, not driven by this policy at all — see
 "Tool approval policy — deliberately not `settings.toolApproval`" under
-[bots-triggers.md](bots-triggers.md) and [SECURITY.md](../../SECURITY.md) #1.
+[bots.md](bots.md) and [SECURITY.md](../../SECURITY.md) #1.
 
-## Budget/turn-cap divergence — resolved
+## Budget/turn-cap divergence — historical
 
 `batchLoopExecutor.ts` enforces an optional per-run budget (`budget.ts`'s `Budget`/`BudgetUsage`,
-checked between files); `triggerExecutor.ts` enforces none. This extraction forced the question,
-and the deliberate answer is: **triggers stay exempt; the divergence is not unified.**
-
-Reasoning:
-
-- A batch-loop budget is a **per-run, human-authorized safety cap**: a user explicitly starts a
-  bounded job (`launchBatchLoop()`'s scope/instruction/budget prompts) covering a known, finite set
-  of files, and the budget caps that one run's total spend.
-- A trigger is a **standing, event-driven configuration**: authored once
-  (`_synapse/triggers/*.md`), then fires an unbounded number of times as matching vault events
-  occur (or on a cron schedule) — there is no single "run" with a natural start/end to attach a
-  cumulative cap to. A meaningful trigger budget would need a different design entirely (e.g.
-  cumulative spend tracked *across* firings, with its own reset policy) — not a drop-in reuse of
-  `BatchLoopBudget`'s per-run accumulator.
-- Concretely, giving triggers a budget would require a new `budget`/`maxSpend` frontmatter field on
-  `TriggerConfig`, parsing it in `scanTriggers()`/`writeTrigger()` (`configWriter.ts`), and
-  probably a settings/UI surface to configure it — all outside `src/runExecutor.ts`,
-  `src/triggerExecutor.ts`, and `src/batchLoopExecutor.ts`, i.e. outside this extraction's file
-  boundary and its acceptance criteria (which is "route Claude vs local → run → apply write mode →
-  append report" — not new config surface).
-
-So: this is a stated, deliberate exemption, not an accident left over from two independent
-implementations — the opposite of the state before #154. If per-trigger budgets are wanted later,
-it's a follow-up issue that starts from a `TriggerConfig.budget` field and its own cumulative
-tracking, not from unifying with `BatchLoopBudget`.
+checked between files); the now-removed trigger executor enforced none. At the time (#154 through
+#188) this was a deliberate, stated exemption rather than an oversight: a batch-loop budget is a
+per-run, human-authorized safety cap over a known, finite set of files, whereas a trigger was a
+standing, event-driven configuration with no single "run" to attach a cumulative cap to. With
+triggers removed (#188) the divergence no longer applies — `runItem()`'s only caller,
+`batchLoopExecutor.ts`, always enforces its budget.
 
 ## Current status
 
-Extracted from `triggerExecutor.ts`/`batchLoopExecutor.ts` in issue #154, after #152 (executor
-tests — `test/triggerExecutor.test.ts`, `test/batchLoopExecutor.test.ts`) and #153
-(`src/vaultPaths.ts`) landed. Both callers' public entry points
-(`executeTrigger(plugin, trigger, filePath)`, `runBatchLoop(plugin, filePaths, instruction, handle,
-onProgress?, budget?)`) are unchanged; #152's tests pass unchanged against the new implementation.
+Extracted from the trigger executor and `batchLoopExecutor.ts` in issue #154, after #152 (executor
+tests) and #153 (`src/vaultPaths.ts`) landed. Issue #188 removed the trigger executor and its
+tests entirely; `batchLoopExecutor.ts`'s public entry point (`runBatchLoop(plugin, filePaths,
+instruction, handle, onProgress?, budget?)`) is unchanged. The trigger-shaped generality this
+module still carries (see "Overview") is left for issue #189.

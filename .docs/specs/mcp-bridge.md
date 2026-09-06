@@ -6,7 +6,7 @@ from `_synapse/.mcp.json`, in addition to the built-in vault tools.
 ## Overview
 
 `McpBridgeSession` manages the full lifecycle of one or more MCP server processes for the
-duration of a single trigger execution:
+duration of a single local-model run (currently: one batch-loop item, via `runExecutor.ts`):
 
 1. **`start(vaultBasePath)`** — reads `_synapse/.mcp.json`, spawns all configured servers,
    negotiates `initialize` + `tools/list` via JSON-RPC 2.0, returns a flat `LocalTool[]`.
@@ -15,7 +15,7 @@ duration of a single trigger execution:
 3. **`stop()`** — kills all spawned processes. Always called in a `finally` block so servers
    are shut down even if the ReAct loop throws.
 
-One session per trigger execution. Sessions are never reused across calls.
+One session per run. Sessions are never reused across calls.
 
 ## Config format (`_synapse/.mcp.json`)
 
@@ -91,11 +91,11 @@ The `app` parameter is unused — MCP tools handle their own I/O.
 - **Request Timeout** — if a server does not respond to a JSON-RPC request within 15 seconds, the request promise is rejected, preventing hung servers from freezing execution.
 - **JSON-RPC error response** — `execute()` catches it and returns an error string (never throws).
 - **Process exit during loop** — pending promises are rejected; `execute()` catches and returns error string.
-- Errors never propagate to crash the trigger executor.
+- Errors never propagate to crash the caller.
 
 ## Integration point
 
-`src/triggerExecutor.ts` → `executeWithLocalModel()`:
+`src/runExecutor.ts` → `executeWithLocalModel()`:
 
 ```ts
 const mcpSession = new McpBridgeSession();

@@ -2,23 +2,25 @@ import {describe, it, expect} from 'vitest';
 import {DEFAULT_SETTINGS} from '../src/settings';
 
 // ---------------------------------------------------------------------------
-// Legacy settings-key tolerance (issues #106, #148)
+// Legacy settings-key tolerance (issues #106, #148, #188)
 //
 // `contextTier` and `reasoningSummary` were removed from `SynapseSettings`
 // (they were pre-Agent-SDK no-ops, never wired to the Agent SDK). `synapseFolder`
 // (issue #148) was removed for the same reason from the opposite direction: it was
 // declared and defaulted but nothing in `src/` ever read it — the vault folder path
 // comes from the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) throughout, so
-// dropping the setting changes no behaviour. Existing `data.json` files written by
-// older plugin versions still contain these keys. `SynapsePlugin.loadSettings()`
-// merges persisted data over `DEFAULT_SETTINGS` via
+// dropping the setting changes no behaviour. `triggerLastFired` (issue #188) was
+// removed along with the rest of the trigger system — nothing reads or writes it
+// anymore, so it is the same no-op-migration shape as `synapseFolder`. Existing
+// `data.json` files written by older plugin versions still contain these keys.
+// `SynapsePlugin.loadSettings()` merges persisted data over `DEFAULT_SETTINGS` via
 // `Object.assign({}, DEFAULT_SETTINGS, raw)` — this test exercises that exact merge
 // shape to confirm stale keys survive as harmless extra properties rather than
 // causing a load error or clobbering unrelated settings.
 // ---------------------------------------------------------------------------
 
 describe('legacy settings key tolerance', () => {
-	/** A `data.json` payload written by a pre-#106/#148 plugin version. */
+	/** A `data.json` payload written by a pre-#106/#148/#188 plugin version. */
 	const legacyRaw = {
 		authType: 'apiKey',
 		reasoningEffort: 'high',
@@ -27,6 +29,8 @@ describe('legacy settings key tolerance', () => {
 		reasoningSummary: 'detailed',
 		// Removed dead setting (#148), still present in old data.json files:
 		synapseFolder: '_some_custom_folder',
+		// Removed with the trigger system (#188), still present in old data.json files:
+		triggerLastFired: {'daily-lint': 1735689600000},
 	};
 
 	it('merging legacy raw data over DEFAULT_SETTINGS does not throw', () => {
@@ -49,6 +53,7 @@ describe('legacy settings key tolerance', () => {
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'contextTier')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'reasoningSummary')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'synapseFolder')).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'triggerLastFired')).toBe(false);
 	});
 
 	it('stale legacy keys survive the merge as harmless untyped properties (not stripped, not erroring)', () => {
@@ -56,5 +61,6 @@ describe('legacy settings key tolerance', () => {
 		expect(merged.contextTier).toBe('long_context');
 		expect(merged.reasoningSummary).toBe('detailed');
 		expect(merged.synapseFolder).toBe('_some_custom_folder');
+		expect(merged.triggerLastFired).toEqual({'daily-lint': 1735689600000});
 	});
 });
