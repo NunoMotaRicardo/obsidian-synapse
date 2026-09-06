@@ -49,8 +49,7 @@ declare module '../synapseView' {
 		renderMessageMetadata(): void;
 		addToolCallBlock(toolCallId: string, toolName: string, args?: unknown): void;
 		completeToolCallBlock(toolCallId: string, success: boolean, result?: {content?: string; detailedContent?: string}, error?: {message: string}): void;
-		addCompactionStartBlock(data: {conversationTokens?: number; systemTokens?: number; toolDefinitionsTokens?: number}): void;
-		addCompactionCompleteBlock(data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; error?: string}): void;
+		addCompactionCompleteBlock(data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string; error?: string}): void;
 		renderWelcome(): void;
 		updateSendButton(): void;
 		renderReasoningBlock(reasoning: string, parent: HTMLElement): Promise<void>;
@@ -752,45 +751,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	// ── Compaction debug blocks ─────────────────────────────────
 
-	proto.addCompactionStartBlock = function (data: {conversationTokens?: number; systemTokens?: number; toolDefinitionsTokens?: number}): void {
+	proto.addCompactionCompleteBlock = function (data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string; error?: string}): void {
 		if (!this.toolCallsContainer) return;
-
-		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
-		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
-		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
-		setIcon(iconEl, 'archive');
-		summary.createSpan({text: 'Compaction started'});
-		const spinner = summary.createSpan({cls: 'synapse-tool-call-spinner'});
-		setIcon(spinner, 'loader');
-
-		const body = details.createDiv({cls: 'synapse-compaction-body'});
-		const lines: string[] = [];
-		if (data.conversationTokens != null) lines.push(`Conversation tokens: ${data.conversationTokens.toLocaleString()}`);
-		if (data.systemTokens != null) lines.push(`System tokens: ${data.systemTokens.toLocaleString()}`);
-		if (data.toolDefinitionsTokens != null) lines.push(`Tool definition tokens: ${data.toolDefinitionsTokens.toLocaleString()}`);
-		if (lines.length > 0) {
-			const pre = body.createEl('pre', {cls: 'synapse-tool-call-code'});
-			pre.createEl('code', {text: lines.join('\n')});
-		}
-
-		this.scrollToBottom();
-	};
-
-	proto.addCompactionCompleteBlock = function (data: {success: boolean; tokensRemoved?: number; messagesRemoved?: number; summaryContent?: string; preCompactionTokens?: number; postCompactionTokens?: number; error?: string}): void {
-		if (!this.toolCallsContainer) return;
-
-		// Try to update the existing compaction_start block's spinner
-		const blocks = Array.from(this.toolCallsContainer.querySelectorAll('.synapse-compaction-block'));
-		const startBlock = blocks.reverse().find(b => b.querySelector('.synapse-tool-call-spinner'));
-		if (startBlock) {
-			const spinner = startBlock.querySelector('.synapse-tool-call-spinner');
-			if (spinner) spinner.remove();
-			const summaryEl = startBlock.querySelector('summary');
-			if (summaryEl) {
-				const statusEl = summaryEl.createSpan({cls: `synapse-tool-call-status ${data.success ? 'is-success' : 'is-error'}`});
-				setIcon(statusEl, data.success ? 'check' : 'x');
-			}
-		}
 
 		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
 		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
@@ -807,6 +769,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			if (data.postCompactionTokens != null) lines.push(`Post-compaction tokens: ${data.postCompactionTokens.toLocaleString()}`);
 			const tokensRemoved = data.tokensRemoved ?? (data.preCompactionTokens != null && data.postCompactionTokens != null ? data.preCompactionTokens - data.postCompactionTokens : undefined);
 			if (tokensRemoved != null) lines.push(`Tokens removed: ${tokensRemoved.toLocaleString()}`);
+			if (data.durationMs != null) lines.push(`Duration: ${(data.durationMs / 1000).toFixed(1)}s`);
+			if (data.trigger != null) lines.push(`Trigger: ${data.trigger}`);
 			if (data.messagesRemoved != null) lines.push(`Messages removed: ${data.messagesRemoved}`);
 		} else {
 			if (data.error) lines.push(`Error: ${data.error}`);

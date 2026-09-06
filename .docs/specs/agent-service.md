@@ -132,6 +132,20 @@ threshold as informational-only, checked once `assistant.run_result` arrives. Fa
 per-turn cost estimate to enable "real-time" dollar cancellation was deliberately avoided —
 see the invariant below.
 
+## Compaction event mapping (issue #177)
+
+`Session.convertToSessionEvent()` converts SDK `compact_boundary` system messages
+(`SDKCompactBoundaryMessage`) into `session.compaction_complete` events carrying:
+- `success: true` (explicitly set at the dispatch site so the view renderer does not infer it from optional fields)
+- `preCompactionTokens: compact_metadata.pre_tokens`
+- `postCompactionTokens: compact_metadata.post_tokens` (optional in the SDK)
+- `durationMs: compact_metadata.duration_ms` (optional in the SDK)
+- `trigger: compact_metadata.trigger` (`'manual' | 'auto'`)
+
+The SDK emits `compact_boundary` only upon reaching the compaction boundary; there is no
+corresponding "compaction starting" signal from the SDK, so `session.compaction_start` is not
+dispatched.
+
 ## Attachment delivery (issue #77)
 
 `query()`'s `Options` has no top-level `attachments` field (`prompt` is

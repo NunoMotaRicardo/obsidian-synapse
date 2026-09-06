@@ -122,6 +122,7 @@ import type {
 	SDKAssistantMessage,
 	SDKResultMessage,
 	SDKPartialAssistantMessage,
+	SDKCompactBoundaryMessage,
 	SDKSessionInfo,
 	ListSessionsOptions,
 	SessionMessage,
@@ -1771,7 +1772,18 @@ export class Session {
 			case 'system': {
 				const subtype = (msg as {subtype?: string}).subtype;
 				if (subtype === 'compact_boundary') {
-					return {type: 'session.compaction_complete', data: {}};
+					const compactMsg = msg as SDKCompactBoundaryMessage;
+					const meta = compactMsg.compact_metadata;
+					return {
+						type: 'session.compaction_complete',
+						data: {
+							success: true,
+							preCompactionTokens: meta?.pre_tokens,
+							postCompactionTokens: meta?.post_tokens,
+							durationMs: meta?.duration_ms,
+							trigger: meta?.trigger,
+						},
+					};
 				}
 				return null;
 			}

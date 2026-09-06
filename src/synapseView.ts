@@ -1082,9 +1082,6 @@ export class SynapseView extends ItemView {
 			case 'skill.invoked':
 				this.turnSkillsUsed.push(data.name as string);
 				break;
-			case 'session.compaction_start':
-				this.addCompactionStartBlock(data);
-				break;
 			case 'session.compaction_complete':
 				this.addCompactionCompleteBlock(data as {
 					success: boolean;
@@ -1093,6 +1090,8 @@ export class SynapseView extends ItemView {
 					summaryContent?: string;
 					preCompactionTokens?: number;
 					postCompactionTokens?: number;
+					durationMs?: number;
+					trigger?: string;
 					error?: string;
 				});
 				break;
@@ -1159,7 +1158,6 @@ export class SynapseView extends ItemView {
 			session.on('tool.execution_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('tool.execution_complete', (event) => { this.handleSessionEvent(event); }),
 			session.on('skill.invoked', (event) => { this.handleSessionEvent(event); }),
-			session.on('session.compaction_start', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.compaction_complete', (event) => { this.handleSessionEvent(event); }),
 			session.on('session.metadata', (event) => { this.handleSessionEvent(event); }),
 		);
