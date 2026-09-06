@@ -19,8 +19,8 @@ import type {
 	AgentInfo,
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from './agentService';
-import type {AgentConfig, SkillInfo, TriggerConfig, ChatMessage, ChatAttachment} from './types';
-import {scanAgents, scanSkills, scanTriggers} from './configWriter';
+import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
+import {scanAgents, scanSkills} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
@@ -83,7 +83,6 @@ export class SynapseView extends ItemView {
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
 	skills: SkillInfo[] = [];
-	triggers: TriggerConfig[] = [];
 
 	selectedAgent = '';
 	selectedModel = '';
@@ -392,14 +391,12 @@ export class SynapseView extends ItemView {
 		this.configLoading = true;
 		try {
 			// Lightweight scan for UI display
-			const [agents, skills, triggers] = await Promise.all([
+			const [agents, skills] = await Promise.all([
 				scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`)),
 				scanSkills(this.app, normalizePath(`${SYNAPSE_FOLDER}/skills`)),
-				scanTriggers(this.app, normalizePath(`${SYNAPSE_FOLDER}/triggers`)),
 			]);
 			this.agents = agents;
 			this.skills = skills;
-			this.triggers = triggers;
 
 			// Enable all skills by default
 			this.enabledSkills = new Set(this.skills.map(s => s.name));
@@ -418,7 +415,7 @@ export class SynapseView extends ItemView {
 		this.updateConfigUI();
 		this.configDirty = true;
 		if (!options?.silent) {
-			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s), ${this.triggers.length} trigger(s).`);
+			new Notice(`Loaded ${this.agents.length} agent(s), ${this.models.length} model(s), ${this.skills.length} skill(s).`);
 		}
 	}
 
@@ -1275,7 +1272,7 @@ export class SynapseView extends ItemView {
 			model: opts.model,
 			// Interactive chat panel only (issue #103) — real token-level streaming instead
 			// of one lump per turn. One-shot helpers (chat/inlineChat) and unattended paths
-			// (search, triggers, Telegram, batch loops) don't go through buildSessionConfig
+			// (search, Telegram, batch loops) don't go through buildSessionConfig
 			// and gain nothing from the extra stream_event volume.
 			includePartialMessages: true,
 			canUseTool: permissionHandler,

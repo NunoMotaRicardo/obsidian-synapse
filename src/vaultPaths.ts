@@ -8,7 +8,7 @@
  * `basePath` cast, the `_synapse/`-plugin-config object shape, and
  * `todayString()` were each independently copy-pasted across 6-7 call
  * sites (`batchLoopExecutor.ts`, `bots/telegramBot.ts`, `editor/editorMenu.ts`,
- * `modals/editModal.ts`, `synapseView.ts`, `triggerExecutor.ts`,
+ * `modals/editModal.ts`, `synapseView.ts`, `runExecutor.ts`,
  * `view/searchPanel.ts`) — see issue #153. Model: `src/budget.ts` (#74's
  * extraction for the same reason, one level down).
  */
@@ -17,14 +17,14 @@ import type {App} from 'obsidian';
 
 /**
  * Hardcoded vault folder for Synapse customization artifacts (agents,
- * skills, triggers, reports, `.mcp.json`). Canonical definition — every
+ * skills, reports, `.mcp.json`). Canonical definition — every
  * other module imports it from here. `settings.ts` re-exports it (rather
  * than importing it under a new name) so `configWriter.ts`'s existing
  * `import {SYNAPSE_FOLDER} from './settings'` keeps working unmodified.
  */
 export const SYNAPSE_FOLDER = '_synapse';
 
-/** Vault-relative folder where triggers/batch-loops append their run reports. */
+/** Vault-relative folder where batch loops append their run reports. */
 export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 /**

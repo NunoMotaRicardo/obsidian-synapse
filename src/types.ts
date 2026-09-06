@@ -11,42 +11,6 @@ export interface AgentConfig {
 	filePath: string;
 }
 
-/** Vault event types that can trigger execution. */
-export type TriggerEvent = 'file-created' | 'file-modified' | 'file-deleted' | 'file-renamed';
-
-/** Parsed trigger configuration from _synapse/triggers/*.md frontmatter + body. */
-export interface TriggerConfig {
-	name: string;
-	description: string;
-	/** Vault event that fires this trigger. Mutually exclusive with `schedule`. */
-	event?: TriggerEvent;
-	/** Cron expression for scheduled execution. Mutually exclusive with `event`. */
-	schedule?: string;
-	/** Glob pattern scoping which files the trigger applies to. */
-	path?: string;
-	/** Model alias or local model ID to use. */
-	model?: string;
-	/** Agent name to use for this trigger. */
-	agent?: string;
-	/** Whether the trigger may write back. false = read-only, true = full write, 'frontmatter' = frontmatter-only. */
-	write?: boolean | 'frontmatter';
-	/**
-	 * Per-trigger opt-in override of `settings.toolApproval` for this trigger's own runs (issue
-	 * #151). `'allow'` grants this trigger `bypassPermissions` even when the global setting is
-	 * `'ask'`, so one trigger can be trusted with tool calls without loosening approval everywhere.
-	 * Absent (the common case) means "not opted in" — this trigger follows the global setting.
-	 * There is no override in the other direction: a trigger cannot force `'ask'` when the global
-	 * setting is `'allow'`.
-	 */
-	toolApproval?: 'allow';
-	/** Whether the trigger is active. Defaults to true when omitted. */
-	enabled?: boolean;
-	/** Prompt/instructions from the markdown body. */
-	body: string;
-	/** Vault-relative path to the trigger file. */
-	filePath: string;
-}
-
 /** Parsed skill information from a skill folder's SKILL.md. */
 export interface SkillInfo {
 	/**

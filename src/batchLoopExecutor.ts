@@ -3,19 +3,20 @@
  * chosen set of vault files ("batch loop"), calling the configured agent once
  * per file and recording results.
  *
- * User-initiated (command palette), plugin-orchestrated iteration — mirrors
- * `src/triggerExecutor.ts`'s model-routing and report-writing pattern (both
- * are thin callers over the shared pipeline in `src/runExecutor.ts`, issue
- * #154). This is the foundational slice (#73) of the Tier-2 batch-loops
- * feature (#66). Budget caps and true in-flight cancellation (#74) build on
- * the extension points (`onProgress`, `BatchLoopHandle`) that #73 left in
- * place for them. The plain per-file `Notice`s from #73/#74 have been
- * replaced by a dedicated progress modal (`BatchLoopProgressModal`, #75) that
- * shows live progress and elapsed budget for the duration of the run.
+ * User-initiated (command palette), plugin-orchestrated iteration — this is a
+ * thin caller over the shared pipeline in `src/runExecutor.ts` (issue #154;
+ * before #188 the trigger executor was runExecutor's other caller, mirroring
+ * this module's model-routing and report-writing pattern). This is the
+ * foundational slice (#73) of the Tier-2 batch-loops feature (#66). Budget
+ * caps and true in-flight cancellation (#74) build on the extension points
+ * (`onProgress`, `BatchLoopHandle`) that #73 left in place for them. The plain
+ * per-file `Notice`s from #73/#74 have been replaced by a dedicated progress
+ * modal (`BatchLoopProgressModal`, #75) that shows live progress and elapsed
+ * budget for the duration of the run.
  *
  * Budget/turn-cap enforcement (this file, `budget.ts`) is batch-loop-only —
- * see the "Budget" note in `.docs/specs/run-executor.md` for why triggers
- * deliberately stay exempt.
+ * see the "Budget" note in `.docs/specs/run-executor.md` for why the
+ * now-removed trigger executor stayed exempt.
  */
 
 import {App, Notice, TFile, TFolder, normalizePath} from 'obsidian';
@@ -99,8 +100,8 @@ export function resolveScopeToFiles(app: App, paths: string[]): string[] {
 	const addFolder = (folder: TFolder): void => {
 		for (const child of folder.children) {
 			// Exclude the _synapse/ customization folder to avoid the loop
-			// processing agent/skill/report artifacts (same rationale as
-			// TriggerWatcher's feedback-loop guard).
+			// processing agent/skill/report artifacts (avoids a run rewriting
+			// its own customization artifacts).
 			if (child.path === synapseBase || child.path.startsWith(`${synapseBase}/`)) continue;
 
 			if (child instanceof TFolder) {

@@ -1,6 +1,73 @@
 import {App, normalizePath, TFile} from 'obsidian';
-import {matchGlob} from './triggers';
 import type {LocalTool} from './providerModels';
+
+/* eslint-disable no-irregular-whitespace -- the doc example below has a zero-width
+   space between `**` and `/notes` so `**​/` doesn't get parsed as the end of this
+   JSDoc comment (`*​/`); it's a deliberate escape, not stray whitespace. */
+/**
+ * Simple glob matcher for vault-relative paths, used by the `list_notes` tool.
+ *
+ * Supports:
+ * - `*` matches any characters except `/`
+ * - `**` matches any path segments (including nested)
+ * - Literal path prefixes (e.g. `inbox/` matches `inbox/note.md`)
+ * - Combination patterns like `inbox/*.md` or `projects/**​/notes/*.md`
+ */
+/* eslint-enable no-irregular-whitespace -- re-enable after the doc comment above */
+export function matchGlob(pattern: string, path: string): boolean {
+	// Normalize both sides: trim, forward slashes, no leading/trailing slash
+	const p = pattern.replace(/\\/g, '/').replace(/^\/|\/$/g, '');
+	const f = path.replace(/\\/g, '/').replace(/^\/|\/$/g, '');
+
+	// Empty pattern matches everything
+	if (!p) return true;
+
+	// Literal prefix match: pattern ending with `/` matches any file under that prefix
+	if (pattern.endsWith('/') && !p.includes('*')) {
+		return f.startsWith(p + '/') || f === p;
+	}
+
+	// Convert glob to regex
+	const regexStr = globToRegex(p);
+	return new RegExp('^' + regexStr + '$').test(f);
+}
+
+/**
+ * Convert a glob pattern string to a regex source string.
+ * Handles `**`, `*`, and escapes all other regex-special chars.
+ */
+function globToRegex(pattern: string): string {
+	let result = '';
+	let i = 0;
+	while (i < pattern.length) {
+		const ch = pattern[i]!;
+		if (ch === '*') {
+			if (pattern[i + 1] === '*') {
+				// `**` — match any path segments
+				// Consume trailing `/` if present (e.g. `**/`)
+				if (pattern[i + 2] === '/') {
+					result += '(?:.+/)?';
+					i += 3;
+				} else {
+					result += '.*';
+					i += 2;
+				}
+			} else {
+				// `*` — match within a single segment (no `/`)
+				result += '[^/]*';
+				i += 1;
+			}
+		} else if (ch === '?') {
+			result += '[^/]';
+			i += 1;
+		} else {
+			// Escape regex-special characters
+			result += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			i += 1;
+		}
+	}
+	return result;
+}
 
 export const vaultTools: LocalTool[] = [
 	{

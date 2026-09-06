@@ -8,7 +8,7 @@ This guide explains how to configure and use local models (such as `qwen3`, `gem
 
 When you select a local model provider preset (**Ollama** or **OpenAI-compatible** — the latter covers LM Studio, llama.cpp, vLLM, Foundry Local, and any other OpenAI-compatible endpoint) and the model supports tool usage, Synapse wraps the session queries in an autonomous **Reasoning & Action (ReAct) loop**.
 
-- **Stateless Execution**: Unlike Claude agentic sessions, the local ReAct loop runs statelessly per-query or per-trigger execution.
+- **Stateless Execution**: Unlike Claude agentic sessions, the local ReAct loop runs statelessly per-query or per-batch-loop-item execution.
 - **Loop Limits**: The loop executes up to **5 turns** (`maxTurns = 5`) to prevent runaway API requests.
 - **No streaming, any preset**: `executeLocalProviderQuery()` never streams the response — Ollama's request body sets `stream: false` explicitly, and every OpenAI-compatible preset (including Azure) omits the `stream` field entirely, which those APIs default to non-streaming. Obsidian's `requestUrl()` (used for every local-provider call) also has no server-sent-events support, so the full response always arrives as one parsed JSON payload regardless of provider.
 
@@ -110,5 +110,5 @@ The local ReAct loop is designed to fail gracefully without hanging Obsidian:
 
 ## 6. Suggested Reading
 
-- [AI Customization Guide](Customization.md) — How customization plugins, agents, and triggers are laid out.
+- [AI Customization Guide](Customization.md) — How customization plugins, agents, and skills are laid out.
 - [MCP Bridge Specification](https://github.com/NunoMotaRicardo/obsidian-synapse/blob/main/.docs/specs/mcp-bridge.md) — Detailed technical specs of the JSON-RPC handshake and process lifecycle.

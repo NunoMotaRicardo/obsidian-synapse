@@ -265,7 +265,7 @@ function sdkModelId(sdk: SDKModelInfo): string {
  * Only fields the SDK actually publishes are populated — no vision/tools/context-window
  * claims. The SDK's `ModelInfo` has no vision or tool-support field at all, so those stay
  * absent rather than guessed (consumers already treat absent as "assume supported", e.g.
- * `triggerExecutor.ts`'s `modelInfo?.supportsTools !== false`).
+ * `runExecutor.ts`'s `modelInfo?.supportsTools !== false`).
  */
 export function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	const efforts = sdk.supportedEffortLevels ?? [];
@@ -301,7 +301,7 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 /**
  * Default turn budget for agentic one-shot helpers (inlineChat).
  * High enough for multi-step tool use (search, read, summarize), low enough
- * to stop a runaway loop in unattended contexts (triggers, Telegram).
+ * to stop a runaway loop in unattended contexts (batch loops, Telegram).
  */
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
@@ -775,7 +775,7 @@ export class AgentService {
 	 *
 	 * Unlike `Session.send()`, tools are only offered here when the caller *also* supplies
 	 * `canUseTool` — editor actions are one-shot rather than an ongoing attended conversation, so
-	 * there is no "unattended by design" precedent (`triggerExecutor.ts`) to fall back to running
+	 * there is no "unattended by design" precedent (`runExecutor.ts`) to fall back to running
 	 * ungated; every tool call this method makes must go through the same approval path as the
 	 * chat panel's, never a silent auto-approve. A caller with `app` but no `canUseTool` gets no
 	 * tools rather than an ungated one (fails closed, not "always denied" — the tool is simply
@@ -814,7 +814,7 @@ export class AgentService {
 
 					// Vault tools for inlineChat's local-model branch (#150) — same
 					// `supportsTools !== false` capability gate as `Session.send()` (#138) and
-					// `triggerExecutor.ts`. See the method doc comment above for why reachability
+					// `runExecutor.ts`. See the method doc comment above for why reachability
 					// also requires `canUseTool` here, unlike `Session.send()`.
 					//
 					// MCP tools are deliberately NOT offered here either, for the same
@@ -1493,15 +1493,15 @@ export class Session {
 					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
 
 					// Vault tools for the chat panel's local-model branch (#138) — mirrors
-					// triggerExecutor.ts's `supportsTools = modelInfo?.supportsTools !== false`
+					// runExecutor.ts's `supportsTools = modelInfo?.supportsTools !== false`
 					// gate: a catalogue that explicitly says "no tools" is honored, but a model
 					// with no capability info (most OpenAI-compatible catalogues) defaults to
 					// allowed.
 					//
-					// MCP tools are deliberately NOT offered here, unlike triggerExecutor.ts.
-					// Triggers run once per file event, so starting/stopping an McpBridgeSession
-					// (spawn a stdio server, negotiate JSON-RPC, tear down) once per trigger is
-					// cheap relative to the trigger itself. Chat's local branch runs once per
+					// MCP tools are deliberately NOT offered here, unlike runExecutor.ts.
+					// Batch loops run once per note, so starting/stopping an McpBridgeSession
+					// (spawn a stdio server, negotiate JSON-RPC, tear down) once per run is
+					// cheap relative to the run itself. Chat's local branch runs once per
 					// user message in a potentially long back-and-forth conversation — paying
 					// that spawn/teardown cost on every single turn would make chat noticeably
 					// slower, and there is no session-scoped owner in `Session` to keep an MCP

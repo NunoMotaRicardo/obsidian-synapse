@@ -4,13 +4,11 @@ import {
 	parseFrontmatter,
 	ensureFolder,
 	writeAgent,
-	writeTrigger,
 	writeSkill,
 	modifyArtifact,
 	deleteArtifact,
 	scanVaultStructure,
 	scanAgents,
-	scanTriggers,
 	ensureImproveSynapseSkill,
 	IMPROVE_SYNAPSE_SKILL_NAME,
 } from '../src/configWriter';
@@ -250,7 +248,7 @@ describe('ensureFolder', () => {
 });
 
 // ---------------------------------------------------------------------------
-// writeAgent / writeTrigger / writeSkill — kebab naming, folder creation
+// writeAgent / writeSkill — kebab naming, folder creation
 // ---------------------------------------------------------------------------
 
 describe('writeAgent', () => {
@@ -290,66 +288,6 @@ describe('writeAgent', () => {
 	});
 });
 
-describe('writeTrigger', () => {
-	it('serializes the write field as the string "true" only when write === true', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeTrigger(app, '_synapse/triggers', {
-			name: 'My Trigger',
-			description: 'desc',
-			event: 'file-created',
-			body: 'do stuff',
-			write: true,
-			enabled: true,
-		});
-		const raw = await readVaultFile(app, path);
-		const {meta} = parseFrontmatter(raw);
-		expect(meta['write']).toBe('true');
-	});
-
-	it('serializes write: "frontmatter" verbatim', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeTrigger(app, '_synapse/triggers', {
-			name: 'FM Trigger',
-			description: 'desc',
-			event: 'file-created',
-			body: 'do stuff',
-			write: 'frontmatter',
-			enabled: true,
-		});
-		const raw = await readVaultFile(app, path);
-		const {meta} = parseFrontmatter(raw);
-		expect(meta['write']).toBe('frontmatter');
-	});
-
-	it('omits the write field entirely when write === false (the default)', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeTrigger(app, '_synapse/triggers', {
-			name: 'Default Trigger',
-			description: 'desc',
-			event: 'file-created',
-			body: 'do stuff',
-			write: false,
-			enabled: true,
-		});
-		const raw = await readVaultFile(app, path);
-		expect(raw).not.toContain('write:');
-	});
-
-	it('only serializes enabled: "false" when disabled (omits the field when enabled)', async () => {
-		const app = createMockApp() as unknown as App;
-		const enabledPath = await writeTrigger(app, '_synapse/triggers', {
-			name: 'Enabled', description: 'd', event: 'file-created', body: 'b', write: false, enabled: true,
-		});
-		const disabledPath = await writeTrigger(app, '_synapse/triggers', {
-			name: 'Disabled', description: 'd', event: 'file-created', body: 'b', write: false, enabled: false,
-		});
-		const enabledRaw = await readVaultFile(app, enabledPath);
-		const disabledRaw = await readVaultFile(app, disabledPath);
-		expect(enabledRaw).not.toContain('enabled:');
-		expect(disabledRaw).toContain('enabled: false');
-	});
-});
-
 describe('writeSkill', () => {
 	it('writes SKILL.md inside a kebab-case subfolder', async () => {
 		const app = createMockApp() as unknown as App;
@@ -368,22 +306,18 @@ describe('writeSkill', () => {
 
 describe('modifyArtifact', () => {
 	it('merges updates into existing frontmatter, preserving untouched fields', async () => {
-		// writeTrigger (unlike writeAgent) persists `name` in frontmatter, so it's
-		// a good vehicle for asserting an untouched field survives the merge.
 		const app = createMockApp() as unknown as App;
-		const path = await writeTrigger(app, '_synapse/triggers', {
+		const path = await writeAgent(app, '_synapse/agents', {
 			name: 'Merge Test',
 			description: 'original description',
-			event: 'file-created',
-			body: 'body text',
-			write: false,
-			enabled: true,
+			instructions: 'body text',
+			model: 'sonnet',
 		});
 		await modifyArtifact(app, path, {description: 'updated description'});
 		const raw = await readVaultFile(app, path);
 		const {meta, body} = parseFrontmatter(raw);
 		expect(meta['description']).toBe('updated description');
-		expect(meta['name']).toBe('Merge Test');
+		expect(meta['model']).toBe('sonnet');
 		expect(body.trim()).toBe('body text');
 	});
 
@@ -411,7 +345,7 @@ describe('modifyArtifact', () => {
 		const raw = await readVaultFile(app, path);
 		const {body} = parseFrontmatter(raw);
 		// buildMarkdown wraps the body in a leading/trailing newline; callers
-		// throughout the codebase (scanAgents/scanTriggers) always `.trim()` it.
+		// throughout the codebase (scanAgents) always `.trim()` it.
 		expect(body.trim()).toBe('new body');
 	});
 
@@ -474,7 +408,7 @@ describe('scanVaultStructure', () => {
 });
 
 // ---------------------------------------------------------------------------
-// scanAgents / scanTriggers — read side of the round trip
+// scanAgents — read side of the round trip
 // ---------------------------------------------------------------------------
 
 describe('scanAgents', () => {
@@ -503,38 +437,6 @@ describe('scanAgents', () => {
 			instructions: 'Body content.',
 			tools: ['Read', 'Write'],
 		});
-	});
-});
-
-describe('scanTriggers', () => {
-	it('skips a trigger with both event and schedule set (mutually exclusive)', async () => {
-		const app = createMockApp() as unknown as App;
-		seedFolder(app, '_synapse/triggers');
-		seedFile(app, '_synapse/triggers/bad.md', '---\nname: bad\nevent: file-created\nschedule: "0 9 * * *"\n---\nbody');
-		const triggers = await scanTriggers(app, '_synapse/triggers');
-		expect(triggers).toEqual([]);
-	});
-
-	it('skips a trigger with an invalid event value', async () => {
-		const app = createMockApp() as unknown as App;
-		seedFolder(app, '_synapse/triggers');
-		seedFile(app, '_synapse/triggers/bad.md', '---\nname: bad\nevent: file-teleported\n---\nbody');
-		const triggers = await scanTriggers(app, '_synapse/triggers');
-		expect(triggers).toEqual([]);
-	});
-
-	it('defaults enabled to true when omitted, and honors enabled: false', async () => {
-		const app = createMockApp() as unknown as App;
-		await writeTrigger(app, '_synapse/triggers', {
-			name: 'Default Enabled', description: 'd', event: 'file-created', body: 'b', write: false, enabled: true,
-		});
-		await writeTrigger(app, '_synapse/triggers', {
-			name: 'Explicitly Disabled', description: 'd', event: 'file-created', body: 'b', write: false, enabled: false,
-		});
-		const triggers = await scanTriggers(app, '_synapse/triggers');
-		const byName = Object.fromEntries(triggers.map(t => [t.name, t]));
-		expect(byName['Default Enabled']?.enabled).toBe(true);
-		expect(byName['Explicitly Disabled']?.enabled).toBe(false);
 	});
 });
 

@@ -26,9 +26,9 @@ Entry point: `launchBatchLoop(plugin: SynapsePlugin): void`, wired to the comman
 2. Resolves the picked paths (a mix of file paths, folder paths, or `'/'` for the whole vault)
    into a flat, de-duplicated, sorted list of vault-relative markdown file paths via
    `resolveScopeToFiles()`. Folders are expanded recursively; only `.md` files are included
-   (matches the convention `configWriter.ts`'s `scanAgents`/`scanTriggers` use). Files under
-   `_synapse/` are excluded from folder expansion (same feedback-loop rationale as
-   `TriggerWatcher` — see [bots-triggers.md](bots-triggers.md)) unless explicitly hand-picked.
+   (matches the convention `configWriter.ts`'s `scanAgents` uses). Files under
+   `_synapse/` are excluded from folder expansion (avoids a run rewriting its own
+   customization artifacts) unless explicitly hand-picked.
    An empty resolved scope (no markdown files, or nothing selected) cancels the run with a
    `Notice` rather than starting.
 3. Opens `UserInputModal` (`src/modals/userInputModal.ts`, reused as-is) prompting for the

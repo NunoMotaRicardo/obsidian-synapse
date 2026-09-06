@@ -4,8 +4,9 @@ Source: `src/settings.ts` — settings interface, defaults, and the settings tab
 
 `SynapseSettingTab.display()` (issue #149) only builds the tab bar/panel scaffolding and dispatches
 to one private `render*Panel(panel: HTMLElement)` method per tab — `renderClaudePanel`,
-`renderAgentsPanel`, `renderCapabilitiesPanel`, `renderToolsPanel`, `renderBotsPanel`,
-`renderTriggersPanel` — matching the shape `renderBotsPanel`/`renderTriggersPanel` already had.
+`renderAgentsPanel`, `renderCapabilitiesPanel`, `renderToolsPanel`, `renderBotsPanel` (the
+**Triggers** tab and its `renderTriggersPanel` were removed in #188 along with the rest of the
+trigger system).
 Per-tab state (e.g. `renderAuthFields`, `renderProviderFields`, `updateProviderDesc`,
 `updateModelDatalist`, the CLI-status renderer) lives as closures local to the owning
 `render*Panel` method, same pattern as `renderBotsPanel`'s `updateConnectButton` — none of it is
@@ -15,10 +16,9 @@ shared across tabs, so nothing needed to become a class-level field.
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
 - **Feature Map & Agents** (replaces legacy Models tab) — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
-- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/`, `_synapse/skills/`, and `_synapse/triggers/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `.docs/specs/chat-view.md` "Loop turn/cost thresholds" for enforcement details. All code uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly; see the `synapseFolder` removal note under Invariants (issue #148).
+- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/` and `_synapse/skills/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `.docs/specs/chat-view.md` "Loop turn/cost thresholds" for enforcement details. All code uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly; see the `synapseFolder` removal note under Invariants (issue #148).
 - **Tools** — tools approval mode (`ask` or `allow`), and MCP input variable management (with secure storage for password inputs).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
-- **Triggers** — list of all triggers found in `_synapse/triggers/`, with enable/disable toggle (writes `enabled` frontmatter field via `modifyArtifact`) and last-fired timestamp (from `triggerLastFired` in settings). Includes an **Open triggers folder** button that reveals the folder in the file explorer. Empty state shows a hint to create `.md` files in `_synapse/triggers/`.
 
 ## Feature Map & Agents (Issue #6)
 
@@ -306,9 +306,9 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
       change), not `false`. A bare OpenAI-shaped `{id, object, created, owned_by}` catalogue —
       what OpenAI's own `/v1/models` and Azure's `/openai/v1/models` both return, i.e. the common
       case for the two flagship presets, not an edge case — carries no information either way.
-      `triggerExecutor.ts`'s `const supportsTools = modelInfo?.supportsTools !== false;` treats
+      `runExecutor.ts`'s `const supportsTools = modelInfo?.supportsTools !== false;` treats
       anything but a hard `false` as "equip this model with vault tools and start the MCP bridge";
-      defaulting an *absent* field to `false` would silently drop every trigger's vault tools with
+      defaulting an *absent* field to `false` would silently drop every batch loop's vault tools with
       no error on exactly the backends most users are on. Ollama's own `false` default (above) is
       not a counter-example: it is backed by a per-model `/api/show` call — a *confirmed* answer —
       not an *absent* one, so the two states are not the same and must not produce the same flag.
@@ -324,7 +324,7 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
     non-over-matching, and a partial catalogue exercising per-field-independent fallback.
   - `supportsTools` isn't just UI gating — since issue #138 it also decides whether the chat
     panel's local-model branch (`Session.send()`, `agentService.ts`) offers `vaultTools` to a
-    model at all, using the same `modelInfo?.supportsTools !== false` test `triggerExecutor.ts`
+    model at all, using the same `modelInfo?.supportsTools !== false` test `runExecutor.ts`
     already used. See `.docs/specs/agent-service.md` "Vault tools and approval gate in the chat
     panel (issue #138)" for the tool-execution/approval side of this (not part of this module).
 
@@ -352,6 +352,17 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   `Object.assign` merge, riding along as a harmless untyped property. Locked by
   `test/settings.test.ts`'s `legacy settings key tolerance` block, extended for #148 to include
   `synapseFolder` alongside `contextTier`/`reasoningSummary`.
+- (issue #188) `triggerLastFired: Record<string, number>` was removed from `SynapseSettings` and
+  `DEFAULT_SETTINGS` along with the rest of the trigger system (`src/triggers.ts`,
+  `src/triggerExecutor.ts`, the **Triggers** settings tab). It is intentionally **not** re-added
+  to the type. Same no-op-migration treatment as `synapseFolder` above: an existing `data.json`
+  with a stale `triggerLastFired` object still loads without error via `main.ts#loadSettings`'s
+  `Object.assign({}, DEFAULT_SETTINGS, raw)` merge — the stale object just rides along as a
+  harmless untyped property, never read by anything, and is dropped the next time settings are
+  saved (`saveSettings()` only ever writes the current `SynapseSettings` shape, so the key
+  disappears from `data.json` on the vault's next save rather than needing an explicit strip
+  step). No `_synapse/triggers/*.md` files are touched by this removal — see
+  [config-writer.md](config-writer.md) for that vault-content invariant.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
 - All BYOK provider HTTP calls (Test, `onListModels`) go through `fetchProviderModels()`

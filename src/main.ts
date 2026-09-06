@@ -8,7 +8,6 @@ import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
-import {TriggerWatcher, TriggerScheduler} from './triggers';
 import {launchBatchLoop} from './batchLoopExecutor';
 import {debugTrace} from './debug';
 import type {EditorView} from '@codemirror/view';
@@ -20,8 +19,6 @@ export default class SynapsePlugin extends Plugin {
 	settings!: SynapseSettings;
 	agentService: AgentService | null = null;
 	telegramBot: TelegramBotService | null = null;
-	triggerWatcher: TriggerWatcher | null = null;
-	triggerScheduler: TriggerScheduler | null = null;
 
 	async onload() {
 		// Register custom Synapse icon in Obsidian's global icon registry
@@ -187,22 +184,6 @@ export default class SynapsePlugin extends Plugin {
 				);
 			}
 		}
-
-		// Start trigger watcher (vault event detection — independent of the agent service)
-		try {
-			this.triggerWatcher = new TriggerWatcher(this);
-			await this.triggerWatcher.start();
-		} catch (e) {
-			console.error('Synapse: failed to start trigger watcher', e);
-		}
-
-		// Start trigger scheduler (cron-based scheduling — independent of the agent service)
-		try {
-			this.triggerScheduler = new TriggerScheduler(this);
-			await this.triggerScheduler.start();
-		} catch (e) {
-			console.error('Synapse: failed to start trigger scheduler', e);
-		}
 	}
 
 	async initAgentService(): Promise<void> {
@@ -291,10 +272,6 @@ export default class SynapsePlugin extends Plugin {
 	}
 
 	onunload() {
-		if (this.triggerWatcher) {
-			this.triggerWatcher.stop();
-		}
-		this.triggerScheduler = null;
 		if (this.agentService) {
 			void this.agentService.stop();
 		}

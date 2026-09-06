@@ -319,9 +319,9 @@ describe('ollama /api/show discovery (#120)', () => {
 //
 // `supportsTools` specifically distinguishes "the catalogue said no" (authoritative — the real
 // new behaviour) from "the catalogue said nothing" (unknown — stays optimistic/`true`, unchanged
-// from before this change, since `triggerExecutor.ts` treats anything but a hard `false` as
+// from before this change, since `runExecutor.ts` treats anything but a hard `false` as
 // "equip this model with vault tools", and a bare OpenAI-shaped catalogue — what OpenAI's own
-// and Azure's `/v1/models` both return — must not silently strip every trigger's tools).
+// and Azure's `/v1/models` both return — must not silently strip every batch loop's tools).
 // ---------------------------------------------------------------------------
 describe('catalogue capability metadata (#129)', () => {
 	function mockModelsResponse(models: unknown[]): void {
@@ -376,7 +376,7 @@ describe('catalogue capability metadata (#129)', () => {
 		expect(model?.capabilities?.supportedReasoningEfforts).toBeUndefined();
 	});
 
-	it('defaults supportsTools to true (unknown, not unsupported) for a bare OpenAI-shaped catalogue with no capability fields at all — matches what OpenAI/Azure /v1/models actually return, and triggerExecutor.ts must keep equipping vault tools for it', async () => {
+	it('defaults supportsTools to true (unknown, not unsupported) for a bare OpenAI-shaped catalogue with no capability fields at all — matches what OpenAI/Azure /v1/models actually return, and runExecutor.ts must keep equipping vault tools for it', async () => {
 		mockModelsResponse([
 			{id: 'gpt-4o-mini', object: 'model', created: 1700000000, owned_by: 'openai'},
 			{id: 'gpt-3.5-turbo', object: 'model', created: 1700000000, owned_by: 'openai'},
@@ -395,7 +395,7 @@ describe('catalogue capability metadata (#129)', () => {
 		expect(gpt4oMini?.isVision).toBe(true);
 		expect(gpt35?.isVision).toBe(false);
 		// No metadata at all: tools default optimistically to true (unknown), preserving today's
-		// working behaviour instead of silently dropping every trigger's vault tools.
+		// working behaviour instead of silently dropping every batch loop's vault tools.
 		expect(gpt4oMini?.supportsTools).toBe(true);
 		expect(gpt35?.supportsTools).toBe(true);
 		// Tightened reasoning heuristic still recognizes the real o1/o3 family.

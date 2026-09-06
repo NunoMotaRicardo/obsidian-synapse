@@ -365,8 +365,8 @@ describe('runBatchLoop — cancellation', () => {
 describe('runBatchLoop — unattended tool approval policy (#151)', () => {
 	/**
 	 * Stand-in for a Claude turn that attempts one tool call (`Write`) via
-	 * `inlineChat`'s `canUseTool`, mirroring what the real SDK does — see the
-	 * matching helper in `test/triggerExecutor.test.ts`.
+	 * `inlineChat`'s `canUseTool`, mirroring what the real SDK does (historically
+	 * mirrored a matching helper in the now-removed `test/triggerExecutor.test.ts`).
 	 */
 	function makeToolCallingInlineChat(calls: InlineChatOptions[]): InlineChatImpl {
 		return async (options) => {
