@@ -13,6 +13,7 @@ import type {
 	ModelInfo,
 	ReasoningEffort,
 	SessionEvent,
+	SessionEvents,
 	TodoItem,
 	SlashCommand,
 	AgentInfo,
@@ -882,13 +883,11 @@ export class SynapseView extends ItemView {
 
 	/** Central event dispatcher — used by both onEvent (early) and typed handlers. */
 	handleSessionEvent(event: SessionEvent): void {
-		const type = event.type;
-		const data = event.data;
-		switch (type) {
+		switch (event.type) {
 			case 'session.init': {
 				// First message of a new session delivered its id — adopt it, name the
 				// session from the first prompt, and surface it in the sidebar.
-				const sessionId = data.sessionId as string;
+				const {sessionId} = event.data;
 				if (!sessionId) break;
 				this.currentSessionId = sessionId;
 				if (!this.sessionNames[sessionId] && this.pendingSessionLabel) {
@@ -915,50 +914,33 @@ export class SynapseView extends ItemView {
 				this.checkLoopThresholds();
 				break;
 			case 'assistant.reasoning_delta':
-				this.appendReasoningDelta(data.deltaContent as string);
-				break;
-			case 'assistant.reasoning':
-				if (typeof data.content === 'string' && data.content.length > 0) {
-					this.syncReasoningContent(data.content);
-				}
-				this.finalizeReasoning();
+				this.appendReasoningDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message_delta':
-				this.appendDelta(data.deltaContent as string);
+				this.appendDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message':
-				if (typeof data.reasoningText === 'string' && data.reasoningText.length > 0) {
-					this.syncReasoningContent(data.reasoningText);
-					if (!this.reasoningComplete) this.finalizeReasoning();
-				}
-				if (typeof data.content === 'string' && data.content !== this.streamingContent) {
-					this.streamingContent = data.content;
+				if (event.data.content !== this.streamingContent) {
+					this.streamingContent = event.data.content;
 					if (this.streamingBodyEl) {
 						void this.updateStreamingRender();
 					}
 				}
 				break;
 			case 'assistant.usage': {
-				const d = data as {inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; model?: string};
-				if (!this.turnUsage) {
-					this.turnUsage = {
-						inputTokens: d.inputTokens ?? 0,
-						outputTokens: d.outputTokens ?? 0,
-						cacheReadTokens: d.cacheReadTokens ?? 0,
-						cacheWriteTokens: d.cacheWriteTokens ?? 0,
-						model: d.model,
-					};
-				} else {
-					this.turnUsage.inputTokens += d.inputTokens ?? 0;
-					this.turnUsage.outputTokens += d.outputTokens ?? 0;
-					this.turnUsage.cacheReadTokens += d.cacheReadTokens ?? 0;
-					this.turnUsage.cacheWriteTokens += d.cacheWriteTokens ?? 0;
-					if (d.model) this.turnUsage.model = d.model;
-				}
 				// input + output only — `assistant.usage` (dispatched in agentService.ts)
-				// never carries cache token fields, so summing them here would always add 0
-				// while implying cache usage is tracked. See specs/chat-view.md.
-				this.runUsage.totalTokens += (d.inputTokens ?? 0) + (d.outputTokens ?? 0);
+				// never carries cache token fields (see `SessionEvents` in agentService.ts),
+				// so `turnUsage`'s cache fields stay at 0 rather than implying cache usage
+				// is tracked. See specs/chat-view.md.
+				const {inputTokens, outputTokens, model} = event.data;
+				if (!this.turnUsage) {
+					this.turnUsage = {inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, model};
+				} else {
+					this.turnUsage.inputTokens += inputTokens;
+					this.turnUsage.outputTokens += outputTokens;
+					if (model) this.turnUsage.model = model;
+				}
+				this.runUsage.totalTokens += inputTokens + outputTokens;
 				this.checkLoopThresholds();
 				break;
 			}
@@ -967,8 +949,8 @@ export class SynapseView extends ItemView {
 				// agentService.ts) — can't auto-cancel on it, but can flag it after
 				// the fact rather than silently ignoring an over-budget run (#88/AC-2).
 				const costThreshold = this.plugin.settings.loopCostThresholdUsd;
-				const totalCostUsd = (data as {totalCostUsd?: number}).totalCostUsd;
-				if (costThreshold > 0 && typeof totalCostUsd === 'number' && totalCostUsd >= costThreshold) {
+				const {totalCostUsd} = event.data;
+				if (costThreshold > 0 && totalCostUsd >= costThreshold) {
 					this.addInfoMessage(
 						`Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
 						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
@@ -988,7 +970,7 @@ export class SynapseView extends ItemView {
 				this.updateConfigUI();
 				break;
 			case 'session.error': {
-				const errMsg = (data as {message?: string; error?: string}).message ?? (data as {error?: string}).error ?? '';
+				const errMsg = event.data.error;
 				if (this.currentSession) {
 					try { void this.currentSession.abort(); } catch { /* ignore */ }
 				}
@@ -1002,9 +984,8 @@ export class SynapseView extends ItemView {
 				break;
 			}
 			case 'tool.execution_start': {
-				const toolName = data.toolName as string;
+				const {toolName, toolCallId, input: toolInput} = event.data;
 				this.turnToolsUsed.push(toolName);
-				const toolInput = (data as {input?: unknown}).input;
 				if (toolName === 'TodoWrite') {
 					const todos = parseTodoWritePayload(toolInput);
 					if (todos) {
@@ -1017,7 +998,7 @@ export class SynapseView extends ItemView {
 					if (parsed) {
 						// The id is only known once the result arrives — stash the fields keyed by
 						// toolCallId so tool.execution_complete can add the entry to taskPlan.
-						this.pendingTaskCreates.set(data.toolCallId as string, parsed);
+						this.pendingTaskCreates.set(toolCallId, parsed);
 						break;
 					}
 				} else if (toolName === 'TaskUpdate') {
@@ -1045,30 +1026,22 @@ export class SynapseView extends ItemView {
 						break;
 					}
 				}
-				this.addToolCallBlock(data.toolCallId as string, toolName, toolInput);
+				this.addToolCallBlock(toolCallId, toolName, toolInput);
 				break;
 			}
 			case 'tool.execution_complete': {
-				const toolError = data.error as {message: string} | undefined;
-				const toolName = data.toolName as string | undefined;
-				const toolCallId = data.toolCallId as string;
+				const {toolCallId, toolName, success, result, error: toolError} = event.data;
 				if (toolName === 'TaskCreate' && this.pendingTaskCreates.has(toolCallId)) {
 					const pending = this.pendingTaskCreates.get(toolCallId)!;
 					this.pendingTaskCreates.delete(toolCallId);
-					const resultText = (data.result as {content?: string} | undefined)?.content;
-					const taskId = !toolError ? parseTaskCreateResultId(resultText) : null;
+					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
 					if (taskId) {
 						this.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
 						this.renderTaskPanel([...this.taskPlan.values()]);
 					}
 					break;
 				}
-				this.completeToolCallBlock(
-					toolCallId,
-					data.success as boolean,
-					data.result as {content?: string; detailedContent?: string} | undefined,
-					toolError,
-				);
+				this.completeToolCallBlock(toolCallId, success, result, toolError);
 				// Surface a clear, actionable message for transient-looking write/edit
 				// failures (e.g. a file locked by sync or open elsewhere) instead of
 				// leaving the user to dig the raw error out of the collapsed tool block.
@@ -1079,7 +1052,7 @@ export class SynapseView extends ItemView {
 				break;
 			}
 			case 'session.compaction_complete':
-				this.addCompactionCompleteBlock(data);
+				this.addCompactionCompleteBlock(event.data);
 				break;
 			case 'session.metadata':
 				// Capture-and-cache refresh (issue #130) — Session already holds the
@@ -1129,22 +1102,28 @@ export class SynapseView extends ItemView {
 		// `earlyEventBuffer` is swapped for `EMPTY_EVENT_BUFFER` above it drops everything it
 		// receives. (A previous version of this comment claimed onEvent delegated directly;
 		// it does not, and #130's `session.metadata` was dead on arrival because of it.)
-		// Add every new SessionEvent type here.
+		// Add every new SessionEvents key here.
+		//
+		// `session.on()` hands the handler bare `data`, typed per key — `forward()` re-wraps it
+		// into the `{type, data}` shape `handleSessionEvent()` (shared with the early-buffer
+		// replay above) switches on, without any cast at the call sites below.
+		const forward = <K extends keyof SessionEvents>(type: K) => (data: SessionEvents[K]) => {
+			this.handleSessionEvent({type, data} as SessionEvent);
+		};
 		this.eventUnsubscribers.push(
-			session.on('session.init', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.turn_start', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.reasoning_delta', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.reasoning', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.message_delta', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.message', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.usage', (event) => { this.handleSessionEvent(event); }),
-			session.on('assistant.run_result', (event) => { this.handleSessionEvent(event); }),
-			session.on('session.idle', (event) => { this.handleSessionEvent(event); }),
-			session.on('session.error', (event) => { this.handleSessionEvent(event); }),
-			session.on('tool.execution_start', (event) => { this.handleSessionEvent(event); }),
-			session.on('tool.execution_complete', (event) => { this.handleSessionEvent(event); }),
-			session.on('session.compaction_complete', (event) => { this.handleSessionEvent(event); }),
-			session.on('session.metadata', (event) => { this.handleSessionEvent(event); }),
+			session.on('session.init', forward('session.init')),
+			session.on('assistant.turn_start', forward('assistant.turn_start')),
+			session.on('assistant.reasoning_delta', forward('assistant.reasoning_delta')),
+			session.on('assistant.message_delta', forward('assistant.message_delta')),
+			session.on('assistant.message', forward('assistant.message')),
+			session.on('assistant.usage', forward('assistant.usage')),
+			session.on('assistant.run_result', forward('assistant.run_result')),
+			session.on('session.idle', forward('session.idle')),
+			session.on('session.error', forward('session.error')),
+			session.on('tool.execution_start', forward('tool.execution_start')),
+			session.on('tool.execution_complete', forward('tool.execution_complete')),
+			session.on('session.compaction_complete', forward('session.compaction_complete')),
+			session.on('session.metadata', forward('session.metadata')),
 		);
 	}
 

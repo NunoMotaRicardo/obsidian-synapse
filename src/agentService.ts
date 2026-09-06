@@ -1032,11 +1032,58 @@ export class AgentService {
 
 // ── Session event types ─────────────────────────────────────────
 
-/** A simplified session event that bridges Agent SDK messages to the view's event system. */
-export interface SessionEvent {
-	type: string;
-	data: Record<string, unknown>;
+/**
+ * Typed event map for the session-event seam (`Session.dispatch()` / `Session.on()` /
+ * `AgentService.createSession()`'s `onEvent` callback). Keys are the exact string literals
+ * `Session.convertToSessionEvent()` and `Session.send()` dispatch; each payload type is derived
+ * from what the producer actually sends and what the (sole) consumer(s) actually read — see
+ * "Session event map" in `.docs/specs/agent-service.md`. Adding a new dispatched event, or a new
+ * field a handler reads, means adding it here first: `dispatch`/`on` are generic over this map,
+ * so an unlisted event name or a payload that doesn't match is a compile error in both
+ * directions (AC-1/AC-2 of #179).
+ */
+export interface SessionEvents {
+	/** First message of a (re)established session delivered its id. */
+	'session.init': {sessionId: string};
+	/** Capture-and-cache refresh of context usage / supported commands / supported agents (#130). */
+	'session.metadata': QueryMetadataCache;
+	/** The stream for the current turn ended (success or already-reported error). */
+	'session.idle': Record<string, never>;
+	'session.error': {error: string};
+	'session.compaction_complete': {
+		preCompactionTokens?: number;
+		postCompactionTokens?: number;
+		durationMs?: number;
+		trigger?: 'manual' | 'auto';
+	};
+	/** A new turn started (one per `assistant` SDKMessage, i.e. possibly more than once per send()). */
+	'assistant.turn_start': Record<string, never>;
+	'assistant.message_delta': {content: string; deltaContent: string; ttftMs?: number};
+	'assistant.reasoning_delta': {content: string; deltaContent: string; ttftMs?: number};
+	/** Reconciliation dispatch of the turn's full accumulated text. */
+	'assistant.message': {content: string};
+	'assistant.usage': {inputTokens: number; outputTokens: number; model: string};
+	/** Dispatched once per run when the terminal SDKResultMessage reports a dollar cost (#88). */
+	'assistant.run_result': {totalCostUsd: number; numTurns: number};
+	'tool.execution_start': {toolName: string; toolCallId: string; input: unknown};
+	'tool.execution_complete': {
+		toolCallId: string;
+		toolName?: string;
+		success: boolean;
+		result: {content: string};
+		error?: {message: string};
+	};
 }
+
+/**
+ * Discriminated union of every `{type, data}` pair `SessionEvents` describes — the shape
+ * `AgentService.createSession()`'s single, type-erased `onEvent` callback receives (it can't be
+ * generic over one event at a time, since it's called for all of them), and the shape buffered
+ * by `SynapseView`'s `earlyEventBuffer`/replayed through `handleSessionEvent()`. Handlers
+ * registered via `Session.on()` do not see this wrapper — they get `data` alone, typed per event
+ * (AC-2).
+ */
+export type SessionEvent = {[K in keyof SessionEvents]: {type: K; data: SessionEvents[K]}}[keyof SessionEvents];
 
 // ── Plan/task tracking (TodoWrite / TaskCreate+TaskUpdate) ───────
 
@@ -1273,7 +1320,7 @@ export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
 
 // ── Session wrapper ─────────────────────────────────────────────
 
-type SessionEventHandler = (event: SessionEvent) => void;
+type SessionEventHandler<K extends keyof SessionEvents = keyof SessionEvents> = (data: SessionEvents[K]) => void;
 
 /**
  * Session wraps the Agent SDK's query() to provide a stateful session API
@@ -1307,7 +1354,12 @@ export class Session {
 	 * `.docs/decisions/2026-09-04-persistent-query-cache.md`.
 	 */
 	private queryMetadata: QueryMetadataCache = {};
-	private handlers: Map<string, SessionEventHandler[]> = new Map();
+	/**
+	 * Stored type-erased: a `Map` keyed by every possible `SessionEvents` key can't itself carry
+	 * a different handler-value type per key. Type-safety is enforced at the `on()`/`dispatch()`
+	 * boundary instead, where the generic `K` ties a given call's event name to its payload type.
+	 */
+	private handlers: Map<keyof SessionEvents, SessionEventHandler[]> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
 	private pendingToolCalls: Map<string, string> = new Map();
@@ -1375,9 +1427,11 @@ export class Session {
 	}
 
 	/**
-	 * Register an event handler. Returns an unsubscribe function.
+	 * Register an event handler for one `SessionEvents` key. Returns an unsubscribe function.
+	 * Partial registration is correct: a call site (e.g. `registerBackgroundEvents()`) is free to
+	 * subscribe to a subset of `SessionEvents` — this is not exhaustiveness-checked, by design.
 	 */
-	on(eventType: string, handler: SessionEventHandler): () => void {
+	on<K extends keyof SessionEvents>(eventType: K, handler: (data: SessionEvents[K]) => void): () => void {
 		const list = this.handlers.get(eventType) ?? [];
 		list.push(handler);
 		this.handlers.set(eventType, list);
@@ -1435,7 +1489,7 @@ export class Session {
 				};
 
 				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig()) {
-					this.dispatch({type: 'assistant.turn_start', data: {}});
+					this.dispatch('assistant.turn_start', {});
 					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
 
 					// Vault tools for the chat panel's local-model branch (#138) — mirrors
@@ -1485,17 +1539,11 @@ export class Session {
 					});
 					if (ctrl.signal.aborted) return;
 					if (res.ok) {
-						this.dispatch({
-							type: 'assistant.message_delta',
-							data: {content: res.content, deltaContent: res.content},
-						});
-						this.dispatch({
-							type: 'assistant.message',
-							data: {content: res.content},
-						});
-						this.dispatch({type: 'session.idle', data: {}});
+						this.dispatch('assistant.message_delta', {content: res.content, deltaContent: res.content});
+						this.dispatch('assistant.message', {content: res.content});
+						this.dispatch('session.idle', {});
 					} else {
-						this.dispatch({type: 'session.error', data: {error: res.error}});
+						this.dispatch('session.error', {error: res.error});
 						throw new Error(res.error);
 					}
 					return;
@@ -1518,15 +1566,14 @@ export class Session {
 							const isNew = this._sessionId !== sdkMsg.session_id;
 							this._sessionId = sdkMsg.session_id;
 							if (isNew) {
-								this.dispatch({type: 'session.init', data: {sessionId: this._sessionId}});
+								this.dispatch('session.init', {sessionId: this._sessionId});
 							}
 						}
 
-						// Convert SDKMessage to SessionEvent and dispatch
-						const event = this.convertToSessionEvent(sdkMsg);
-						if (event) {
-							this.dispatch(event);
-						}
+						// Convert SDKMessage to a SessionEvent, dispatching it directly (see
+						// convertToSessionEvent()'s doc comment for why it dispatches rather than
+						// returns).
+						this.convertToSessionEvent(sdkMsg);
 
 						// Capture-and-cache (issue #130): refresh context usage / supported
 						// commands / supported agents while the process is still known to be
@@ -1540,7 +1587,7 @@ export class Session {
 								this.queryMetadata,
 								(message) => debugTrace(message),
 							);
-							this.dispatch({type: 'session.metadata', data: {...this.queryMetadata}});
+							this.dispatch('session.metadata', {...this.queryMetadata});
 						}
 					}
 				} finally {
@@ -1548,7 +1595,7 @@ export class Session {
 				}
 
 				// Dispatch session.idle when the stream ends
-				this.dispatch({type: 'session.idle', data: {}});
+				this.dispatch('session.idle', {});
 			}, {abortController: controller, timeoutMs: options.timeoutMs});
 		} catch (e) {
 			if (e instanceof Error && e.name === 'AbortError') {
@@ -1561,7 +1608,7 @@ export class Session {
 				// failure to report (see the field comment on userInterruptRequested).
 				return;
 			}
-			this.dispatch({type: 'session.error', data: {error: e instanceof Error ? e.message : String(e)}});
+			this.dispatch('session.error', {error: e instanceof Error ? e.message : String(e)});
 			throw e;
 		} finally {
 			this.abortController = null;
@@ -1614,28 +1661,37 @@ export class Session {
 		this.onEventCallback = null;
 	}
 
-	private dispatch(event: SessionEvent): void {
-		// Fire onEvent callback (from buildSessionConfig)
+	/**
+	 * Dispatch one `SessionEvents` event. Generic over `K` so an unknown event name, or a
+	 * `data` payload that doesn't match that event's declared shape, is a build error
+	 * (AC-1 of #179) — see `SessionEvents`' doc comment.
+	 */
+	private dispatch<K extends keyof SessionEvents>(type: K, data: SessionEvents[K]): void {
+		// Fire onEvent callback (from buildSessionConfig) — type-erased by design (see
+		// `SessionEvent`'s doc comment), so it gets the wrapped {type, data} shape.
 		if (this.onEventCallback) {
-			this.onEventCallback(event);
+			this.onEventCallback({type, data} as SessionEvent);
 		}
 		// Fire typed handlers
-		const handlers = this.handlers.get(event.type);
+		const handlers = this.handlers.get(type);
 		if (handlers) {
-			for (const h of handlers) h(event);
+			for (const h of handlers) h(data);
 		}
 	}
 
 	/**
-	 * Convert an SDKMessage into a SessionEvent compatible with the view's
-	 * event system. Returns null for messages that don't map to events.
+	 * Convert an SDKMessage into `SessionEvents` dispatches. Dispatches directly (rather than
+	 * returning an event for the caller to dispatch) so every case can use the generic,
+	 * per-event-typed `dispatch<K>()` without a caller-side union type that would defeat that
+	 * typing — see `SessionEvent`'s doc comment for why the wrapped `{type, data}` shape is kept
+	 * only for the type-erased `onEventCallback` path.
 	 */
-	private convertToSessionEvent(msg: SDKMessage): SessionEvent | null {
+	private convertToSessionEvent(msg: SDKMessage): void {
 		switch (msg.type) {
 			case 'assistant': {
 				const assistantMsg = msg;
 				// Emit turn_start
-				this.dispatch({type: 'assistant.turn_start', data: {}});
+				this.dispatch('assistant.turn_start', {});
 				// Emit text content as message events. When partial streaming is on, the
 				// real incremental deltas already went out from the 'stream_event' case as
 				// they arrived — redispatching the now-complete block here would render the
@@ -1645,44 +1701,32 @@ export class Session {
 				for (const block of assistantMsg.message.content) {
 					if (block.type === 'text') {
 						if (!this.partialMessagesEnabled) {
-							this.dispatch({
-								type: 'assistant.message_delta',
-								data: {content: block.text, deltaContent: block.text},
-							});
+							this.dispatch('assistant.message_delta', {content: block.text, deltaContent: block.text});
 						}
 					} else if (block.type === 'thinking') {
 						if (!this.partialMessagesEnabled) {
-							this.dispatch({
-								type: 'assistant.reasoning_delta',
-								data: {content: (block as {thinking: string}).thinking, deltaContent: (block as {thinking: string}).thinking},
-							});
+							const thinking = (block as {thinking: string}).thinking;
+							this.dispatch('assistant.reasoning_delta', {content: thinking, deltaContent: thinking});
 						}
 					} else if (block.type === 'tool_use') {
 						const toolBlock = block as {id: string; name: string; input: unknown};
 						this.pendingToolCalls.set(toolBlock.id, toolBlock.name);
-						this.dispatch({
-							type: 'tool.execution_start',
-							data: {toolName: toolBlock.name, toolCallId: toolBlock.id, input: toolBlock.input},
-						});
+						this.dispatch('tool.execution_start', {toolName: toolBlock.name, toolCallId: toolBlock.id, input: toolBlock.input});
 					}
 				}
 				// Emit usage if available
 				if (assistantMsg.message.usage) {
-					this.dispatch({
-						type: 'assistant.usage',
-						data: {
-							inputTokens: assistantMsg.message.usage.input_tokens,
-							outputTokens: assistantMsg.message.usage.output_tokens,
-							model: assistantMsg.message.model,
-						},
+					this.dispatch('assistant.usage', {
+						inputTokens: assistantMsg.message.usage.input_tokens,
+						outputTokens: assistantMsg.message.usage.output_tokens,
+						model: assistantMsg.message.model,
 					});
 				}
 				// Dispatch the full message event directly (not returned, to avoid double-dispatch)
-				this.dispatch({
-					type: 'assistant.message',
-					data: {content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join('')},
+				this.dispatch('assistant.message', {
+					content: assistantMsg.message.content.filter(b => b.type === 'text').map(b => (b as {text: string}).text).join(''),
 				});
-				return null;
+				return;
 			}
 			case 'stream_event': {
 				// Genuine incremental streaming (issue #103) — only emitted when the session
@@ -1698,18 +1742,12 @@ export class Session {
 					// dedicated event type for a single optional field.
 					const ttft = typeof partial.ttft_ms === 'number' ? {ttftMs: partial.ttft_ms} : {};
 					if (delta.type === 'text_delta') {
-						this.dispatch({
-							type: 'assistant.message_delta',
-							data: {content: delta.text, deltaContent: delta.text, ...ttft},
-						});
+						this.dispatch('assistant.message_delta', {content: delta.text, deltaContent: delta.text, ...ttft});
 					} else if (delta.type === 'thinking_delta') {
-						this.dispatch({
-							type: 'assistant.reasoning_delta',
-							data: {content: delta.thinking, deltaContent: delta.thinking, ...ttft},
-						});
+						this.dispatch('assistant.reasoning_delta', {content: delta.thinking, deltaContent: delta.thinking, ...ttft});
 					}
 				}
-				return null;
+				return;
 			}
 			case 'user': {
 				// Tool results arrive as `tool_result` content blocks on `user` messages.
@@ -1729,19 +1767,16 @@ export class Session {
 							: Array.isArray(b.content)
 								? b.content.filter(c => c.type === 'text').map(c => c.text ?? '').join('')
 								: '';
-						this.dispatch({
-							type: 'tool.execution_complete',
-							data: {
-								toolCallId,
-								toolName,
-								success: !b.is_error,
-								result: {content: resultText},
-								...(b.is_error ? {error: {message: resultText || 'Tool execution failed'}} : {}),
-							},
+						this.dispatch('tool.execution_complete', {
+							toolCallId,
+							toolName,
+							success: !b.is_error,
+							result: {content: resultText},
+							...(b.is_error ? {error: {message: resultText || 'Tool execution failed'}} : {}),
 						});
 					}
 				}
-				return null;
+				return;
 			}
 			case 'result': {
 				const resultMsg = msg;
@@ -1752,10 +1787,7 @@ export class Session {
 				// Dispatched for both success and error results, since a failed/aborted
 				// run can still have accrued cost.
 				if (typeof resultMsg.total_cost_usd === 'number') {
-					this.dispatch({
-						type: 'assistant.run_result',
-						data: {totalCostUsd: resultMsg.total_cost_usd, numTurns: resultMsg.num_turns},
-					});
+					this.dispatch('assistant.run_result', {totalCostUsd: resultMsg.total_cost_usd, numTurns: resultMsg.num_turns});
 				}
 				if (resultMsg.is_error) {
 					const raw = (resultMsg as {result?: string}).result;
@@ -1765,29 +1797,26 @@ export class Session {
 						: subtype === 'error_max_turns'
 							? 'The agent hit its turn limit before finishing. Try again or narrow the request.'
 							: `Query failed${subtype ? ` (${subtype})` : ''}.`;
-					return {type: 'session.error', data: {error}};
+					this.dispatch('session.error', {error});
 				}
-				return null; // session.idle is dispatched after the loop
+				return; // session.idle is dispatched after the loop
 			}
 			case 'system': {
 				const subtype = (msg as {subtype?: string}).subtype;
 				if (subtype === 'compact_boundary') {
 					const compactMsg = msg as SDKCompactBoundaryMessage;
 					const meta = compactMsg.compact_metadata;
-					return {
-						type: 'session.compaction_complete',
-						data: {
-							preCompactionTokens: meta?.pre_tokens,
-							postCompactionTokens: meta?.post_tokens,
-							durationMs: meta?.duration_ms,
-							trigger: meta?.trigger,
-						},
-					};
+					this.dispatch('session.compaction_complete', {
+						preCompactionTokens: meta?.pre_tokens,
+						postCompactionTokens: meta?.post_tokens,
+						durationMs: meta?.duration_ms,
+						trigger: meta?.trigger,
+					});
 				}
-				return null;
+				return;
 			}
 			default:
-				return null;
+				return;
 		}
 	}
 }

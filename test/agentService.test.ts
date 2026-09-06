@@ -340,9 +340,16 @@ describe('AgentService#resolveValidModel — resolvedModel matching', () => {
 // ---------------------------------------------------------------------------
 
 describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
-	function convert(msg: unknown): unknown {
+	// `convertToSessionEvent()` dispatches `session.compaction_complete` directly (like every
+	// other case in its switch) rather than returning it — see its doc comment in
+	// agentService.ts. Capture the dispatched payload via `session.on()` instead of the method's
+	// (void) return value.
+	function convert(msg: unknown): {data: unknown} | undefined {
 		const session = new Session(new AgentService(), {});
-		return (session as unknown as {convertToSessionEvent: (m: unknown) => unknown}).convertToSessionEvent(msg);
+		let captured: {data: unknown} | undefined;
+		session.on('session.compaction_complete', (data) => { captured = {data}; });
+		(session as unknown as {convertToSessionEvent: (m: unknown) => void}).convertToSessionEvent(msg);
+		return captured;
 	}
 
 	it('maps a compact_boundary message with full metadata into a populated session.compaction_complete payload', () => {
@@ -360,7 +367,6 @@ describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
 		});
 
 		expect(event).toEqual({
-			type: 'session.compaction_complete',
 			data: {
 				preCompactionTokens: 150000,
 				postCompactionTokens: 45000,
@@ -383,7 +389,6 @@ describe('Session#convertToSessionEvent — compact_boundary mapping', () => {
 		});
 
 		expect(event).toEqual({
-			type: 'session.compaction_complete',
 			data: {
 				preCompactionTokens: 100000,
 				postCompactionTokens: undefined,

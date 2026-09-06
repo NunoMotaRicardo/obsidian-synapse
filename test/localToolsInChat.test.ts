@@ -1,6 +1,6 @@
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {requestUrl} from 'obsidian';
-import {AgentService, Session, type SessionConfig, type SessionEvent, type PermissionResult} from '../src/agentService';
+import {AgentService, Session, type SessionConfig, type PermissionResult} from '../src/agentService';
 import {executeLocalProviderQuery, isLoopbackEndpoint, type LocalTool} from '../src/providerModels';
 
 // ---------------------------------------------------------------------------
@@ -236,10 +236,13 @@ describe('Session#send — local-model tool wiring', () => {
 		return new AgentService({providerConfig: {preset: 'openai', baseUrl: 'http://localhost:9999'}});
 	}
 
-	function collectMessages(session: Session): SessionEvent[] {
-		const events: SessionEvent[] = [];
-		session.on('assistant.message', (e) => events.push(e));
-		session.on('session.error', (e) => events.push(e));
+	// Only registers handlers to exercise Session#send()'s dispatch path — the
+	// per-event-typed `data` payloads aren't asserted on here, so a single
+	// loosely-typed collection array is enough.
+	function collectMessages(session: Session): unknown[] {
+		const events: unknown[] = [];
+		session.on('assistant.message', (data) => events.push(data));
+		session.on('session.error', (data) => events.push(data));
 		return events;
 	}
 
