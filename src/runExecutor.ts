@@ -1,32 +1,33 @@
 /**
- * Shared run pipeline for the two "run a prompt against a file, then persist
- * the result" surfaces: the trigger executor (`triggerExecutor.ts`) and the
- * batch loop executor (`batchLoopExecutor.ts`).
+ * Run pipeline for "run a prompt against a file, then persist the result":
+ * substitute template variables, route Claude vs. a local model, run, apply
+ * a write mode, append a report entry. `batchLoopExecutor.ts` is its one
+ * caller and is a thin one — it supplies what's caller-specific: which
+ * file(s) to run over, where the prompt body comes from, how a report block
+ * is formatted, and budget/cancellation/progress orchestration across many
+ * items. Everything else lives here.
  *
- * Both independently implemented the same five steps — substitute template
- * variables, route Claude vs. a local model, run, apply a write mode, append
- * a report entry — before this extraction (issue #154). This module owns
- * that pipeline; `triggerExecutor.ts`/`batchLoopExecutor.ts` are thin callers
- * that supply what differs: which file(s) to run over, where the prompt body
- * comes from, and how a report block is formatted. Everything outside the
- * per-item pipeline (trigger's `triggerLastFired` stamp, batch loop's
- * budget/cancellation/progress orchestration across many items) stays in the
- * respective caller — it isn't part of what was duplicated.
+ * This module originally also served the trigger executor
+ * (`triggerExecutor.ts`, extracted alongside the batch loop executor in
+ * issue #154). Triggers were removed in issue #188; issue #189 then
+ * collapsed the trigger-shaped generality this pipeline carried while it had
+ * two callers (a `surface` union, a per-item tool-approval override, a
+ * `{{files}}` template alias — see `.docs/specs/run-executor.md`'s "Current
+ * status" for the full history).
  *
- * `runItem()` deliberately does not catch execution errors: the two callers
- * need different failure handling (`triggerExecutor.ts` always converts a
- * failure into a report entry; `batchLoopExecutor.ts` must first distinguish
- * a genuine per-file failure from a mid-flight cancellation), so the error is
- * left to propagate and each caller decides.
+ * `runItem()` deliberately does not catch execution errors: `batchLoopExecutor.ts`
+ * must distinguish a genuine per-file failure from a mid-flight cancellation
+ * (`handle.stop()` aborting the in-flight query), so the error is left to
+ * propagate and the caller decides.
  *
  * Model: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small,
  * focused extractions of exactly the logic that was duplicated, not a new
  * abstraction layer on top of it.
  *
- * Unattended tool-approval policy (issue #151): this is also the one place that maps
- * `settings.toolApproval` to what the Claude branch (`executeWithClaude()`) hands the SDK, so
- * triggers and batch loops agree on what "ask" and "allow" mean. See `resolveToolApprovalPolicy()`
- * and the "Tool approval policy" section of `.docs/specs/run-executor.md`.
+ * Unattended tool-approval policy (issue #151): this is also the place that maps
+ * `settings.toolApproval` to what the Claude branch (`executeWithClaude()`) hands the SDK. See
+ * `resolveToolApprovalPolicy()` and the "Tool approval policy" section of
+ * `.docs/specs/run-executor.md`.
  */
 
 import {App, TFile, normalizePath} from 'obsidian';
@@ -44,24 +45,11 @@ import {lockManager, LockAcquisitionError} from './lockManager';
 // ---------------------------------------------------------------------------
 
 /**
- * Replace template variables in a prompt/instruction body before execution.
- *
- * - `{{file}}` — vault-relative path of the file this run concerns.
- * - `{{files}}` — alias for `{{file}}`, trigger-only (`aliasFiles: true`).
- *   Scheduled triggers with a `path` glob fan out to one `executeTrigger()`
- *   call per matched file (see `TriggerScheduler.fire()` in `triggers.ts`),
- *   so each execution only ever sees a single file — there is no list to
- *   substitute. Batch loops don't request this alias: their instruction
- *   already only ever documented `{{file}}` (#73), and substituting a second
- *   pattern there would be a silent behavior change for any instruction that
- *   happens to contain the literal text `{{files}}`.
+ * Replace `{{file}}` in a prompt/instruction body with the vault-relative
+ * path of the file this run concerns.
  */
-export function substituteTemplates(body: string, filePath: string, options: {aliasFiles?: boolean} = {}): string {
-	let result = body.replace(/\{\{file\}\}/g, filePath);
-	if (options.aliasFiles) {
-		result = result.replace(/\{\{files\}\}/g, filePath);
-	}
-	return result;
+function substituteTemplates(body: string, filePath: string): string {
+	return body.replace(/\{\{file\}\}/g, filePath);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,12 +75,10 @@ export interface ReportTarget {
  *
  * The whole read-modify-write is wrapped in `lockManager.withLock` so a
  * report append can't interleave with another plugin-initiated write to the
- * same report file (another trigger firing for the same name/day, or a batch
- * loop). Does not catch `LockAcquisitionError` — that decision is caller
- * -specific: `triggerExecutor.ts` degrades gracefully (warns and drops the
- * entry) so a wedged holder can't block `executeTrigger()` forever;
- * `batchLoopExecutor.ts` lets it propagate to the per-file loop body, which
- * already has to catch and report per-file failures.
+ * same report file (e.g. two concurrent batch loops). Does not catch
+ * `LockAcquisitionError` — `batchLoopExecutor.ts` lets it propagate to the
+ * per-file loop body, which already has to catch and report per-file
+ * failures.
  */
 export async function appendReportBlock(app: App, target: ReportTarget, block: string): Promise<void> {
 	await lockManager.withLock(target.path, async () => {
@@ -123,23 +109,15 @@ export async function appendReportBlock(app: App, target: ReportTarget, block: s
  * denies — there is no human in an unattended run to ask, so "ask" can only
  * mean "deny" (see `.docs/specs/run-executor.md`).
  */
-export type ToolApprovalPolicy = 'allow' | 'ask';
+type ToolApprovalPolicy = 'allow' | 'ask';
 
-/**
- * Resolve the effective policy for one run: `overrideAllow` (a trigger's
- * `toolApproval: allow` frontmatter opt-in) wins over a global `'ask'`
- * setting; there is no override in the other direction (a trigger cannot
- * force `'ask'` when the global setting is already `'allow'`). Batch loops
- * never pass `overrideAllow` — they have no per-item config to opt in from —
- * so they always follow the global setting directly.
- */
-export function resolveToolApprovalPolicy(plugin: SynapsePlugin, overrideAllow?: boolean): ToolApprovalPolicy {
-	if (plugin.settings.toolApproval === 'allow' || overrideAllow) return 'allow';
-	return 'ask';
+/** Resolve the effective policy for one run from the global `settings.toolApproval` setting. */
+function resolveToolApprovalPolicy(plugin: SynapsePlugin): ToolApprovalPolicy {
+	return plugin.settings.toolApproval === 'allow' ? 'allow' : 'ask';
 }
 
 /** One tool call denied by the `'ask'` policy's `canUseTool`, recorded for the run's report. */
-export interface ToolRefusal {
+interface ToolRefusal {
 	toolName: string;
 }
 
@@ -147,20 +125,14 @@ export interface ToolRefusal {
  * Build the report block for a run whose `'ask'`-policy `canUseTool` denied one or more tool
  * calls — this is what makes AC "silence is no longer a possible outcome" true: a refused tool
  * call always lands in the report file, not just a console warning nobody sees.
- *
- * `surface` tailors the escape-hatch hint: triggers can opt in per-trigger via frontmatter; batch
- * loops have no per-run config surface to opt in from, so only the global setting is mentioned.
  */
-export function formatToolRefusalsReportBlock(refusals: ToolRefusal[], surface: 'trigger' | 'batch-loop'): string {
+function formatToolRefusalsReportBlock(refusals: ToolRefusal[]): string {
 	const count = refusals.length;
 	const items = refusals.map(r => `- \`${r.toolName}\``).join('\n');
-	const overrideHint = surface === 'trigger'
-		? 'Add `toolApproval: allow` to this trigger\'s frontmatter to allow it for just this trigger, or set '
-		: 'Set ';
 	return [
 		`**Tool approval:** ${count} tool call${count === 1 ? '' : 's'} denied — the Tools approval setting is "Ask", and unattended runs have no one to approve a request.`,
 		items,
-		`${overrideHint}Settings → Synapse → Tools → Tools approval to "Allow (auto-approve)" to run unattended tool calls without asking.`,
+		`Set Settings → Synapse → Tools → Tools approval to "Allow (auto-approve)" to run unattended tool calls without asking.`,
 	].join('\n\n');
 }
 
@@ -188,13 +160,12 @@ function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
 
 /**
  * Execute the prompt via the configured local provider backend.
- * Reads the triggering file's content and prepends it to the prompt
+ * Reads the target file's content and prepends it to the prompt
  * so the model has context about the file.
  *
- * Local-model routing is trigger-only (`triggerExecutor.ts`) — batch loops
- * never pass a `model`, so `runItem()` never selects this branch for them
- * (local-model routing for batch loops was out of scope for #73 and remains
- * so here; see `.docs/specs/run-executor.md`).
+ * No current caller passes a `model`, so `runItem()` never selects this
+ * branch today (local-model routing for batch loops was out of scope for
+ * #73 and remains so; see `.docs/specs/run-executor.md`).
  */
 async function executeWithLocalModel(
 	plugin: SynapsePlugin,
@@ -269,11 +240,9 @@ interface RunResult {
 /**
  * Execute the prompt via the Claude Agent SDK (`AgentService.inlineChat`).
  *
- * `agent`/`abortController`/`onEvent` are each only meaningful to one
- * caller today (`agent` — trigger-only; `abortController`/`onEvent` —
- * batch-loop-only, for cancellation and usage accumulation) but are
- * harmless no-ops for the other, so this stays a single shared call site
- * rather than two near-identical ones.
+ * `agent` has no current caller; `abortController`/`onEvent` are used by
+ * `batchLoopExecutor.ts` for cancellation and usage accumulation. Unused
+ * options are harmless no-ops here.
  *
  * `policy` (issue #151) decides what the run is handed: `'allow'` maps to
  * `bypassPermissions` (+ `allowDangerouslySkipPermissions`, matching the
@@ -355,21 +324,20 @@ async function routeAndRun(
  * content. `'frontmatter'`: merge the response (parsed as YAML) into the
  * target file's frontmatter.
  *
- * Write modes are a trigger-only concept (`TriggerConfig.write`) — batch
- * loops always pass `undefined` here (they have no equivalent config field),
- * so they always take the default "append to report" branch. See
- * `.docs/specs/run-executor.md` for the reasoning.
+ * No current caller sets anything but the default: `batchLoopExecutor.ts`
+ * always passes `undefined` (it has no equivalent config field), so it
+ * always takes the "append to report" branch. See `.docs/specs/run-executor.md`.
  */
-export type WriteMode = boolean | 'frontmatter' | undefined;
+type WriteMode = boolean | 'frontmatter' | undefined;
 
-export interface ApplyWriteModeOptions {
+interface ApplyWriteModeOptions {
 	app: App;
 	/** Vault-relative path of the file to write back to (write: true / 'frontmatter'). */
 	filePath: string;
 	write: WriteMode;
 	/** The model's result to persist. */
 	result: string;
-	/** Identity used in `console.warn` messages, e.g. `Trigger "name"`. */
+	/** Identity used in `console.warn` messages, e.g. `Batch loop file "path"`. */
 	logLabel: string;
 	/** Appends `result` (or a write-mode fallback message) to the caller's report. */
 	appendReport: (result: string, isError?: boolean) => Promise<void>;
@@ -387,7 +355,7 @@ export interface ApplyWriteModeOptions {
  *   `modifyArtifact`, which quotes values containing colons). Falls back to
  *   `appendReport` on a missing file or a lock timeout.
  */
-export async function applyWriteMode(options: ApplyWriteModeOptions): Promise<void> {
+async function applyWriteMode(options: ApplyWriteModeOptions): Promise<void> {
 	const {app, filePath, write, result, logLabel, appendReport} = options;
 
 	if (write === true) {
@@ -462,36 +430,22 @@ export async function applyWriteMode(options: ApplyWriteModeOptions): Promise<vo
 
 export interface RunItemOptions {
 	plugin: SynapsePlugin;
-	/** Vault-relative path this item concerns — substituted for `{{file}}`/`{{files}}` and used as the write-back target. */
+	/** Vault-relative path this item concerns — substituted for `{{file}}` and used as the write-back target. */
 	filePath: string;
 	/** Prompt/instruction body, before template substitution. */
 	body: string;
-	/** Also substitute `{{files}}` as an alias for `{{file}}` (trigger-only, see `substituteTemplates()`). */
-	aliasFiles?: boolean;
-	/** Model alias or local-model id. `undefined` always routes to Claude (batch loops never set this). */
+	/** Model alias or local-model id. `undefined` always routes to Claude (no current caller sets this). */
 	model?: string;
-	/** Claude agent name. Trigger-only; batch loops have no agent concept. */
+	/** Claude agent name. No current caller sets this. */
 	agent?: string;
 	write?: WriteMode;
-	/** Identity used in `console.warn` messages, e.g. `Trigger "name"`. */
+	/** Identity used in `console.warn` messages, e.g. `Batch loop file "path"`. */
 	logLabel: string;
 	appendReport: (result: string, isError?: boolean) => Promise<void>;
-	/** Batch-loop-only: forwarded to `inlineChat()` for in-flight cancellation. */
+	/** Forwarded to `inlineChat()` for in-flight cancellation. */
 	abortController?: AbortController;
-	/** Batch-loop-only: forwarded to `inlineChat()` to accumulate usage/cost. */
+	/** Forwarded to `inlineChat()` to accumulate usage/cost. */
 	onEvent?: (msg: SDKMessage) => void;
-	/**
-	 * Which surface this run is for — tailors the escape-hatch hint in a tool-refusal report
-	 * block (see `formatToolRefusalsReportBlock()`). Triggers can opt in per-trigger via
-	 * frontmatter; batch loops can't, so only the global setting is mentioned for them.
-	 */
-	surface: 'trigger' | 'batch-loop';
-	/**
-	 * Trigger-only: this trigger's `toolApproval: allow` frontmatter opt-in (issue #151).
-	 * Batch loops never set this — they always follow `settings.toolApproval` directly. See
-	 * `resolveToolApprovalPolicy()`.
-	 */
-	toolApprovalOverrideAllow?: boolean;
 }
 
 /**
@@ -509,8 +463,8 @@ export interface RunItemOptions {
  * Does not catch execution errors — see the module doc comment for why.
  */
 export async function runItem(options: RunItemOptions): Promise<void> {
-	const prompt = substituteTemplates(options.body, options.filePath, {aliasFiles: options.aliasFiles});
-	const policy = resolveToolApprovalPolicy(options.plugin, options.toolApprovalOverrideAllow);
+	const prompt = substituteTemplates(options.body, options.filePath);
+	const policy = resolveToolApprovalPolicy(options.plugin);
 
 	const {content: result, refusals} = await routeAndRun(options.plugin, prompt, options.filePath, policy, {
 		model: options.model,
@@ -529,6 +483,6 @@ export async function runItem(options: RunItemOptions): Promise<void> {
 	});
 
 	if (refusals.length > 0) {
-		await options.appendReport(formatToolRefusalsReportBlock(refusals, options.surface));
+		await options.appendReport(formatToolRefusalsReportBlock(refusals));
 	}
 }
