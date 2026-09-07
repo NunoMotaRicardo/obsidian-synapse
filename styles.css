@@ -799,6 +799,12 @@
 	border-color: var(--interactive-accent);
 }
 
+.synapse-askq-option:focus-visible {
+	border-color: var(--interactive-accent);
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
 .synapse-askq-option.is-selected {
 	border-color: var(--interactive-accent);
 	background: var(--background-modifier-hover);

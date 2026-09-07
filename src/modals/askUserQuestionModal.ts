@@ -148,22 +148,43 @@ export class AskUserQuestionModal extends Modal {
 
 		const state = this.states.get(q.question)!;
 
+		// The options are a radio group (single-select) or a set of checkboxes (multi-select).
+		// They are divs rather than native inputs so the label/description/preview can be laid out
+		// as a card, which means the roles, focusability and key handling below are what make them
+		// reachable at all without a mouse — the modal blocks the agent's turn until it is
+		// answered, so a mouse-only UI would strand a keyboard user.
+		optionsEl.setAttr('role', q.multiSelect ? 'group' : 'radiogroup');
+		optionsEl.setAttr('aria-label', q.question);
+
 		const cards: {label: string; el: HTMLElement}[] = [];
 
 		const applySelectionStyles = (): void => {
 			for (const {label, el} of cards) {
-				el.toggleClass('is-selected', state.selectedLabels.has(label));
+				const selected = state.selectedLabels.has(label);
+				el.toggleClass('is-selected', selected);
+				el.setAttr('aria-checked', String(selected));
 			}
 			otherCard.toggleClass('is-selected', state.otherSelected);
 		};
 
+		/** Move focus between this question's option cards — the arrow keys a radio group expects. */
+		const focusCard = (from: HTMLElement, delta: number): void => {
+			const index = cards.findIndex(c => c.el === from);
+			if (index === -1) return;
+			const next = cards[(index + delta + cards.length) % cards.length];
+			next?.el.focus();
+		};
+
 		for (const opt of q.options) {
 			const card = optionsEl.createDiv({cls: 'synapse-askq-option'});
+			card.setAttr('role', q.multiSelect ? 'checkbox' : 'radio');
+			card.setAttr('tabindex', '0');
+			card.setAttr('aria-checked', 'false');
 			card.createDiv({cls: 'synapse-askq-option-label', text: opt.label});
 			card.createDiv({cls: 'synapse-askq-option-description', text: opt.description});
 			cards.push({label: opt.label, el: card});
 
-			card.addEventListener('click', () => {
+			const toggle = (): void => {
 				if (q.multiSelect) {
 					if (state.selectedLabels.has(opt.label)) state.selectedLabels.delete(opt.label);
 					else state.selectedLabels.add(opt.label);
@@ -174,16 +195,33 @@ export class AskUserQuestionModal extends Modal {
 				}
 				applySelectionStyles();
 				this.updateSubmitState();
+			};
+
+			card.addEventListener('click', toggle);
+			card.addEventListener('keydown', (e: KeyboardEvent) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					// Space would otherwise scroll the modal, and Enter would submit the form.
+					e.preventDefault();
+					toggle();
+				} else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+					e.preventDefault();
+					focusCard(card, 1);
+				} else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+					e.preventDefault();
+					focusCard(card, -1);
+				}
 			});
 		}
 
 		// "Other" free-text option — always offered (AC-3): the model never sends one itself.
 		const otherCard = optionsEl.createDiv({cls: 'synapse-askq-option synapse-askq-option-other'});
 		otherCard.createDiv({cls: 'synapse-askq-option-label', text: 'Other'});
+		// The Other option's control is the text field itself — natively focusable, so it needs a
+		// label rather than a role.
 		const otherInput = otherCard.createEl('input', {
 			type: 'text',
 			cls: 'synapse-askq-other-input',
-			attr: {placeholder: 'Type your own answer…'},
+			attr: {placeholder: 'Type your own answer…', 'aria-label': `Other answer for: ${q.question}`},
 		});
 		otherInput.addEventListener('click', (e) => e.stopPropagation());
 		otherCard.addEventListener('click', () => {

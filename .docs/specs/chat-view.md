@@ -376,6 +376,15 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     text, not on focus** — on a single-select question claiming it clears the selected option, so
     focusing alone would silently drop the user's pick and leave Submit disabled with nothing
     typed to replace it.
+  - **The option cards carry their own keyboard semantics.** They are `div`s (so a card can lay out
+    a label, description and preview) rather than native inputs, so the modal sets the roles and
+    key handling by hand: the options container is a `radiogroup` (single-select) or `group`
+    (multi-select) labelled by the question text, each card is a `radio`/`checkbox` with
+    `tabindex="0"` and a maintained `aria-checked`, Enter/Space toggles it (both default-prevented
+    — Space would scroll, Enter would submit), and the arrow keys move focus within the question's
+    cards. The Other option's control is the text input itself, natively focusable, so it takes an
+    `aria-label` instead of a role. This is not cosmetic: the modal blocks the agent's turn until
+    it is answered or dismissed, so click-only cards would strand a keyboard-driven user.
   - On submit, the pure `buildAskUserQuestionAnswers()` helper (exported standalone, no DOM/Obsidian
     dependency, so it's unit-tested in `test/askUserQuestionModal.test.ts` without a live CLI or
     vault) maps the per-question selection state to the `answers`/`annotations` shape the CLI
