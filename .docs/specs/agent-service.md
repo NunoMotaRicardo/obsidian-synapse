@@ -117,7 +117,10 @@ them into every query rather than relying on the CLI's own process-local state:
   but a future one might). A pre-existing *string* `settings` (a file path) is left untouched,
   since folding an in-memory list into a file on disk would mean writing to it — exactly what this
   feature must never do.
-- `Session.setSettings(settings)` mutates the live `Session`'s config in place, so a grant added
+- `Session.applyToolGrants(grants)` merges the grants into the live `Session`'s config in place
+  (via `buildInMemoryPermissionSettings()`, against that session's own `settings` — the merge lives
+  here because `config` is private, so a caller could only pass a grants-only object and would drop
+  anything else the session was built with), so a grant added
   mid-conversation reaches the *next* `send()` on the same (un-rebuilt) `Session` object — `send()`
   always reads `this.config` fresh on each call.
 

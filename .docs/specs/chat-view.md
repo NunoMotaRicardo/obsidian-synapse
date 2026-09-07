@@ -311,11 +311,11 @@ vault scope, folder tree.
   (a `Set<string>` of CLI rule strings, e.g. `Read(C:\path\**)`) fixes this by accumulating
   approved grants for the life of the conversation and re-injecting them into every query via
   `Options.settings` — see `agent-service.md`'s "In-memory tool-approval grants" for the
-  `extractAllowRuleStrings()`/`buildInMemoryPermissionSettings()`/`Session.setSettings()` mechanism.
+  `extractAllowRuleStrings()`/`buildInMemoryPermissionSettings()`/`Session.applyToolGrants()` mechanism.
   Nothing is written to disk; the set lives only in memory.
   - `buildSessionConfig()`'s `permissionHandler`, on an `'allow'` result with `addRules`/`'allow'`
     suggestions, adds the extracted rule strings to `sessionToolGrants` and immediately calls
-    `this.currentSession?.setSettings(...)` so the *next* `send()` on the same, un-rebuilt
+    `this.currentSession?.applyToolGrants(...)` so the *next* `send()` on the same, un-rebuilt
     `Session` object already carries the grant — a session that only picked it up on the next
     `configDirty` rebuild would still re-prompt for every turn in between.
   - `buildSessionConfig()` also seeds a freshly (re)built `Session`'s initial `settings` from

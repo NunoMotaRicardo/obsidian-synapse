@@ -1492,9 +1492,14 @@ export class Session {
 	 * `configDirty` rebuild would still re-prompt for every turn in between. `send()` always
 	 * reads `this.config` fresh on each call (`queryOpts: Options = {...this.config, ...}`), so
 	 * mutating it here is picked up by the very next turn.
+	 *
+	 * Takes the grant set rather than a finished `settings` value so the merge happens *here*,
+	 * against this session's own `settings` — `config` is private, so a caller could only ever
+	 * pass a grants-only object and would silently drop any other `settings` the session was
+	 * built with (e.g. #194's `_synapse/settings.json`).
 	 */
-	setSettings(settings: Options['settings']): void {
-		this.config = {...this.config, settings};
+	applyToolGrants(grants: Iterable<string>): void {
+		this.config = {...this.config, settings: buildInMemoryPermissionSettings(grants, this.config.settings)};
 	}
 
 	/**

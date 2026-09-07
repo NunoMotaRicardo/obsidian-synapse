@@ -73,7 +73,7 @@ export class SynapseView extends ItemView {
 	 * but the grants a user already approved this conversation must survive that rebuild —
 	 * `buildSessionConfig()` reads this set fresh on every call, rebuild or not. Cleared only in
 	 * `newConversation()`, never on a rebuild; grants added mid-conversation (no rebuild) reach
-	 * the live `Session` via `Session.setSettings()` instead (see the permission handler in
+	 * the live `Session` via `Session.applyToolGrants()` instead (see the permission handler in
 	 * `buildSessionConfig()`).
 	 */
 	sessionToolGrants: Set<string> = new Set();
@@ -1260,7 +1260,7 @@ export class SynapseView extends ItemView {
 					// Push the update to the live Session immediately so the *next* send() on
 					// this same (un-rebuilt) session already carries it — buildSessionConfig()
 					// only seeds a session at creation/rebuild time.
-					this.currentSession?.setSettings(buildInMemoryPermissionSettings(this.sessionToolGrants));
+					this.currentSession?.applyToolGrants(this.sessionToolGrants);
 				}
 			}
 
