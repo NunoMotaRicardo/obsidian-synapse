@@ -304,6 +304,28 @@ vault scope, folder tree.
     the approval in effect for the rest of that conversation (no re-prompt loop for the same path)
     without touching disk. See `agent-service.md`'s "Session-scoped permission updates" for the
     helper.
+- **A deliberate, permanent grant is back, written by Synapse (issue #197).** #193 removed the CLI's
+  own "always allow" persistence outright (it wrote to whatever `<cwd>/.claude/settings.local.json`
+  happened to be — the drive-wide `Read(//d//**)` blast-radius problem). #194 gives the vault its own
+  settings file Synapse owns, so `ToolApprovalModal` now offers a third action, **Always allow**,
+  alongside **Allow** and **Deny**:
+  - **Allow** is byte-for-byte #193's behavior — conversation-scoped, writes nothing (AC-2). This is
+    unchanged.
+  - **Always allow** returns the same `{behavior: 'allow', ...}` `PermissionResult` as **Allow** (so
+    the current conversation is granted immediately, same as before) but the modal additionally
+    resolves a `persistRules: string[]` alongside it — the rule string(s) (`permissionRuleToString()`'s
+    syntax) derived from `extractAllowRuleStrings(request.suggestions)`, or, if the CLI sent no
+    `addRules` suggestion to derive one from, a bare `toolName` rule so the button is never a no-op.
+    **The modal shows these exact rule strings above the buttons before they can be clicked** — the
+    literal text that will be written, not a paraphrase — specifically so a drive-wide suggestion like
+    `Read(//d//**)` is visible before the user makes it permanent (the scenario that started #193).
+  - The modal itself never writes to disk (it only returns `persistRules`); `buildSessionConfig()`'s
+    `permissionHandler` is the one call site that does, via `configWriter.persistToolApprovalRules()`
+    (see `config-writer.md`) — matching the `configWriter.ts` file-writing rule in `CLAUDE.md`. A write
+    failure (e.g. malformed existing `_synapse/settings.json`) surfaces as a `Notice` but does not
+    revoke the in-memory grant already returned to the SDK for the current conversation.
+  - There is no in-app UI to remove a persisted grant (AC-5) — `wiki/Customization.md` documents
+    editing `_synapse/settings.json`'s `permissions.allow` list directly.
 - **In-memory tool-approval grants (issue #193 round 2).** `destination: 'session'` above only
   covers the CLI process handling the *current* turn — the Agent SDK spawns a fresh process on
   every `Session.send()` (resuming by session id), so in **ask** mode the grant above was lost on

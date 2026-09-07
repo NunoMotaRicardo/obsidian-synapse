@@ -216,13 +216,33 @@ Any field from the Claude Code settings schema is accepted — `permissions`, `e
 - **In-conversation tool approvals still work.** If you approve a tool mid-conversation, that
   approval is layered *on top of* this file rather than replacing it — a `permissions.deny` rule
   here still blocks that tool even after an unrelated approval elsewhere in the same chat.
-- **Synapse never creates or writes this file.** A vault with none behaves exactly as if the
-  feature didn't exist. Create it yourself when you want vault-wide rules; there's currently no
-  in-app "Always allow, and remember it" action that writes here for you (a possible future
-  addition).
+- **Synapse writes to this file in exactly one place: the tool-approval modal's "Always allow"
+  action** (see below). Outside of that, Synapse never creates or writes it — a vault with none,
+  and that never clicks "Always allow", behaves exactly as if the feature didn't exist.
 - If the file exists but isn't valid JSON, Synapse shows a one-time notice and proceeds without
   applying any of it — it won't repeatedly warn you on every message for the same broken file,
   and a syntax error here never blocks a query outright.
+
+### Permanently allowing a tool ("Always allow")
+
+When Synapse's tool-approval modal opens (prompting you to approve a tool call), it offers three
+actions:
+
+- **Allow** — grants the tool for the current conversation only. Nothing is written to disk; a new
+  conversation prompts again.
+- **Always allow** — grants the tool for the current conversation *and* permanently, by writing the
+  rule into this file's `permissions.allow` list. A new conversation does not re-prompt for the
+  same rule.
+- **Deny** — refuses the tool call.
+
+Before you can click **Always allow**, the modal shows you the **exact rule string** it would
+write — not a summary. This matters: for a tool call outside your vault (e.g. reading a file in an
+attached folder), the CLI can suggest a very broad rule shaped like `Read(//d//**)` (an entire
+drive). Read what's shown before making it permanent — narrower is safer.
+
+**There is no in-app UI to remove a persisted grant.** To revoke one, open
+`_synapse/settings.json` yourself and delete the entry from `permissions.allow` (or delete the
+whole file if you have nothing else in it worth keeping).
 
 ### Relationship to Claude Code's own settings files
 

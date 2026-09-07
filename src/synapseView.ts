@@ -20,7 +20,7 @@ import type {
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
-import {scanAgents, scanSkills} from './configWriter';
+import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
@@ -1247,7 +1247,7 @@ export class SynapseView extends ItemView {
 				toolUseID: options.toolUseID,
 			});
 			modal.open();
-			const result = await modal.promise;
+			const {result, persistRules} = await modal.promise;
 
 			// Accumulate the approval in memory (issue #193 round 2) so it survives the Agent
 			// SDK's per-send() process respawn — destination: 'session' (sessionScopePermissions())
@@ -1261,6 +1261,19 @@ export class SynapseView extends ItemView {
 					// this same (un-rebuilt) session already carries it — buildSessionConfig()
 					// only seeds a session at creation/rebuild time.
 					this.currentSession?.applyToolGrants(this.sessionToolGrants);
+				}
+			}
+
+			// "Always allow" (issue #197) — persist into _synapse/settings.json, deliberately
+			// separate from #193's in-memory accumulation above (which always runs for an allowed
+			// call regardless of scope). The modal itself never writes; this is the one call site
+			// that does, per the configWriter.ts file-writing rule in CLAUDE.md.
+			if (persistRules.length > 0) {
+				try {
+					await persistToolApprovalRules(this.app, persistRules);
+				} catch (e) {
+					debugTrace('[synapse] Failed to persist tool-approval rule:', e);
+					new Notice(e instanceof Error ? e.message : '[synapse] Failed to persist tool-approval rule.');
 				}
 			}
 

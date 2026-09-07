@@ -311,6 +311,68 @@ export async function deleteArtifact(app: App, filePath: string): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
+// Tool-approval persistence (issue #197)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist tool-approval rule string(s) into `_synapse/settings.json`'s `permissions.allow`,
+ * creating the file (and `_synapse/`) if absent (AC-3). `ruleStrings` must already be in the
+ * CLI's rule-string syntax — callers derive them via `permissionRuleToString()`/
+ * `extractAllowRuleStrings()` (`agentService.ts`) so what's shown to the user in
+ * `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
+ *
+ * Uses `vault.adapter.exists` + `vault.read`/`vault.create`/`vault.modify` — the same pattern
+ * `appendReportBlock()` (`runExecutor.ts`) uses for a vault-relative file that may or may not
+ * exist yet — rather than `node:fs`, parses the existing content as JSON, and writes back every
+ * other top-level key untouched: only `permissions.allow` is unioned with `ruleStrings` (never
+ * clobbered, never duplicated). `_synapse/settings.json` is read directly by
+ * `AgentService.loadVaultSettings()` via `node:fs`, cached by mtime (issue #194): a plain
+ * `vault.create`/`vault.modify` write here changes the file's on-disk mtime, so the next query
+ * picks up the change with no extra invalidation needed.
+ *
+ * A malformed existing file is left untouched and reported via a thrown error (surfaced by the
+ * caller, e.g. as a `Notice`) rather than silently overwritten — the in-memory conversation grant
+ * (`sessionScopePermissions()`) still applies regardless of whether persistence itself succeeds.
+ */
+export async function persistToolApprovalRules(app: App, ruleStrings: string[]): Promise<void> {
+	if (ruleStrings.length === 0) return;
+	const path = normalizePath(`${SYNAPSE_FOLDER}/settings.json`);
+
+	await lockManager.withLock(path, async () => {
+		await ensureFolder(app, SYNAPSE_FOLDER);
+
+		const exists = await app.vault.adapter.exists(path);
+		const existingFile = exists ? app.vault.getAbstractFileByPath(path) : null;
+		let settings: Record<string, unknown> = {};
+		if (existingFile instanceof TFile) {
+			const raw = await app.vault.read(existingFile);
+			try {
+				const parsed: unknown = JSON.parse(raw);
+				settings = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed as Record<string, unknown> : {};
+			} catch {
+				throw new Error('[synapse] _synapse/settings.json is not valid JSON — fix or remove it, then try "Always allow" again.');
+			}
+		}
+
+		const existingPermissions = (settings['permissions'] && typeof settings['permissions'] === 'object' && !Array.isArray(settings['permissions']))
+			? {...(settings['permissions'] as Record<string, unknown>)}
+			: {};
+		const existingAllow = Array.isArray(existingPermissions['allow'])
+			? (existingPermissions['allow'] as unknown[]).filter((r): r is string => typeof r === 'string')
+			: [];
+		existingPermissions['allow'] = Array.from(new Set([...existingAllow, ...ruleStrings]));
+		settings['permissions'] = existingPermissions;
+
+		const content = `${JSON.stringify(settings, null, 2)}\n`;
+		if (existingFile instanceof TFile) {
+			await app.vault.modify(existingFile, content);
+		} else {
+			await app.vault.create(path, content);
+		}
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Vault structure scanning
 // ---------------------------------------------------------------------------
 

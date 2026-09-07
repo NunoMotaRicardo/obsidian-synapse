@@ -11,6 +11,7 @@ import {
 	scanAgents,
 	ensureImproveSynapseSkill,
 	IMPROVE_SYNAPSE_SKILL_NAME,
+	persistToolApprovalRules,
 } from '../src/configWriter';
 import {createMockApp, seedFile, seedFolder, readVaultFile} from './setup';
 
@@ -437,6 +438,76 @@ describe('scanAgents', () => {
 			instructions: 'Body content.',
 			tools: ['Read', 'Write'],
 		});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// persistToolApprovalRules (issue #197)
+// ---------------------------------------------------------------------------
+
+interface TestSettingsFile {
+	$schema?: string;
+	model?: string;
+	permissions?: {
+		allow?: string[];
+		deny?: string[];
+		defaultMode?: string;
+	};
+}
+
+function parseSettingsFile(raw: string): TestSettingsFile {
+	return JSON.parse(raw) as TestSettingsFile;
+}
+
+describe('persistToolApprovalRules', () => {
+	it('creates _synapse/settings.json when absent, with the rule under permissions.allow', async () => {
+		const app = createMockApp() as unknown as App;
+		await persistToolApprovalRules(app, ['Read(/some/path/**)']);
+		const raw = await readVaultFile(app, '_synapse/settings.json');
+		const parsed = parseSettingsFile(raw);
+		expect(parsed.permissions?.allow).toEqual(['Read(/some/path/**)']);
+	});
+
+	it('is a no-op when given an empty rule list', async () => {
+		const app = createMockApp() as unknown as App;
+		await persistToolApprovalRules(app, []);
+		expect(app.vault.getAbstractFileByPath('_synapse/settings.json')).toBeNull();
+	});
+
+	it('unions new rules into an existing allow list without duplicating', async () => {
+		const app = createMockApp() as unknown as App;
+		seedFile(app, '_synapse/settings.json', JSON.stringify({
+			permissions: {allow: ['Bash(git status)']},
+		}));
+		await persistToolApprovalRules(app, ['Bash(git status)', 'Read(/foo/**)']);
+		const raw = await readVaultFile(app, '_synapse/settings.json');
+		const parsed = parseSettingsFile(raw);
+		expect(parsed.permissions?.allow?.slice().sort()).toEqual(['Bash(git status)', 'Read(/foo/**)']);
+	});
+
+	it('preserves every other top-level key and every other permissions key in an existing file', async () => {
+		const app = createMockApp() as unknown as App;
+		seedFile(app, '_synapse/settings.json', JSON.stringify({
+			$schema: 'https://example.com/schema.json',
+			model: 'sonnet',
+			permissions: {allow: ['Bash(git status)'], deny: ['Bash(rm -rf /)'], defaultMode: 'default'},
+		}));
+		await persistToolApprovalRules(app, ['Read(/foo/**)']);
+		const raw = await readVaultFile(app, '_synapse/settings.json');
+		const parsed = parseSettingsFile(raw);
+		expect(parsed.$schema).toBe('https://example.com/schema.json');
+		expect(parsed.model).toBe('sonnet');
+		expect(parsed.permissions?.deny).toEqual(['Bash(rm -rf /)']);
+		expect(parsed.permissions?.defaultMode).toBe('default');
+		expect(parsed.permissions?.allow?.slice().sort()).toEqual(['Bash(git status)', 'Read(/foo/**)']);
+	});
+
+	it('throws and does not overwrite when the existing file is malformed JSON', async () => {
+		const app = createMockApp() as unknown as App;
+		seedFile(app, '_synapse/settings.json', '{ not valid json');
+		await expect(persistToolApprovalRules(app, ['Read(/foo/**)'])).rejects.toThrow('not valid JSON');
+		const raw = await readVaultFile(app, '_synapse/settings.json');
+		expect(raw).toBe('{ not valid json');
 	});
 });
 
