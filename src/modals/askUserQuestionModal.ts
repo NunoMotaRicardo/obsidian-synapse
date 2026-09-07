@@ -125,7 +125,7 @@ export class AskUserQuestionModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('synapse-askq-modal');
 
-		contentEl.createEl('h3', {text: 'Claude has a question'});
+		contentEl.createEl('h3', {text: 'Synapse has a question'});
 
 		const list = contentEl.createDiv({cls: 'synapse-askq-list'});
 		this.input.questions.forEach((q, i) => {
