@@ -390,10 +390,17 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     vault) maps the per-question selection state to the `answers`/`annotations` shape the CLI
     expects: `answers` is keyed by the **question text**, valued by the selected option's
     **label** — for `multiSelect`, the selected labels joined with `", "` (verified live:
-    `"Alpha, Gamma"`, in option order); an "Other" answer is the typed string as-is.
+    `"Alpha, Gamma"`, in option order); an "Other" answer is the typed string as-is, appended
+    **after** the selected labels since it is not one of the listed options.
     `annotations[question].preview` is populated only for a single-select answer whose one
     selected (non-Other) option carries a `preview` — a joined multi-select answer or a free-text
     Other answer has no single option's preview to attach, so annotations are omitted for those.
+  - **Selection state is positional, not keyed by question text.** Nothing in the tool's schema
+    forbids two questions carrying identical `question` text, so `states` is an array parallel to
+    `input.questions` — keying it by text would make both questions share one selection and mirror
+    each other in the UI. The CLI's `answers` map *is* keyed by that text and therefore has a
+    single slot for both, so on emit their answers merge into it (deduplicated, first annotation
+    wins) rather than the later question silently discarding the earlier one's answer.
     The modal resolves `{behavior: 'allow', updatedInput: {...input, answers, annotations}}` (SDK
     result type: `PermissionResult`'s `updatedInput?: Record<string, unknown>`).
   - Dismissing the modal (Esc/close/Cancel button) resolves `{behavior: 'deny', message: 'Denied

@@ -35,37 +35,51 @@ interface QuestionAnswerState {
  * Pure mapping from an `AskUserQuestionInput`-shaped payload plus per-question UI selection state
  * to the `answers`/`annotations` maps the CLI expects (issue #182 — verified against the live
  * CLI): `answers` is keyed by the **question text**, valued by the selected option's **label**
- * (multi-select joins labels with `", "`); an "Other" answer is the typed string as-is.
+ * (multi-select joins labels with `", "`, in the order the model listed the options); an "Other"
+ * answer is the typed string as-is, placed last since it is not one of the listed options.
  * `annotations[question].preview` is populated when a single non-"Other" option carrying a
  * `preview` was selected for a single-select question (multi-select/Other/no-preview omit it).
+ * `states` is positional — parallel to `questions` — because two questions may carry identical
+ * `question` text; their answers merge into that text's single slot, deduplicated.
  * Exported standalone (no DOM/Obsidian dependency) so it's unit-testable without a vault.
  */
 export function buildAskUserQuestionAnswers(
 	questions: AskUserQuestionQuestion[],
-	states: Map<string, QuestionAnswerState>,
+	states: QuestionAnswerState[],
 ): {answers: Record<string, string>; annotations: Record<string, {preview?: string}>} {
 	const answers: Record<string, string> = {};
 	const annotations: Record<string, {preview?: string}> = {};
 
-	for (const q of questions) {
-		const state = states.get(q.question);
-		if (!state) continue;
+	for (let i = 0; i < questions.length; i++) {
+		const q = questions[i];
+		const state = states[i];
+		if (!q || !state) continue;
 
+		// Option labels in the order the model listed them, with any free-text "Other" answer
+		// last — it isn't one of the listed options, so it has no place among them.
 		const labels: string[] = [];
-		if (state.otherSelected && state.otherText.trim()) {
-			labels.push(state.otherText.trim());
-		}
 		for (const opt of q.options) {
 			if (state.selectedLabels.has(opt.label)) labels.push(opt.label);
 		}
+		if (state.otherSelected && state.otherText.trim()) {
+			labels.push(state.otherText.trim());
+		}
 		if (labels.length === 0) continue;
 
-		answers[q.question] = labels.join(', ');
+		// Two questions can carry identical `question` text — nothing in the tool's schema forbids
+		// it, and the CLI's `answers` map is keyed by that text, so it has one slot for both. The
+		// UI keeps their selections independent (state is positional); here their answers merge
+		// into that one slot, deduplicated, rather than the later one silently discarding the
+		// earlier.
+		const existing = answers[q.question];
+		const merged = existing ? [...new Set([...existing.split(', '), ...labels])] : labels;
+		answers[q.question] = merged.join(', ');
 
 		// Only surface a preview when exactly one, non-"Other" option was selected — a joined
 		// multi-select answer or a free-text "Other" answer has no single option's preview to
-		// attach.
-		if (!q.multiSelect && !state.otherSelected && state.selectedLabels.size === 1) {
+		// attach. A duplicate question keeps the first annotation for the same reason its answer
+		// merges rather than overwrites.
+		if (!q.multiSelect && !state.otherSelected && state.selectedLabels.size === 1 && !(q.question in annotations)) {
 			const selectedLabel = [...state.selectedLabels][0];
 			const opt = q.options.find(o => o.label === selectedLabel);
 			if (opt?.preview) {
@@ -89,7 +103,9 @@ export class AskUserQuestionModal extends Modal {
 	private resolved = false;
 	private resolve!: (result: PermissionResult) => void;
 	private readonly input: AskUserQuestionInputLike;
-	private readonly states: Map<string, QuestionAnswerState> = new Map();
+	/** Per-question selection state, positional — parallel to `input.questions`, since two
+	 *  questions may carry identical `question` text and must not share one entry. */
+	private readonly states: QuestionAnswerState[] = [];
 	private submitBtn!: HTMLButtonElement;
 	readonly promise: Promise<PermissionResult>;
 
@@ -99,8 +115,8 @@ export class AskUserQuestionModal extends Modal {
 		this.promise = new Promise<PermissionResult>((res) => {
 			this.resolve = res;
 		});
-		for (const q of input.questions) {
-			this.states.set(q.question, {selectedLabels: new Set(), otherSelected: false, otherText: ''});
+		for (const _q of input.questions) {
+			this.states.push({selectedLabels: new Set(), otherSelected: false, otherText: ''});
 		}
 	}
 
@@ -112,9 +128,9 @@ export class AskUserQuestionModal extends Modal {
 		contentEl.createEl('h3', {text: 'Claude has a question'});
 
 		const list = contentEl.createDiv({cls: 'synapse-askq-list'});
-		for (const q of this.input.questions) {
-			this.renderQuestion(list, q);
-		}
+		this.input.questions.forEach((q, i) => {
+			this.renderQuestion(list, q, this.states[i]!);
+		});
 
 		const btnRow = contentEl.createDiv({cls: 'synapse-askq-buttons'});
 
@@ -133,7 +149,7 @@ export class AskUserQuestionModal extends Modal {
 		}
 	}
 
-	private renderQuestion(parent: HTMLElement, q: AskUserQuestionQuestion): void {
+	private renderQuestion(parent: HTMLElement, q: AskUserQuestionQuestion, state: QuestionAnswerState): void {
 		const wrapper = parent.createDiv({cls: 'synapse-askq-question'});
 
 		const headerRow = wrapper.createDiv({cls: 'synapse-askq-header-row'});
@@ -145,8 +161,6 @@ export class AskUserQuestionModal extends Modal {
 		wrapper.createDiv({cls: 'synapse-askq-question-text', text: q.question});
 
 		const optionsEl = wrapper.createDiv({cls: 'synapse-askq-options'});
-
-		const state = this.states.get(q.question)!;
 
 		// The options are a radio group (single-select) or a set of checkboxes (multi-select).
 		// They are divs rather than native inputs so the label/description/preview can be laid out
@@ -256,7 +270,7 @@ export class AskUserQuestionModal extends Modal {
 	}
 
 	private updateSubmitState(): void {
-		const allAnswered = this.input.questions.every(q => this.isAnswered(this.states.get(q.question)!));
+		const allAnswered = this.states.every(state => this.isAnswered(state));
 		this.submitBtn.disabled = !allAnswered;
 	}
 
