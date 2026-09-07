@@ -452,6 +452,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			session: this.currentSession,
 			messages: [...this.messages],
 			sdkSeenIndex: this.sdkSeenIndex,
+			sessionToolGrants: new Set(this.sessionToolGrants),
 			isStreaming: this.isStreaming,
 			streamingContent: this.streamingContent,
 			streamingReasoning: this.streamingReasoning,
@@ -509,6 +510,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.currentSessionId = bg.sessionId;
 		this.messages = bg.messages;
 		this.sdkSeenIndex = bg.sdkSeenIndex;
+		this.sessionToolGrants = bg.sessionToolGrants;
 		this.isStreaming = bg.isStreaming;
 		this.streamingContent = bg.streamingContent;
 		this.streamingReasoning = bg.streamingReasoning;
@@ -756,6 +758,11 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// Clear UI for the new session
 		this.messages = [];
 		this.sdkSeenIndex = 0;
+		// Reset in-memory tool-approval grants (#193 round 2) — a different session is a
+		// different conversation with no known grants of its own, unless it's still alive in
+		// the background, in which case restoreFromBackground() (below) overwrites this with
+		// that session's own accumulated set.
+		this.sessionToolGrants = new Set();
 		if (this.fullRenderTimer) {
 			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;

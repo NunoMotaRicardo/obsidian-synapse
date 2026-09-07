@@ -289,6 +289,50 @@ vault scope, folder tree.
   The shared `IMAGE_EXTS` constant (`types.ts`) defines the supported image extensions
   (`png, jpg, jpeg, gif, webp, bmp, svg`). Non-vision models are unaffected (the SDK/model
   handles or ignores image attachments gracefully).
+- **Tool approval never persists to disk (issue #193).** `buildSessionConfig()`'s `permissionHandler`
+  (the `CanUseTool` passed as `canUseTool`) has two branches, and neither writes a
+  `.claude/settings.local.json` into the vault or anywhere else:
+  - `settings.toolApproval === 'allow'` (auto-allow) returns `{behavior: 'allow', updatedInput:
+    input}` with **no** `updatedPermissions` at all — every call is allowed anyway, so echoing the
+    CLI's suggested permission updates back would only persist rules that buy nothing.
+  - Otherwise, `ToolApprovalModal` opens; its **Allow** button passes the CLI's `suggestions`
+    through `sessionScopePermissions()` (`agentService.ts`) before including them as
+    `updatedPermissions`, forcing every update's `destination` to `'session'` regardless of what
+    the CLI suggested (directory-shaped grants, e.g. an out-of-vault folder attachment, come back
+    suggesting `'localSettings'`, which the SDK would otherwise write to `<cwd>/.claude/settings.local.json`
+    inside the vault — including drive-wide grants like `Read(//d//**)`). Session scope still keeps
+    the approval in effect for the rest of that conversation (no re-prompt loop for the same path)
+    without touching disk. See `agent-service.md`'s "Session-scoped permission updates" for the
+    helper.
+- **In-memory tool-approval grants (issue #193 round 2).** `destination: 'session'` above only
+  covers the CLI process handling the *current* turn — the Agent SDK spawns a fresh process on
+  every `Session.send()` (resuming by session id), so in **ask** mode the grant above was lost on
+  the very next turn, re-prompting for the same path repeatedly. `SynapseView.sessionToolGrants`
+  (a `Set<string>` of CLI rule strings, e.g. `Read(C:\path\**)`) fixes this by accumulating
+  approved grants for the life of the conversation and re-injecting them into every query via
+  `Options.settings` — see `agent-service.md`'s "In-memory tool-approval grants" for the
+  `extractAllowRuleStrings()`/`buildInMemoryPermissionSettings()`/`Session.applyToolGrants()` mechanism.
+  Nothing is written to disk; the set lives only in memory.
+  - `buildSessionConfig()`'s `permissionHandler`, on an `'allow'` result with `addRules`/`'allow'`
+    suggestions, adds the extracted rule strings to `sessionToolGrants` and immediately calls
+    `this.currentSession?.applyToolGrants(...)` so the *next* `send()` on the same, un-rebuilt
+    `Session` object already carries the grant — a session that only picked it up on the next
+    `configDirty` rebuild would still re-prompt for every turn in between.
+  - `buildSessionConfig()` also seeds a freshly (re)built `Session`'s initial `settings` from
+    whatever `sessionToolGrants` already holds, exactly the way `resume` carries the conversation's
+    session id across a rebuild (issue #104) — so a rebuild triggered by e.g. a model change never
+    drops an already-approved grant.
+  - **Cleared only in `newConversation()`** — a genuinely new conversation starts with no known
+    grants, which is why AC-3's "starting a new conversation prompts again" holds. It is *not*
+    cleared on a `configDirty` rebuild (that would defeat the fix) or on the background-session
+    round-trip in `sessionSidebar.ts`: `saveCurrentToBackground()`/`restoreFromBackground()` carry
+    a `sessionToolGrants` copy on `BackgroundSession` alongside `sdkSeenIndex`, and `selectSession()`
+    resets the view's set to empty before either restoring that copy (same conversation, still
+    alive in the background) or cold-loading a persisted session from disk (a different
+    conversation this view instance has no in-memory grant history for).
+  - This is the same seam issue #194's persistent-grant feature (`_synapse/settings.json`) is
+    expected to extend — sourcing its own allow-list into the same `Options.settings` merge point
+    rather than adding a second one.
 - Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is

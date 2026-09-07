@@ -70,6 +70,67 @@ Dual auth via `buildEnv()`:
   is set; the CLI picks up the stored credential automatically.
 - **API key:** `ANTHROPIC_API_KEY` is injected into the subprocess env from `auth.apiKey`.
 
+## Session-scoped permission updates (issue #193)
+
+`sessionScopePermissions(suggestions: PermissionUpdate[]): PermissionUpdate[]` maps each CLI-
+suggested `PermissionUpdate` to `{...u, destination: 'session'}`. Every variant of the SDK's
+`PermissionUpdate` union carries `destination` (`'userSettings' | 'projectSettings' |
+'localSettings' | 'session' | 'cliArg'`), so the spread is type-safe with no per-variant switch.
+
+The CLI's `canUseTool` suggestions are not safe to echo back unfiltered: for directory-shaped
+grants (e.g. approving a read on an out-of-vault attached folder) the CLI suggests
+`'localSettings'`, which the SDK writes to `<cwd>/.claude/settings.local.json` — inside the vault,
+for chat sessions — including blanket, drive-wide grants such as `Read(//d//**)`. Forcing
+`'session'` keeps the approval in effect only for the rest of the current conversation (so the
+user isn't re-prompted for the same path) without ever persisting a rule to disk.
+
+`ToolApprovalModal`'s **Allow** button (`src/modals/toolApprovalModal.ts`) is the sole caller —
+it reaches both `sessionScopePermissions()` and the `PermissionUpdate` type through this module's
+re-exports rather than importing the SDK directly. See `chat-view.md`'s "Tool approval never
+persists to disk" for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses this
+(and why its auto-allow branch sends no `updatedPermissions` at all instead). Where a deliberate
+*persistent* grant should live is out of scope here — tracked separately (#194,
+`_synapse/settings.json`).
+
+### In-memory tool-approval grants across the per-`send()` respawn (issue #193 round 2)
+
+`destination: 'session'` above only covers the **current CLI process**. The Agent SDK spawns a
+fresh `claude` process on every `Session.send()` call (resuming by session id, not by keeping a
+process alive) — see "Agent SDK model" below. That respawn does not inherit the previous
+process's session-scoped grant, so in **ask** mode a user approving an out-of-vault read was
+re-prompted for the identical path on every subsequent turn of the same conversation.
+
+The fix carries approved grants **in memory**, for the life of the conversation, and re-injects
+them into every query rather than relying on the CLI's own process-local state:
+
+- `extractAllowRuleStrings(suggestions: PermissionUpdate[]): string[]` converts only `addRules`
+  updates with `behavior: 'allow'` into rule strings (`permissionRuleToString()`: `toolName`
+  alone, or `toolName(ruleContent)` — the same syntax the CLI itself writes to
+  `settings.local.json`). Every other update type (`replaceRules`, `removeRules`, `setMode`,
+  `addDirectories`, `removeDirectories`) and any non-`'allow'` behavior is skipped — there is no
+  faithful way to represent "replace" or "remove" semantics against a purely additive in-memory
+  accumulator.
+- `buildInMemoryPermissionSettings(grants, existing?): Options['settings']` builds the inline
+  `{permissions: {allow: [...]}}` object the SDK loads into its highest-priority user-controlled
+  "flag settings" layer (`Options.settings`, equivalent to the CLI's `--settings` flag) — merging
+  with a pre-existing object `settings` value rather than clobbering it (no caller sets one today,
+  but a future one might). A pre-existing *string* `settings` (a file path) is left untouched,
+  since folding an in-memory list into a file on disk would mean writing to it — exactly what this
+  feature must never do.
+- `Session.applyToolGrants(grants)` merges the grants into the live `Session`'s config in place
+  (via `buildInMemoryPermissionSettings()`, against that session's own `settings` — the merge lives
+  here because `config` is private, so a caller could only pass a grants-only object and would drop
+  anything else the session was built with), so a grant added
+  mid-conversation reaches the *next* `send()` on the same (un-rebuilt) `Session` object — `send()`
+  always reads `this.config` fresh on each call.
+
+The accumulator itself (`SynapseView.sessionToolGrants`) and the call sites that populate/consume
+it live in the view layer — see `chat-view.md`'s "In-memory tool-approval grants" for where the
+set lives, how it survives a `configDirty` `Session` rebuild, and when it's cleared. Nothing here
+is ever written to disk; the grants die with the conversation. This is the same seam #194's
+persistent-grant feature (`_synapse/settings.json`) is expected to extend, sourcing its own
+allow-list into the same `Options.settings` merge point instead of adding a second one.
+
 ## Named Agent Model Binding & Routing
 
 Named agents parsed from `_synapse/agents/*.md` carry an optional `model` binding (Claude
