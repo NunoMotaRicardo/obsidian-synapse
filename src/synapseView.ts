@@ -18,7 +18,7 @@ import type {
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
-import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from './agentService';
+import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
 import {scanAgents, scanSkills} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
@@ -61,6 +61,22 @@ export class SynapseView extends ItemView {
 	 * session's CLI transcript contains).
 	 */
 	sdkSeenIndex = 0;
+	/**
+	 * Tool-approval grants (rule strings, e.g. `Read(/abs/path/**)`) accumulated in memory for
+	 * the life of the current conversation (issue #193 round 2). Injected into every query via
+	 * `Options.settings` (`buildSessionConfig()`) so an **ask**-mode approval survives the Agent
+	 * SDK's per-`send()` process respawn without ever writing to disk — see
+	 * `buildInMemoryPermissionSettings()`'s doc comment in `agentService.ts`.
+	 *
+	 * Lives on `SynapseView`, not `Session`, for the same reason `sdkSeenIndex` does: a
+	 * `configDirty` change makes `ensureSession()` rebuild the `Session` object (issue #104),
+	 * but the grants a user already approved this conversation must survive that rebuild —
+	 * `buildSessionConfig()` reads this set fresh on every call, rebuild or not. Cleared only in
+	 * `newConversation()`, never on a rebuild; grants added mid-conversation (no rebuild) reach
+	 * the live `Session` via `Session.setSettings()` instead (see the permission handler in
+	 * `buildSessionConfig()`).
+	 */
+	sessionToolGrants: Set<string> = new Set();
 	/**
 	 * Last successful `supportedCommands()`/`supportedAgents()` capture (#130), held here
 	 * rather than read only from `currentSession` (#163).
@@ -1166,6 +1182,7 @@ export class SynapseView extends ItemView {
 		this.pendingSessionLabel = null;
 		this.messages = [];
 		this.sdkSeenIndex = 0;
+		this.sessionToolGrants.clear();
 		if (this.fullRenderTimer) {
 			window.clearTimeout(this.fullRenderTimer);
 			this.fullRenderTimer = null;
@@ -1230,7 +1247,24 @@ export class SynapseView extends ItemView {
 				toolUseID: options.toolUseID,
 			});
 			modal.open();
-			return modal.promise;
+			const result = await modal.promise;
+
+			// Accumulate the approval in memory (issue #193 round 2) so it survives the Agent
+			// SDK's per-send() process respawn — destination: 'session' (sessionScopePermissions())
+			// only covers the current CLI process. Only addRules/'allow' suggestions translate;
+			// see extractAllowRuleStrings()'s doc comment for what's skipped and why.
+			if (result.behavior === 'allow' && options.suggestions && options.suggestions.length > 0) {
+				const newRules = extractAllowRuleStrings(options.suggestions);
+				if (newRules.length > 0) {
+					for (const rule of newRules) this.sessionToolGrants.add(rule);
+					// Push the update to the live Session immediately so the *next* send() on
+					// this same (un-rebuilt) session already carries it — buildSessionConfig()
+					// only seeds a session at creation/rebuild time.
+					this.currentSession?.setSettings(buildInMemoryPermissionSettings(this.sessionToolGrants));
+				}
+			}
+
+			return result;
 		};
 
 		// Elicitation handler — shows a form modal for structured input requests
@@ -1285,6 +1319,10 @@ export class SynapseView extends ItemView {
 			systemPrompt: {type: 'preset', preset: 'claude_code', append: systemContent},
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
 			...(opts.resume ? {resume: opts.resume} : {}),
+			// Seed a (re)built session with whatever grants this conversation already
+			// accumulated (issue #193 round 2) — survives a configDirty rebuild the same way
+			// `resume` above does. Omitted entirely when nothing has been granted yet.
+			...(this.sessionToolGrants.size > 0 ? {settings: buildInMemoryPermissionSettings(this.sessionToolGrants)} : {}),
 		};
 
 		return config;
