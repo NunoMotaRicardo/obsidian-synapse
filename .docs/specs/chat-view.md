@@ -372,7 +372,10 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     allows several cards selected at once, `false` allows exactly one. Every question also offers
     an **Other** free-text card — the tool description tells the model the harness supplies one,
     so the model never sends one itself. Submit stays disabled until every question has an answer
-    (a selected option or non-empty Other text).
+    (a selected option or non-empty Other text). The Other field claims the answer on **typed
+    text, not on focus** — on a single-select question claiming it clears the selected option, so
+    focusing alone would silently drop the user's pick and leave Submit disabled with nothing
+    typed to replace it.
   - On submit, the pure `buildAskUserQuestionAnswers()` helper (exported standalone, no DOM/Obsidian
     dependency, so it's unit-tested in `test/askUserQuestionModal.test.ts` without a live CLI or
     vault) maps the per-question selection state to the `answers`/`annotations` shape the CLI

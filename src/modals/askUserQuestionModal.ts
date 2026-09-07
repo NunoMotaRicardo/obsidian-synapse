@@ -189,13 +189,16 @@ export class AskUserQuestionModal extends Modal {
 		otherCard.addEventListener('click', () => {
 			otherInput.focus();
 		});
+		// Claiming the answer is driven by typed text, never by focus alone: on a single-select
+		// question this clears the currently selected option, so a user who merely clicks into the
+		// field to consider a custom answer would otherwise lose their pick and find Submit
+		// disabled with nothing typed to replace it.
 		const selectOther = (): void => {
 			if (!q.multiSelect) state.selectedLabels.clear();
 			state.otherSelected = true;
 			applySelectionStyles();
 			this.updateSubmitState();
 		};
-		otherInput.addEventListener('focus', selectOther);
 		otherInput.addEventListener('input', () => {
 			state.otherText = otherInput.value;
 			if (otherInput.value.trim()) selectOther();
