@@ -1,6 +1,6 @@
 # Working-Directory Auto-Update: Deferral Restored on Token-Cost Grounds (issue #202)
 
-Status: **decided; implemented in PR #204** (2026-09-07)
+Status: **decided and implemented** (2026-09-07) — merged in PR #204
 
 Supersedes: [`2026-09-03-cwd-deferral-removed.md`](2026-09-03-cwd-deferral-removed.md) (issue #131)
 
@@ -117,8 +117,8 @@ Alternatives considered and rejected:
 
 ## Hand-off Notes for the Technical Planner
 
-No new technical work is requested by this record; issue #202 is already implemented in PR #204,
-and the spec update to `chat-view.md` ships with it.
+No new technical work is requested by this record; issue #202 is implemented and merged (PR #204),
+and the spec update to `chat-view.md` shipped with it.
 
 Two items may warrant issues if the user wants them pursued:
 
