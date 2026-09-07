@@ -426,9 +426,11 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				this.workingDir = newDir;
 				this.updateCwdButton();
 				this.configDirty = true;
-				this.pendingWorkingDir = null;
-			} else if (decision.pendingDir !== null) {
+			}
+			if (decision.pendingDir !== null) {
 				this.pendingWorkingDir = decision.pendingDir;
+			} else if (decision.clearPending) {
+				this.pendingWorkingDir = null;
 			}
 		}
 	};

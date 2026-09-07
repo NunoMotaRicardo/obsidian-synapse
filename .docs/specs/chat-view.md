@@ -241,9 +241,13 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     (`currentSession !== null && messages.length > 0`); when true and the folder actually changed, the new
     directory is held in `SynapseView.pendingWorkingDir` instead of being applied — the working-directory button
     doesn't move and no rebuild happens — and applied the next time a conversation is *not* in progress
-    (`newConversation()`). A *manual* working-directory override (`SynapseView.setWorkingDir()`) bypasses this
-    function entirely and always applies immediately, since it's a deliberate user action rather than a silent
-    side effect of navigation.
+    (`newConversation()`). If the active note instead returns to the folder the session is already in
+    (`newDir === currentWorkingDir`) while a deferral from an earlier detour is outstanding,
+    `decideWorkingDirAutoUpdate()` reports `clearPending: true` and `updateActiveNote()` clears
+    `pendingWorkingDir` — otherwise the abandoned detour's folder would survive and get silently applied by the
+    next `newConversation()`, even though the user is looking at a note back in the original folder. A *manual*
+    working-directory override (`SynapseView.setWorkingDir()`) bypasses this function entirely and always applies
+    immediately, since it's a deliberate user action rather than a silent side effect of navigation.
   - **Every `configDirty` rebuild now carries the conversation forward (issue #104):** the
     toolbar-toggle pattern above (agent/model/reasoning/tools) still marks `configDirty` and lets
     `ensureSession()` rebuild the `Session` — that part is unchanged, and deliberately so (see

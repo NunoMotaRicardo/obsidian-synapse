@@ -630,6 +630,14 @@ export interface WorkingDirAutoUpdateDecision {
 	 * `null` when there is nothing to defer (directory unchanged, or applied now).
 	 */
 	pendingDir: string | null;
+	/**
+	 * Whether any existing `pendingWorkingDir` on the caller should be cleared. True whenever
+	 * `pendingDir` is `null` — covers both `applyNow` (the change already landed, so there is
+	 * nothing left to defer) and the note returning to `currentWorkingDir` (any earlier deferral
+	 * from a since-abandoned detour would otherwise survive and get applied at the wrong time —
+	 * see the "stale pendingWorkingDir" scenario in this function's doc comment).
+	 */
+	clearPending: boolean;
 }
 
 /**
@@ -651,6 +659,14 @@ export interface WorkingDirAutoUpdateDecision {
  * `pendingWorkingDir` while a conversation is in progress — the working-directory button
  * doesn't move and no rebuild happens — and applied the next time a conversation is *not*
  * in progress (`newConversation()`).
+ *
+ * Returning to `currentWorkingDir` mid-conversation must **cancel** any pending deferral
+ * from an earlier detour, not just leave it as a no-op: a user chatting about a note in
+ * folder A, glancing at a note in folder B (deferred), and coming back to A before ending the
+ * conversation is looking at A when the conversation ends, so the working directory must stay
+ * A — not silently jump to the abandoned B. `clearPending` on the returned decision signals
+ * this to the caller (`inputArea.ts#updateActiveNote()`), which must clear its
+ * `pendingWorkingDir` whenever `clearPending` is true, regardless of `pendingDir`.
  */
 export function decideWorkingDirAutoUpdate(params: {
 	newDir: string;
@@ -658,9 +674,9 @@ export function decideWorkingDirAutoUpdate(params: {
 	conversationInProgress: boolean;
 }): WorkingDirAutoUpdateDecision {
 	const {newDir, currentWorkingDir, conversationInProgress} = params;
-	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null};
-	if (conversationInProgress) return {applyNow: false, pendingDir: newDir};
-	return {applyNow: true, pendingDir: null};
+	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null, clearPending: true};
+	if (conversationInProgress) return {applyNow: false, pendingDir: newDir, clearPending: false};
+	return {applyNow: true, pendingDir: null, clearPending: true};
 }
 
 /**
