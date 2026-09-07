@@ -12,7 +12,7 @@ import type {SessionConfig} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 import {scanAgents, scanSkills} from '../configWriter';
-import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
+import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError} from './telegramApi';
@@ -255,6 +255,13 @@ export class TelegramBotService {
 				promptText += `\n\n---\nAttached file: ${att.name}\nPath: ${att.path}`;
 			}
 
+			// Per-turn volatile context (issue #201) — Working directory and the current agent
+			// stay out of `systemPrompt.append` (built in `buildBotSessionConfig()`) and are
+			// delivered here instead, matching the chat view's split.
+			const normalizedBasePath = this.getVaultBasePath().replace(/\\/g, '/');
+			const defaultAgentName = this.plugin.settings.featureAgents?.telegram || this.plugin.settings.telegramDefaultAgent || undefined;
+			promptText += `\n\nWorking directory: ${normalizedBasePath}` + buildCurrentAgentLine(defaultAgentName || 'Auto');
+
 			const sendOpts = {
 				prompt: promptText,
 			};
@@ -313,11 +320,16 @@ export class TelegramBotService {
 
 		const reasoningEffort = this.plugin.settings.reasoningEffort;
 		const normalizedBasePath = basePath.replace(/\\/g, '/');
+		// Session-stable content only (issue #201) — Working directory and the current agent
+		// are volatile in general (they can change between turns of a resumed conversation)
+		// and are delivered per-turn in the prompt instead (see `processMessage()`), matching
+		// the chat view's split even though this bot's own values happen to be constant across
+		// a chat/topic today. Resilience guidance (constraint: bot runs unattended, bypassing
+		// permissions, so it must never silently lose this) stays here, unconditionally stable.
 		const systemContent = [
 			'[Workspace Path Information]',
 			`Vault root: ${normalizedBasePath}`,
-			`Working directory: ${normalizedBasePath}`,
-		].join('\n') + buildResilienceHint() + buildSelfImproveHint(defaultAgentName || 'Auto');
+		].join('\n') + buildResilienceHint() + buildSelfImproveHint();
 
 		return {
 			model,

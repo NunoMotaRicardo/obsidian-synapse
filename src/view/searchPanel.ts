@@ -3,7 +3,7 @@ import type {SynapseView} from '../synapseView';
 import {autoApproveReadOnlyTools, type SessionConfig} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
-import {buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
+import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 import {getSynapsePluginConfig} from '../vaultPaths';
 
 /** Read-only file tools for vault search — no write/exec access needed. */
@@ -261,8 +261,11 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
-		// Self-improve detection hint + resilience hint for search sessions
-		const selfImproveBlock = buildSelfImproveHint(this.searchAgent || 'Auto');
+		// Self-improve detection hint (static body — issue #201) + resilience hint for
+		// search sessions. The "Current agent" line moved out of this hint's return value
+		// (it's volatile) and is delivered per-turn in the search prompt instead — see
+		// `handleAdvancedSearch()`'s `buildCurrentAgentLine()` call.
+		const selfImproveBlock = buildSelfImproveHint();
 		const resilienceBlock = buildResilienceHint();
 
 		return {
@@ -363,7 +366,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 	proto.handleAdvancedSearch = async function (this: SynapseView, query: string): Promise<void> {
 		const sessionConfig = this.buildSearchSessionConfig();
-		const searchPrompt = buildSearchPrompt(query);
+		// Current agent moved out of the (session-stable) self-improve hint in
+		// `buildSearchSessionConfig()` — deliver it per-turn in the prompt instead (issue #201).
+		const searchPrompt = buildSearchPrompt(query) + buildCurrentAgentLine(this.searchAgent || 'Auto');
 
 		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
 
