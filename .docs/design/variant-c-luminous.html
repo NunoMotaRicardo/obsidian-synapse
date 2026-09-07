@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variant C — Luminous Clay · Synapse</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+/* ── shared prototype scaffolding (inlined from _shared.css) ── */
+/* Shared scaffolding for Synapse × Claude design prototypes.
+   Only the page chrome lives here — each variant owns its own design tokens. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	background: var(--page-bg, #efece5);
+	color: var(--page-tx, #1a1714);
+	-webkit-font-smoothing: antialiased;
+	transition: background .3s ease, color .3s ease;
+}
+
+.page {
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 40px 32px 96px;
+}
+
+.page-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	margin-bottom: 8px;
+}
+
+.eyebrow {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: .11em;
+	text-transform: uppercase;
+	color: var(--page-tx-faint, #9a9088);
+	margin-bottom: 10px;
+}
+
+h1.page-title {
+	font-size: 34px;
+	font-weight: 600;
+	letter-spacing: -.025em;
+	margin: 0 0 10px;
+	line-height: 1.1;
+}
+
+.page-lede {
+	font-size: 15px;
+	line-height: 1.6;
+	color: var(--page-tx-muted, #6b6258);
+	max-width: 62ch;
+	margin: 0;
+}
+
+.toolbar { display: flex; gap: 8px; flex-shrink: 0; }
+
+.toolbar button,
+.backlink {
+	font: inherit;
+	font-size: 12.5px;
+	font-weight: 500;
+	padding: 8px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--page-line, #ded8cf);
+	background: var(--page-card, #faf9f5);
+	color: var(--page-tx, #1a1714);
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background .15s ease, border-color .15s ease;
+}
+.toolbar button:hover, .backlink:hover { border-color: #d97757; color: #d97757; }
+
+.stage {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 28px;
+	margin-top: 40px;
+	align-items: flex-start;
+}
+
+.stage-item { display: flex; flex-direction: column; gap: 12px; }
+
+.stage-label {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--page-tx-faint, #9a9088);
+}
+
+/* Obsidian window mock — the panel always sits in a right sidebar. */
+.obsidian-frame {
+	width: 452px;
+	height: 720px;
+	border-radius: 10px;
+	overflow: hidden;
+	display: flex;
+	box-shadow: 0 18px 44px rgba(26, 23, 20, .13), 0 2px 6px rgba(26, 23, 20, .06);
+	border: 1px solid var(--page-line, #ded8cf);
+}
+.obsidian-frame > .panel { flex: 1; min-width: 0; }
+
+.notes {
+	margin-top: 56px;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 20px;
+}
+.note-card {
+	background: var(--page-card, #faf9f5);
+	border: 1px solid var(--page-line, #ded8cf);
+	border-radius: 10px;
+	padding: 20px 22px;
+}
+.note-card h3 {
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: -.01em;
+}
+.note-card p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.62;
+	color: var(--page-tx-muted, #6b6258);
+}
+.note-card .swatches { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.note-card .sw {
+	width: 26px; height: 26px; border-radius: 5px;
+	border: 1px solid rgba(26,23,20,.12);
+}
+
+code.tok {
+	font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	font-size: 12px;
+	background: rgba(217,119,87,.1);
+	color: #b8552f;
+	padding: 1px 5px;
+	border-radius: 4px;
+}
+
+body.is-dark {
+	--page-bg: #14110f;
+	--page-tx: #e8e2da;
+	--page-tx-muted: #9a9088;
+	--page-tx-faint: #6b6258;
+	--page-card: #1e1a17;
+	--page-line: #332d27;
+}
+body.is-dark .obsidian-frame { box-shadow: 0 18px 44px rgba(0,0,0,.5); }
+body.is-dark code.tok { background: rgba(217,119,87,.16); color: #e08a6c; }
+body.is-dark .note-card .sw { border-color: rgba(255,255,255,.14); }
+</style>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   VARIANT C — "Luminous Clay"
+   Claude's palette given depth. Soft layered elevation, 20px
+   radii, a clay glow behind the mark, a composer that floats
+   over a scrim, and tool calls drawn as a connected timeline.
+   The tweak: light and elevation carry hierarchy.
+   ══════════════════════════════════════════════════════════════ */
+
+.panel {
+	--clay:      #d97757;
+	--clay-deep: #c2603f;
+	--clay-lift: #e18f70;
+	--moss:      #788c5d;
+	--slate:     #6a9bcc;
+
+	--paper:     #ffffff;
+	--canvas:    #f3f0e8;
+	--sunk:      #ece8de;
+	--tx:        #141413;
+	--tx-muted:  #6d6a63;
+	--tx-faint:  #a29c90;
+	--line:      rgba(20, 20, 19, .09);
+
+	--sh-sm: 0 1px 2px rgba(58, 41, 30, .06);
+	--sh-md: 0 2px 6px rgba(58, 41, 30, .07), 0 8px 22px rgba(58, 41, 30, .06);
+	--sh-lg: 0 4px 12px rgba(58, 41, 30, .09), 0 18px 44px rgba(58, 41, 30, .1);
+
+	--r-xl: 20px;
+	--r-lg: 14px;
+	--r-md: 10px;
+
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	background: var(--canvas);
+	color: var(--tx);
+	font-family: 'DM Sans', -apple-system, 'Segoe UI', sans-serif;
+	font-size: 13.5px;
+	line-height: 1.55;
+	overflow: hidden;
+}
+
+.panel.dark {
+	--clay-deep: #e79877;
+	--paper:     #241f1b;
+	--canvas:    #17140f;
+	--sunk:      #1e1a16;
+	--tx:        #efeae1;
+	--tx-muted:  #a49c90;
+	--tx-faint:  #746b60;
+	--line:      rgba(255, 255, 255, .09);
+	--sh-sm: 0 1px 2px rgba(0, 0, 0, .4);
+	--sh-md: 0 2px 8px rgba(0, 0, 0, .45);
+	--sh-lg: 0 6px 16px rgba(0, 0, 0, .5), 0 20px 48px rgba(0, 0, 0, .4);
+}
+
+/* Ambient clay wash at the top of the panel */
+.panel::before {
+	content: '';
+	position: absolute; inset: 0 0 auto; height: 260px;
+	background: radial-gradient(120% 80% at 50% -18%, rgba(217, 119, 87, .17), transparent 68%);
+	pointer-events: none;
+}
+.panel.dark::before { background: radial-gradient(120% 80% at 50% -18%, rgba(217, 119, 87, .16), transparent 66%); }
+
+/* ── Header ──────────────────────────────────────────────── */
+.p-head {
+	position: relative; z-index: 1;
+	display: flex; align-items: center; gap: 8px;
+	padding: 12px 16px 10px;
+}
+.seg-tabs {
+	display: inline-flex; padding: 3px;
+	background: var(--sunk); border-radius: 999px;
+	box-shadow: inset 0 1px 2px rgba(58, 41, 30, .07);
+}
+.panel.dark .seg-tabs { box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35); }
+.seg-tab {
+	display: inline-flex; align-items: center; gap: 6px;
+	font-size: 12.5px; font-weight: 500; color: var(--tx-muted);
+	padding: 5px 13px; border-radius: 999px; cursor: pointer;
+	transition: color .15s ease;
+}
+.seg-tab svg { width: 14px; height: 14px; }
+.seg-tab.on { background: var(--paper); color: var(--tx); box-shadow: var(--sh-sm); }
+.p-head .sp { flex: 1; }
+.p-head .ghost {
+	width: 30px; height: 30px; border-radius: 999px;
+	display: grid; place-items: center; color: var(--tx-faint); cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+.p-head .ghost:hover { background: var(--paper); color: var(--tx); box-shadow: var(--sh-sm); }
+.p-head .ghost svg { width: 16px; height: 16px; }
+
+/* ── Body ────────────────────────────────────────────────── */
+.p-body {
+	position: relative; z-index: 1;
+	flex: 1; min-height: 0; overflow-y: auto;
+	display: flex; flex-direction: column;
+	padding: 0 16px;
+}
+.p-body::-webkit-scrollbar { width: 10px; }
+.p-body::-webkit-scrollbar-thumb { background: rgba(20, 20, 19, .14); border-radius: 9px; border: 3px solid transparent; background-clip: content-box; }
+.panel.dark .p-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .13); background-clip: content-box; }
+
+/* ── Empty state — the mark, lit ─────────────────────────── */
+.hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px 0 4px; }
+.hero-orb {
+	position: relative;
+	width: 76px; height: 76px; border-radius: 999px;
+	display: grid; place-items: center; margin-bottom: 20px;
+	background: var(--paper);
+	box-shadow: var(--sh-md), 0 0 0 8px rgba(217, 119, 87, .07), 0 0 40px rgba(217, 119, 87, .3);
+}
+.hero-orb svg { width: 38px; height: 38px; color: var(--clay); }
+.hero h1 {
+	font-family: 'Newsreader', Georgia, serif;
+	font-size: 27px; font-weight: 400; letter-spacing: -.015em;
+	margin: 0; line-height: 1.2; color: var(--tx);
+}
+.hero p { margin: 12px 0 0; font-size: 13px; color: var(--tx-muted); max-width: 32ch; line-height: 1.6; }
+
+/* Starter cards, elevated */
+.cards { display: flex; flex-direction: column; gap: 8px; padding: 22px 0 16px; }
+.card {
+	display: flex; align-items: center; gap: 11px;
+	background: var(--paper); border-radius: var(--r-lg);
+	padding: 12px 14px; cursor: pointer;
+	box-shadow: var(--sh-sm);
+	transition: transform .16s ease, box-shadow .16s ease;
+}
+.card:hover { transform: translateY(-1px); box-shadow: var(--sh-md); }
+.card .c-ico {
+	width: 30px; height: 30px; border-radius: var(--r-md);
+	display: grid; place-items: center; flex-shrink: 0;
+	background: rgba(217, 119, 87, .12); color: var(--clay-deep);
+}
+.card .c-ico svg { width: 15px; height: 15px; }
+.card .c-txt { min-width: 0; }
+.card .c-t { font-size: 13px; font-weight: 500; color: var(--tx); }
+.card .c-d { font-size: 11.5px; color: var(--tx-faint); margin-top: 1px; }
+
+/* ── Conversation ────────────────────────────────────────── */
+.thread { padding: 14px 0 8px; display: flex; flex-direction: column; gap: 18px; }
+
+.turn-user { align-self: flex-end; max-width: 84%; }
+.turn-user .bubble {
+	background: linear-gradient(160deg, var(--clay) 0%, var(--clay-deep) 100%);
+	color: #fff;
+	border-radius: var(--r-xl) var(--r-xl) 5px var(--r-xl);
+	padding: 11px 15px;
+	font-size: 13.5px;
+	box-shadow: 0 2px 8px rgba(194, 96, 63, .3);
+}
+
+.turn-ai { display: flex; flex-direction: column; gap: 10px; }
+.ai-card {
+	background: var(--paper);
+	border-radius: var(--r-xl) var(--r-xl) var(--r-xl) 5px;
+	padding: 14px 16px;
+	box-shadow: var(--sh-sm);
+	font-size: 13.5px;
+}
+.ai-card p { margin: 0 0 10px; }
+.ai-card p:last-child { margin-bottom: 0; }
+.ai-card strong { font-weight: 600; }
+.ai-card a { color: var(--clay-deep); text-decoration: none; border-bottom: 1px solid rgba(217, 119, 87, .35); }
+.ai-card code {
+	font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	font-size: 12px; background: rgba(20, 20, 19, .05); padding: 1px 5px; border-radius: 4px;
+}
+.panel.dark .ai-card code { background: rgba(255, 255, 255, .08); }
+
+/* Result rows inside the answer card */
+.rows { display: flex; flex-direction: column; gap: 2px; margin: 0 0 11px; }
+.row {
+	display: flex; gap: 10px; align-items: flex-start;
+	padding: 8px 10px; border-radius: var(--r-md);
+	background: var(--sunk);
+}
+.row .pip { width: 6px; height: 6px; border-radius: 999px; margin-top: 6px; flex-shrink: 0; background: var(--clay); }
+.row.warn .pip { background: var(--clay); }
+.row.calm .pip { background: var(--slate); }
+.row.done .pip { background: var(--moss); }
+.row .r-t { font-size: 12.5px; line-height: 1.5; }
+.row .r-t b { font-weight: 600; }
+
+/* Tool calls — a connected timeline */
+.timeline { position: relative; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+.timeline::before {
+	content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px;
+	width: 1.5px; background: linear-gradient(var(--clay), rgba(217, 119, 87, .18));
+	border-radius: 2px;
+}
+.node { position: relative; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tx-muted); min-width: 0; cursor: pointer; }
+.node::before {
+	content: ''; position: absolute; left: -19px; top: 50%; transform: translateY(-50%);
+	width: 9px; height: 9px; border-radius: 999px;
+	background: var(--paper); border: 2px solid var(--clay);
+	box-shadow: 0 0 0 3px var(--canvas);
+}
+.node.live::before { background: var(--clay); animation: halo 1.4s ease-out infinite; }
+@keyframes halo {
+	0%   { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 3px rgba(217, 119, 87, .5); }
+	100% { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 12px rgba(217, 119, 87, 0); }
+}
+.node .n-name { font-weight: 600; color: var(--tx); flex-shrink: 0; }
+.node .n-arg {
+	font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	font-size: 11.5px; color: var(--tx-faint);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.turn-meta { display: flex; gap: 6px; }
+.meta-btn {
+	display: inline-flex; align-items: center; gap: 5px;
+	font-size: 11.5px; font-weight: 500; color: var(--tx-faint);
+	padding: 4px 9px; border-radius: 999px; cursor: pointer;
+	background: var(--sunk);
+	transition: color .15s ease, background .15s ease;
+}
+.meta-btn:hover { color: var(--clay-deep); background: rgba(217, 119, 87, .12); }
+.meta-btn svg { width: 12px; height: 12px; }
+
+/* ── Composer — floats over a scrim ──────────────────────── */
+.composer-dock {
+	position: relative; z-index: 2;
+	padding: 18px 16px 16px;
+	background: linear-gradient(to top, var(--canvas) 62%, transparent);
+	margin-top: -18px;
+}
+.composer {
+	background: var(--paper);
+	border-radius: var(--r-xl);
+	padding: 12px 12px 9px;
+	box-shadow: var(--sh-md);
+	transition: box-shadow .2s ease, transform .2s ease;
+}
+.composer:focus-within { box-shadow: var(--sh-lg), 0 0 0 2px rgba(217, 119, 87, .28); }
+
+.ctx-row { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; flex-wrap: wrap; }
+.chip {
+	display: inline-flex; align-items: center; gap: 5px;
+	font-size: 11.5px; font-weight: 500;
+	padding: 4px 9px; border-radius: 999px;
+	background: rgba(217, 119, 87, .12); color: var(--clay-deep);
+}
+.chip svg { width: 12px; height: 12px; flex-shrink: 0; }
+.chip.neutral { background: var(--sunk); color: var(--tx-muted); }
+
+.c-input {
+	width: 100%; border: 0; background: transparent; resize: none; outline: none;
+	font: inherit; font-size: 14px; color: var(--tx);
+	line-height: 1.55; min-height: 44px; padding: 2px 2px 8px;
+}
+.c-input::placeholder { color: var(--tx-faint); }
+
+.c-foot { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+	width: 30px; height: 30px; border-radius: 999px;
+	display: grid; place-items: center; color: var(--tx-faint);
+	cursor: pointer; flex-shrink: 0;
+	transition: background .15s ease, color .15s ease;
+}
+.icon-btn:hover { background: var(--sunk); color: var(--tx); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+.picker {
+	display: inline-flex; align-items: center; gap: 5px;
+	font-size: 12px; font-weight: 500; color: var(--tx-muted);
+	padding: 5px 10px; border-radius: 999px; cursor: pointer;
+	background: var(--sunk); white-space: nowrap;
+	transition: color .15s ease;
+}
+.picker:hover { color: var(--tx); }
+.picker svg { width: 12px; height: 12px; }
+.picker .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--clay); }
+
+.send {
+	width: 32px; height: 32px; border-radius: 999px;
+	display: grid; place-items: center; flex-shrink: 0; margin-left: auto;
+	background: linear-gradient(160deg, var(--clay-lift), var(--clay-deep));
+	color: #fff; cursor: pointer;
+	box-shadow: 0 2px 8px rgba(194, 96, 63, .38);
+	transition: transform .12s ease, box-shadow .18s ease;
+}
+.send:hover { box-shadow: 0 4px 14px rgba(194, 96, 63, .48); }
+.send:active { transform: scale(.93); }
+.send svg { width: 16px; height: 16px; }
+
+.thinking { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--tx-faint); padding-left: 2px; }
+.thinking .orb {
+	width: 14px; height: 14px; border-radius: 999px;
+	background: radial-gradient(circle at 35% 30%, var(--clay-lift), var(--clay-deep));
+	animation: breathe 1.5s ease-in-out infinite;
+}
+@keyframes breathe { 0%, 100% { transform: scale(.72); opacity: .6; } 50% { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-head">
+		<div>
+			<div class="eyebrow">Variant C</div>
+			<h1 class="page-title">Luminous Clay</h1>
+			<p class="page-lede">Claude's palette given depth. Hierarchy comes from light rather than borders: a clay glow behind the mark, soft layered elevation on every surface, a composer that floats over a gradient scrim, and tool calls drawn as a connected timeline with a live pulsing node. The one place colour goes loud is the user's own turn — a clay gradient bubble that makes your side of the conversation unmistakable.</p>
+		</div>
+		<div class="toolbar">
+			<button onclick="document.body.classList.toggle('is-dark');document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('dark')})">Toggle dark</button>
+			<a class="backlink" href="index.html">All variants</a>
+		</div>
+	</div>
+
+	<div class="stage">
+
+		<!-- ─────────── Empty state ─────────── -->
+		<div class="stage-item">
+			<div class="stage-label">Empty state</div>
+			<div class="obsidian-frame">
+				<div class="panel">
+
+					<div class="p-head">
+						<div class="seg-tabs">
+							<div class="seg-tab on">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+								Chat
+							</div>
+							<div class="seg-tab">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+								Search
+							</div>
+						</div>
+						<div class="sp"></div>
+						<div class="ghost" title="New chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+						<div class="ghost" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg></div>
+					</div>
+
+					<div class="p-body">
+						<div class="hero">
+							<div class="hero-orb">
+								<svg viewBox="0 0 40 40" fill="currentColor">
+									<g transform="translate(20,20)">
+										<circle r="4.5"/>
+										<g transform="rotate(-90)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+										<g transform="rotate(30)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+										<g transform="rotate(150)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+									</g>
+								</svg>
+							</div>
+							<h1>Good evening, Nuno</h1>
+							<p>Twelve notes changed today. Where would you like to start?</p>
+						</div>
+
+						<div class="cards">
+							<div class="card">
+								<div class="c-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div>
+								<div class="c-txt">
+									<div class="c-t">Summarise what changed today</div>
+									<div class="c-d">12 notes across 4 folders</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="c-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+								<div class="c-txt">
+									<div class="c-t">Find unresolved decisions</div>
+									<div class="c-d">Vault-wide sweep</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="c-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+								<div class="c-txt">
+									<div class="c-t">Work on the current note</div>
+									<div class="c-d">meeting.md</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="composer-dock">
+						<div class="composer">
+							<div class="ctx-row">
+								<span class="chip">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+									meeting.md
+								</span>
+								<span class="chip neutral">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+									Meetings/
+								</span>
+							</div>
+							<textarea class="c-input" placeholder="Ask or paste something to work on…"></textarea>
+							<div class="c-foot">
+								<div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+								<div class="picker"><span class="dot"></span>General<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+								<div class="picker">Default model<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+								<div class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+							</div>
+						</div>
+					</div>
+
+				</div>
+			</div>
+		</div>
+
+		<!-- ─────────── Active conversation ─────────── -->
+		<div class="stage-item">
+			<div class="stage-label">Active conversation</div>
+			<div class="obsidian-frame">
+				<div class="panel">
+
+					<div class="p-head">
+						<div class="seg-tabs">
+							<div class="seg-tab on">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+								Chat
+							</div>
+							<div class="seg-tab">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+								Search
+							</div>
+						</div>
+						<div class="sp"></div>
+						<div class="ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+						<div class="ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg></div>
+					</div>
+
+					<div class="p-body">
+						<div class="thread">
+
+							<div class="turn-user">
+								<div class="bubble">Go through this week's meeting notes and pull out everything still unresolved.</div>
+							</div>
+
+							<div class="turn-ai">
+								<div class="timeline">
+									<div class="node">
+										<span class="n-name">Glob</span>
+										<span class="n-arg">Meetings/2026-09-*.md</span>
+									</div>
+									<div class="node">
+										<span class="n-name">Read</span>
+										<span class="n-arg">4 notes</span>
+									</div>
+									<div class="node live">
+										<span class="n-name">Grep</span>
+										<span class="n-arg">TODO|blocked|pending</span>
+									</div>
+								</div>
+
+								<div class="ai-card">
+									<p>Four notes, three threads still open:</p>
+									<div class="rows">
+										<div class="row warn">
+											<span class="pip"></span>
+											<span class="r-t"><b>Vendor contract</b> — legal review requested Tuesday, no reply. Owner unassigned in <a href="#">2026-09-01.md</a>.</span>
+										</div>
+										<div class="row calm">
+											<span class="pip"></span>
+											<span class="r-t"><b>Migration window</b> — two candidate dates, neither confirmed.</span>
+										</div>
+										<div class="row done">
+											<span class="pip"></span>
+											<span class="r-t"><b>Headcount</b> — deferred twice; carries a <code>#decide</code> tag with no date.</span>
+										</div>
+									</div>
+									<p>The vendor contract is the only one with an external dependency, so chase that first.</p>
+								</div>
+
+								<div class="turn-meta">
+									<span class="meta-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</span>
+									<span class="meta-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Insert</span>
+									<span class="meta-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Retry</span>
+								</div>
+							</div>
+
+							<div class="turn-user">
+								<div class="bubble">Draft a follow-up for the vendor one.</div>
+							</div>
+
+							<div class="turn-ai">
+								<div class="thinking"><span class="orb"></span> Drafting…</div>
+							</div>
+
+						</div>
+					</div>
+
+					<div class="composer-dock">
+						<div class="composer">
+							<textarea class="c-input" placeholder="Reply to Synapse…"></textarea>
+							<div class="c-foot">
+								<div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+								<div class="picker"><span class="dot"></span>General<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+								<div class="picker">Opus 5<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+								<div class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+							</div>
+						</div>
+					</div>
+
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<div class="notes">
+		<div class="note-card">
+			<h3>The tweak, in one line</h3>
+			<p>Same Claude colours, but hierarchy is carried by elevation instead of borders. Almost every hairline is replaced by a shadow, which is what lets the panel feel like an app layer floating above the vault rather than a pane cut into it.</p>
+		</div>
+		<div class="note-card">
+			<h3>The user turn goes loud</h3>
+			<p>A clay gradient bubble with an asymmetric corner. It is the only saturated surface on screen, so your own instructions are findable when scrolling a long thread — the exact thing that gets lost in Claude's all-neutral transcript.</p>
+			<div class="swatches">
+				<div class="sw" style="background:#f3f0e8"></div>
+				<div class="sw" style="background:#ffffff"></div>
+				<div class="sw" style="background:#e18f70"></div>
+				<div class="sw" style="background:#d97757"></div>
+				<div class="sw" style="background:#c2603f"></div>
+				<div class="sw" style="background:#788c5d"></div>
+				<div class="sw" style="background:#6a9bcc"></div>
+			</div>
+		</div>
+		<div class="note-card">
+			<h3>Tool calls as a timeline</h3>
+			<p>A gradient rail connects the nodes, so a multi-step run reads as one continuous action instead of three unrelated rows. The active node pulses a clay halo — progress without a spinner.</p>
+		</div>
+		<div class="note-card">
+			<h3>Dark mode is first-class</h3>
+			<p>Warm charcoal <code class="tok">#17140f</code> and <code class="tok">#241f1b</code> rather than a desaturated grey, so the clay accent stays warm instead of turning neon. The ambient wash at the top of the panel survives the theme flip.</p>
+		</div>
+	</div>
+
+</div>
+</body>
+</html>

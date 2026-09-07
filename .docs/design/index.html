@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synapse × Claude — design prototypes</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+/* ── shared prototype scaffolding (inlined from _shared.css) ── */
+/* Shared scaffolding for Synapse × Claude design prototypes.
+   Only the page chrome lives here — each variant owns its own design tokens. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	background: var(--page-bg, #efece5);
+	color: var(--page-tx, #1a1714);
+	-webkit-font-smoothing: antialiased;
+	transition: background .3s ease, color .3s ease;
+}
+
+.page {
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 40px 32px 96px;
+}
+
+.page-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	margin-bottom: 8px;
+}
+
+.eyebrow {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: .11em;
+	text-transform: uppercase;
+	color: var(--page-tx-faint, #9a9088);
+	margin-bottom: 10px;
+}
+
+h1.page-title {
+	font-size: 34px;
+	font-weight: 600;
+	letter-spacing: -.025em;
+	margin: 0 0 10px;
+	line-height: 1.1;
+}
+
+.page-lede {
+	font-size: 15px;
+	line-height: 1.6;
+	color: var(--page-tx-muted, #6b6258);
+	max-width: 62ch;
+	margin: 0;
+}
+
+.toolbar { display: flex; gap: 8px; flex-shrink: 0; }
+
+.toolbar button,
+.backlink {
+	font: inherit;
+	font-size: 12.5px;
+	font-weight: 500;
+	padding: 8px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--page-line, #ded8cf);
+	background: var(--page-card, #faf9f5);
+	color: var(--page-tx, #1a1714);
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background .15s ease, border-color .15s ease;
+}
+.toolbar button:hover, .backlink:hover { border-color: #d97757; color: #d97757; }
+
+.stage {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 28px;
+	margin-top: 40px;
+	align-items: flex-start;
+}
+
+.stage-item { display: flex; flex-direction: column; gap: 12px; }
+
+.stage-label {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--page-tx-faint, #9a9088);
+}
+
+/* Obsidian window mock — the panel always sits in a right sidebar. */
+.obsidian-frame {
+	width: 452px;
+	height: 720px;
+	border-radius: 10px;
+	overflow: hidden;
+	display: flex;
+	box-shadow: 0 18px 44px rgba(26, 23, 20, .13), 0 2px 6px rgba(26, 23, 20, .06);
+	border: 1px solid var(--page-line, #ded8cf);
+}
+.obsidian-frame > .panel { flex: 1; min-width: 0; }
+
+.notes {
+	margin-top: 56px;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 20px;
+}
+.note-card {
+	background: var(--page-card, #faf9f5);
+	border: 1px solid var(--page-line, #ded8cf);
+	border-radius: 10px;
+	padding: 20px 22px;
+}
+.note-card h3 {
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: -.01em;
+}
+.note-card p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.62;
+	color: var(--page-tx-muted, #6b6258);
+}
+.note-card .swatches { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.note-card .sw {
+	width: 26px; height: 26px; border-radius: 5px;
+	border: 1px solid rgba(26,23,20,.12);
+}
+
+code.tok {
+	font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	font-size: 12px;
+	background: rgba(217,119,87,.1);
+	color: #b8552f;
+	padding: 1px 5px;
+	border-radius: 4px;
+}
+
+body.is-dark {
+	--page-bg: #14110f;
+	--page-tx: #e8e2da;
+	--page-tx-muted: #9a9088;
+	--page-tx-faint: #6b6258;
+	--page-card: #1e1a17;
+	--page-line: #332d27;
+}
+body.is-dark .obsidian-frame { box-shadow: 0 18px 44px rgba(0,0,0,.5); }
+body.is-dark code.tok { background: rgba(217,119,87,.16); color: #e08a6c; }
+body.is-dark .note-card .sw { border-color: rgba(255,255,255,.14); }
+</style>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   Index — the comparison that motivates the three variants,
+   plus a mock of each side so the gap is visible, not asserted.
+   ══════════════════════════════════════════════════════════════ */
+
+.section { margin-top: 64px; }
+.section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.section-head h2 {
+	font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin: 0;
+}
+.section-head .n {
+	font-size: 11px; font-weight: 500; letter-spacing: .12em;
+	text-transform: uppercase; color: #d97757;
+}
+.section > p.lede {
+	font-size: 14px; line-height: 1.65; color: var(--page-tx-muted);
+	max-width: 70ch; margin: 0 0 8px;
+}
+
+/* ── Gap table ───────────────────────────────────────────── */
+.gap {
+	width: 100%; border-collapse: collapse; margin-top: 26px;
+	background: var(--page-card); border: 1px solid var(--page-line); border-radius: 10px;
+	overflow: hidden; font-size: 13px;
+}
+.gap th, .gap td { text-align: left; padding: 11px 16px; vertical-align: top; border-bottom: 1px solid var(--page-line); }
+.gap tr:last-child td { border-bottom: 0; }
+.gap th {
+	font-size: 10.5px; font-weight: 500; letter-spacing: .11em; text-transform: uppercase;
+	color: var(--page-tx-faint); background: rgba(20, 20, 19, .025);
+}
+body.is-dark .gap th { background: rgba(255, 255, 255, .03); }
+.gap td:first-child { font-weight: 500; width: 20%; }
+.gap td { color: var(--page-tx-muted); line-height: 1.55; }
+.gap td.now { color: var(--page-tx-muted); }
+.gap td.claude { color: var(--page-tx); }
+
+/* ── Variant cards ───────────────────────────────────────── */
+.variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px; }
+.v-card {
+	display: block; text-decoration: none; color: inherit;
+	background: var(--page-card); border: 1px solid var(--page-line);
+	border-radius: 12px; overflow: hidden;
+	transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.v-card:hover { transform: translateY(-2px); border-color: #d97757; box-shadow: 0 10px 30px rgba(26, 23, 20, .1); }
+.v-swatch { height: 76px; display: flex; }
+.v-swatch span { flex: 1; }
+.v-body { padding: 18px 20px 20px; }
+.v-body .v-tag {
+	font-size: 10.5px; font-weight: 500; letter-spacing: .12em;
+	text-transform: uppercase; color: var(--page-tx-faint); margin-bottom: 7px;
+}
+.v-body h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.v-body p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--page-tx-muted); }
+.v-body .v-go {
+	display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
+	font-size: 12.5px; font-weight: 500; color: #d97757;
+}
+.v-body .v-go svg { width: 13px; height: 13px; }
+
+/* ══════════════ Mock: current Synapse (today) ══════════════ */
+.now-panel {
+	--bg1: #faf8f5; --bg2: #f2ede7; --ui1: #ede8e1; --ui2: #e0d9d0;
+	--tx1: #1a1714; --tx2: #8a7f76; --tx3: #b8b0a8; --ax1: #d97757;
+	display: flex; flex-direction: column;
+	background: var(--bg1); color: var(--tx1);
+	font-family: 'DM Sans', -apple-system, sans-serif; font-size: 13px; line-height: 1.5;
+}
+.now-panel .n-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--ui1); padding: 0 8px; }
+.now-panel .n-tab {
+	display: flex; align-items: center; gap: 6px;
+	padding: 9px 12px; font-size: 12px; color: var(--tx2);
+	border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.now-panel .n-tab.on { color: var(--tx1); border-bottom-color: var(--ax1); }
+.now-panel .n-tab svg { width: 14px; height: 14px; }
+
+.now-panel .n-body { flex: 1; display: flex; flex-direction: column; padding: 12px 10px; min-height: 0; }
+.now-panel .n-welcome {
+	flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+	text-align: center; opacity: .7; padding: 40px 16px;
+}
+.now-panel .n-welcome svg { width: 48px; height: 48px; color: var(--ax1); margin-bottom: 12px; }
+.now-panel .n-welcome h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.now-panel .n-welcome p { margin: 0; font-size: 12px; color: var(--tx2); max-width: 30ch; line-height: 1.5; }
+
+.now-panel .n-input-area {
+	display: flex; flex-direction: column; gap: 4px;
+	background: var(--bg2); border: 1px solid var(--ui1); border-radius: 8px;
+	padding: 6px 8px; margin: 0 10px 8px;
+}
+.now-panel .n-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.now-panel .n-ico {
+	width: 24px; height: 24px; border-radius: 4px; display: grid; place-items: center; color: var(--tx2);
+}
+.now-panel .n-ico svg { width: 15px; height: 15px; }
+.now-panel .n-chip {
+	display: inline-flex; align-items: center; gap: 4px;
+	font-size: 11px; padding: 2px 6px; border-radius: 4px;
+	background: var(--ui1); color: var(--tx2);
+}
+.now-panel .n-chip svg { width: 11px; height: 11px; }
+.now-panel .n-row { display: flex; align-items: flex-end; gap: 6px; }
+.now-panel .n-ta {
+	flex: 1; border: 0; background: transparent; resize: none; outline: none;
+	font: inherit; font-size: 13px; color: var(--tx1); min-height: 26px; padding: 2px 0;
+}
+.now-panel .n-ta::placeholder { color: var(--tx3); }
+.now-panel .n-send {
+	width: 28px; height: 28px; border-radius: 4px; display: grid; place-items: center;
+	background: var(--ax1); color: #fff; flex-shrink: 0;
+}
+.now-panel .n-send svg { width: 16px; height: 16px; }
+.now-panel .n-bar {
+	display: flex; align-items: center; gap: 6px; padding: 0 10px 10px;
+}
+.now-panel .n-sel {
+	display: inline-flex; align-items: center; gap: 5px;
+	font-size: 11.5px; color: var(--tx1);
+	border: 1px solid var(--ui2); border-radius: 4px; padding: 3px 8px; background: var(--bg1);
+}
+.now-panel .n-sel svg { width: 12px; height: 12px; color: var(--tx2); }
+
+/* ══════════════ Mock: Claude Cowork (reference) ════════════ */
+.cw-panel {
+	display: flex; flex-direction: column; justify-content: center;
+	background: #f0eee6; color: #141413;
+	font-family: 'DM Sans', -apple-system, sans-serif; font-size: 13.5px;
+	padding: 0 28px;
+}
+.cw-hero { text-align: center; }
+.cw-hero .cw-line { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.cw-hero .cw-star { width: 30px; height: 30px; color: #d97757; }
+.cw-hero h1 {
+	font-family: 'Newsreader', Georgia, serif; font-weight: 400;
+	font-size: 30px; letter-spacing: -.015em; margin: 0; line-height: 1.1;
+}
+.cw-composer {
+	margin-top: 26px; background: #faf9f5; border: 1px solid #e3e0d6;
+	border-radius: 16px; padding: 13px 13px 9px; text-align: left;
+	box-shadow: 0 1px 2px rgba(20, 20, 19, .04);
+}
+.cw-composer .cw-ph { font-size: 14px; color: #9b968c; padding: 3px 2px 22px; }
+.cw-foot { display: flex; align-items: center; gap: 7px; }
+.cw-foot .cw-plus { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: #9b968c; }
+.cw-foot .cw-plus svg { width: 16px; height: 16px; }
+.cw-seg { display: inline-flex; background: rgba(20, 20, 19, .05); border-radius: 999px; padding: 2px; }
+.cw-seg span { font-size: 12px; font-weight: 500; color: #6d6a63; padding: 4px 11px; border-radius: 999px; }
+.cw-seg span.on { background: #faf9f5; color: #141413; box-shadow: 0 1px 2px rgba(20, 20, 19, .09); }
+.cw-foot .cw-model { margin-left: auto; font-size: 12px; font-weight: 500; color: #6d6a63; display: flex; align-items: center; gap: 7px; }
+.cw-foot .cw-model .lvl { color: #9b968c; }
+.cw-foot .cw-mic { width: 26px; height: 26px; display: grid; place-items: center; color: #6d6a63; }
+.cw-foot .cw-mic svg { width: 15px; height: 15px; }
+.cw-sub { display: flex; gap: 16px; padding: 12px 4px 0; font-size: 12.5px; color: #6d6a63; }
+
+.frame-sm { width: 452px; height: 470px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-head">
+		<div>
+			<div class="eyebrow">Synapse · design study</div>
+			<h1 class="page-title">Making Synapse look like Claude</h1>
+			<p class="page-lede">Three prototypes for the Synapse chat panel, built on Claude's brand palette and measured against the Claude Cowork surface. Variant A reproduces Claude exactly; B and C keep the palette but each apply one deliberate, non-subtle design move.</p>
+		</div>
+		<div class="toolbar">
+			<button onclick="document.body.classList.toggle('is-dark')">Toggle dark</button>
+		</div>
+	</div>
+
+	<!-- ═══════════ 1. The comparison ═══════════ -->
+	<div class="section">
+		<div class="section-head">
+			<span class="n">01</span>
+			<h2>Where Synapse stands today</h2>
+		</div>
+		<p class="lede">Synapse already ships the right colours — the vault's Synapse theme sets terracotta <code class="tok">#d97757</code> on warm parchment, which is within a hair of Claude's clay on ivory. What differs is everything downstream of colour: density, radii, the weight given to the composer, and where hierarchy comes from.</p>
+
+		<div class="stage">
+			<div class="stage-item">
+				<div class="stage-label">Synapse today</div>
+				<div class="obsidian-frame frame-sm">
+					<div class="panel now-panel">
+						<div class="n-tabs">
+							<div class="n-tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</div>
+							<div class="n-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search</div>
+						</div>
+						<div class="n-body">
+							<div class="n-welcome">
+								<svg viewBox="0 0 40 40" fill="currentColor">
+									<g transform="translate(20,20)">
+										<circle r="4.5"/>
+										<g transform="rotate(-90)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+										<g transform="rotate(30)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+										<g transform="rotate(150)"><rect x="5.2" y="-1.1" width="8.5" height="2.2" rx="1.1"/><circle cx="17" cy="0" r="2.8"/></g>
+									</g>
+								</svg>
+								<h3>Synapse</h3>
+								<p>Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!</p>
+							</div>
+						</div>
+						<div class="n-input-area">
+							<div class="n-actions">
+								<div class="n-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+								<div class="n-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.19 5.19l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg></div>
+								<div class="n-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+								<span class="n-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>meeting.md</span>
+							</div>
+							<div class="n-row">
+								<textarea class="n-ta" placeholder="Ask or paste something to work on..."></textarea>
+								<div class="n-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+								<div class="n-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+							</div>
+						</div>
+						<div class="n-bar">
+							<div class="n-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+							<span class="n-sel">General<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+							<span class="n-sel">Default model<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="stage-item">
+				<div class="stage-label">Claude Cowork</div>
+				<div class="obsidian-frame frame-sm">
+					<div class="panel cw-panel">
+						<div class="cw-hero">
+							<div class="cw-line">
+								<svg class="cw-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.5c.3 0 .55.24.57.54l.38 6.1 3.4-4.35a.57.57 0 0 1 .95.6l-2.53 5.56 5.3-3.05a.57.57 0 0 1 .68.9l-4.4 4.24 6.03-.86a.57.57 0 0 1 .27 1.1l-5.85 1.86 5.85 1.86a.57.57 0 0 1-.27 1.1l-6.03-.86 4.4 4.24a.57.57 0 0 1-.68.9l-5.3-3.05 2.53 5.56a.57.57 0 0 1-.95.6l-3.4-4.35-.38 6.1a.57.57 0 0 1-1.14 0l-.38-6.1-3.4 4.35a.57.57 0 0 1-.95-.6l2.53-5.56-5.3 3.05a.57.57 0 0 1-.68-.9l4.4-4.24-6.03.86a.57.57 0 0 1-.27-1.1L7.7 12l-5.85-1.86a.57.57 0 0 1 .27-1.1l6.03.86-4.4-4.24a.57.57 0 0 1 .68-.9l5.3 3.05L7.2 2.29a.57.57 0 0 1 .95-.6l3.4 4.35.38-6.1c.02-.3.27-.54.57-.54z"/></svg>
+								<h1>Good evening, Nuno</h1>
+							</div>
+						</div>
+						<div class="cw-composer">
+							<div class="cw-ph">How can I help you today?</div>
+							<div class="cw-foot">
+								<div class="cw-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+								<div class="cw-seg"><span>Chat</span><span class="on">Cowork</span></div>
+								<div class="cw-model">Opus 5 <span class="lvl">Medium</span>
+									<span class="cw-mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg></span>
+								</div>
+							</div>
+						</div>
+						<div class="cw-sub">
+							<span>Project or folder</span>
+							<span>Manual</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<table class="gap">
+			<thead>
+				<tr><th>Dimension</th><th>Synapse today</th><th>Claude Cowork</th></tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td>Accent</td>
+					<td class="now">Terracotta <code class="tok">#d97757</code> via the vault theme — already Claude's clay.</td>
+					<td class="claude">Clay <code class="tok">#d97757</code> on ivory <code class="tok">#f0eee6</code> / <code class="tok">#faf9f5</code>.</td>
+				</tr>
+				<tr>
+					<td>Composer</td>
+					<td class="now">A 8px-radius strip on <code class="tok">--background-secondary</code>, visually lighter than the chat above it. Controls spill into a separate bar below.</td>
+					<td class="claude">The heaviest object on screen: 16px radius, raised card, generous padding, every control folded into its footer.</td>
+				</tr>
+				<tr>
+					<td>Density</td>
+					<td class="now">Obsidian-native and tight — 6px gaps, 24px icon buttons, <code class="tok">--font-ui-small</code>.</td>
+					<td class="claude">Roomy: 14px body, 18–20px gutters, generous vertical rhythm.</td>
+				</tr>
+				<tr>
+					<td>Empty state</td>
+					<td class="now">Icon, an <code class="tok">h3</code>, and a two-line product blurb at 70% opacity.</td>
+					<td class="claude">A single personal serif greeting. No product copy at all.</td>
+				</tr>
+				<tr>
+					<td>Selects</td>
+					<td class="now">Bordered rectangular dropdowns inheriting Obsidian's form styling.</td>
+					<td class="claude">Borderless pills and a segmented control; borders reserved for the composer.</td>
+				</tr>
+				<tr>
+					<td>Hierarchy</td>
+					<td class="now">Carried by 1px borders on nearly every surface.</td>
+					<td class="claude">Carried by surface lightness and one 2px shadow; borders are rare.</td>
+				</tr>
+				<tr>
+					<td>Typography</td>
+					<td class="now">DM Sans throughout, no serif.</td>
+					<td class="claude">Styrene-class sans plus one serif (Tiempos) used sparingly for voice.</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- ═══════════ 2. The variants ═══════════ -->
+	<div class="section">
+		<div class="section-head">
+			<span class="n">02</span>
+			<h2>Three prototypes</h2>
+		</div>
+		<p class="lede">All three share the same palette and the same information architecture, so they can be compared on design alone. A is the control; B and C each change exactly one thing about where hierarchy comes from.</p>
+
+		<div class="variants">
+
+			<a class="v-card" href="variant-a-claude-native.html">
+				<div class="v-swatch">
+					<span style="background:#f0eee6"></span>
+					<span style="background:#faf9f5"></span>
+					<span style="background:#f5e3c7"></span>
+					<span style="background:#d97757"></span>
+					<span style="background:#141413"></span>
+				</div>
+				<div class="v-body">
+					<div class="v-tag">Variant A · the control</div>
+					<h3>Claude Native</h3>
+					<p>Claude Cowork, ported to the side panel with nothing invented. Exact palette, 16px composer card, segmented agent control, centred serif greeting. The safe answer to "make it look like Claude".</p>
+					<span class="v-go">Open prototype <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+				</div>
+			</a>
+
+			<a class="v-card" href="variant-b-editorial.html">
+				<div class="v-swatch">
+					<span style="background:#faf9f5"></span>
+					<span style="background:#f4f2ea"></span>
+					<span style="background:#f5e3c7"></span>
+					<span style="background:#d97757"></span>
+					<span style="background:#141413"></span>
+				</div>
+				<div class="v-body">
+					<div class="v-tag">Variant B · typographic</div>
+					<h3>Editorial</h3>
+					<p>Same colours, but the transcript is set like a printed page: hairline rules and small-caps speaker labels instead of bubbles, the assistant answering in a serif, tool calls in a monospace margin rail.</p>
+					<span class="v-go">Open prototype <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+				</div>
+			</a>
+
+			<a class="v-card" href="variant-c-luminous.html">
+				<div class="v-swatch">
+					<span style="background:#f3f0e8"></span>
+					<span style="background:#ffffff"></span>
+					<span style="background:#e18f70"></span>
+					<span style="background:#d97757"></span>
+					<span style="background:#c2603f"></span>
+				</div>
+				<div class="v-body">
+					<div class="v-tag">Variant C · atmospheric</div>
+					<h3>Luminous Clay</h3>
+					<p>Same colours, but hierarchy comes from light: soft elevation instead of borders, a clay glow behind the mark, a composer floating over a scrim, tool calls drawn as a connected timeline, and a saturated clay bubble for your own turns.</p>
+					<span class="v-go">Open prototype <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+				</div>
+			</a>
+
+		</div>
+	</div>
+
+	<!-- ═══════════ 3. Notes ═══════════ -->
+	<div class="section">
+		<div class="section-head">
+			<span class="n">03</span>
+			<h2>Notes on the source material</h2>
+		</div>
+		<div class="notes" style="margin-top:24px">
+			<div class="note-card">
+				<h3>Claude palette</h3>
+				<p>Ink <code class="tok">#141413</code>, paper <code class="tok">#faf9f5</code>, canvas <code class="tok">#f0eee6</code>, manilla <code class="tok">#f5e3c7</code>; accents clay <code class="tok">#d97757</code>, slate blue <code class="tok">#6a9bcc</code>, moss <code class="tok">#788c5d</code>. Type is Styrene A with a Tiempos-class serif; DM Sans and Newsreader stand in here.</p>
+			</div>
+			<div class="note-card">
+				<h3>Synapse theme</h3>
+				<p>From the configs vault: accent <code class="tok">#d97757</code>, parchment <code class="tok">#faf8f5</code> / <code class="tok">#f2ede7</code>, warm dark <code class="tok">#1a1714</code>, DM Sans UI font. The theme is already Claude-adjacent — the prototypes shift only the two or three tokens where it diverges.</p>
+			</div>
+			<div class="note-card">
+				<h3>These are drafts, not a spec</h3>
+				<p>Static HTML with hard-coded hex values. Nothing here maps to Obsidian CSS variables yet — that translation is the implementation step, and it is what decides how much of a chosen variant survives contact with other themes.</p>
+			</div>
+			<div class="note-card">
+				<h3>Every prototype has a dark mode</h3>
+				<p>Use the toggle at the top of each page. Dark mode is where the variants diverge most: A stays neutral, B keeps its rules, C leans hardest on warm charcoal so the clay accent does not turn neon.</p>
+			</div>
+		</div>
+	</div>
+
+</div>
+</body>
+</html>
