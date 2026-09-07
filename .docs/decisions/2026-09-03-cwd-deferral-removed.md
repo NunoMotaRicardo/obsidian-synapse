@@ -1,6 +1,15 @@
 # Working-Directory Auto-Update: Deferral Removed After Empirical Testing (issue #131)
 
-Status: **decided and implemented** (2026-09-03)
+Status: **superseded** (2026-09-07)
+
+Superseded by: [`2026-09-07-cwd-deferral-restored.md`](2026-09-07-cwd-deferral-restored.md) (issue #202)
+
+> **The empirical findings below still stand.** The deferral was restored on 2026-09-07, but *not*
+> because anything in this record was wrong: issue #104 really did fix transcript loss, and the
+> path-handling test really did show graceful degradation under a changed `cwd`. Neither argument
+> should be revived. What this record did not weigh is the **token cost** of the session rebuild —
+> a resumed session replays the whole transcript into the prompt cache, which the "Consequences"
+> section below treats only as a subprocess cost. See the superseding record for the measurements.
 
 ## Context
 
