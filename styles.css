@@ -139,12 +139,17 @@
 	--synapse-font-serif: 'Newsreader', Georgia, 'Iowan Old Style', 'Times New Roman', serif;
 	--synapse-rule: var(--background-modifier-border);
 	--synapse-rule-soft: var(--background-modifier-border-focus, var(--background-modifier-border));
+	--synapse-rule-heavy: var(--text-normal);
 	--synapse-user-wash: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
 	font-family: var(--font-interface);
+}
+
+.theme-dark .synapse-root {
+	--synapse-rule-heavy: var(--background-modifier-border-hover, var(--background-modifier-border));
 }
 
 /* ── Shared Editorial Primitives ──────────────────────────────── */
@@ -362,45 +367,94 @@
 	overflow: hidden;
 }
 
-/* ── Tab bar ──────────────────────────────────────────────────── */
+/* ── Masthead (Editorial #208) ────────────────────────────────── */
 
+.synapse-masthead,
 .synapse-tab-bar {
 	display: flex;
-	flex-direction: row;
-	gap: 0;
-	border-bottom: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	align-items: baseline;
+	gap: 10px;
+	padding: 14px 20px 11px;
+	border-bottom: 1px solid var(--synapse-rule-heavy);
+	background: var(--background-primary);
 	flex-shrink: 0;
 }
 
-.synapse-tab {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	padding: 6px 12px;
-	cursor: pointer;
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-	border-bottom: 2px solid transparent;
-	transition: color 0.15s, border-color 0.15s;
-	user-select: none;
-}
-
-.synapse-tab:hover {
+.synapse-masthead-wordmark {
+	font-family: var(--synapse-font-serif);
+	font-size: 19px;
+	font-weight: 500;
+	letter-spacing: -0.01em;
 	color: var(--text-normal);
-	background: var(--background-modifier-hover);
+	line-height: 1;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
+.synapse-masthead .synapse-rule-dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	flex-shrink: 0;
+	align-self: center;
+}
+
+.synapse-masthead-kicker {
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	line-height: 1;
+	user-select: none;
+	-webkit-user-select: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.synapse-masthead-spacer {
+	flex: 1;
+	min-width: 8px;
+}
+
+.synapse-masthead-tab,
+.synapse-tab {
+	display: inline-flex;
+	align-items: center;
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 3px 0;
+	border: none;
+	background: transparent;
+	border-bottom: 1px solid transparent;
+	border-radius: 0;
+	line-height: 1;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-masthead-tab:hover,
+.synapse-tab:hover {
+	color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+	background: transparent;
+}
+
+.synapse-masthead-tab.is-active,
 .synapse-tab.is-active {
 	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
+	border-bottom-color: var(--synapse-rule-heavy);
+	background: transparent;
 }
 
-.synapse-tab-icon svg {
-	width: 14px;
-	height: 14px;
-}
-
+.synapse-masthead-tab-label,
 .synapse-tab-label {
 	line-height: 1;
 }
@@ -1256,8 +1310,8 @@
 
 .synapse-bottom {
 	flex-shrink: 0;
-	border-top: 1px solid var(--background-modifier-border);
-	padding: 8px 10px;
+	border-top: 1px solid var(--synapse-rule-heavy);
+	padding: 10px 20px 14px;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -1318,15 +1372,34 @@
 	display: none;
 }
 
+.synapse-input-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 2px;
+}
+
+.synapse-input-chips:empty {
+	display: none;
+}
+
 .synapse-attachment-tag {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
-	background: var(--background-secondary-alt);
-	border-radius: var(--radius-s);
-	padding: 2px 6px;
-	font-size: var(--font-ui-smaller);
+	gap: 5px;
+	background: var(--background-secondary);
+	border: 1px solid var(--synapse-rule-soft);
+	border-radius: 2px;
+	padding: 2px 7px;
+	font-size: 11px;
 	color: var(--text-normal);
+	line-height: 1.3;
+}
+
+.synapse-attachment-tag.synapse-active-note-tag {
+	color: var(--interactive-accent);
+	border-color: var(--synapse-rule);
 }
 
 .synapse-attachment-icon svg {
@@ -1335,7 +1408,7 @@
 }
 
 .synapse-attachment-name {
-	max-width: 120px;
+	max-width: 140px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1344,16 +1417,19 @@
 .synapse-attachment-remove {
 	cursor: pointer;
 	opacity: 0.5;
+	display: inline-flex;
+	align-items: center;
 	transition: opacity 0.15s;
 }
 
 .synapse-attachment-remove:hover {
 	opacity: 1;
+	color: var(--text-error, var(--interactive-accent));
 }
 
 .synapse-attachment-remove svg {
-	width: 12px;
-	height: 12px;
+	width: 11px;
+	height: 11px;
 }
 
 /* Scope bar */
@@ -1362,22 +1438,32 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-size: var(--font-ui-smaller);
+	font-size: 11px;
 	color: var(--text-muted);
 }
 
-
-
 .synapse-scope-label {
-	display: flex;
+	display: inline-flex;
 	align-items: center;
-	gap: 3px;
+	gap: 4px;
+	background: var(--background-secondary);
+	border: 1px solid var(--synapse-rule-soft);
+	border-radius: 2px;
+	padding: 2px 7px;
 	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 11px;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.synapse-scope-label:hover {
+	color: var(--text-normal);
+	border-color: var(--synapse-rule);
 }
 
 .synapse-scope-label svg {
-	width: 14px;
-	height: 14px;
+	width: 12px;
+	height: 12px;
 }
 
 .synapse-scope-remove {
@@ -1390,42 +1476,82 @@
 
 .synapse-scope-remove:hover {
 	opacity: 1;
+	color: var(--text-error, var(--interactive-accent));
 }
 
 .synapse-scope-remove svg {
-	width: 12px;
-	height: 12px;
+	width: 11px;
+	height: 11px;
 }
 
-/* ── Input area ───────────────────────────────────────────────── */
+/* ── State line (Editorial #208) ─────────────────────────────── */
+
+.synapse-state-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 0 4px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	user-select: none;
+	-webkit-user-select: none;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.synapse-state-note {
+	color: var(--interactive-accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 180px;
+}
+
+.synapse-state-sep {
+	color: var(--synapse-rule);
+	flex-shrink: 0;
+}
+
+.theme-dark .synapse-state-sep {
+	color: var(--text-faint);
+	opacity: 0.5;
+}
+
+.synapse-state-agent,
+.synapse-state-model {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ── Input area (Editorial #208) ─────────────────────────────── */
 
 .synapse-input-area {
 	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
-	background: var(--background-secondary);
-	border-radius: var(--radius-m);
-	padding: 6px 8px;
-	border: 1px solid var(--background-modifier-border);
-	transition: border-color 0.15s;
+	background: transparent;
+	border-radius: 0;
+	padding: 0;
+	border: none;
+	box-shadow: none;
+	transition: none;
 }
 
 .synapse-input-area:focus-within {
-	border-color: var(--interactive-accent);
+	border-color: transparent;
+	box-shadow: none;
 }
 
 .synapse-input-area.synapse-drag-over {
-	border-color: var(--interactive-accent);
-	background: var(--background-secondary-alt);
-	box-shadow: inset 0 0 0 2px var(--interactive-accent-hover);
-}
-
-.synapse-input-actions {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	flex-wrap: wrap;
+	outline: 1px dashed var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+	border-radius: 2px;
 }
 
 .synapse-input-row {
@@ -1435,43 +1561,105 @@
 }
 
 .synapse-input {
-	flex: 1;
+	width: 100%;
 	border: none;
 	background: transparent;
 	resize: none;
 	outline: none;
-	font-family: var(--font-interface);
-	font-size: var(--font-ui-small);
+	font-family: var(--synapse-font-serif);
+	font-size: 16px;
 	color: var(--text-normal);
 	height: var(--input-height, auto);
-	min-height: 24px;
+	min-height: 46px;
 	max-height: 200px;
 	line-height: 1.5;
-	padding: 2px 0;
+	padding: 6px 0;
+	box-shadow: none;
 }
 
 .synapse-input::placeholder {
 	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* ── Composer actions & footer buttons (Editorial #208) ──────── */
+
+.synapse-composer-foot,
+.synapse-input-actions {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding-top: 6px;
+	border-top: 1px solid var(--synapse-rule);
+	margin-top: 2px;
+}
+
+.synapse-composer-spacer {
+	flex: 1;
+}
+
+.synapse-f-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--font-interface);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	cursor: pointer;
+	white-space: nowrap;
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	border-radius: 0;
+	padding: 2px 0;
+	box-shadow: none;
+	line-height: 1;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-f-btn:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+	background: transparent;
+}
+
+.synapse-f-btn-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.synapse-f-btn-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+.synapse-f-btn-model {
+	color: var(--text-muted);
 }
 
 .synapse-send-btn {
+	width: 30px;
+	height: 30px;
+	border-radius: 2px;
+	display: grid;
+	place-items: center;
 	flex-shrink: 0;
-	width: 28px;
-	height: 28px;
-	border-radius: var(--radius-s);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
 	background: var(--interactive-accent) !important;
 	color: var(--text-on-accent) !important;
 	border: none;
-	transition: opacity 0.15s;
+	cursor: pointer;
+	padding: 0;
+	box-shadow: none;
+	transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 .synapse-send-btn:hover {
-	opacity: 0.85;
-	background: var(--interactive-accent) !important;
+	background: var(--interactive-accent-hover, var(--interactive-accent)) !important;
 }
 
 .synapse-send-btn.is-streaming {
@@ -1479,8 +1667,8 @@
 }
 
 .synapse-send-btn svg {
-	width: 16px;
-	height: 16px;
+	width: 15px;
+	height: 15px;
 	stroke: var(--text-on-accent);
 }
 
@@ -1489,15 +1677,15 @@
 .synapse-skill-popup {
 	position: absolute;
 	bottom: 100%;
-	left: 8px;
-	right: 8px;
-	margin-bottom: 4px;
+	left: 0;
+	right: 0;
+	margin-bottom: 6px;
 	max-height: 220px;
 	overflow-y: auto;
 	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-	box-shadow: var(--shadow-s);
+	border: 1px solid var(--synapse-rule);
+	border-radius: 2px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 	z-index: 20;
 }
 

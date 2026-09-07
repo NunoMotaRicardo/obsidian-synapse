@@ -4,7 +4,6 @@ import {
 	Notice,
 	TFile,
 	normalizePath,
-	setIcon,
 	Component,
 } from 'obsidian';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from './main';
@@ -212,6 +211,12 @@ export class SynapseView extends ItemView {
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
+	kickerEl!: HTMLElement;
+	stateLineEl!: HTMLElement;
+	stateNoteEl!: HTMLElement;
+	stateAgentEl!: HTMLElement;
+	stateModelEl!: HTMLElement;
+	modelPickerBtn!: HTMLButtonElement;
 	chatPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
 	chatContainer!: HTMLElement;
@@ -380,19 +385,23 @@ export class SynapseView extends ItemView {
 	}
 
 	buildTabBar(parent: HTMLElement): void {
-		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar'});
-		const tabs: {id: 'chat' | 'search'; icon: string; label: string}[] = [
-			{id: 'chat', icon: 'message-square', label: 'Chat'},
-			{id: 'search', icon: 'search', label: 'Search'},
+		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar synapse-masthead'});
+		this.tabBarEl.createSpan({cls: 'synapse-masthead-wordmark', text: 'Synapse'});
+		this.tabBarEl.createSpan({cls: 'synapse-rule-dot'});
+		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker', text: 'Chat'});
+		this.tabBarEl.createSpan({cls: 'synapse-masthead-spacer'});
+
+		const tabs: {id: 'chat' | 'search'; label: string}[] = [
+			{id: 'chat', label: 'Chat'},
+			{id: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
-			const btn = this.tabBarEl.createDiv({cls: 'synapse-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
+			const btn = this.tabBarEl.createDiv({cls: 'synapse-masthead-tab synapse-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
 			btn.dataset.tab = tab.id;
-			const iconEl = btn.createSpan({cls: 'synapse-tab-icon'});
-			setIcon(iconEl, tab.icon);
-			btn.createSpan({cls: 'synapse-tab-label', text: tab.label});
+			btn.createSpan({cls: 'synapse-masthead-tab-label', text: tab.label});
 			btn.addEventListener('click', () => this.switchTab(tab.id));
 		}
+		this.updateMastheadKicker();
 	}
 
 	switchTab(tab: 'chat' | 'search'): void {
@@ -407,6 +416,30 @@ export class SynapseView extends ItemView {
 		// Show/hide panels
 		this.chatPanelEl.toggleClass('is-hidden', tab !== 'chat');
 		this.searchPanelEl.toggleClass('is-hidden', tab !== 'search');
+
+		this.updateMastheadKicker();
+	}
+
+	updateMastheadKicker(text?: string): void {
+		if (!this.kickerEl) return;
+		if (text !== undefined) {
+			this.kickerEl.setText(text);
+			return;
+		}
+		if (this.activeTab === 'search') {
+			this.kickerEl.setText('Search');
+			return;
+		}
+		// In chat tab: show active session title if one exists, otherwise 'Chat'
+		let title = '';
+		if (this.currentSessionId) {
+			const raw = this.sessionNames[this.currentSessionId]
+				|| this.sessionList.find(s => s.sessionId === this.currentSessionId)?.summary;
+			if (raw) {
+				title = raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '').trim();
+			}
+		}
+		this.kickerEl.setText(title || 'Chat');
 	}
 
 	// ── Config loading ───────────────────────────────────────────
@@ -543,6 +576,8 @@ export class SynapseView extends ItemView {
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
+		this.updateModelPickerButton?.();
+		this.updateStateLine?.();
 
 		// Update search panel dropdowns
 		if (this.searchAgentSelect) {
@@ -931,6 +966,7 @@ export class SynapseView extends ItemView {
 					const agentName = this.selectedAgent || 'Chat';
 					this.sessionNames[sessionId] = `[chat] ${agentName}: ${this.pendingSessionLabel}`;
 					this.saveSessionNames();
+					this.updateMastheadKicker();
 				}
 				this.pendingSessionLabel = null;
 				if (!this.sessionList.some(s => s.sessionId === sessionId)) {
@@ -1245,6 +1281,9 @@ export class SynapseView extends ItemView {
 		this.updateSendButton();
 		this.updateToolbarLock();
 		this.renderSessionList();
+		this.updateMastheadKicker();
+		this.updateModelPickerButton?.();
+		this.updateStateLine?.();
 	}
 
 	// ── Session config building ──────────────────────────────────
