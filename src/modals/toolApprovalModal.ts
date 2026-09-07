@@ -57,13 +57,17 @@ export class ToolApprovalModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('synapse-approval-modal');
 
-		contentEl.createEl('h3', {text: 'Tool approval required'});
+		contentEl.createEl('h3', {cls: 'synapse-modal-title', text: 'Tool approval required'});
 
 		const info = contentEl.createDiv({cls: 'synapse-approval-info'});
 		if (this.request.title) {
-			info.createDiv({cls: 'synapse-approval-row', text: this.request.title});
+			const row = info.createDiv({cls: 'synapse-approval-row'});
+			row.createSpan({cls: 'synapse-approval-tool-name', text: this.request.toolName});
+			row.createSpan({text: ` — ${this.request.title}`});
 		} else {
-			info.createDiv({cls: 'synapse-approval-row', text: `Tool: ${this.request.toolName}`});
+			const toolRow = info.createDiv({cls: 'synapse-approval-row'});
+			toolRow.createSpan({cls: 'synapse-modal-label', text: 'Tool: '});
+			toolRow.createSpan({cls: 'synapse-approval-tool-name', text: this.request.toolName});
 		}
 		if (this.request.description) {
 			info.createDiv({cls: 'synapse-approval-row', text: this.request.description});
@@ -72,7 +76,7 @@ export class ToolApprovalModal extends Modal {
 		// Show input details
 		const inputKeys = Object.keys(this.request.input);
 		if (inputKeys.length > 0) {
-			const pre = info.createEl('pre', {cls: 'synapse-approval-details'});
+			const pre = info.createEl('pre', {cls: 'synapse-approval-details synapse-ledger'});
 			pre.createEl('code', {text: JSON.stringify(this.request.input, null, 2)});
 		}
 
@@ -89,7 +93,7 @@ export class ToolApprovalModal extends Modal {
 		const alwaysRow = scopeInfo.createDiv({cls: 'synapse-approval-row'});
 		alwaysRow.createEl('strong', {text: 'Always allow'});
 		alwaysRow.appendText(' permanently grants, by writing to _synapse/settings.json in this vault:');
-		const rulesPre = scopeInfo.createEl('pre', {cls: 'synapse-approval-details'});
+		const rulesPre = scopeInfo.createEl('pre', {cls: 'synapse-approval-details synapse-ledger'});
 		rulesPre.createEl('code', {text: rules.join('\n')});
 
 		const btnRow = contentEl.createDiv({cls: 'synapse-approval-buttons'});

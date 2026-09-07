@@ -135,21 +135,28 @@
 
 /* ── Synapse Chat View ───────────────────────────────────────── */
 
+:root,
+.modal-container,
 .synapse-root {
 	--synapse-font-serif: 'Newsreader', Georgia, 'Iowan Old Style', 'Times New Roman', serif;
 	--synapse-rule: var(--background-modifier-border);
 	--synapse-rule-soft: var(--background-modifier-border-focus, var(--background-modifier-border));
 	--synapse-rule-heavy: var(--text-normal);
 	--synapse-user-wash: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
+}
+
+.theme-dark,
+.theme-dark .modal-container,
+.theme-dark .synapse-root {
+	--synapse-rule-heavy: var(--background-modifier-border-hover, var(--background-modifier-border));
+}
+
+.synapse-root {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
 	font-family: var(--font-interface);
-}
-
-.theme-dark .synapse-root {
-	--synapse-rule-heavy: var(--background-modifier-border-hover, var(--background-modifier-border));
 }
 
 /* ── Shared Editorial Primitives ──────────────────────────────── */
@@ -744,70 +751,189 @@
 	height: 12px;
 }
 
-/* ── Tool approval modal ──────────────────────────────────────── */
+/* ── Modal Titles Masthead Treatment (AC-1) ─────────────────────── */
 
-.synapse-approval-modal h3 {
-	margin-top: 0;
-	margin-bottom: 12px;
+.synapse-modal-title,
+.synapse-approval-modal h3,
+.synapse-userinput-modal h3,
+.synapse-askq-modal h3,
+.synapse-elicitation-modal h3,
+.synapse-scope-modal h3,
+.synapse-batch-progress-modal h3,
+.modal:has(.synapse-edit-modal) .modal-title,
+.modal:has([class*="synapse-"]) .modal-title {
+	font-family: var(--synapse-font-serif);
+	font-size: 20px;
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	color: var(--text-normal);
+	line-height: 1.2;
+	margin: 0 0 16px;
+	padding: 0 0 12px;
+	border-bottom: 2px solid var(--synapse-rule-heavy);
 }
+
+/* ── Modal Button System (AC-3) ────────────────────────────────── */
+
+.synapse-approval-buttons,
+.synapse-userinput-buttons,
+.synapse-askq-buttons,
+.synapse-elicitation-buttons,
+.synapse-scope-buttons,
+.synapse-batch-progress-buttons {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 12px;
+	margin-top: 16px;
+	padding-top: 10px;
+	border-top: 1px solid var(--synapse-rule-soft);
+}
+
+.synapse-approval-buttons button.mod-cta,
+.synapse-userinput-buttons button.mod-cta,
+.synapse-askq-buttons button.mod-cta,
+.synapse-elicitation-buttons button.mod-cta,
+.synapse-scope-buttons button.mod-cta,
+.synapse-batch-progress-buttons button.mod-cta,
+.synapse-edit-btn-primary {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 6px 14px;
+	font-family: var(--font-interface);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	box-shadow: none;
+	transition: opacity 0.15s ease;
+}
+
+.synapse-approval-buttons button.mod-cta:hover,
+.synapse-userinput-buttons button.mod-cta:hover,
+.synapse-askq-buttons button.mod-cta:hover,
+.synapse-elicitation-buttons button.mod-cta:hover,
+.synapse-scope-buttons button.mod-cta:hover,
+.synapse-batch-progress-buttons button.mod-cta:hover,
+.synapse-edit-btn-primary:hover {
+	opacity: 0.9;
+}
+
+.synapse-approval-buttons button:not(.mod-cta),
+.synapse-userinput-buttons button:not(.mod-cta),
+.synapse-askq-buttons button:not(.mod-cta),
+.synapse-elicitation-buttons button:not(.mod-cta),
+.synapse-scope-buttons button:not(.mod-cta),
+.synapse-batch-progress-buttons button:not(.mod-cta),
+.synapse-edit-btn-secondary,
+.synapse-userinput-choice {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 6px 10px;
+	font-family: var(--font-interface);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	background: transparent;
+	color: var(--text-muted);
+	border: none;
+	border-bottom: 1px solid transparent;
+	border-radius: 0;
+	cursor: pointer;
+	box-shadow: none;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-approval-buttons button:not(.mod-cta):hover,
+.synapse-userinput-buttons button:not(.mod-cta):hover,
+.synapse-askq-buttons button:not(.mod-cta):hover,
+.synapse-elicitation-buttons button:not(.mod-cta):hover,
+.synapse-scope-buttons button:not(.mod-cta):hover,
+.synapse-batch-progress-buttons button:not(.mod-cta):hover,
+.synapse-edit-btn-secondary:hover,
+.synapse-userinput-choice:hover {
+	background: transparent;
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+	box-shadow: none;
+}
+
+/* ── Tool approval modal ──────────────────────────────────────── */
 
 .synapse-approval-info {
 	margin-bottom: 16px;
 }
 
 .synapse-approval-row {
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-	margin-bottom: 6px;
+	font-family: var(--synapse-font-serif);
+	font-size: 14.5px;
+	line-height: 1.55;
+	color: var(--text-normal);
+	margin-bottom: 8px;
 }
 
-.synapse-approval-details {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	background: var(--code-background);
-	border-radius: var(--radius-s);
-	font-size: var(--font-ui-smaller);
-	line-height: 1.4;
+.synapse-approval-tool-name {
+	font-family: var(--font-monospace);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.synapse-approval-details,
+.synapse-approval-details.synapse-ledger {
+	margin: 8px 0 12px;
+	padding: 4px 0 4px 13px;
+	border: none;
+	border-left: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
+	font-family: var(--font-monospace);
+	font-size: 11px;
+	line-height: 1.45;
 	max-height: 200px;
 	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-all;
+	color: var(--text-muted);
 }
 
 .synapse-approval-details code {
 	background: none;
 	padding: 0;
 	font-size: inherit;
-}
-
-.synapse-approval-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
+	color: inherit;
 }
 
 /* ── User input modal (ask_user) ──────────────────────────────── */
 
-.synapse-userinput-modal h3 {
-	margin-top: 0;
-	margin-bottom: 12px;
-}
-
 .synapse-userinput-question {
-	font-size: var(--font-ui-medium);
+	font-family: var(--synapse-font-serif);
+	font-size: 15px;
+	line-height: 1.55;
+	color: var(--text-normal);
 	margin-bottom: 16px;
-	line-height: 1.5;
 }
 
 .synapse-userinput-choices {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
-	margin-bottom: 12px;
-}
-
-.synapse-userinput-choice {
-	cursor: pointer;
+	gap: 12px;
+	margin-bottom: 14px;
+	padding: 8px 0;
+	border-top: 1px solid var(--synapse-rule-soft);
+	border-bottom: 1px solid var(--synapse-rule-soft);
 }
 
 .synapse-userinput-freeform {
@@ -817,44 +943,38 @@
 .synapse-userinput-textarea {
 	width: 100%;
 	resize: vertical;
-	font-family: var(--font-interface);
-	font-size: var(--font-ui-small);
-	padding: 8px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	font-family: var(--synapse-font-serif);
+	font-size: 15px;
+	line-height: 1.5;
+	padding: 8px 0;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
+	box-shadow: none;
 }
 
 .synapse-userinput-textarea:focus {
-	border-color: var(--interactive-accent);
+	border-bottom: 2px solid var(--interactive-accent);
 	outline: none;
-}
-
-.synapse-userinput-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	margin-top: 8px;
+	box-shadow: none;
 }
 
 /* ── Elicitation modal (structured input) ─────────────────────── */
 
-.synapse-elicitation-modal h3 {
-	margin-top: 0;
-	margin-bottom: 12px;
-}
-
 .synapse-elicitation-message {
-	font-size: var(--font-ui-medium);
+	font-family: var(--synapse-font-serif);
+	font-size: 15px;
+	line-height: 1.55;
+	color: var(--text-normal);
 	margin-bottom: 16px;
-	line-height: 1.5;
 }
 
 .synapse-elicitation-form {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: 16px;
 	margin-bottom: 16px;
 }
 
@@ -865,34 +985,55 @@
 }
 
 .synapse-elicitation-label {
-	font-weight: var(--font-semibold);
-	font-size: var(--font-ui-small);
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-faint);
 }
 
 .synapse-elicitation-description {
-	font-size: var(--font-ui-smaller);
+	font-size: 12px;
+	line-height: 1.45;
 	color: var(--text-muted);
 	margin-bottom: 2px;
 }
 
 .synapse-elicitation-input {
 	width: 100%;
-	padding: 6px 8px;
+	padding: 6px 0;
 	font-family: var(--font-interface);
 	font-size: var(--font-ui-small);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
+	box-shadow: none;
 }
 
 .synapse-elicitation-input:focus {
-	border-color: var(--interactive-accent);
+	border-bottom: 2px solid var(--interactive-accent);
 	outline: none;
+	box-shadow: none;
 }
 
 .synapse-elicitation-select {
 	width: 100%;
+	padding: 6px 0;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
+	color: var(--text-normal);
+}
+
+.synapse-elicitation-select:focus {
+	border-bottom: 2px solid var(--interactive-accent);
+	outline: none;
 }
 
 .synapse-elicitation-checklist {
@@ -912,19 +1053,7 @@
 	margin-bottom: 16px;
 }
 
-.synapse-elicitation-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	margin-top: 8px;
-}
-
 /* ── Ask-user-question modal (issue #182) ─────────────────────── */
-
-.synapse-askq-modal h3 {
-	margin-top: 0;
-	margin-bottom: 12px;
-}
 
 .synapse-askq-list {
 	display: flex;
@@ -947,63 +1076,83 @@
 
 .synapse-askq-chip {
 	display: inline-block;
-	padding: 2px 8px;
-	font-size: var(--font-ui-smaller);
-	font-weight: var(--font-semibold);
+	padding: 2px 6px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
 	border-radius: var(--radius-s);
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
 .synapse-askq-chip-muted {
-	background: var(--background-modifier-border);
-	color: var(--text-muted);
-	font-weight: normal;
+	background: transparent;
+	border: 1px solid var(--synapse-rule-soft);
+	color: var(--text-faint);
 }
 
 .synapse-askq-question-text {
-	font-size: var(--font-ui-medium);
-	font-weight: var(--font-semibold);
+	font-family: var(--synapse-font-serif);
+	font-size: 15px;
+	font-weight: 400;
+	line-height: 1.5;
+	color: var(--text-normal);
 }
 
 .synapse-askq-options {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 0;
+	margin-top: 6px;
 }
 
 .synapse-askq-option {
-	padding: 8px 10px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
+	padding: 9px 8px;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
 	cursor: pointer;
-	background: var(--background-primary);
+	background: transparent;
+	transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.synapse-askq-option:first-child {
+	border-top: 1px solid var(--synapse-rule-soft);
 }
 
 .synapse-askq-option:hover {
-	border-color: var(--interactive-accent);
+	border-bottom-color: var(--synapse-rule);
 }
 
 .synapse-askq-option:focus-visible {
-	border-color: var(--interactive-accent);
-	outline: 2px solid var(--interactive-accent);
-	outline-offset: 2px;
+	outline: none;
+	border-bottom-color: var(--interactive-accent);
 }
 
 .synapse-askq-option.is-selected {
-	border-color: var(--interactive-accent);
-	background: var(--background-modifier-hover);
+	border-left: 2px solid var(--interactive-accent);
+	padding-left: 10px;
+	background: transparent;
+}
+
+.synapse-askq-option.is-selected .synapse-askq-option-label {
+	color: var(--interactive-accent);
 }
 
 .synapse-askq-option-label {
-	font-weight: var(--font-semibold);
-	font-size: var(--font-ui-small);
+	font-family: var(--font-interface);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-normal);
 }
 
 .synapse-askq-option-description {
-	font-size: var(--font-ui-smaller);
+	font-size: 12px;
 	color: var(--text-muted);
 	margin-top: 2px;
+	line-height: 1.4;
 }
 
 .synapse-askq-option-other {
@@ -1013,25 +1162,19 @@
 .synapse-askq-other-input {
 	width: 100%;
 	margin-top: 6px;
-	padding: 6px 8px;
+	padding: 6px 0;
 	font-family: var(--font-interface);
-	font-size: var(--font-ui-small);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	font-size: 12px;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
 }
 
 .synapse-askq-other-input:focus {
-	border-color: var(--interactive-accent);
+	border-bottom: 2px solid var(--interactive-accent);
 	outline: none;
-}
-
-.synapse-askq-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	margin-top: 8px;
 }
 
 /* ── Message metadata footer ──────────────────────────────────── */
@@ -2080,46 +2223,67 @@
 	flex-direction: column;
 }
 
-.synapse-scope-modal h3 {
-	margin: 0 0 10px;
-}
-
 .synapse-scope-search {
 	width: 100%;
-	padding: 6px 10px;
-	border-radius: var(--radius-s);
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
+	padding: 6px 0;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
-	margin-bottom: 8px;
+	margin-bottom: 12px;
+	box-shadow: none;
+}
+
+.synapse-scope-search:focus {
+	border-bottom: 2px solid var(--interactive-accent);
+	outline: none;
+	box-shadow: none;
 }
 
 .synapse-scope-tree {
 	flex: 1;
 	overflow-y: auto;
 	max-height: 50vh;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
+	border: none;
+	border-top: 1px solid var(--synapse-rule-soft);
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
 	padding: 4px 0;
+	background: transparent;
 }
 
 .synapse-scope-item {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding: 2px 8px;
+	gap: 6px;
+	padding: 5px 8px;
 	font-size: var(--font-ui-small);
 	cursor: pointer;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
+	background: transparent;
+	color: var(--text-normal);
+	transition: color 0.15s ease;
 }
 
 .synapse-scope-item:hover {
-	background: var(--background-modifier-hover);
+	background: transparent;
+	color: var(--text-normal);
 }
 
-.synapse-scope-item.is-active {
-	background: var(--background-modifier-active-hover);
-	color: var(--text-accent);
+.synapse-scope-item.is-active,
+.synapse-scope-item.is-selected {
+	background: transparent;
+	color: var(--interactive-accent);
+	border-left: 2px solid var(--interactive-accent);
+}
+
+.synapse-scope-item.is-active .synapse-scope-icon svg,
+.synapse-scope-item.is-selected .synapse-scope-icon svg {
+	color: var(--interactive-accent);
 }
 
 .synapse-scope-toggle {
@@ -2168,46 +2332,60 @@
 	white-space: nowrap;
 }
 
-.synapse-scope-buttons {
-	display: flex;
-	gap: 8px;
-	justify-content: flex-end;
-	margin-top: 10px;
-}
-
-/* ── Batch loop progress modal ────────────────────────────────── */
-
-.synapse-batch-progress-modal h3 {
-	margin-top: 0;
-	margin-bottom: 12px;
-}
+/* ── Batch loop progress modal (AC-8) ─────────────────────────── */
 
 .synapse-batch-progress-status {
+	font-family: var(--font-monospace);
+	font-size: 11px;
 	font-weight: 600;
-	margin-bottom: 6px;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+}
+
+.synapse-batch-progress-meter {
+	height: 2px;
+	background: var(--synapse-rule-soft);
+	margin-bottom: 12px;
+	overflow: hidden;
+	width: 100%;
+}
+
+.synapse-batch-progress-fill {
+	height: 100%;
+	width: var(--progress-width, 0%);
+	background: var(--interactive-accent);
+	transition: width 0.2s ease;
 }
 
 .synapse-batch-progress-file {
-	font-size: var(--font-ui-small);
+	font-family: var(--synapse-font-serif);
+	font-size: 14px;
+	line-height: 1.5;
 	color: var(--text-muted);
-	margin-bottom: 6px;
+	margin-bottom: 8px;
 	word-break: break-all;
 }
 
 .synapse-batch-progress-file h4 {
-	margin: 8px 0 6px;
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	margin: 12px 0 8px;
 }
 
 .synapse-batch-progress-budget {
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
 	margin-bottom: 16px;
-}
-
-.synapse-batch-progress-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
 }
 
 /* ── Settings page models list ────────────────────────────────── */
@@ -2848,19 +3026,32 @@ body.synapse-no-select {
 
 .synapse-modal-label {
 	display: block;
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-faint);
 	margin-bottom: 4px;
-	font-size: var(--font-ui-small);
 }
 
 .synapse-rename-input {
 	width: 100%;
 	margin-bottom: 12px;
-	padding: 6px 10px;
+	padding: 6px 0;
 	font-size: var(--font-ui-small);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
+	box-shadow: none;
+}
+
+.synapse-rename-input:focus {
+	border-bottom: 2px solid var(--interactive-accent);
+	outline: none;
+	box-shadow: none;
 }
 
 /* Hidden file input for attach button */
@@ -2887,9 +3078,14 @@ body.synapse-no-select {
 }
 
 .synapse-edit-label {
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
+	display: block;
+	font-family: var(--font-interface);
+	font-size: 10.5px;
 	font-weight: 500;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	margin-bottom: 4px;
 }
 
 .synapse-edit-slider-value {
@@ -2901,21 +3097,23 @@ body.synapse-no-select {
 
 .synapse-edit-textarea {
 	width: 100%;
-	padding: 8px 10px;
-	font-size: var(--font-ui-small);
-	font-family: var(--font-interface);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	padding: 8px 0;
+	font-size: 14.5px;
+	font-family: var(--synapse-font-serif);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
 	resize: vertical;
 	line-height: 1.5;
+	box-shadow: none;
 }
 
 .synapse-edit-textarea:focus {
-	border-color: var(--interactive-accent);
+	border-bottom: 2px solid var(--interactive-accent);
 	outline: none;
-	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.15);
+	box-shadow: none;
 }
 
 .synapse-edit-userinput-textarea {
@@ -2929,6 +3127,20 @@ body.synapse-no-select {
 	height: var(--prompt-height, auto);
 	overflow-y: var(--prompt-overflow, hidden);
 	line-height: 1.5;
+	font-family: var(--synapse-font-serif);
+	font-size: 14.5px;
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	background: transparent;
+	padding: 6px 0;
+	box-shadow: none;
+}
+
+.synapse-edit-prompt-area:focus {
+	border-bottom: 2px solid var(--interactive-accent);
+	outline: none;
+	box-shadow: none;
 }
 
 .synapse-edit-options {
@@ -2946,12 +3158,18 @@ body.synapse-no-select {
 }
 
 .synapse-edit-select {
-	padding: 4px 8px;
+	padding: 4px 0;
 	font-size: var(--font-ui-small);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
+}
+
+.synapse-edit-select:focus {
+	border-bottom-color: var(--interactive-accent);
+	outline: none;
 }
 
 .synapse-edit-slider {
@@ -2979,8 +3197,10 @@ body.synapse-no-select {
 .synapse-edit-buttons {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	margin-top: 4px;
+	gap: 12px;
+	margin-top: 8px;
+	padding-top: 10px;
+	border-top: 1px solid var(--synapse-rule-soft);
 }
 
 .synapse-edit-choices-inline {
@@ -3075,50 +3295,61 @@ body.synapse-no-select {
 .synapse-edit-cards {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 0;
 	max-height: 400px;
 	overflow-y: auto;
+	border-top: 1px solid var(--synapse-rule-soft);
 }
 
 .synapse-edit-card {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
 	overflow: hidden;
-	transition: border-color 0.15s;
+	background: transparent;
+	transition: border-color 0.15s ease;
 	flex-shrink: 0;
 }
 
 .synapse-edit-card:hover {
-	border-color: var(--interactive-accent);
+	border-bottom-color: var(--synapse-rule);
 }
 
 .synapse-edit-card-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 6px 10px;
-	background: var(--background-secondary);
-	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 6px 0;
+	background: transparent;
+	border-bottom: none;
 }
 
 .synapse-edit-card-title {
-	font-size: var(--font-ui-smaller);
+	font-family: var(--font-interface);
+	font-size: 10.5px;
 	font-weight: 500;
-	color: var(--text-muted);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--text-faint);
 }
 
 .synapse-edit-card-actions {
 	display: flex;
-	gap: 2px;
+	gap: 4px;
 }
 
 .synapse-edit-card-btn {
-	padding: 2px;
+	padding: 2px 4px;
 	color: var(--text-muted);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	border-bottom: 1px solid transparent;
 }
 
 .synapse-edit-card-btn:hover {
 	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
 }
 
 .synapse-edit-card-use {
@@ -3126,7 +3357,7 @@ body.synapse-no-select {
 }
 
 .synapse-edit-card-body {
-	padding: 10px 12px;
+	padding: 6px 0 10px;
 	max-height: 120px;
 	overflow-y: auto;
 }
@@ -3140,15 +3371,15 @@ body.synapse-no-select {
 	min-height: 1.6em;
 	padding: 0;
 	margin: 0;
-	font-size: var(--font-ui-small);
-	line-height: 1.6;
+	font-size: 14px;
+	line-height: 1.55;
 	color: var(--text-normal);
 	background: transparent;
 	border: none;
 	resize: none;
 	overflow: hidden;
 	white-space: pre-wrap;
-	font-family: var(--font-interface);
+	font-family: var(--synapse-font-serif);
 	field-sizing: content;
 }
 

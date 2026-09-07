@@ -136,6 +136,7 @@ export class EditModal extends Modal {
 	onOpen(): void {
 		const {contentEl, titleEl} = this;
 		titleEl.setText('Synapse edit');
+		titleEl.addClass('synapse-modal-title');
 		contentEl.addClass('synapse-edit-modal');
 
 		this.formContainer = contentEl.createDiv({cls: 'synapse-edit-form'});

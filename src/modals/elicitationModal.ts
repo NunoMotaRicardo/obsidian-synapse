@@ -36,7 +36,7 @@ export class ElicitationModal extends Modal {
 		contentEl.addClass('synapse-elicitation-modal');
 
 		// Header
-		const header = contentEl.createEl('h3', {text: 'Input requested'});
+		const header = contentEl.createEl('h3', {cls: 'synapse-modal-title', text: 'Input requested'});
 		if (this.context.serverName) {
 			header.textContent = `Input requested by ${this.context.serverName}`;
 		}

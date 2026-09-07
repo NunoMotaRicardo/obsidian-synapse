@@ -28,7 +28,7 @@ export class VaultScopeModal extends Modal {
 		const {contentEl} = this;
 		contentEl.addClass('synapse-scope-modal');
 
-		contentEl.createEl('h3', {text: 'Select vault scope'});
+		contentEl.createEl('h3', {cls: 'synapse-modal-title', text: 'Select vault scope'});
 
 		this.searchInput = contentEl.createEl('input', {
 			type: 'text',
@@ -71,7 +71,9 @@ export class VaultScopeModal extends Modal {
 		const root = this.app.vault.getRoot();
 
 		// Render the root node
+		const isRootSelected = this.selected.has('/') || this.isAncestorSelected('/');
 		const rootRow = this.listContainer.createDiv({cls: 'synapse-scope-item'});
+		rootRow.toggleClass('is-selected', isRootSelected);
 
 		const toggle = rootRow.createSpan({cls: 'synapse-scope-toggle'});
 		setIcon(toggle, this.collapsed.has('/') ? 'chevron-right' : 'chevron-down');
@@ -85,7 +87,7 @@ export class VaultScopeModal extends Modal {
 		});
 
 		const checkbox = rootRow.createEl('input', {type: 'checkbox'});
-		checkbox.checked = this.selected.has('/') || this.isAncestorSelected('/');
+		checkbox.checked = isRootSelected;
 
 		const iconSpan = rootRow.createSpan({cls: 'synapse-scope-icon'});
 		setIcon(iconSpan, 'vault');
@@ -132,7 +134,9 @@ export class VaultScopeModal extends Modal {
 
 			if (!matchesFilter && !hasMatch) continue;
 
+			const isChildSelected = this.selected.has(child.path) || this.isAncestorSelected(child.path);
 			const row = parent.createDiv({cls: 'synapse-scope-item'});
+			row.toggleClass('is-selected', isChildSelected);
 			row.style.paddingLeft = `${depth * 20 + 8}px`;
 
 			if (isFolder) {
@@ -159,7 +163,7 @@ export class VaultScopeModal extends Modal {
 			}
 
 			const checkbox = row.createEl('input', {type: 'checkbox'});
-			checkbox.checked = this.selected.has(child.path) || this.isAncestorSelected(child.path);
+			checkbox.checked = isChildSelected;
 
 			const iconSpan = row.createSpan({cls: 'synapse-scope-icon'});
 			setIcon(iconSpan, isFolder ? 'folder' : 'file-text');
