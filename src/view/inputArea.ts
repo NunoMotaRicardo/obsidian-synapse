@@ -409,17 +409,28 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.activeSelection = null;
 		this.renderActiveNoteBar();
 
-		// Update working directory to the parent folder of the active note. Applies
-		// immediately even mid-conversation (issue #131) — a `cwd` change no longer
-		// orphans the live session's history (issue #104's `resume` fallback), and
-		// resuming under a changed `cwd` was verified not to degrade path handling.
+		// Update working directory to the parent folder of the active note — deferred
+		// while a conversation is in progress so switching notes mid-conversation doesn't
+		// force a session rebuild (and its full-transcript cache replay) on every follow-up
+		// message (issue #108 / #202).
 		if (file && this.plugin.settings.autoUpdateWorkingDirectory) {
 			const lastSlash = file.path.lastIndexOf('/');
 			const newDir = lastSlash > 0 ? file.path.substring(0, lastSlash) : '';
-			if (decideWorkingDirAutoUpdate({newDir, currentWorkingDir: this.workingDir})) {
+			const conversationInProgress = this.currentSession !== null && this.messages.length > 0;
+			const decision = decideWorkingDirAutoUpdate({
+				newDir,
+				currentWorkingDir: this.workingDir,
+				conversationInProgress,
+			});
+			if (decision.applyNow) {
 				this.workingDir = newDir;
 				this.updateCwdButton();
 				this.configDirty = true;
+			}
+			if (decision.pendingDir !== null) {
+				this.pendingWorkingDir = decision.pendingDir;
+			} else if (decision.clearPending) {
+				this.pendingWorkingDir = null;
 			}
 		}
 	};
