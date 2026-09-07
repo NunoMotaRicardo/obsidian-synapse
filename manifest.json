@@ -1,7 +1,7 @@
 {
 	"id": "synapse",
 	"name": "Synapse",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"minAppVersion": "1.13.0",
 	"description": "Synapse — your Claude-native AI assistant with agents, tools, skills, and smart workflows directly in your notes.",
 	"author": "Nuno Mota Ricardo",
