@@ -718,13 +718,21 @@ pill backgrounds are eliminated. Structural clarity is achieved via typography, 
 monospace margin rails, with color reserved exclusively for the interactive accent.
 
 ### Typography & bundled serif
-- **Newsreader 400 (Latin subset):** Embedded directly in `styles.css` as a `data:font/woff2;base64,...`
-  data URI (~76 KB base64, ~57 KB raw), ensuring zero runtime network activity, offline operation, and
-  seamless compatibility with BRAT/vault installs without external assets.
+- **Newsreader, upright + italic (Latin subset):** Two `@font-face` declarations embedded directly in
+  `styles.css` as `data:font/woff2;base64,...` data URIs (~163 KB base64, ~123 KB raw combined),
+  ensuring zero runtime network activity, offline operation, and seamless compatibility with
+  BRAT/vault installs without external assets.
+- **Variable weight axis:** Both files are variable fonts carrying the full `200 800` axis, declared
+  as `font-weight: 200 800`. One face per style therefore covers every weight the stylesheet asks for
+  — 400 body copy, 500 masthead wordmark, 600 `strong` in assistant prose — so the browser never
+  synthesizes faux-bold, and the italic face means `em` never renders as a sheared oblique. This is
+  load-bearing for the design: assistant replies are Markdown, so `strong` and `em` appear constantly.
 - **SIL OFL 1.1 licence compliance:** Full licence text and copyright notice
   (`Copyright 2020 The Newsreader Project Authors`) are embedded in a comment header in `styles.css`
-  directly above the `@font-face` declaration, alongside provenance and reproducible `pyftsubset`
-  command. An accompanying `OFL.txt` is also committed at the repository root.
+  directly above the `@font-face` declarations, alongside provenance: the upstream `fonts.gstatic.com`
+  URL for each file and the `css2` query that produced them. The bytes are Google's own Latin subset —
+  no local subsetting step is involved. An accompanying `OFL.txt` is also committed at the repository
+  root.
 - **Fallback stack:** Declared via `--synapse-font-serif`:
   `Newsreader, Georgia, 'Iowan Old Style', 'Times New Roman', serif`.
   The bundled subset is Latin-only (`U+0000-00FF` plus punctuation); non-Latin scripts (Greek, Cyrillic,
@@ -767,5 +775,6 @@ monospace margin rails, with color reserved exclusively for the interactive acce
   summary label (`Thinking…` while streaming with accent pulse, `Reasoning` when complete or historical;
   sentence case in DOM, rendered uppercase via CSS), serif body matching the assistant's voice.
 - **Thinking indicator (`.synapse-thinking`):** serif status indicator matching the assistant's
-  voice (upright Newsreader 400).
+  voice (upright Newsreader). Set upright rather than italic; with the italic face now bundled this is
+  a style choice rather than a constraint.
 

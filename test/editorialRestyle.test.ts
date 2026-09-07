@@ -10,7 +10,7 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 	const stylesContent = readFileSync(stylesPath, 'utf8');
 
 	describe('AC-1 & AC-7 & AC-10: Font embedding, OFL licence & serif fallback', () => {
-		it('styles.css embeds Newsreader 400 as a base64 data URI with zero external network URLs', () => {
+		it('styles.css embeds the Newsreader faces as base64 data URIs with zero external network URLs', () => {
 			expect(stylesContent).toContain("@font-face");
 			expect(stylesContent).toContain("font-family: 'Newsreader'");
 			expect(stylesContent).toContain("src: url('data:font/woff2;base64,");
@@ -26,7 +26,26 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(stylesContent).toContain('Copyright 2020 The Newsreader Project Authors');
 			expect(stylesContent).toContain('SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007');
 			expect(stylesContent).toContain('https://github.com/productiontype/Newsreader');
-			expect(stylesContent).toContain('pyftsubset Newsreader-Regular.ttf');
+			expect(stylesContent).toContain('https://fonts.gstatic.com/s/newsreader/');
+		});
+
+		it('embeds an upright and an italic face, each spanning the 200-800 weight axis', () => {
+			const faces = [...stylesContent.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(m => m[1] ?? '');
+			const newsreader = faces.filter(f => f.includes("font-family: 'Newsreader'"));
+			expect(newsreader).toHaveLength(2);
+
+			const upright = newsreader.find(f => /font-style:\s*normal/.test(f));
+			const italic = newsreader.find(f => /font-style:\s*italic/.test(f));
+			expect(upright).toBeDefined();
+			expect(italic).toBeDefined();
+
+			// A real face for every weight the stylesheet requests (400 body, 500
+			// wordmark, 600 strong) so the browser never synthesizes faux-bold or
+			// faux-oblique in the transcript.
+			for (const face of newsreader) {
+				expect(face).toMatch(/font-weight:\s*200 800/);
+				expect(face).toContain("src: url('data:font/woff2;base64,");
+			}
 		});
 
 		it('OFL.txt exists at the repository root with full license text', () => {
