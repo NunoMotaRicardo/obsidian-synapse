@@ -289,6 +289,21 @@ vault scope, folder tree.
   The shared `IMAGE_EXTS` constant (`types.ts`) defines the supported image extensions
   (`png, jpg, jpeg, gif, webp, bmp, svg`). Non-vision models are unaffected (the SDK/model
   handles or ignores image attachments gracefully).
+- **Tool approval never persists to disk (issue #193).** `buildSessionConfig()`'s `permissionHandler`
+  (the `CanUseTool` passed as `canUseTool`) has two branches, and neither writes a
+  `.claude/settings.local.json` into the vault or anywhere else:
+  - `settings.toolApproval === 'allow'` (auto-allow) returns `{behavior: 'allow', updatedInput:
+    input}` with **no** `updatedPermissions` at all — every call is allowed anyway, so echoing the
+    CLI's suggested permission updates back would only persist rules that buy nothing.
+  - Otherwise, `ToolApprovalModal` opens; its **Allow** button passes the CLI's `suggestions`
+    through `sessionScopePermissions()` (`agentService.ts`) before including them as
+    `updatedPermissions`, forcing every update's `destination` to `'session'` regardless of what
+    the CLI suggested (directory-shaped grants, e.g. an out-of-vault folder attachment, come back
+    suggesting `'localSettings'`, which the SDK would otherwise write to `<cwd>/.claude/settings.local.json`
+    inside the vault — including drive-wide grants like `Read(//d//**)`). Session scope still keeps
+    the approval in effect for the rest of that conversation (no re-prompt loop for the same path)
+    without touching disk. See `agent-service.md`'s "Session-scoped permission updates" for the
+    helper.
 - Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is

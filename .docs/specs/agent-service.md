@@ -70,6 +70,28 @@ Dual auth via `buildEnv()`:
   is set; the CLI picks up the stored credential automatically.
 - **API key:** `ANTHROPIC_API_KEY` is injected into the subprocess env from `auth.apiKey`.
 
+## Session-scoped permission updates (issue #193)
+
+`sessionScopePermissions(suggestions: PermissionUpdate[]): PermissionUpdate[]` maps each CLI-
+suggested `PermissionUpdate` to `{...u, destination: 'session'}`. Every variant of the SDK's
+`PermissionUpdate` union carries `destination` (`'userSettings' | 'projectSettings' |
+'localSettings' | 'session' | 'cliArg'`), so the spread is type-safe with no per-variant switch.
+
+The CLI's `canUseTool` suggestions are not safe to echo back unfiltered: for directory-shaped
+grants (e.g. approving a read on an out-of-vault attached folder) the CLI suggests
+`'localSettings'`, which the SDK writes to `<cwd>/.claude/settings.local.json` — inside the vault,
+for chat sessions — including blanket, drive-wide grants such as `Read(//d//**)`. Forcing
+`'session'` keeps the approval in effect only for the rest of the current conversation (so the
+user isn't re-prompted for the same path) without ever persisting a rule to disk.
+
+`ToolApprovalModal`'s **Allow** button (`src/modals/toolApprovalModal.ts`) is the sole caller —
+it reaches both `sessionScopePermissions()` and the `PermissionUpdate` type through this module's
+re-exports rather than importing the SDK directly. See `chat-view.md`'s "Tool approval never
+persists to disk" for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses this
+(and why its auto-allow branch sends no `updatedPermissions` at all instead). Where a deliberate
+*persistent* grant should live is out of scope here — tracked separately (#194,
+`_synapse/settings.json`).
+
 ## Named Agent Model Binding & Routing
 
 Named agents parsed from `_synapse/agents/*.md` carry an optional `model` binding (Claude

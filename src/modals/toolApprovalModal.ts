@@ -1,5 +1,5 @@
 import {App, Modal} from 'obsidian';
-import type {PermissionResult, PermissionUpdate} from '../agentService';
+import {sessionScopePermissions, type PermissionResult, type PermissionUpdate} from '../agentService';
 
 export interface ToolApprovalRequest {
 	toolName: string;
@@ -57,7 +57,7 @@ export class ToolApprovalModal extends Modal {
 			this.resolve({
 				behavior: 'allow',
 				updatedInput: this.request.input,
-				...(this.request.suggestions ? {updatedPermissions: this.request.suggestions} : {}),
+				...(this.request.suggestions ? {updatedPermissions: sessionScopePermissions(this.request.suggestions)} : {}),
 			});
 			this.close();
 		});

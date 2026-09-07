@@ -320,6 +320,20 @@ export interface AuthConfig {
 export type VersionInfoCallback = (info: {version: string; path: string}) => void;
 
 /**
+ * Rewrite CLI-suggested permission updates so approving a tool call never persists a grant to
+ * disk. The CLI's `canUseTool` suggestions carry a `destination` of `'userSettings'`,
+ * `'projectSettings'`, `'localSettings'`, `'session'`, or `'cliArg'` — for directory-shaped
+ * grants (e.g. an out-of-vault `Read` on an attached folder) it suggests `'localSettings'`,
+ * which the SDK writes to `<cwd>/.claude/settings.local.json` inside the vault (issue #193).
+ * Every `PermissionUpdate` union variant carries `destination`, so overwriting it via spread is
+ * type-safe without a per-variant switch. Forcing `'session'` keeps the approval in effect for
+ * the rest of the conversation (no re-prompt loop) without ever touching disk.
+ */
+export function sessionScopePermissions(suggestions: PermissionUpdate[]): PermissionUpdate[] {
+	return suggestions.map(u => ({...u, destination: 'session'}));
+}
+
+/**
  * Executes a query/stream operation with active cancellation and optional timeout.
  * Wraps execution so that on timeout, error, or cancellation, abortController.abort() is invoked
  * to drop in-flight work and resources immediately, and the error is re-thrown.
