@@ -536,9 +536,10 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
 `Session`-side mechanism and its one-turn-stale/timing caveats.
 
 - **The gauge** (`.synapse-context-indicator`, built in `configToolbar.ts`'s
-  `buildConfigToolbar()`, before the debug-toggle spacer): a small pill reading `"NN% context"`
-  with a tooltip giving the raw token counts (`~totalTokens / maxTokens`) and a note that the
-  figure is one turn stale. `updateContextIndicator()` reads
+  `buildConfigToolbar()`, before the debug-toggle spacer): an editorial hairline meter
+  (`.synapse-gauge-track` with accent `.synapse-gauge-fill` and a tabular mono percentage
+  `.synapse-gauge-value`) with a tooltip giving the raw token counts (`~totalTokens / maxTokens`)
+  and a note that the figure is one turn stale. `updateContextIndicator()` reads
   `this.currentSession?.cachedContextUsage` and:
   - **Renders nothing** (`is-hidden`, empty text) when it's `undefined` — before any session has
     captured a value, and for the entire conversation on a BYOK local model (see
@@ -797,7 +798,7 @@ The input area transforms from a floating card into an editorial ruled footer:
 - **Model picker button:** quick-picker text button displaying the active model name, underlined on hover and opening a selection menu directly from the composer footer while keeping state line and toolbar synchronized.
 - **Send button (`.synapse-send-btn`):** 30px square accent block with 2px border radius and centered icon. Transitions to error color and stop icon when streaming is active.
 - **Editorial chips (`.synapse-input-chips`):** attachment, active-note, and vault-scope chips adopt hairline borders (`--synapse-rule-soft`), rectangular 2px border radius, and muted typography. All chips remain removable via a hoverable `x` button.
-- **Toolbar coexistence decision:** The state line displays `NOTE / AGENT / MODEL` above the input. The config toolbar continues to function alongside it as a separate row below the composer until slice #210 restyles the toolbar and context gauge. Leaving the toolbar intact avoids a half-migrated interface and ensures working directory selection, reasoning effort menu, tool toggle, and context window gauge remain fully usable.
+- **Toolbar coexistence decision:** The state line was established in #208 displaying `NOTE / AGENT / MODEL`. In slice #210, the coexistence is resolved: the composer state line focuses strictly on the active note / selection context (`.synapse-state-note`), while the restyled config toolbar below houses the interactive controls (agent, model, reasoning effort, tools, working directory, context gauge, debug), completely eliminating duplicated agent/model readouts across the two surfaces.
 
 ### Session sidebar (issue #209)
 
@@ -819,5 +820,20 @@ The vault search tab is restyled to align with the Editorial design language:
 - **Ruled search results:** Result rows (`.synapse-search-result`) render as ruled rows with hairline dividers (`border-bottom: 1px solid var(--synapse-rule-soft);`). Note titles are set in interface sans with accent hover underline, parent folder paths are right-aligned in faint tabular text, and matched excerpts or reasons are set in the bundled serif (`--synapse-font-serif`, 14.5px, line-height 1.55).
 - **Accent match highlighting:** Search query terms inside excerpts are highlighted using `.synapse-search-highlight` with the interactive accent text color and a subtle bottom accent border over a transparent background, completely eliminating yellow highlight fills.
 - **Sliding hairline loading state:** While searching, `.synapse-search-loading` displays "Searching vault…" in serif italic alongside an animated sliding hairline bar (`.synapse-search-loading-bar` with `@keyframes synapse-slide`), completely eliminating spinners from the search experience. Empty search results render as a serif italic line ("No results found").
+
+### Config toolbar, gauge & task panel (issue #210)
+
+The config toolbar, context-window gauge, and live task/plan panel adopt the Editorial design language:
+- **Config toolbar controls:** Agent, model, reasoning effort, tools, working directory, and debug toggle render as uppercase letterspaced text controls (10px, font-weight 500, letter-spacing 0.13em) separated by thin `/` dividers (`.synapse-toolbar-sep`). Bordered rectangular dropdowns, card containers, and pill badges are eliminated.
+- **Toolbar & State line relationship:** The state line focuses strictly on active note / selection context (`.synapse-state-note`), while the config toolbar below houses the interactive controls, eliminating duplicated agent/model readouts across the two surfaces.
+- **Context-window gauge hairline meter:** The context-window gauge (`.synapse-context-gauge`, `.synapse-context-indicator`) renders as a hairline meter: a 2px track (`.synapse-gauge-track`) filling with the interactive accent (`.synapse-gauge-fill`), paired with a tabular mono numeric readout (`.synapse-gauge-value`). Rounded pills, card borders, and gradient fills are eliminated.
+- **Semantic warning and critical gauge states:** Warning (≥75%) and critical (≥90%) states are conveyed using Obsidian's semantic theme color variables (`--text-warning`, `--text-error`) and increased font weight (600 for warning, 700 for critical), introducing no raw hex colors or foreign hues.
+- **Ruled definition list task panel:** The task/plan panel (`.synapse-task-panel`) reuses the ruled definition list primitive (`.synapse-findings`), rendering uppercase status (`TODO`, `ACTIVE`, `DONE`) in the left column (`.synapse-finding-key`, 10.5px, letter-spacing 0.09em) and task prose in the right column (`.synapse-finding-val`). Separators are hairlines (`--synapse-rule-soft`), with transparent backgrounds and no boxed card styling.
+- **Typographical task states:** Task states are distinguished typographically rather than with colored chips or Lucide icons:
+  - Active tasks (`.is-in_progress`) use interactive accent status, font-weight 600, and a 5px circular accent mark (`.synapse-task-active-dot`).
+  - Pending tasks (`.is-pending`) use faint status and muted prose.
+  - Completed tasks (`.is-completed`) use faint status, faint prose, and line-through text decoration.
+- **Collapsible behavior & live updates:** The task panel uses native `<details>` and `<summary>` elements (`.synapse-task-panel-header`), providing collapse/expand while preserving the user's toggle state across live `TodoWrite` rebuilds and maintaining live tabular elapsed time tracking.
+- **Theme compliance:** All status indicators, rules, and backgrounds strictly consume Obsidian CSS variables with zero raw hex values across light and dark modes.
 
 

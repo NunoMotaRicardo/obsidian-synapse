@@ -710,12 +710,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		this.scrollToBottom();
 	};
 
-	// ── Task/plan tracking (TodoWrite) ──────────────────────────
+	// ── Task/plan tracking (TodoWrite #210) ────────────────────
 
-	const TASK_STATUS_ICON: Record<TodoItem['status'], string> = {
-		pending: 'circle',
-		in_progress: 'loader',
-		completed: 'check-circle-2',
+	const TASK_STATUS_LABEL: Record<TodoItem['status'], string> = {
+		pending: 'TODO',
+		in_progress: 'ACTIVE',
+		completed: 'DONE',
 	};
 
 	/**
@@ -726,28 +726,37 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.renderTaskPanel = function (todos: TodoItem[]): void {
 		if (!this.toolCallsContainer) return;
 
+		let wasOpen = true;
 		if (!this.taskPanelEl || !this.taskPanelEl.isConnected) {
-			this.taskPanelEl = this.toolCallsContainer.createDiv({cls: 'synapse-task-panel'});
+			this.taskPanelEl = this.toolCallsContainer.createEl('details', {cls: 'synapse-task-panel synapse-findings'});
+			(this.taskPanelEl as HTMLDetailsElement).open = true;
 			// Keep the panel first among tool blocks — the plan is the headline, tool calls are detail.
 			this.toolCallsContainer.prepend(this.taskPanelEl);
+		} else {
+			wasOpen = (this.taskPanelEl as HTMLDetailsElement).open ?? true;
 		}
 		this.currentTodos = todos;
 
-		const panel = this.taskPanelEl;
+		const panel = this.taskPanelEl as HTMLDetailsElement;
 		panel.empty();
+		panel.open = wasOpen;
 
-		const header = panel.createDiv({cls: 'synapse-task-panel-header'});
-		header.createSpan({cls: 'synapse-task-panel-title', text: 'Plan'});
-		const elapsedSpan = header.createSpan({cls: 'synapse-task-panel-elapsed'});
+		const summary = panel.createEl('summary', {cls: 'synapse-task-panel-header'});
+		summary.createSpan({cls: 'synapse-task-panel-title', text: 'PLAN'});
+		const elapsedSpan = summary.createSpan({cls: 'synapse-task-panel-elapsed'});
 		elapsedSpan.setAttribute('data-synapse-task-elapsed', 'true');
 
 		const list = panel.createDiv({cls: 'synapse-task-list'});
 		for (const todo of todos) {
-			const item = list.createDiv({cls: `synapse-task-item is-${todo.status}`});
-			const iconEl = item.createSpan({cls: 'synapse-task-item-icon'});
-			setIcon(iconEl, TASK_STATUS_ICON[todo.status]);
+			const item = list.createDiv({cls: `synapse-task-item synapse-finding is-${todo.status}`});
+			const statusEl = item.createSpan({cls: 'synapse-task-item-status synapse-finding-key'});
+			if (todo.status === 'in_progress') {
+				statusEl.createSpan({cls: 'synapse-task-active-dot'});
+			}
+			statusEl.appendText(TASK_STATUS_LABEL[todo.status] ?? todo.status.toUpperCase());
+
 			const label = todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
-			item.createSpan({cls: 'synapse-task-item-label', text: label});
+			item.createSpan({cls: 'synapse-task-item-label synapse-finding-val', text: label});
 		}
 
 		this.updateTaskPanelElapsed();

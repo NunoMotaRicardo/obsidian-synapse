@@ -1,4 +1,4 @@
-import {Menu, setIcon} from 'obsidian';
+import {Menu} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
@@ -41,27 +41,18 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	proto.buildConfigToolbar = function(parent: HTMLElement): void {
 		const toolbar = parent.createDiv({cls: 'synapse-toolbar'});
 
-		// New conversation button
-		const newChatBtn = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'New conversation'}});
-		setIcon(newChatBtn, 'plus');
-		newChatBtn.addEventListener('click', () => void this.newConversation());
-
 		// Agent dropdown
-		const agentGroup = toolbar.createDiv({cls: 'synapse-toolbar-group'});
-		const agentIcon = agentGroup.createSpan({cls: 'synapse-toolbar-icon'});
-		setIcon(agentIcon, 'bot');
-		this.agentSelect = agentGroup.createEl('select', {cls: 'synapse-select'});
+		this.agentSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-agent-select'});
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
 			this.updateStateLine?.();
 		});
 
+		// Divider
+		toolbar.createSpan({cls: 'synapse-toolbar-sep', text: '/'});
+
 		// Model dropdown
-		const modelGroup = toolbar.createDiv({cls: 'synapse-toolbar-group'});
-		this.modelIconEl = modelGroup.createSpan({cls: 'synapse-toolbar-icon clickable-icon'});
-		setIcon(this.modelIconEl, 'cpu');
-		this.modelIconEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
-		this.modelSelect = modelGroup.createEl('select', {cls: 'synapse-select synapse-model-select'});
+		this.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
 		this.modelSelect.addEventListener('change', () => {
 			const newModel = this.modelSelect.value;
 			this.selectedModel = newModel;
@@ -73,33 +64,46 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.updateStateLine?.();
 		});
 
+		// Divider
+		toolbar.createSpan({cls: 'synapse-toolbar-sep', text: '/'});
+
+		// Reasoning effort button
+		this.modelIconEl = toolbar.createSpan({cls: 'synapse-toolbar-btn synapse-reasoning-btn', text: 'REASONING'});
+		this.modelIconEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
+
+		// Divider
+		toolbar.createSpan({cls: 'synapse-toolbar-sep', text: '/'});
+
 		// Tools button
-		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
-		setIcon(this.toolsBtnEl, 'plug');
+		this.toolsBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-tools-btn', text: 'TOOLS', attr: {title: 'Tools'}});
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
 
+		// Divider
+		toolbar.createSpan({cls: 'synapse-toolbar-sep', text: '/'});
+
 		// Working directory button
-		this.cwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Working directory'}});
-		setIcon(this.cwdBtnEl, 'hard-drive-download');
+		this.cwdBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-cwd-btn'});
 		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
 		this.updateCwdButton();
 
-		// Context-window gauge (issue #130) — hidden until the first successful capture;
-		// only ever populated for the real Agent SDK path (BYOK local models never produce
-		// a Query control-request response). See `updateContextIndicator()`.
-		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator is-hidden'});
+		// Separator for context indicator (hidden until indicator is visible)
+		this.contextSepEl = toolbar.createSpan({cls: 'synapse-toolbar-sep synapse-context-sep is-hidden', text: '/'});
+
+		// Context-window gauge (issue #130, #210) — hairline meter
+		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator synapse-context-gauge is-hidden'});
 
 		// Spacer to push debug toggle to the right
 		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
 
 		// Debug toggle
 		this.debugBtnEl = toolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
-		const debugIcon = this.debugBtnEl.createSpan({cls: 'synapse-debug-icon'});
-		setIcon(debugIcon, 'bug');
+		this.debugBtnEl.createSpan({cls: 'synapse-debug-label', text: 'DEBUG'});
 		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'synapse-debug-checkbox'});
 		debugCheck.checked = this.showDebugInfo;
+		this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
 		debugCheck.addEventListener('change', () => {
 			this.showDebugInfo = debugCheck.checked;
+			this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
 			setDebugEnabled(this.showDebugInfo);
 			this.chatContainer.toggleClass('synapse-hide-debug', !this.showDebugInfo);
 		});
@@ -311,6 +315,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// MCP is now SDK-native; badge always shows inactive
 		this.toolsBtnEl.toggleClass('is-active', false);
 		this.toolsBtnEl.setAttribute('title', 'Tools');
+		this.toolsBtnEl.setText('TOOLS');
 	};
 
 	proto.openCwdPicker = function(): void {
@@ -326,6 +331,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const label = `Working directory: ${vaultName}/${this.workingDir}`;
 		this.cwdBtnEl.setAttribute('title', label);
 		this.cwdBtnEl.toggleClass('is-active', true);
+		const folderName = this.workingDir ? (this.workingDir.split('/').pop() || this.workingDir) : '';
+		this.cwdBtnEl.setText(folderName ? `DIR: ${folderName.toUpperCase()}` : 'DIR');
 	};
 
 	/**
@@ -363,22 +370,34 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	/**
-	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130) in the toolbar
-	 * gauge. Renders nothing — not a zero, not a placeholder — until the first successful
-	 * capture, and applies only to the real Agent SDK path: a BYOK local model's `Session`
-	 * never populates `cachedContextUsage`, so the indicator stays absent for the entire
+	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130, #210) in the toolbar
+	 * gauge. Renders as a hairline meter: a 2px track that fills with the accent, with its
+	 * numeric readout in tabular mono.
+	 *
+	 * Renders nothing — not a zero, not a placeholder — until the first successful capture,
+	 * and applies only to the real Agent SDK path: a BYOK local model's `Session` never
+	 * populates `cachedContextUsage`, so the indicator stays absent for the entire
 	 * conversation rather than showing a number that was never actually measured.
 	 */
 	proto.updateContextIndicator = function(): void {
 		const usage = this.currentSession?.cachedContextUsage;
 		if (!usage) {
 			this.contextIndicatorEl.addClass('is-hidden');
-			this.contextIndicatorEl.setText('');
+			if (this.contextSepEl) this.contextSepEl.addClass('is-hidden');
+			this.contextIndicatorEl.empty();
 			return;
 		}
 		const pct = Math.round(usage.percentage);
 		this.contextIndicatorEl.removeClass('is-hidden');
-		this.contextIndicatorEl.setText(`${pct}% context`);
+		if (this.contextSepEl) this.contextSepEl.removeClass('is-hidden');
+		this.contextIndicatorEl.empty();
+
+		const track = this.contextIndicatorEl.createDiv({cls: 'synapse-gauge-track'});
+		const fill = track.createDiv({cls: 'synapse-gauge-fill'});
+		fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+
+		this.contextIndicatorEl.createSpan({cls: 'synapse-gauge-value', text: `${pct}%`});
+
 		this.contextIndicatorEl.setAttribute(
 			'title',
 			`Context window: ~${usage.totalTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} tokens (${pct}%). ` +

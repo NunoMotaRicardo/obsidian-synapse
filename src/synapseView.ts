@@ -234,6 +234,7 @@ export class SynapseView extends ItemView {
 	cwdBtnEl!: HTMLButtonElement;
 	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
 	contextIndicatorEl!: HTMLElement;
+	contextSepEl?: HTMLElement;
 	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;

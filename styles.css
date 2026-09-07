@@ -1383,11 +1383,13 @@
 	opacity: 0.5;
 }
 
+/* Duplication resolution between state line and toolbar (#210 AC-2):
+   The state line focuses strictly on the active note / selection context;
+   agent and model controls live in the config toolbar below. */
 .synapse-state-agent,
-.synapse-state-model {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.synapse-state-model,
+.synapse-state-sep {
+	display: none;
 }
 
 /* ── Input area (Editorial #208) ─────────────────────────────── */
@@ -1588,13 +1590,118 @@
 	white-space: nowrap;
 }
 
-/* ── Config toolbar ───────────────────────────────────────────── */
+/* ── Config toolbar (Editorial #210) ─────────────────────────── */
 
 .synapse-toolbar {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
+	padding: 6px 0 2px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	user-select: none;
+	-webkit-user-select: none;
 	flex-wrap: wrap;
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.synapse-toolbar-sep {
+	color: var(--synapse-rule);
+	font-size: 10px;
+	flex-shrink: 0;
+}
+
+.theme-dark .synapse-toolbar-sep {
+	color: var(--text-faint);
+	opacity: 0.5;
+}
+
+.synapse-toolbar-group {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.synapse-toolbar-icon svg {
+	width: 13px;
+	height: 13px;
+	color: var(--text-faint);
+}
+
+.synapse-toolbar-icon.is-active svg {
+	color: var(--interactive-accent);
+}
+
+.synapse-select {
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	padding: 2px 0;
+	border-radius: 0;
+	cursor: pointer;
+	outline: none;
+	-webkit-appearance: none;
+	appearance: none;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.synapse-select:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.synapse-select option {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+.synapse-model-select {
+	max-width: 17ch;
+}
+
+.synapse-toolbar-btn {
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	padding: 2px 0;
+	cursor: pointer;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
+	white-space: nowrap;
+}
+
+.synapse-toolbar-btn:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.synapse-toolbar-btn.is-active {
+	color: var(--interactive-accent);
 }
 
 .synapse-toolbar-spacer {
@@ -1602,58 +1709,32 @@
 }
 
 .synapse-debug-toggle {
-	position: relative;
 	display: inline-flex;
 	align-items: center;
-	padding: 2px 6px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
 	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
+	border: none;
+	border-bottom: 1px solid transparent;
+	padding: 2px 0;
 	cursor: pointer;
-	transition: all 0.15s ease;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
 	margin-left: auto;
 }
 
 .synapse-debug-toggle:hover {
-	border-color: var(--interactive-accent);
 	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
 }
 
-/* ── Context-window gauge (issue #130) ───────────────────────── */
-
-.synapse-context-indicator {
-	display: inline-flex;
-	align-items: center;
-	padding: 2px 6px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	white-space: nowrap;
-}
-
-.synapse-context-indicator.is-context-warning {
-	color: var(--text-warning, var(--color-orange));
-	border-color: var(--text-warning, var(--color-orange));
-}
-
-.synapse-context-indicator.is-context-critical {
-	color: var(--text-error);
-	border-color: var(--text-error);
-}
-
+.synapse-debug-toggle.is-active,
 .synapse-debug-toggle:has(.synapse-debug-checkbox:checked) {
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-}
-
-.synapse-debug-icon svg {
-	width: 14px;
-	height: 14px;
+	color: var(--interactive-accent);
+	font-weight: 600;
 }
 
 .synapse-debug-checkbox {
@@ -1666,169 +1747,229 @@
 	display: none;
 }
 
-/* ── Compaction debug blocks ─────────────────────────────────── */
+/* ── Context-window gauge (issue #130, #210) ─────────────────── */
+
+.synapse-context-gauge,
+.synapse-context-indicator {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: transparent;
+	border: none;
+	padding: 0;
+	white-space: nowrap;
+}
+
+.synapse-gauge-track {
+	width: 36px;
+	height: 2px;
+	background: var(--synapse-rule-soft);
+	overflow: hidden;
+	position: relative;
+	border-radius: 0;
+}
+
+.synapse-gauge-fill {
+	height: 100%;
+	background: var(--interactive-accent);
+	transition: width 0.2s ease;
+	border-radius: 0;
+}
+
+.synapse-gauge-value {
+	font-family: var(--font-monospace);
+	font-size: 10px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+
+/* Warning & critical states conveyed by accent/semantic variables and weight (AC-4) */
+.synapse-context-indicator.is-context-warning .synapse-gauge-fill {
+	background: var(--text-warning, var(--interactive-accent));
+}
+
+.synapse-context-indicator.is-context-warning .synapse-gauge-value {
+	color: var(--text-warning, var(--interactive-accent));
+	font-weight: 600;
+}
+
+.synapse-context-indicator.is-context-critical .synapse-gauge-fill {
+	background: var(--text-error);
+}
+
+.synapse-context-indicator.is-context-critical .synapse-gauge-value {
+	color: var(--text-error);
+	font-weight: 700;
+}
+
+/* ── Compaction debug blocks (Editorial #210) ─────────────────── */
 
 .synapse-compaction-block {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
+	border-left: 1px solid var(--synapse-rule);
+	padding-left: 12px;
 	margin: 4px 0;
-	padding: 0;
+	color: var(--text-muted);
 }
 
 .synapse-compaction-summary {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 4px 8px;
+	padding: 2px 0;
 	cursor: pointer;
 	user-select: none;
+	-webkit-user-select: none;
+	list-style: none;
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.synapse-compaction-summary::-webkit-details-marker {
+	display: none;
+}
+
+.synapse-compaction-summary:hover {
+	color: var(--text-normal);
 }
 
 .synapse-compaction-icon svg {
-	width: 14px;
-	height: 14px;
-	color: var(--text-muted);
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
 }
 
 .synapse-compaction-body {
-	padding: 4px 8px 8px;
-	border-top: 1px solid var(--background-modifier-border);
+	padding: 4px 0;
 }
 
-/* ── Task/plan tracking panel (TodoWrite) ────────────────────── */
+/* ── Task/plan tracking panel (TodoWrite #210) ────────────────── */
 
 .synapse-task-panel {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-secondary);
-	font-size: var(--font-ui-smaller);
-	padding: 6px 8px;
+	border: none;
+	background: transparent;
+	padding: 4px 0 8px;
+	margin: 6px 0 10px;
 }
 
 .synapse-task-panel-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 4px;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	list-style: none;
+	padding: 4px 0 6px;
+}
+
+.synapse-task-panel-header::-webkit-details-marker {
+	display: none;
 }
 
 .synapse-task-panel-title {
-	font-weight: var(--font-semibold);
-	color: var(--text-muted);
+	font-family: var(--font-interface);
+	font-weight: 500;
+	color: var(--text-faint);
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.14em;
+	font-size: 10px;
+	transition: color 0.15s ease;
+}
+
+.synapse-task-panel-header:hover .synapse-task-panel-title {
+	color: var(--interactive-accent);
 }
 
 .synapse-task-panel-elapsed {
 	color: var(--text-faint);
+	font-family: var(--font-monospace);
+	font-size: 10px;
 	font-variant-numeric: tabular-nums;
 }
 
 .synapse-task-list {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
 }
 
+/* Task items reuse .synapse-finding (ruled definition row primitive) */
 .synapse-task-item {
 	display: flex;
+	gap: 12px;
+	padding: 7px 0;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	align-items: baseline;
+}
+
+.synapse-task-item:first-child {
+	border-top: 1px solid var(--synapse-rule-soft);
+}
+
+.synapse-task-item-status {
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	width: 74px;
+	flex-shrink: 0;
+	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 2px 0;
+}
+
+.synapse-task-item-label {
+	font-size: 13.5px;
+	line-height: 1.5;
+	flex: 1;
+	min-width: 0;
 	color: var(--text-muted);
 }
 
-.synapse-task-item-icon {
-	display: flex;
-	flex-shrink: 0;
-}
-
-.synapse-task-item-icon svg {
-	width: 13px;
-	height: 13px;
-}
-
-.synapse-task-item.is-pending .synapse-task-item-icon {
+/* Typographical state distinction (AC-6) */
+.synapse-task-item.is-pending .synapse-task-item-status {
 	color: var(--text-faint);
 }
 
-.synapse-task-item.is-completed {
+.synapse-task-item.is-pending .synapse-task-item-label {
+	color: var(--text-muted);
+}
+
+.synapse-task-item.is-in_progress .synapse-task-item-status {
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.synapse-task-item.is-in_progress .synapse-task-item-label {
+	color: var(--text-normal);
+	font-weight: 600;
+}
+
+.synapse-task-active-dot {
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	margin-right: 6px;
+	flex-shrink: 0;
+}
+
+.synapse-task-item.is-completed .synapse-task-item-status {
 	color: var(--text-faint);
 }
 
 .synapse-task-item.is-completed .synapse-task-item-label {
+	color: var(--text-faint);
 	text-decoration: line-through;
 }
 
-.synapse-task-item.is-completed .synapse-task-item-icon {
-	color: var(--text-success);
-}
-
-.synapse-task-item.is-in_progress {
-	color: var(--text-normal);
-	font-weight: var(--font-semibold);
-}
-
-.synapse-task-item.is-in_progress .synapse-task-item-icon {
-	color: var(--text-accent);
-	animation: synapse-spin 1s linear infinite;
-}
-
-.synapse-toolbar-group {
-	display: flex;
-	align-items: center;
-	gap: 3px;
-}
-
-.synapse-toolbar-icon svg {
-	width: 14px;
-	height: 14px;
-	color: var(--text-muted);
-}
-
-.synapse-toolbar-icon.clickable-icon {
-	cursor: pointer;
-	border-radius: var(--radius-s);
-	padding: 2px;
-}
-
-.synapse-toolbar-icon.clickable-icon:hover {
-	background: var(--background-modifier-hover);
-}
-
-.synapse-toolbar-icon.clickable-icon.is-non-interactive {
-	cursor: default;
-}
-
-.synapse-toolbar-icon.is-active svg {
-	color: var(--interactive-accent);
-}
-
-.synapse-select {
-	font-size: var(--font-ui-smaller);
-	padding: 2px 4px;
-	border-radius: var(--radius-s);
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
-	color: var(--text-normal);
-	max-width: 140px;
-	cursor: pointer;
-}
-
-.synapse-model-select {
-	width: 17ch;
-}
-
-.synapse-toolbar-actions {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	margin-left: auto;
-}
-
+/* Icon button fallback for search and session headers */
 .synapse-icon-btn {
 	display: flex;
 	align-items: center;
@@ -1857,46 +1998,6 @@
 	width: 16px;
 	height: 16px;
 	stroke-width: 2px;
-}
-
-/* ── Skills & tools chips (inline in toolbar) ─────────────────── */
-
-.synapse-toolbar-chips {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 3px;
-	align-items: center;
-}
-
-.synapse-chips-empty {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
-	font-style: italic;
-}
-
-.synapse-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	padding: 2px 8px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	cursor: pointer;
-	transition: all 0.15s ease;
-}
-
-.synapse-chip:hover {
-	border-color: var(--interactive-accent);
-	color: var(--text-normal);
-}
-
-.synapse-chip.is-active {
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
 }
 
 /* ── Vault scope modal ────────────────────────────────────────── */
