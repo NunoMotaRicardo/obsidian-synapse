@@ -257,29 +257,52 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   To anchor path resolution, the session is configured with standard system instructions containing
   the absolute vault root, active note path, and working directory, preventing the LLM from constructing
   incorrect absolute paths (e.g., nesting file paths under attached image subfolders).
-  All of these system-prompt blocks are delivered as
+  All of these blocks are delivered as either part of
   `systemPrompt: {type: 'preset', preset: 'claude_code', append: ...}` — appended to Claude
-  Code's default system prompt, never replacing it. (A plain-string `systemPrompt` replaces the
-  whole default prompt and the model stops using tools/reading files; this applies to chat,
-  advanced search, and the Telegram bot alike.)
-  A compact `[Vault Structure]` block is appended to every session's system prompt listing
-  top-level vault folders (name + child count), excluding system folders (`.obsidian`, `.trash`,
-  the synapse folder, and any dot-prefixed folder). This gives agents awareness of the vault's
-  organization without reading note contents. The scan is performed by `scanVaultStructure()`
-  in `configWriter.ts`; the formatter `buildVaultContextBlock()` lives in `sessionConfig.ts`.
+  Code's default system prompt, never replacing it — or, for volatile content, inlined into the
+  per-turn user message instead (see the stable-vs-volatile split below). (A plain-string
+  `systemPrompt` replaces the whole default prompt and the model stops using tools/reading
+  files; this applies to chat, advanced search, and the Telegram bot alike.)
+  **Stable vs. volatile split (issue #201):** the system prompt sits at the front of every
+  request, so any change to `systemPrompt.append` invalidates the SDK's cached prefix *and*
+  all conversation history behind it — measured at ~50K tokens re-written at cache-write price
+  on a turn that changed nothing but the appended block's volatile fields. `buildSessionConfig()`
+  (`synapseView.ts`) only ever puts session-stable content in `systemPrompt.append`: the vault
+  root, `buildResilienceHint()`, and the static body of `buildSelfImproveHint()` (no longer
+  parameterized by agent name). Everything that can change between turns of the same resumed
+  conversation — active note, working directory, the `[Vault Structure]` block, and the current
+  agent name — is instead built by `buildTurnContextBlock()` (`sessionConfig.ts`) and appended
+  to the *user message* on every send (`handleSend()`, after the conversation-history injection),
+  where a change only costs that turn's own tokens instead of the whole cached prefix. The
+  search and Telegram paths apply the same split (`buildCurrentAgentLine()` inlined into the
+  search prompt / Telegram message text) even though their own volatile fields happen to be
+  effectively constant in practice — advanced search starts a fresh session per query, and the
+  Telegram bot has no active-note concept — so the split costs nothing there but keeps the
+  three call sites consistent.
+  A compact `[Vault Structure]` block, part of the per-turn context above, lists top-level
+  vault folder *names only* — no `(N items)` counts (dropped outright, issue #201, since the
+  counts made the block gratuitously volatile without the model needing exact numbers) —
+  excluding system folders (`.obsidian`, `.trash`, the synapse folder, and any dot-prefixed
+  folder). This gives agents awareness of the vault's organization without reading note
+  contents. The scan is performed by `scanVaultStructure()` in `configWriter.ts` (its return
+  shape, including `fileCount`, is unchanged — only the formatter stopped emitting it); the
+  formatter `buildVaultContextBlock()` lives in `sessionConfig.ts`.
   A compact `[Self-Improve]` detection block is appended to every session's system prompt
   (chat, search, and Telegram bot) via `buildSelfImproveHint()` in `sessionConfig.ts`.
   It teaches the active agent to recognize when the user expresses a customization preference
   and propose creating or modifying a Synapse artifact (agent, prompt, or skill),
-  always asking permission before writing. The block includes the current agent name for
-  context. It is skipped when the user is already using the `improve-synapse` prompt
-  (no double-activation).
+  always asking permission before writing. The current agent name is delivered separately,
+  per-turn, by `buildCurrentAgentLine()` (see the stable-vs-volatile split above). The whole
+  self-improve hint (static body + current-agent line) is skipped when the user is already
+  using the `improve-synapse` prompt (no double-activation).
   A compact `[Resilience]` block is appended to every session's system prompt (chat, search,
   and Telegram bot) via `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask
   guidance for failed writes/edits and confirm-before-acting guidance for referenced
   attachments; see "Write/edit tool error guidance (issue #78)" below. This matters most for
   the Telegram bot, which runs unattended with `permissionMode: 'bypassPermissions'` and no UI
-  to catch a silent failure.
+  to catch a silent failure — `buildResilienceHint()` stays session-stable and is never moved
+  out of `systemPrompt.append`, so this guidance can't be silently dropped by the stable/
+  volatile split.
   When `settings.autoIncludeNoteImages` is enabled (default),
   `handleSend()` reads the active note content, scans for image embeds (`![[image.png]]` and
   `![alt](path.png)` syntaxes), resolves them to vault files via `resolveNoteImageEmbeds()`

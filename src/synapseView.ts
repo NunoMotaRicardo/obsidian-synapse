@@ -29,7 +29,7 @@ import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildVaultContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -665,7 +665,22 @@ export class SynapseView extends ItemView {
 				this.attachmentTempFiles.add(tempPath);
 			}
 
-			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths);
+			// Per-turn volatile context (issue #201) — Active note, Working directory, the
+			// vault-structure block, and the current agent all vary between turns of the same
+			// resumed conversation, so they're delivered here in the user message rather than
+			// `systemPrompt.append` (built once, session-stable, in `buildSessionConfig()`) —
+			// a change here only costs this turn's own tokens instead of invalidating the
+			// cached prefix and everything behind it.
+			const effectiveAgentName = this.selectedAgent;
+			const turnContext = buildTurnContextBlock({
+				app: this.app,
+				vaultRoot: vaultBasePath.replace(/\\/g, '/'),
+				activeNotePath: this.app.workspace.getActiveFile()?.path,
+				workingDirectory: this.getWorkingDirectory().replace(/\\/g, '/'),
+				agentName: effectiveAgentName !== 'improve-synapse' ? (effectiveAgentName || 'Auto') : undefined,
+			});
+
+			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths) + turnContext;
 			const additionalDirectories = computeAdditionalDirectories({
 				attachments: currentAttachments,
 				blobPaths,
@@ -1299,28 +1314,23 @@ export class SynapseView extends ItemView {
 
 		const reasoningEffort = this.plugin.settings.reasoningEffort;
 
-		// Build workspace path info for system prompt
-		const parts: string[] = [];
+		// Build workspace path info for the system prompt — session-stable content only
+		// (issue #201). Active note, working directory, the vault-structure block, and the
+		// current agent all vary between turns of the same resumed conversation, so they're
+		// delivered per-turn in the user message instead (see `handleSend()`'s
+		// `buildTurnContextBlock()` call) rather than here, where a change would invalidate
+		// the cached prefix and everything behind it.
 		const vaultRoot = this.getVaultBasePath().replace(/\\/g, '/');
-		const activeFile = this.app.workspace.getActiveFile();
-		const workDir = this.getWorkingDirectory().replace(/\\/g, '/');
-		parts.push('[Workspace Path Information]');
-		parts.push(`Vault root: ${vaultRoot}`);
-		if (activeFile) {
-			parts.push(`Active note: ${vaultRoot}/${activeFile.path}`);
-		}
-		parts.push(`Working directory: ${workDir}`);
-		const wsInfo = parts.join('\n');
-		const vaultContext = buildVaultContextBlock(this.app);
+		const wsInfo = `[Workspace Path Information]\nVault root: ${vaultRoot}`;
 		let systemContent = (opts.systemContent
 			? opts.systemContent + '\n\n' + wsInfo
-			: wsInfo) + vaultContext + buildResilienceHint();
+			: wsInfo) + buildResilienceHint();
 
 		const effectiveAgentName = opts.selectedAgentName !== undefined ? opts.selectedAgentName : (this.plugin.settings.featureAgents?.chat || '');
 
 		// Inject self-improve detection hint unless the user is already using the improve-synapse agent
 		if (effectiveAgentName !== 'improve-synapse') {
-			systemContent += buildSelfImproveHint(effectiveAgentName || 'Auto');
+			systemContent += buildSelfImproveHint();
 		}
 
 		const config: SessionConfig = {

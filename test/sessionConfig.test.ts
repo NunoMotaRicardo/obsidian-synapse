@@ -6,7 +6,7 @@ vi.mock('../src/configWriter', () => ({
 	scanVaultStructure: vi.fn(),
 }));
 
-import {buildSelfImproveHint, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig, mergeLiveAgents, mergeLiveSkills, splitCommandNamespace} from '../src/view/sessionConfig';
+import {buildSelfImproveHint, buildCurrentAgentLine, buildTurnContextBlock, buildVaultContextBlock, resolveModelForAgent, mapSlashCommandsToSkillInfo, mapAgentInfoToAgentConfig, mergeLiveAgents, mergeLiveSkills, splitCommandNamespace} from '../src/view/sessionConfig';
 import {scanVaultStructure} from '../src/configWriter';
 import type {ModelInfo, SlashCommand, AgentInfo} from '../src/agentService';
 import type {AgentConfig, SkillInfo} from '../src/types';
@@ -18,32 +18,47 @@ const mockedScanVaultStructure = scanVaultStructure as ReturnType<typeof vi.fn>;
 // ---------------------------------------------------------------------------
 
 describe('buildSelfImproveHint', () => {
-	it('contains the agent name', () => {
-		const result = buildSelfImproveHint('TestAgent');
-		expect(result).toContain('TestAgent');
-	});
-
+	// Session-stable (issue #201) — no longer takes an agent name; that volatile piece is
+	// now `buildCurrentAgentLine()`, delivered per-turn instead of baked into this hint.
 	it('references the _synapse/ folder', () => {
-		const result = buildSelfImproveHint('TestAgent');
+		const result = buildSelfImproveHint();
 		expect(result).toContain('_synapse/');
 	});
 
 	it('contains "Self-Improve" heading marker', () => {
-		const result = buildSelfImproveHint('TestAgent');
+		const result = buildSelfImproveHint();
 		expect(result).toContain('Self-Improve');
 	});
 
-	it('returns a non-empty string for any agent name', () => {
-		expect(buildSelfImproveHint('').length).toBeGreaterThan(0);
-		expect(buildSelfImproveHint('   ').length).toBeGreaterThan(0);
+	it('returns a non-empty string', () => {
+		expect(buildSelfImproveHint().length).toBeGreaterThan(0);
+	});
+
+	it('is stable across calls (no volatile content)', () => {
+		expect(buildSelfImproveHint()).toBe(buildSelfImproveHint());
+	});
+});
+
+// ---------------------------------------------------------------------------
+// buildCurrentAgentLine — the volatile "Current agent" line split out of
+// buildSelfImproveHint() (issue #201) so it can be delivered per-turn.
+// ---------------------------------------------------------------------------
+
+describe('buildCurrentAgentLine', () => {
+	it('contains the agent name', () => {
+		expect(buildCurrentAgentLine('TestAgent')).toContain('TestAgent');
 	});
 
 	it('different agent names produce different outputs', () => {
-		const a = buildSelfImproveHint('AgentAlpha');
-		const b = buildSelfImproveHint('AgentBeta');
+		const a = buildCurrentAgentLine('AgentAlpha');
+		const b = buildCurrentAgentLine('AgentBeta');
 		expect(a).not.toBe(b);
 		expect(a).toContain('AgentAlpha');
 		expect(b).toContain('AgentBeta');
+	});
+
+	it('mentions "Current agent"', () => {
+		expect(buildCurrentAgentLine('Auto')).toContain('Current agent');
 	});
 });
 
@@ -94,14 +109,16 @@ describe('buildVaultContextBlock', () => {
 		expect(result).toContain('projects');
 	});
 
-	it('includes item counts in the output', () => {
+	it('does not include item counts in the output (issue #201)', () => {
 		mockedScanVaultStructure.mockReturnValue([
 			{name: 'notes', fileCount: 7},
 		]);
 
 		const result = buildVaultContextBlock(mockApp);
 
-		expect(result).toContain('7');
+		expect(result).not.toContain('7');
+		expect(result).not.toContain('items');
+		expect(result).not.toContain('(');
 	});
 
 	it('contains [Vault Structure] label', () => {
@@ -120,6 +137,84 @@ describe('buildVaultContextBlock', () => {
 		buildVaultContextBlock(mockApp);
 
 		expect(mockedScanVaultStructure).toHaveBeenCalledWith(mockApp);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// buildTurnContextBlock — the per-turn volatile block (Active note, Working
+// directory, vault-structure block, current agent) delivered in the user
+// message instead of systemPrompt.append (issue #201).
+// ---------------------------------------------------------------------------
+
+describe('buildTurnContextBlock', () => {
+	const mockApp = {
+		vault: {
+			getFiles: () => [] as TFile[],
+		},
+	} as unknown as App;
+
+	beforeEach(() => {
+		mockedScanVaultStructure.mockReset();
+		mockedScanVaultStructure.mockReturnValue([]);
+	});
+
+	it('includes the working directory', () => {
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			workingDirectory: '/vault/sub',
+		});
+		expect(result).toContain('Working directory: /vault/sub');
+	});
+
+	it('omits the active note line when no active note is given', () => {
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			workingDirectory: '/vault',
+		});
+		expect(result).not.toContain('Active note');
+	});
+
+	it('includes the active note as vaultRoot/activeNotePath when given', () => {
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			activeNotePath: 'folder/note.md',
+			workingDirectory: '/vault',
+		});
+		expect(result).toContain('Active note: /vault/folder/note.md');
+	});
+
+	it('omits the current agent line when no agent name is given', () => {
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			workingDirectory: '/vault',
+		});
+		expect(result).not.toContain('Current agent');
+	});
+
+	it('includes the current agent line when an agent name is given', () => {
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			workingDirectory: '/vault',
+			agentName: 'TestAgent',
+		});
+		expect(result).toContain('Current agent: TestAgent.');
+	});
+
+	it('includes the count-free vault structure block when folders exist', () => {
+		mockedScanVaultStructure.mockReturnValue([{name: 'inbox', fileCount: 3}]);
+		const result = buildTurnContextBlock({
+			app: mockApp,
+			vaultRoot: '/vault',
+			workingDirectory: '/vault',
+		});
+		expect(result).toContain('[Vault Structure]');
+		expect(result).toContain('inbox');
+		expect(result).not.toContain('3');
 	});
 });
 

@@ -580,15 +580,22 @@ export function getAdaptiveTimeout(app: App, scopePath?: string, configuredTimeo
 }
 
 /**
- * Build a compact vault-structure context block listing top-level folders.
+ * Build a compact vault-structure context block listing top-level folder names.
  * Returns an empty string when the vault has no scannable folders.
+ *
+ * Folder names only — no `(N items)` counts (issue #201). Counts changed whenever the
+ * vault's contents changed, which made this block volatile; it's delivered per-turn in
+ * the user message (see `synapseView.ts`'s `handleSend()`) rather than the system prompt,
+ * so being volatile no longer costs a cache invalidation, but the counts were dropped
+ * outright rather than kept and moved — they added noise without the model needing exact
+ * numbers to decide where to look.
  */
 export function buildVaultContextBlock(
 	app: App,
 ): string {
 	const folders = scanVaultStructure(app);
 	if (folders.length === 0) return '';
-	const list = folders.map(f => `${f.name} (${f.fileCount} items)`).join(', ');
+	const list = folders.map(f => f.name).join(', ');
 	return `\n\n[Vault Structure] Top-level folders: ${list}`;
 }
 
@@ -610,14 +617,52 @@ export function buildResilienceHint(): string {
 /**
  * Build a compact self-improve detection hint for the system prompt.
  * Teaches the agent to recognize customization intent and propose artifact changes.
+ *
+ * Session-stable — no longer takes an `agentName` (issue #201): the "Current agent" line it
+ * used to append is volatile (a `configDirty` rebuild can change the selected agent for a
+ * resumed conversation) and is now delivered per-turn via `buildCurrentAgentLine()` instead,
+ * so this static body can stay in `systemPrompt.append` without invalidating the cached
+ * prefix whenever the agent changes.
  */
-export function buildSelfImproveHint(agentName: string): string {
+export function buildSelfImproveHint(): string {
 	return '\n\n[Self-Improve] If the user expresses a preference about how Synapse should behave' +
 		' (e.g. "always use APA citations" or "make the assistant more concise"),' +
 		' propose creating or modifying a Synapse customization artifact (agent or skill).' +
 		' Artifacts live in the _synapse/ folder (.md files for agents in _synapse/agents/, and SKILL.md files for skills in _synapse/skills/<name>/SKILL.md).' +
-		' State what you would create (type and summary), then ask permission before writing.' +
-		` Current agent: ${agentName}.`;
+		' State what you would create (type and summary), then ask permission before writing.';
+}
+
+/**
+ * Build the volatile "Current agent" line delivered per-turn in the user message rather
+ * than baked into `buildSelfImproveHint()`'s static body — see that function's doc comment.
+ */
+export function buildCurrentAgentLine(agentName: string): string {
+	return `\n\nCurrent agent: ${agentName}.`;
+}
+
+/**
+ * Build the per-turn volatile context block appended to the *user message* rather than
+ * `systemPrompt.append` (issue #201): Active note, Working directory, the `[Vault Structure]`
+ * block, and (when the current agent isn't `improve-synapse`, matching the self-improve hint's
+ * own skip) the current agent. Each of these can change between turns of the same resumed
+ * conversation (switching notes, a `configDirty` rebuild changing cwd/agent, vault edits), so
+ * baking them into the system prompt would invalidate the cached prefix — and everything
+ * behind it in the conversation history — on every such change. Delivered here instead, a
+ * change only costs this turn's own tokens.
+ */
+export function buildTurnContextBlock(opts: {
+	app: App;
+	vaultRoot: string;
+	activeNotePath?: string;
+	workingDirectory: string;
+	agentName?: string;
+}): string {
+	const parts: string[] = ['[Workspace Path Information]'];
+	if (opts.activeNotePath) parts.push(`Active note: ${opts.vaultRoot}/${opts.activeNotePath}`);
+	parts.push(`Working directory: ${opts.workingDirectory}`);
+	let block = '\n\n' + parts.join('\n') + buildVaultContextBlock(opts.app);
+	if (opts.agentName) block += buildCurrentAgentLine(opts.agentName);
+	return block;
 }
 
 /**

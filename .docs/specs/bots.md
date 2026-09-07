@@ -8,8 +8,14 @@
 - Attachments (photo/document/audio/video) are downloaded and passed as SDK attachments.
 - Uses the default agent from settings; skills and MCP servers are discovered natively via the
   `_synapse/` plugin registration (passed in session `Options.plugins`).
-- The `[Self-Improve]` detection block is appended to the bot's system prompt via
-  `buildSelfImproveHint()`, using the bot's default agent name. The bot's system prompt is
+- The `[Self-Improve]` detection block (its static body only — `buildSelfImproveHint()`,
+  issue #201) is appended to the bot's system prompt; `buildBotSessionConfig()` keeps only
+  session-stable content there (vault root, `buildResilienceHint()`, the static self-improve
+  body). The bot's default agent name and working directory are volatile per the same stable/
+  volatile split `chat-view.md` describes, so `processMessage()` inlines them into each
+  outgoing message text via `buildCurrentAgentLine()` instead — even though in practice
+  neither actually changes between messages in the same chat/topic today, keeping this call
+  site consistent with the chat and search paths costs nothing. The bot's system prompt is
   delivered as `{type: 'preset', preset: 'claude_code', append: ...}` — appended to Claude
   Code's default prompt so unattended tool use (with `bypassPermissions`) keeps working.
 - Runs only while Obsidian is open and connected.
