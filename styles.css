@@ -2193,13 +2193,13 @@
 	color: var(--text-error);
 }
 
-/* ── Session sidebar ──────────────────────────────────────────── */
+/* ── Session sidebar (Editorial #209) ────────────────────────── */
 
 .synapse-splitter {
 	width: 4px;
 	flex-shrink: 0;
 	cursor: col-resize;
-	background: var(--background-modifier-border);
+	background: var(--synapse-rule-soft);
 	transition: background 0.15s;
 }
 
@@ -2218,53 +2218,121 @@ body.synapse-no-select {
 	flex-direction: column;
 	flex-shrink: 0;
 	overflow: hidden;
-	background: var(--background-secondary);
+	background: var(--background-primary);
 	width: var(--sidebar-width, 40px);
 }
 
 .synapse-sidebar-header {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-	padding: 6px;
-	border-bottom: 1px solid var(--background-modifier-border);
+	gap: 6px;
+	padding: 10px 10px 8px;
+	border-bottom: 1px solid var(--synapse-rule);
 	align-items: stretch;
 }
 
 .synapse-sidebar-btn-row {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	gap: 2px;
+	gap: 4px;
 }
 
-.synapse-sidebar-new-btn {
-	flex-shrink: 0;
-}
-
+.synapse-sidebar-btn-row button,
+.synapse-sidebar-new-btn,
 .synapse-sidebar-filter-btn,
-.synapse-sidebar-sort-btn {
-	flex-shrink: 0;
-	padding: 2px;
-	color: var(--text-muted);
+.synapse-sidebar-sort-btn,
+.synapse-sidebar-refresh-btn,
+.synapse-sidebar-delete-btn {
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	border-radius: 0;
+	box-shadow: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 3px 2px;
+	line-height: 1;
+	transition: color 0.15s ease, border-color 0.15s ease;
 }
-.synapse-sidebar-filter-btn.is-active {
+
+.synapse-sidebar-btn-row button:hover,
+.synapse-sidebar-new-btn:hover,
+.synapse-sidebar-filter-btn:hover,
+.synapse-sidebar-sort-btn:hover,
+.synapse-sidebar-refresh-btn:hover,
+.synapse-sidebar-delete-btn:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+	background: transparent;
+}
+
+.synapse-sidebar-filter-btn.is-active,
+.synapse-sidebar-sort-btn.is-active {
 	color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
 }
 
 .synapse-sidebar-search {
 	width: 100%;
-	padding: 4px 6px;
+	padding: 4px 2px;
 	font-size: var(--font-ui-smaller);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
+	font-family: var(--font-interface);
+	border: none;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-radius: 0;
+	background: transparent;
 	color: var(--text-normal);
 	outline: none;
+	box-shadow: none;
 }
 
 .synapse-sidebar-search:focus {
-	border-color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+	box-shadow: none;
+}
+
+.synapse-sidebar-search::placeholder {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* Sidebar section headings (Editorial label primitive) */
+
+.synapse-sidebar-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	padding: 14px 10px 6px;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.synapse-sidebar-heading:first-child {
+	padding-top: 8px;
+}
+
+.synapse-sidebar-heading::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--synapse-rule);
+}
+
+/* Sidebar empty state */
+
+.synapse-sidebar-empty {
+	font-family: var(--synapse-font-serif);
+	font-style: italic;
+	font-size: 13.5px;
+	color: var(--text-faint);
+	padding: 24px 12px;
+	text-align: center;
+	line-height: 1.4;
 }
 
 /* Session list */
@@ -2272,25 +2340,45 @@ body.synapse-no-select {
 .synapse-sidebar-list {
 	flex: 1;
 	overflow-y: auto;
-	padding: 4px 0;
+	padding: 4px 0 12px;
 }
 
 .synapse-session-item {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 6px 8px;
+	gap: 8px;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	background: transparent;
 	cursor: pointer;
-	transition: background 0.15s;
-	min-height: 32px;
+	transition: color 0.15s ease, border-color 0.15s ease;
+	min-height: 36px;
+	position: relative;
+	outline: none;
 }
 
 .synapse-session-item:hover {
-	background: var(--background-modifier-hover);
+	background: transparent;
+}
+
+.synapse-session-item:hover .synapse-session-name {
+	color: var(--interactive-accent);
+}
+
+.synapse-session-item:focus-visible {
+	outline: 1px solid var(--interactive-accent);
+	outline-offset: -1px;
 }
 
 .synapse-session-item.is-active {
-	background: var(--background-modifier-active-hover);
+	background: transparent;
+	border-left: 2px solid var(--interactive-accent);
+	padding-left: 8px;
+}
+
+.synapse-session-item.is-active .synapse-session-name {
+	color: var(--interactive-accent);
+	font-weight: 500;
 }
 
 .synapse-session-icon {
@@ -2298,19 +2386,21 @@ body.synapse-no-select {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 20px;
-	height: 20px;
+	width: 18px;
+	height: 18px;
 	position: relative;
 }
 
 .synapse-session-icon svg {
-	width: 16px;
-	height: 16px;
+	width: 14px;
+	height: 14px;
 	color: var(--text-faint);
-	opacity: 0.45;
+	opacity: 0.6;
+	transition: color 0.15s ease, opacity 0.15s ease;
 }
 
-.synapse-session-item.is-active .synapse-session-icon svg {
+.synapse-session-item.is-active .synapse-session-icon svg,
+.synapse-session-item:hover .synapse-session-icon svg {
 	color: var(--interactive-accent);
 	opacity: 1;
 }
@@ -2319,39 +2409,318 @@ body.synapse-no-select {
 	position: absolute;
 	bottom: -2px;
 	right: -2px;
-	width: 8px;
-	height: 8px;
+	width: 7px;
+	height: 7px;
 	border-radius: 50%;
-	background: var(--text-success);
-	border: 1.5px solid var(--background-secondary);
+	background: var(--interactive-accent);
+	border: 1.5px solid var(--background-primary);
 	animation: synapse-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes synapse-pulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.4; }
-}
-
 .synapse-session-details {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
 }
 
 .synapse-session-name {
-	font-size: var(--font-ui-smaller);
+	font-family: var(--font-interface);
+	font-size: 13px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	color: var(--text-normal);
-	line-height: 1.3;
+	line-height: 1.4;
+	transition: color 0.15s ease;
+	flex: 1;
+	min-width: 0;
 }
 
 .synapse-session-time {
-	font-size: 10px;
+	margin-left: auto;
+	font-size: 11px;
 	color: var(--text-faint);
 	white-space: nowrap;
-	line-height: 1.3;
+	line-height: 1.4;
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+
+.synapse-session-actions {
+	display: none;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+.synapse-session-item:hover .synapse-session-actions,
+.synapse-session-item:focus-within .synapse-session-actions {
+	display: flex;
+}
+
+.synapse-session-item:hover .synapse-session-time,
+.synapse-session-item:focus-within .synapse-session-time {
+	display: none;
+}
+
+.synapse-session-action-btn {
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	color: var(--text-faint) !important;
+	cursor: pointer;
+	padding: 1px 2px !important;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-session-action-btn svg {
+	width: 13px;
+	height: 13px;
+}
+
+.synapse-session-action-btn:hover {
+	color: var(--text-normal) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+}
+
+.synapse-session-action-btn.mod-delete:hover {
+	color: var(--text-error) !important;
+	border-bottom-color: var(--text-error) !important;
+}
+
+/* ── Search tab (Editorial #209) ─────────────────────────────── */
+
+.synapse-search-wrapper {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	padding: 14px 20px;
+	gap: 12px;
+	background: var(--background-primary);
+}
+
+.synapse-search-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 0 8px;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	flex-shrink: 0;
+}
+
+.synapse-search-toolbar button {
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	border-radius: 0;
+	box-shadow: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 3px 2px;
+	line-height: 1;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-search-toolbar button:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+	background: transparent;
+}
+
+.synapse-search-toolbar button.is-active {
+	color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.synapse-search-advanced-group {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.synapse-search-input-row {
+	display: flex;
+	align-items: flex-end;
+	gap: 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--synapse-rule);
+	flex-shrink: 0;
+}
+
+.synapse-search-input {
+	width: 100%;
+	border: none;
+	background: transparent;
+	resize: none;
+	outline: none;
+	font-family: var(--synapse-font-serif);
+	font-size: 16px;
+	line-height: 1.5;
+	color: var(--text-normal);
+	padding: 4px 0;
+	box-shadow: none;
+}
+
+.synapse-search-input:focus {
+	box-shadow: none;
+}
+
+.synapse-search-input::placeholder {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.synapse-search-btn {
+	width: 30px;
+	height: 30px;
+	border-radius: 2px;
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	background: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	box-shadow: none;
+	transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.synapse-search-btn:hover {
+	background: var(--interactive-accent-hover, var(--interactive-accent)) !important;
+}
+
+.synapse-search-btn.is-searching {
+	background: var(--text-error) !important;
+}
+
+.synapse-search-btn svg {
+	width: 15px;
+	height: 15px;
+	stroke: var(--text-on-accent);
+}
+
+.synapse-search-results {
+	flex: 1;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+
+.synapse-search-result {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 2px;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	background: transparent;
+}
+
+.synapse-search-result:first-child {
+	border-top: 1px solid var(--synapse-rule-soft);
+}
+
+.synapse-search-result-file {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.synapse-search-result-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+
+.synapse-search-result-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+.synapse-search-result-name {
+	font-family: var(--font-interface);
+	font-size: 13.5px;
+	font-weight: 500;
+	color: var(--text-normal);
+	cursor: pointer;
+	text-decoration: none;
+	border-bottom: 1px solid transparent;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.synapse-search-result-name:hover {
+	color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.synapse-search-result-folder {
+	margin-left: auto;
+	font-size: 11px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.synapse-search-result-reason {
+	font-family: var(--synapse-font-serif);
+	font-size: 14.5px;
+	line-height: 1.55;
+	color: var(--text-muted);
+	padding-left: 21px;
+}
+
+.synapse-search-result mark,
+.synapse-search-highlight {
+	background: transparent;
+	color: var(--interactive-accent);
+	font-weight: 600;
+	border-bottom: 1px solid var(--interactive-accent);
+	padding: 0 1px;
+}
+
+.synapse-search-loading {
+	font-family: var(--synapse-font-serif);
+	font-style: italic;
+	font-size: 14.5px;
+	color: var(--text-faint);
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 24px 4px;
+}
+
+.synapse-search-loading-bar {
+	width: 26px;
+	height: 1px;
+	background: var(--interactive-accent);
+	animation: synapse-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes synapse-slide {
+	0%, 100% { transform: scaleX(0.3); transform-origin: left; }
+	50%      { transform: scaleX(1);   transform-origin: left; }
+}
+
+.synapse-search-empty {
+	font-family: var(--synapse-font-serif);
+	font-style: italic;
+	font-size: 14.5px;
+	color: var(--text-faint);
+	padding: 24px 4px;
+	text-align: center;
 }
 
 /* ── Prompt dropdown ─────────────────────────────────────────── */

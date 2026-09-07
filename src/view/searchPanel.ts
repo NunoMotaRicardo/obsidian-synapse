@@ -19,6 +19,36 @@ function buildSearchPrompt(query: string): string {
 		'No markdown fences, no extra text.\n\nQuery: ' + query;
 }
 
+/** Highlight query terms in result text using .synapse-search-highlight (accent color, no yellow fill). */
+function highlightQueryTerms(container: HTMLElement, text: string, query?: string): void {
+	if (!query) {
+		container.setText(text);
+		return;
+	}
+	const terms = query
+		.split(/\s+/)
+		.map(t => t.replace(/[^\w-]/g, ''))
+		.filter(t => t.length >= 2);
+
+	if (terms.length === 0) {
+		container.setText(text);
+		return;
+	}
+
+	const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+	const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+	const parts = text.split(regex);
+
+	container.empty();
+	for (const part of parts) {
+		if (regex.test(part)) {
+			container.createEl('mark', {cls: 'synapse-search-highlight', text: part});
+		} else if (part) {
+			container.appendText(part);
+		}
+	}
+}
+
 declare module '../synapseView' {
 	interface SynapseView {
 		searchAbortController?: AbortController | null;
@@ -38,7 +68,7 @@ declare module '../synapseView' {
 		handleSearch(): Promise<void>;
 		handleBasicSearch(query: string): Promise<void>;
 		handleAdvancedSearch(query: string): Promise<void>;
-		renderSearchResults(content: string): void;
+		renderSearchResults(content: string, query?: string): void;
 		updateSearchButton(): void;
 	}
 }
@@ -318,7 +348,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchAbortController = new AbortController();
 		this.updateSearchButton();
 		this.searchResultsEl.empty();
-		this.searchResultsEl.createDiv({cls: 'synapse-search-loading', text: 'Searching…'});
+		const loadingEl = this.searchResultsEl.createDiv({cls: 'synapse-search-loading'});
+		loadingEl.createSpan({cls: 'synapse-search-loading-text', text: 'Searching vault…'});
+		loadingEl.createSpan({cls: 'synapse-search-loading-bar'});
 
 		try {
 			if (this.searchMode === 'basic') {
@@ -361,7 +393,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			canUseTool: autoApproveReadOnlyTools,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
-		this.renderSearchResults(content || '');
+		this.renderSearchResults(content || '', query);
 	};
 
 	proto.handleAdvancedSearch = async function (this: SynapseView, query: string): Promise<void> {
@@ -386,7 +418,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		// Name the session (skip if the query never got an id, e.g. aborted)
 		if (!sessionId) {
-			this.renderSearchResults(content || '');
+			this.renderSearchResults(content || '', query);
 			return;
 		}
 		const agentLabel = this.searchAgent || 'Search';
@@ -405,10 +437,10 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		}
 		this.renderSessionList();
 
-		this.renderSearchResults(content || '');
+		this.renderSearchResults(content || '', query);
 	};
 
-	proto.renderSearchResults = function (this: SynapseView, content: string): void {
+	proto.renderSearchResults = function (this: SynapseView, content: string, query?: string): void {
 		this.searchResultsEl.empty();
 
 		// Try to parse JSON array from the response
@@ -421,12 +453,12 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			results = (Array.isArray(parsed) ? parsed : [parsed]) as typeof results;
 		} catch {
 			// If not valid JSON, show the raw response
-			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: content || 'No results found.'});
+			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: content || 'No results found'});
 			return;
 		}
 
 		if (!Array.isArray(results) || results.length === 0) {
-			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: 'No results found.'});
+			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: 'No results found'});
 			return;
 		}
 
@@ -457,7 +489,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			}
 
 			if (result.reason) {
-				item.createDiv({cls: 'synapse-search-result-reason', text: result.reason});
+				const reasonEl = item.createDiv({cls: 'synapse-search-result-reason'});
+				highlightQueryTerms(reasonEl, result.reason, query);
 			}
 		}
 	};

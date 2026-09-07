@@ -799,3 +799,25 @@ The input area transforms from a floating card into an editorial ruled footer:
 - **Editorial chips (`.synapse-input-chips`):** attachment, active-note, and vault-scope chips adopt hairline borders (`--synapse-rule-soft`), rectangular 2px border radius, and muted typography. All chips remain removable via a hoverable `x` button.
 - **Toolbar coexistence decision:** The state line displays `NOTE / AGENT / MODEL` above the input. The config toolbar continues to function alongside it as a separate row below the composer until slice #210 restyles the toolbar and context gauge. Leaving the toolbar intact avoids a half-migrated interface and ensures working directory selection, reasoning effort menu, tool toggle, and context window gauge remain fully usable.
 
+### Session sidebar (issue #209)
+
+The session sidebar adopts the prototype's starter list pattern (ruled contents column):
+- **Ruled rows:** Each session item (`.synapse-session-item`) renders with a hairline bottom separator (`border-bottom: 1px solid var(--synapse-rule-soft);`), transparent background, and no card borders or drop shadows.
+- **Typography & metadata:** Session titles use the interface sans (`font-family: var(--font-interface); font-size: 13px;`). Relative timestamps and message counts are right-aligned, muted (`color: var(--text-faint);`), and set with `font-variant-numeric: tabular-nums`.
+- **Active session accent:** Marked exclusively by a 2px solid interactive accent left border (`border-left: 2px solid var(--interactive-accent);`) and accent title color, retaining a transparent background rather than a filled pill or card background.
+- **Section headings (`.synapse-sidebar-heading`):** Follow the uppercase letterspaced label primitive (10px, font-weight 500, letter-spacing 0.14em, faint text) with a trailing hairline rule filling the remaining width via `::after`. Renders a "Background" section when active background sessions exist alongside a "Sessions" section.
+- **Underline-on-hover affordances:** Header icon controls (new, filter, sort, refresh, bulk delete) and inline row action buttons (rename, delete) use transparent backgrounds with the underline-on-hover border transition (`border-bottom-color: var(--interactive-accent)`), eliminating filled buttons.
+- **Keyboard accessibility:** Session items are fully keyboard-navigable (`tabindex="0"`, `role="button"`). Pressing `Enter` or `Space` selects and restores the session, `F2` triggers session rename, and `Delete` confirms session deletion.
+- **Empty state (`.synapse-sidebar-empty`):** Rendered as a centered italic serif line in faint text (`font-family: var(--synapse-font-serif); font-style: italic;`), without spinners or card boxes.
+
+### Search tab (issue #209)
+
+The vault search tab is restyled to align with the Editorial design language:
+- **Ruled query input:** The search textarea (`.synapse-search-input`) adopts the composer's ruled treatment with a bottom hairline border (`border-bottom: 1px solid var(--synapse-rule);`), transparent background, bundled serif typography (`font-family: var(--synapse-font-serif); font-size: 16px;`), and an italic placeholder.
+- **Square accent search button:** 30px square accent block (`.synapse-search-btn`) with 2px border radius matching the composer's send button. Turns to error background with a stop icon when a search is running to allow cancellation.
+- **Preserved mode switching:** Basic mode (fast single-turn exploration) and Advanced mode (full agent session with config options) remain togglable from the search toolbar, which adopts underline-on-hover icon buttons.
+- **Ruled search results:** Result rows (`.synapse-search-result`) render as ruled rows with hairline dividers (`border-bottom: 1px solid var(--synapse-rule-soft);`). Note titles are set in interface sans with accent hover underline, parent folder paths are right-aligned in faint tabular text, and matched excerpts or reasons are set in the bundled serif (`--synapse-font-serif`, 14.5px, line-height 1.55).
+- **Accent match highlighting:** Search query terms inside excerpts are highlighted using `.synapse-search-highlight` with the interactive accent text color and a subtle bottom accent border over a transparent background, completely eliminating yellow highlight fills.
+- **Sliding hairline loading state:** While searching, `.synapse-search-loading` displays "Searching vault…" in serif italic alongside an animated sliding hairline bar (`.synapse-search-loading-bar` with `@keyframes synapse-slide`), completely eliminating spinners from the search experience. Empty search results render as a serif italic line ("No results found").
+
+
