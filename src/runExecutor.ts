@@ -146,6 +146,17 @@ function formatToolRefusalsReportBlock(refusals: ToolRefusal[]): string {
 function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
 	return async (toolName) => {
 		refusals.push({toolName});
+		// AskUserQuestion (issue #182) gets its own message here too — the generic "tools
+		// approval is ask" wording would be misleading since this path denies unconditionally
+		// (`resolveToolApprovalPolicy()`'s 'ask' branch), regardless of the tool-approval setting,
+		// because a batch/trigger run has no attended UI to answer it.
+		if (toolName === 'AskUserQuestion') {
+			const result: PermissionResult = {
+				behavior: 'deny',
+				message: 'Synapse: no one is available to answer AskUserQuestion in this unattended run.',
+			};
+			return result;
+		}
 		const result: PermissionResult = {
 			behavior: 'deny',
 			message: 'Synapse: unattended runs deny tool calls while tools approval is "ask" — there is no one to ask. See this run\'s report for how to allow it.',

@@ -12,8 +12,8 @@ Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErro
 | `searchPanel.ts` | AI vault search tab (basic/advanced) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
 
-Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user), edit modal,
-vault scope, folder tree.
+Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user), ask-user-question
+(`AskUserQuestion` tool), edit modal, vault scope, folder tree.
 
 ## Behavior contracts
 
@@ -357,6 +357,61 @@ vault scope, folder tree.
     merge point in the view layer. A vault-level `permissions.deny` rule still applies even after
     a grant is added mid-conversation, because the merge happens fresh on every query build; see
     `agent-service.md`'s "Vault settings layer (issue #194)".
+- **`AskUserQuestion` gets a dedicated question UI, not the approval gate (issue #182).**
+  `buildSessionConfig()`'s `permissionHandler` checks `toolName === 'AskUserQuestion'` **before**
+  the `settings.toolApproval === 'allow'` auto-allow short-circuit and before `ToolApprovalModal`
+  — verified live against the CLI (`@anthropic-ai/claude-agent-sdk` 0.3.x): `canUseTool` does fire
+  for this tool on the Agent SDK path, and allowing it with **no** `answers` (which is what
+  auto-allow's `updatedInput: input` passthrough would do) is exactly the bug this fixes — the
+  call resolves unanswered and the model falls back to prose instead of a structured question.
+  (A bare `AskUserQuestion` entry in `allowedTools` would shadow the `canUseTool` callback
+  entirely — the SDK warns `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` — so none is added.)
+  - `AskUserQuestionModal` (`src/modals/askUserQuestionModal.ts`, mirroring `ElicitationModal`'s
+    promise-resolving structure) renders every question (1-4) with its `header` chip, the question
+    text, and each option (2-4) as a selectable card (label + description); `multiSelect: true`
+    allows several cards selected at once, `false` allows exactly one. Every question also offers
+    an **Other** free-text card — the tool description tells the model the harness supplies one,
+    so the model never sends one itself. Submit stays disabled until every question has an answer
+    (a selected option or non-empty Other text). The Other field claims the answer on **typed
+    text, not on focus** — on a single-select question claiming it clears the selected option, so
+    focusing alone would silently drop the user's pick and leave Submit disabled with nothing
+    typed to replace it.
+  - **The option cards carry their own keyboard semantics.** They are `div`s (so a card can lay out
+    a label, description and preview) rather than native inputs, so the modal sets the roles and
+    key handling by hand: the options container is a `radiogroup` (single-select) or `group`
+    (multi-select) labelled by the question text, each card is a `radio`/`checkbox` with
+    `tabindex="0"` and a maintained `aria-checked`, Enter/Space toggles it (both default-prevented
+    — Space would scroll, Enter would submit), and the arrow keys move focus within the question's
+    cards. The Other option's control is the text input itself, natively focusable, so it takes an
+    `aria-label` instead of a role. This is not cosmetic: the modal blocks the agent's turn until
+    it is answered or dismissed, so click-only cards would strand a keyboard-driven user.
+  - On submit, the pure `buildAskUserQuestionAnswers()` helper (exported standalone, no DOM/Obsidian
+    dependency, so it's unit-tested in `test/askUserQuestionModal.test.ts` without a live CLI or
+    vault) maps the per-question selection state to the `answers`/`annotations` shape the CLI
+    expects: `answers` is keyed by the **question text**, valued by the selected option's
+    **label** — for `multiSelect`, the selected labels joined with `", "` (verified live:
+    `"Alpha, Gamma"`, in option order); an "Other" answer is the typed string as-is, appended
+    **after** the selected labels since it is not one of the listed options.
+    `annotations[question].preview` is populated only for a single-select answer whose one
+    selected (non-Other) option carries a `preview` — a joined multi-select answer or a free-text
+    Other answer has no single option's preview to attach, so annotations are omitted for those.
+  - **Selection state is positional, not keyed by question text.** Nothing in the tool's schema
+    forbids two questions carrying identical `question` text, so `states` is an array parallel to
+    `input.questions` — keying it by text would make both questions share one selection and mirror
+    each other in the UI. The CLI's `answers` map *is* keyed by that text and therefore has a
+    single slot for both, so on emit their answers merge into it (deduplicated, first annotation
+    wins) rather than the later question silently discarding the earlier one's answer.
+    The modal resolves `{behavior: 'allow', updatedInput: {...input, answers, annotations}}` (SDK
+    result type: `PermissionResult`'s `updatedInput?: Record<string, unknown>`).
+  - Dismissing the modal (Esc/close/Cancel button) resolves `{behavior: 'deny', message: 'Denied
+    by user'}` rather than hanging or submitting empty answers.
+  - This is a question UI, not an approval gate: unlike `ToolApprovalModal`, there is no
+    `suggestions`/`persistRules`/`sessionToolGrants` handling for this branch.
+  - **Unattended paths still deny it**, with a message explaining no one is available to answer
+    rather than the generic wording each site otherwise uses: `autoApproveReadOnlyTools`
+    (`agentService.ts`, used by search/local-model call sites) and `makeDenyingCanUseTool`
+    (`runExecutor.ts`, used by batch/trigger runs) both special-case `toolName ===
+    'AskUserQuestion'` before their normal fallback-deny message.
 - Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is

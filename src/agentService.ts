@@ -1531,6 +1531,15 @@ export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
 	if (READ_ONLY_TOOL_NAMES.has(toolName)) {
 		return {behavior: 'allow', updatedInput: input};
 	}
+	// AskUserQuestion needs an attended UI to answer it (issue #182's AskUserQuestionModal, wired
+	// only in synapseView.ts's chat-panel permissionHandler) — this call site (search/local-model)
+	// runs unattended, so say so explicitly rather than the generic "not read-only" wording.
+	if (toolName === 'AskUserQuestion') {
+		return {
+			behavior: 'deny',
+			message: 'Synapse: no one is available to answer AskUserQuestion in this unattended run.',
+		};
+	}
 	return {
 		behavior: 'deny',
 		message: `Synapse: "${toolName}" is not one of the read-only tools this call site auto-approves.`,

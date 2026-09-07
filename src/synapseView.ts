@@ -24,6 +24,7 @@ import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
 import {ToolApprovalModal} from './modals/toolApprovalModal';
+import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
@@ -1232,6 +1233,15 @@ export class SynapseView extends ItemView {
 	}): SessionConfig {
 		// Permission handler — canUseTool for Agent SDK
 		const permissionHandler: import('./agentService').PermissionHandler = async (toolName, input, options) => {
+			// AskUserQuestion is a question UI, not an approval gate (issue #182) — intercept it
+			// before the auto-allow short-circuit below (AC-6: an unanswered auto-allow reproduces
+			// the bug this fixes) and before ToolApprovalModal. No suggestions/persistRules/
+			// sessionToolGrants handling applies here.
+			if (toolName === 'AskUserQuestion') {
+				const modal = new AskUserQuestionModal(this.app, input as unknown as import('./modals/askUserQuestionModal').AskUserQuestionInputLike);
+				modal.open();
+				return modal.promise;
+			}
 			if (this.plugin.settings.toolApproval === 'allow') {
 				// Auto-allow mode: every call is allowed anyway, so echoing the CLI's
 				// suggestions back would only persist rules that buy nothing (issue #193).
