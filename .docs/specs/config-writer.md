@@ -57,6 +57,7 @@ Write operations for the self-improve feature. All output is SDK-native format.
 | `modifyArtifact(app, filePath, updates)` | — | Patches frontmatter/body in-place |
 | `deleteArtifact(app, filePath)` | — | Moves to Obsidian trash |
 | `ensureFolder(app, path)` | Folder | Creates intermediates |
+| `persistToolApprovalRules(app, ruleStrings)` | `settings.json` (if absent) | `_synapse/settings.json`'s `permissions.allow` |
 
 ### Rules
 
@@ -93,6 +94,31 @@ no reliable way to tell "this was corrupted by the old bug" from "the user's act
 contains `\\`". Attempting to "repair" old files on read would silently corrupt values that were
 always correct. Only newly written/modified artifacts benefit from the fix; pre-existing
 corrupted values must be fixed by the user re-entering them.
+
+## Tool-approval persistence (issue #197)
+
+`persistToolApprovalRules(app, ruleStrings)` is the one place `ToolApprovalModal`'s **Always
+allow** action writes to disk (the modal itself never touches the filesystem — it only returns
+which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent grant is back").
+
+- `ruleStrings` are already in the CLI's `Settings.permissions.allow` rule-string syntax
+  (`toolName` or `toolName(ruleContent)`) — produced by `permissionRuleToString()`/
+  `extractAllowRuleStrings()` in `agentService.ts`, never re-derived here.
+- No-op (returns immediately, writes nothing) when `ruleStrings` is empty.
+- Serializes writes to `_synapse/settings.json` through `lockManager`, same as every other writer
+  in this module.
+- Creates `_synapse/settings.json` (and `_synapse/` itself) if absent, otherwise reads it via
+  `vault.read`, parses as JSON, and writes back **every top-level key untouched** except
+  `permissions.allow`, which is unioned (deduplicated, never clobbered) with `ruleStrings`.
+- Uses the `vault`/`vault.adapter.exists` API (not `node:fs`), matching every other writer in this
+  file. `_synapse/settings.json` is read by `AgentService.loadVaultSettings()` (`agent-service.md`,
+  issue #194) via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write
+  here changes that mtime, so the next query picks up the change with no separate invalidation.
+- A malformed existing file throws (surfaced by the caller as a `Notice`) rather than being
+  silently overwritten; the caller's in-memory, conversation-scoped grant already returned to the
+  SDK is unaffected by a persistence failure.
+- No removal UI (AC-5 of issue #197) — removing a persisted grant means hand-editing
+  `_synapse/settings.json`'s `permissions.allow` list; documented in `wiki/Customization.md`.
 
 ## Vault structure scanner
 

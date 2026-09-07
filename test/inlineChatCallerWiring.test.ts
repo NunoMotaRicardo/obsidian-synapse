@@ -100,10 +100,16 @@ describe('editorMenu.ts — tools: [\'Read\'] sites left unwired, deliberately (
 		expect(source).not.toMatch(/import\s*\{[^}]*autoApproveReadOnlyTools/);
 	});
 
-	it('leaves the toolless (tools: []) call sites untouched — no app/canUseTool added', () => {
+	it('leaves the toolless (tools: []) call sites without canUseTool — no vault-tool gating added', () => {
 		const source = read('src/editor/editorMenu.ts');
 		expect((source.match(/tools: \[\]/g) ?? []).length).toBeGreaterThanOrEqual(6);
-		expect(source).not.toContain('app: plugin.app');
+		// `app: plugin.app` IS now present on these call sites (issue #194 — every inlineChat()
+		// caller passes `app` so AgentService can derive `_synapse/settings.json`'s vault path
+		// for the vault settings layer), but that alone does not reach the local-model branch's
+		// `localTools` gate (agentService.ts: `supportsTools && options.app && options.canUseTool`)
+		// without `canUseTool`, which none of these sites set — so the #167 guarantee (no vault
+		// tools offered here) still holds.
+		expect(source).not.toContain('canUseTool: autoApproveReadOnlyTools');
 	});
 });
 
