@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest';
 import {readFileSync, existsSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {formatToolArgsSummary} from '../src/view/chatRenderer';
 
 const repoRoot = resolve(__dirname, '..');
 
@@ -85,13 +86,14 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(stylesContent).toContain('.synapse-speaker.ai');
 		});
 
-		it('chatRenderer.ts renders YOU and SYNAPSE speaker labels', () => {
+		it('chatRenderer.ts renders sentence-case You and Synapse speaker labels with aria-labelledby', () => {
 			const chatRendererPath = resolve(repoRoot, 'src/view/chatRenderer.ts');
 			const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
 
-			expect(chatRendererSource).toContain("'YOU'");
-			expect(chatRendererSource).toContain("'SYNAPSE'");
+			expect(chatRendererSource).toContain("'You'");
+			expect(chatRendererSource).toContain("'Synapse'");
 			expect(chatRendererSource).toContain('synapse-speaker');
+			expect(chatRendererSource).toContain("'aria-labelledby': speakerId");
 		});
 	});
 
@@ -115,11 +117,14 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			);
 		});
 
-		it('chatRenderer.ts formats tool name in uppercase, args summary in mono, and tabular elapsed time', () => {
+		it('chatRenderer.ts renders tool name in normal case, uppercase in CSS, and tabular elapsed time', () => {
 			const chatRendererPath = resolve(repoRoot, 'src/view/chatRenderer.ts');
 			const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
 
-			expect(chatRendererSource).toContain('toolName.toUpperCase()');
+			expect(chatRendererSource).toContain("summary.createSpan({cls: 'synapse-tool-call-name', text: toolName});");
+			expect(stylesContent).toMatch(
+				/\.synapse-tool-call-name\s*\{[^}]*text-transform:\s*uppercase/
+			);
 			expect(chatRendererSource).toContain('formatToolArgsSummary');
 			expect(chatRendererSource).toContain('synapse-tool-call-arg');
 			expect(chatRendererSource).toContain('synapse-tool-call-time');
@@ -143,17 +148,17 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(stylesContent).toContain('.synapse-reasoning.is-live > summary');
 		});
 
-		it('chatRenderer.ts uses THINKING… while streaming and REASONING when complete/rendered', () => {
+		it('chatRenderer.ts uses sentence-case Thinking… and Reasoning with CSS uppercase', () => {
 			const chatRendererPath = resolve(repoRoot, 'src/view/chatRenderer.ts');
 			const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
 
-			expect(chatRendererSource).toContain("'THINKING\\u2026'");
-			expect(chatRendererSource).toContain("'REASONING'");
+			expect(chatRendererSource).toContain("'Thinking\\u2026'");
+			expect(chatRendererSource).toContain("'Reasoning'");
 			expect(chatRendererSource).not.toContain('synapse-reasoning-spinner');
 		});
 	});
 
-	describe('Shared primitives', () => {
+	describe('Shared primitives & status styling', () => {
 		it('styles.css defines .synapse-rule, .synapse-findings, and .synapse-ledger', () => {
 			expect(stylesContent).toContain('.synapse-rule {');
 			expect(stylesContent).toContain('.synapse-findings {');
@@ -161,7 +166,51 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(stylesContent).toContain('.synapse-finding-key {');
 			expect(stylesContent).toContain('.synapse-finding-val {');
 			expect(stylesContent).toContain('.synapse-ledger,');
-			expect(stylesContent).toContain('.synapse-ledger-row,');
+			expect(stylesContent).toContain('.synapse-tool-calls {');
+		});
+
+		it('status lines use upright Newsreader serif without faux-oblique italic', () => {
+			expect(stylesContent).toMatch(
+				/\.synapse-thinking\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
+			);
+			expect(stylesContent).not.toMatch(
+				/\.synapse-thinking\s*\{[^}]*font-style:\s*italic/
+			);
+			expect(stylesContent).not.toMatch(
+				/\.synapse-cancelled\s*\{[^}]*font-style:\s*italic/
+			);
+		});
+	});
+
+	describe('Security: formatToolArgsSummary() allowlist and length cap', () => {
+		it('extracts known primary keys and normalizes whitespace', () => {
+			expect(formatToolArgsSummary({path: '  src/main.ts  '})).toBe('src/main.ts');
+			expect(formatToolArgsSummary({file_path: 'a/b/c.md'})).toBe('a/b/c.md');
+			expect(formatToolArgsSummary({CommandLine: 'npm   run\nbuild'})).toBe('npm run build');
+			expect(formatToolArgsSummary({query: 'Obsidian API'})).toBe('Obsidian API');
+		});
+
+		it('caps returned length at 120 characters with ellipsis', () => {
+			const longPath = 'a/very/long/path/'.repeat(10);
+			const summary = formatToolArgsSummary({path: longPath});
+			expect(summary.length).toBe(120);
+			expect(summary.endsWith('…')).toBe(true);
+		});
+
+		it('does NOT leak unknown keys or credentials into the summary', () => {
+			// Third-party MCP or unknown tool with credentials
+			expect(formatToolArgsSummary({apiKey: 'sk-ant-secret-key-12345', endpoint: 'https://example.com'})).toBe('');
+			expect(formatToolArgsSummary({secretToken: 'ghp_abc123', username: 'admin'})).toBe('');
+			expect(formatToolArgsSummary({customKey: 'sensitive-vault-value'})).toBe('');
+		});
+
+		it('returns empty string for non-object, null, or empty arguments', () => {
+			expect(formatToolArgsSummary(null)).toBe('');
+			expect(formatToolArgsSummary(undefined)).toBe('');
+			expect(formatToolArgsSummary('hello')).toBe('');
+			expect(formatToolArgsSummary(42)).toBe('');
+			expect(formatToolArgsSummary({})).toBe('');
+			expect(formatToolArgsSummary({path: ''})).toBe('');
 		});
 	});
 });

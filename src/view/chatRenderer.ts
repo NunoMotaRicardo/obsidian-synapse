@@ -32,8 +32,10 @@ function createThinkingIndicator(parent: HTMLElement, label: string): HTMLElemen
 	return indicator;
 }
 
+const MAX_TOOL_ARG_SUMMARY_LEN = 120;
+
 /** Format a compact inline single-line summary of tool arguments for the monospace ledger rail. */
-function formatToolArgsSummary(args: unknown): string {
+export function formatToolArgsSummary(args: unknown): string {
 	if (!args || typeof args !== 'object') return '';
 	const record = args as Record<string, unknown>;
 	const primaryKeys = [
@@ -45,15 +47,10 @@ function formatToolArgsSummary(args: unknown): string {
 	for (const key of primaryKeys) {
 		const val = record[key];
 		if (typeof val === 'string' && val.trim().length > 0) {
-			return val.replace(/\s+/g, ' ').trim();
-		}
-	}
-	for (const val of Object.values(record)) {
-		if (typeof val === 'string' && val.trim().length > 0) {
-			return val.replace(/\s+/g, ' ').trim();
-		}
-		if (typeof val === 'number') {
-			return String(val);
+			const cleaned = val.replace(/\s+/g, ' ').trim();
+			return cleaned.length > MAX_TOOL_ARG_SUMMARY_LEN
+				? cleaned.slice(0, MAX_TOOL_ARG_SUMMARY_LEN - 1) + '\u2026'
+				: cleaned;
 		}
 	}
 	return '';
@@ -135,11 +132,17 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Speaker label
 		const speakerCls = msg.role === 'user' ? 'you' : 'ai';
-		const speakerText = msg.role === 'user' ? 'YOU' : 'SYNAPSE';
-		this.chatContainer.createDiv({cls: `synapse-speaker ${speakerCls}`, text: speakerText});
+		const speakerText = msg.role === 'user' ? 'You' : 'Synapse';
+		const speakerId = `synapse-speaker-${msg.id || Date.now()}`;
+		this.chatContainer.createDiv({
+			cls: `synapse-speaker ${speakerCls}`,
+			text: speakerText,
+			attr: {id: speakerId},
+		});
 
 		const wrapper = this.chatContainer.createDiv({
 			cls: `synapse-msg synapse-msg-${msg.role}`,
+			attr: {'aria-labelledby': speakerId},
 		});
 
 		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
@@ -283,7 +286,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	proto.renderReasoningBlock = function (reasoning: string, parent: HTMLElement): Promise<void> {
 		const details = parent.createEl('details', {cls: 'synapse-reasoning'});
-		details.createEl('summary', {cls: 'synapse-reasoning-summary', text: 'REASONING'});
+		details.createEl('summary', {cls: 'synapse-reasoning-summary', text: 'Reasoning'});
 		const body = details.createDiv({cls: 'synapse-reasoning-body'});
 		return renderMarkdownSafe(this.app, reasoning, body, this.streamingComponent ?? this);
 	};
@@ -296,9 +299,17 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.addAssistantPlaceholder = function (): void {
-		this.chatContainer.createDiv({cls: 'synapse-speaker ai', text: 'SYNAPSE'});
+		const speakerId = `synapse-speaker-placeholder-${Date.now()}`;
+		this.chatContainer.createDiv({
+			cls: 'synapse-speaker ai',
+			text: 'Synapse',
+			attr: {id: speakerId},
+		});
 
-		const wrapper = this.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-assistant'});
+		const wrapper = this.chatContainer.createDiv({
+			cls: 'synapse-msg synapse-msg-assistant',
+			attr: {'aria-labelledby': speakerId},
+		});
 
 		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
 
@@ -374,7 +385,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		const summary = createEl('summary');
 		summary.className = 'synapse-reasoning-summary';
-		summary.appendChild(document.createTextNode('THINKING\u2026'));
+		summary.appendChild(document.createTextNode('Thinking\u2026'));
 		details.appendChild(summary);
 
 		const body = createDiv();
@@ -443,7 +454,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			const summary = this.reasoningEl.querySelector<HTMLElement>('summary');
 			if (summary) {
 				summary.empty();
-				summary.appendText('REASONING');
+				summary.appendText('Reasoning');
 			}
 		}
 
@@ -639,7 +650,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-tool-call'});
 		const summary = details.createEl('summary', {cls: 'synapse-tool-call-summary is-live'});
-		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName.toUpperCase()});
+		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName});
 		const argSummary = formatToolArgsSummary(args);
 		if (argSummary) {
 			summary.createSpan({cls: 'synapse-tool-call-arg', text: argSummary});
