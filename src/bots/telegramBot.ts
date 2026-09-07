@@ -268,6 +268,7 @@ export class TelegramBotService {
 			// Use inlineChat which handles session resume internally
 			const {content, sessionId} = await this.plugin.agentService!.inlineChat({
 				prompt: sendOpts.prompt,
+				app: this.plugin.app,
 				...(entry.sessionId ? {resume: entry.sessionId} : {}),
 				...config,
 				timeoutMs,

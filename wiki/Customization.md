@@ -25,6 +25,7 @@ _synapse/                 ← registered as an SDK local plugin on every session
       SKILL.md            ← skill instructions (invocable via /name)
       ...optional resources...
   .mcp.json               ← MCP server configs (SDK-native format)
+  settings.json           ← vault settings layer (permissions, env, model overrides, ...)
 ```
 
 The underscore prefix keeps `_synapse/` sorted at the top of Obsidian's file explorer and
@@ -171,7 +172,54 @@ All configured MCP servers are always available; remove a server from the file t
 
 ---
 
-## 5. How the SDK discovers your customizations
+## 5. Vault settings (`_synapse/settings.json`)
+
+An optional JSON file carrying vault-scoped settings — permission rules, environment values, a
+default model override, and anything else the [Claude Code settings
+schema](https://code.claude.com/docs/en/settings#available-settings) supports. It's Synapse's own
+settings layer, distinct from the plugin's own preferences (Settings tab, stored in Obsidian's
+`data.json`): this file follows the **vault**, not any one session's working directory, so it
+applies the same whether you're chatting from the vault root or with the working directory
+scoped to a subfolder.
+
+### Format
+
+```jsonc
+{
+  "permissions": {
+    "deny": ["Bash(rm -rf *)"],
+    "allow": ["Read"]
+  },
+  "env": {
+    "SOME_TOOL_TOKEN": "..."
+  }
+}
+```
+
+Any field from the Claude Code settings schema is accepted — `permissions`, `env`, `model`,
+`fallbackModel`, and more.
+
+### How it's applied
+
+- Read fresh (and re-parsed) on every query — editing the file takes effect on your very next
+  message, no reload needed.
+- Applies to every Synapse-initiated query: the chat panel, editor actions, the edit modal,
+  vault search, batch loops/runs, and the Telegram bot — regardless of which one started the
+  query or what its working directory is scoped to.
+- **In-conversation tool approvals still work.** If you approve a tool mid-conversation, that
+  approval is layered *on top of* this file rather than replacing it — a `permissions.deny` rule
+  here still blocks that tool even after an unrelated approval elsewhere in the same chat.
+- **Synapse never creates or writes this file.** A vault with none behaves exactly as if the
+  feature didn't exist. Create it yourself when you want vault-wide rules; there's currently no
+  in-app "Always allow, and remember it" action that writes here for you (a possible future
+  addition).
+- If the file exists but isn't valid JSON, Synapse shows a one-time notice and proceeds without
+  applying any of it — it won't repeatedly warn you on every message for the same broken file,
+  and a syntax error here never blocks a query outright.
+
+---
+
+## 6. How the SDK discovers your customizations
 
 On every chat session or query, Synapse passes `_synapse/` to the Claude Agent SDK as a
 **local plugin**:
@@ -190,7 +238,7 @@ No explicit reload is needed after writing a new artifact — the next query pic
 
 ---
 
-## 6. The self-improve workflow
+## 7. The self-improve workflow
 
 The self-improve system lets you teach Synapse how to behave using plain language in chat.
 Synapse recognizes customization intent and offers to create or modify `_synapse/` artifacts.
@@ -214,7 +262,7 @@ write capabilities.
 
 ---
 
-## 7. Settings integration
+## 8. Settings integration
 
 ### Initialize button (Settings → Capabilities)
 
@@ -228,7 +276,7 @@ Settings — the plugin writes the change to the agent's `.md` file frontmatter.
 
 ---
 
-## 8. Tips and patterns
+## 9. Tips and patterns
 
 ### Keep agents focused
 
@@ -247,7 +295,7 @@ configurations between machines.
 
 ---
 
-## 9. Suggested reading
+## 10. Suggested reading
 
 - [`Local-Models-ReAct.md`](Local-Models-ReAct.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
 - [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md) —

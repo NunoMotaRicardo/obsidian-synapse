@@ -232,6 +232,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 	try {
 		// Ask the LLM for a suggested filename and structured content
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Create a new Markdown note. ${templateClause}` +
 				`Return the output in exactly this format:\n` +
@@ -322,6 +323,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 	const notice = new Notice('Synapse: creating canvas\u2026', 0);
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Create an Obsidian canvas. ${templateClause}` +
 				`Return the output in exactly this format:\n` +
@@ -422,6 +424,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 		const combined = noteContents.join('\n\n---\n\n');
 
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Summarize the following ${mdFiles.length} notes from the folder "${folder.name}". ` +
 				`Produce a single cohesive summary note in Markdown that captures the key topics, ` +
@@ -504,6 +507,7 @@ async function runActionPrompt(
 	if (!plugin.agentService) return null;
 
 	const {content: result, sessionId} = await plugin.agentService.inlineChat({
+		app: plugin.app,
 		prompt: action.prompt(selectedText),
 		agent: plugin.settings.featureAgents?.inline || undefined,
 		plugins: getVaultPlugins(plugin),
@@ -631,6 +635,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 	const notice = new Notice('Synapse: asking about image…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt: `${userPrompt}\n\n---\nAttached image: ${file.name}\nPath: ${absPath}`,
 			agent: plugin.settings.featureAgents?.vision || undefined,
 			plugins: getVaultPlugins(plugin),
@@ -704,6 +709,7 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 	const absPath = getAbsolutePath(plugin, file);
 
 	const {content: result, sessionId} = await plugin.agentService.inlineChat({
+		app: plugin.app,
 		prompt:
 			`Extract all visible content from this image and convert it to well-structured Markdown. ` +
 			`Include text, tables, lists, diagrams descriptions, and any other meaningful content. ` +
@@ -850,6 +856,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 	const notice = new Notice('Synapse: converting image to Mermaid diagram…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Analyze this image and convert it into a Mermaid diagram. ` +
 				`Use the mermaid skill available in the vault to produce valid Mermaid syntax. ` +
@@ -937,6 +944,7 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 	const notice = new Notice('Synapse: editing note…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
 				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
@@ -1001,6 +1009,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 
 	try {
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
+			app: plugin.app,
 			prompt:
 				`Structure and refine the following note using Markdown. ${templateClause}` +
 				`Organise the content with headings, lists, and emphasis where appropriate. ` +

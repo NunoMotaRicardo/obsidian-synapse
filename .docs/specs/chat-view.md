@@ -330,9 +330,11 @@ vault scope, folder tree.
     resets the view's set to empty before either restoring that copy (same conversation, still
     alive in the background) or cold-loading a persisted session from disk (a different
     conversation this view instance has no in-memory grant history for).
-  - This is the same seam issue #194's persistent-grant feature (`_synapse/settings.json`) is
-    expected to extend — sourcing its own allow-list into the same `Options.settings` merge point
-    rather than adding a second one.
+  - Issue #194 layers `_synapse/settings.json` (the vault's own settings) *underneath* whatever
+    `sessionToolGrants` produces here, inside `AgentService.routeQueryOptions()` — not a second
+    merge point in the view layer. A vault-level `permissions.deny` rule still applies even after
+    a grant is added mid-conversation, because the merge happens fresh on every query build; see
+    `agent-service.md`'s "Vault settings layer (issue #194)".
 - Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is

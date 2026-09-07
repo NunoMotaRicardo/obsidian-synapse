@@ -71,6 +71,18 @@ export function getSynapsePluginConfig(app: App): LocalPluginConfig[] {
 	return [{type: 'local', path: `${normalizedBase}/${SYNAPSE_FOLDER}/`}];
 }
 
+/**
+ * Absolute on-disk path to the vault's own settings layer, `_synapse/settings.json` (issue
+ * #194) — matching how `getSynapsePluginConfig()` already derives `_synapse/`'s SDK-plugin
+ * path. Purely path derivation: this does not check whether the file exists, nor read it — see
+ * `AgentService`'s vault-settings-layer merge in `agentService.ts` for that (kept out of this
+ * dependency-free module, which must stay free of `node:fs`/internal imports).
+ */
+export function getSynapseSettingsPath(app: App): string {
+	const normalizedBase = getVaultBasePath(app).replace(/\\/g, '/');
+	return `${normalizedBase}/${SYNAPSE_FOLDER}/settings.json`;
+}
+
 /** Today's date as `YYYY-MM-DD`, for report filenames/headings. */
 export function todayString(): string {
 	const d = new Date();

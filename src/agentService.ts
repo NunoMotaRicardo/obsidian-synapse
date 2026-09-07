@@ -113,6 +113,7 @@ function forceRestoreSetTimeoutShim(): void {
  */
 const ABORT_SHIM_GRACE_MS = 8000;
 
+import {Notice} from 'obsidian';
 import type {App} from 'obsidian';
 import {query, listSessions, getSessionMessages, deleteSession, renameSession, tool, createSdkMcpServer, startup} from '@anthropic-ai/claude-agent-sdk';
 import type {
@@ -144,6 +145,7 @@ import type {
 	SlashCommand,
 	AgentInfo,
 	SDKControlGetContextUsageResponse,
+	Settings,
 } from '@anthropic-ai/claude-agent-sdk';
 // zod is a transitive dependency of @anthropic-ai/claude-agent-sdk; declaring it
 // directly in package.json is a dependency-manifest change out of scope for this
@@ -155,6 +157,15 @@ import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
 import {vaultTools} from './vaultTools';
 import {debugTrace} from './debug';
+import {getSynapseSettingsPath} from './vaultPaths';
+// Static import (matching mcpBridge.ts's `_synapse/.mcp.json` read, the closest existing
+// precedent for reading a small vault-local JSON config synchronously) rather than the lazy
+// `window.require`-gated pattern used elsewhere in this file for fs/promises — that gate exists
+// because those call sites' `await import()` fallback only fires once, off the hot path
+// (ensureConnected()); `loadVaultSettings()` below must stay synchronous (it runs on every
+// query build) and `window.require` is unavailable outside Electron's renderer (e.g. tests),
+// where a static Node import still works.
+import * as fs from 'node:fs';
 
 // Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
 const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
@@ -405,6 +416,38 @@ export function buildInMemoryPermissionSettings(
 }
 
 /**
+ * Merge the vault's own settings layer (`_synapse/settings.json`, issue #194) beneath whatever
+ * `Options.settings` a call site/session already carries — including, notably, #193's
+ * in-memory tool-approval grants (`buildInMemoryPermissionSettings()`'s output, folded into
+ * `Session.applyToolGrants()`'s `this.config.settings`).
+ *
+ * `vaultSettings` is always the base and `existing` is always layered on top: `permissions.allow`
+ * /`deny`/`ask` are unioned (nothing from either side is dropped — the vault's own rules survive
+ * a later `applyToolGrants()` call, AC-3), while every other top-level key prefers `existing`'s
+ * value when both set it, so a caller's/session's explicit settings win on conflict.
+ *
+ * If `existing` is a settings *file path* rather than an object, it is returned unchanged — same
+ * defensive convention as `buildInMemoryPermissionSettings()`'s `existing` handling, and for the
+ * same reason: there is no way to fold an object (the parsed vault file) into an arbitrary path
+ * on disk without writing to it. No caller in this codebase sets a string `Options.settings`
+ * today.
+ */
+export function mergeVaultSettingsLayer(vaultSettings: Settings, existing?: Options['settings']): Options['settings'] {
+	if (typeof existing === 'string') return existing;
+	return {
+		...vaultSettings,
+		...existing,
+		permissions: {
+			...vaultSettings.permissions,
+			...existing?.permissions,
+			allow: Array.from(new Set([...(vaultSettings.permissions?.allow ?? []), ...(existing?.permissions?.allow ?? [])])),
+			deny: Array.from(new Set([...(vaultSettings.permissions?.deny ?? []), ...(existing?.permissions?.deny ?? [])])),
+			ask: Array.from(new Set([...(vaultSettings.permissions?.ask ?? []), ...(existing?.permissions?.ask ?? [])])),
+		},
+	};
+}
+
+/**
  * Executes a query/stream operation with active cancellation and optional timeout.
  * Wraps execution so that on timeout, error, or cancellation, abortController.abort() is invoked
  * to drop in-flight work and resources immediately, and the error is re-thrown.
@@ -468,6 +511,22 @@ export class AgentService {
 	private customModels: ModelInfo[] = [];
 	private sdkModels: ModelInfo[] = [];
 	private cachedDelegationServer: McpServerConfig | null = null;
+	/**
+	 * Cached parse of `_synapse/settings.json` (issue #194), keyed by its absolute path and
+	 * re-read whenever the file's mtime changes — so an edit takes effect on the very next
+	 * query (AC-5) without re-parsing an unchanged file on every turn. `settings: null` means
+	 * the last read attempt found a malformed file (distinguished from "not cached yet"/`this.
+	 * vaultSettingsCache === null`, and from "file absent", which is never cached at all — see
+	 * `loadVaultSettings()`).
+	 */
+	private vaultSettingsCache: {path: string; mtimeMs: number; settings: Settings | null} | null = null;
+	/**
+	 * mtime (ms) of `_synapse/settings.json` the last time a malformed-JSON Notice fired for
+	 * that path, so a broken file warns once per edit rather than once per turn (AC-4) — a
+	 * fresh mtime (the user fixed or re-broke the file) clears the dedup and allows one more
+	 * Notice.
+	 */
+	private malformedSettingsWarnedAt: Map<string, number> = new Map();
 
 	constructor(opts?: {
 		auth?: AuthConfig;
@@ -800,6 +859,13 @@ export class AgentService {
 		maxTurns?: number;
 		permissionMode?: Options['permissionMode'];
 		tools?: Options['tools'];
+		/**
+		 * Vault handle for the `_synapse/settings.json` layer (issue #194) — see
+		 * `routeQueryOptions()`. Not used for anything else here (no vault tools are offered by
+		 * this one-shot helper), so it's fine for a caller to omit it, at the cost of the layer
+		 * not applying to that call.
+		 */
+		app?: App;
 		abortController?: AbortController;
 		signal?: AbortSignal;
 		timeoutMs?: number;
@@ -834,7 +900,7 @@ export class AgentService {
 						env: this.buildEnv(),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						abortController: controller,
-					}),
+					}, options.app),
 				});
 
 				const text = await this.collectText(stream);
@@ -959,7 +1025,7 @@ export class AgentService {
 						...(options.resume ? {resume: options.resume} : {}),
 						...(options.cwd ? {cwd: options.cwd} : {}),
 						abortController: controller,
-					}),
+					}, options.app),
 				});
 
 				let sessionId = '';
@@ -1018,6 +1084,8 @@ export class AgentService {
 	createQuery(options: {
 		prompt: string;
 		queryOptions: Options;
+		/** Vault handle for the `_synapse/settings.json` layer (issue #194) — see `routeQueryOptions()`. */
+		app?: App;
 	}): Query {
 		return query({
 			prompt: options.prompt,
@@ -1028,14 +1096,67 @@ export class AgentService {
 					...options.queryOptions.env,
 				},
 				pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
-			}),
+			}, options.app),
 		});
 	}
 
 	/**
-	 * Route query options. Resolves bound model for named agent if configured.
+	 * Read and parse `_synapse/settings.json` from the vault, synchronously — desktop-only
+	 * plugin, tiny file, and a sync read keeps `routeQueryOptions()` (the single choke point
+	 * every real SDK query passes through) synchronous too (issue #194).
+	 *
+	 * Returns `undefined` when the file is absent (AC-2: the plugin never creates it, and a
+	 * vault without one must behave exactly as before, silently) or malformed (AC-4: degrades
+	 * gracefully — one `[synapse]` Notice + `debugTrace`, no crash, no repeat Notice per turn).
+	 * Cached by mtime (`vaultSettingsCache`) so an edit is picked up on the very next query
+	 * (AC-5) without re-parsing an unchanged file on every turn.
 	 */
-	private routeQueryOptions(options: Options): Options {
+	private loadVaultSettings(app: App): Settings | undefined {
+		let path: string;
+		try {
+			path = getSynapseSettingsPath(app);
+		} catch {
+			return undefined;
+		}
+
+		let mtimeMs: number;
+		try {
+			mtimeMs = fs.statSync(path).mtimeMs;
+		} catch {
+			// File does not exist (or is unreadable for some other reason) — no layer, no
+			// Notice: a vault with no settings.json must behave exactly as today (AC-2).
+			return undefined;
+		}
+
+		if (this.vaultSettingsCache && this.vaultSettingsCache.path === path && this.vaultSettingsCache.mtimeMs === mtimeMs) {
+			return this.vaultSettingsCache.settings ?? undefined;
+		}
+
+		try {
+			const raw = fs.readFileSync(path, 'utf8');
+			const parsed = JSON.parse(raw) as Settings;
+			this.vaultSettingsCache = {path, mtimeMs, settings: parsed};
+			return parsed;
+		} catch (e) {
+			this.vaultSettingsCache = {path, mtimeMs, settings: null};
+			if (this.malformedSettingsWarnedAt.get(path) !== mtimeMs) {
+				this.malformedSettingsWarnedAt.set(path, mtimeMs);
+				new Notice('[synapse] _synapse/settings.json is not valid JSON — ignoring it for this query.');
+				debugTrace('[synapse] Failed to parse vault settings.json:', e);
+			}
+			return undefined;
+		}
+	}
+
+	/**
+	 * Route query options. Resolves bound model for named agent if configured, and layers in
+	 * the vault's `_synapse/settings.json` (issue #194) beneath whatever `Options.settings` the
+	 * caller already built (including any in-memory tool-approval grants) — see
+	 * `mergeVaultSettingsLayer()`. `app` is optional because not every caller has one
+	 * (`AgentService` holds no `App` reference of its own, per the architecture rule); no `app`
+	 * means no layer, same as a vault with no `_synapse/settings.json`.
+	 */
+	private routeQueryOptions(options: Options, app?: App): Options {
 		const opts = {...options};
 		if (opts.model) {
 			opts.model = this.isLocalModel(opts.model) ? undefined : this.resolveValidModel(opts.model);
@@ -1048,6 +1169,10 @@ export class AgentService {
 					delegation: delegationServer,
 				};
 			}
+		}
+		const vaultSettings = app ? this.loadVaultSettings(app) : undefined;
+		if (vaultSettings) {
+			opts.settings = mergeVaultSettingsLayer(vaultSettings, opts.settings);
 		}
 		return opts;
 	}
@@ -1565,12 +1690,15 @@ export class Session {
 	 * into the neutral `LocalHistoryMessage[]` shape (`sessionConfig.ts#buildLocalHistory`)
 	 * before calling `send()`; this method just threads it through unchanged.
 	 *
-	 * `app` (#138) is only used in the local-model branch, where it's forwarded to
+	 * `app` (#138) was originally local-model-branch-only, where it's forwarded to
 	 * `executeLocalProviderQuery()` as the `App` instance vault tools (`read_note`, `list_notes`,
-	 * `search_notes`) execute against — the real Agent SDK path never needs it, since its own
-	 * tools run inside the CLI process. `Session`/`AgentService` hold no `App` reference of their
-	 * own (architecture rule: SDK/session plumbing stays UI-agnostic), so `SynapseView` passes it
-	 * per call, the same shape as `images`/`history`.
+	 * `search_notes`) execute against. It's now also read on the real Agent SDK path
+	 * (`createQuery()` -> `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path
+	 * for the vault settings layer (issue #194) — the CLI itself doesn't need an `App`, since its
+	 * own tools run inside the CLI process, but locating the vault-scoped settings file does.
+	 * `Session`/`AgentService` hold no `App` reference of their own (architecture rule:
+	 * SDK/session plumbing stays UI-agnostic), so `SynapseView` passes it per call, the same
+	 * shape as `images`/`history`.
 	 */
 	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>; history?: LocalHistoryMessage[]; app?: App}): Promise<void> {
 		this.abortController = new AbortController();
@@ -1655,6 +1783,7 @@ export class Session {
 				const stream = this.service.createQuery({
 					prompt: options.prompt,
 					queryOptions: queryOpts,
+					app: options.app,
 				});
 				this.currentQuery = stream;
 

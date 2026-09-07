@@ -44,6 +44,11 @@ export function getVaultBasePath(app: App): string
 // folder. Backslash-normalizes the basePath (SDK plugin paths are POSIX-style).
 export function getSynapsePluginConfig(app: App): LocalPluginConfig[]
 
+// Absolute on-disk path to the vault's own settings layer, `_synapse/settings.json`
+// (issue #194). Pure path derivation only — does not check existence or read the
+// file; see agentService.ts's AgentService#loadVaultSettings for that.
+export function getSynapseSettingsPath(app: App): string
+
 // Today's date as `YYYY-MM-DD`, for report filenames/headings.
 export function todayString(): string
 ```
@@ -101,6 +106,8 @@ export function todayString(): string
   `getVaultBasePath`/`getSynapsePluginConfig`; `executeWithLocalModel` (MCP bridge start) uses
   `getVaultBasePath`; `REPORTS_FOLDER`/`todayString` in the report-append path.
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
+- **`agentService.ts`** (#194) — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
+  to locate `_synapse/settings.json`, the sole caller of that function.
 
 **Not touched:** `configWriter.ts` (out of scope for #153 — see Design decisions). Its `_synapse`
 occurrences at line 436+ are seeded skill prose (user-facing markdown describing the folder layout
@@ -122,9 +129,16 @@ acceptance criteria didn't ask for.
 
 ## Current status
 
-Implemented (issue #153). `src/vaultPaths.ts` exports `SYNAPSE_FOLDER`, `REPORTS_FOLDER`,
-`getVaultBasePath`, `getSynapsePluginConfig`, and `todayString`. Unit tests in
-`test/vaultPaths.test.ts` cover the basePath cast/throw, backslash normalization in the plugin
-config path, and `todayString()`'s zero-padding across fake-timer dates. Purely mechanical
-extraction — no behavior change beyond `getVaultBasePath`'s throw-instead-of-silent-`undefined`
-on a code path that was already desktop-only and unreachable in practice (see Design decisions).
+Implemented (issue #153; extended by #194 with `getSynapseSettingsPath`). `src/vaultPaths.ts`
+exports `SYNAPSE_FOLDER`, `REPORTS_FOLDER`, `getVaultBasePath`, `getSynapsePluginConfig`,
+`getSynapseSettingsPath`, and `todayString`. Unit tests in `test/vaultPaths.test.ts` cover the
+basePath cast/throw, backslash normalization in the plugin config path and the settings path,
+and `todayString()`'s zero-padding across fake-timer dates. Purely mechanical extraction — no
+behavior change beyond `getVaultBasePath`'s throw-instead-of-silent-`undefined` on a code path
+that was already desktop-only and unreachable in practice (see Design decisions).
+
+`getSynapseSettingsPath` (#194) follows the same pattern as `getSynapsePluginConfig` — derive the
+path, backslash-normalize, done — and stays dependency-free like the rest of this module: reading
+and parsing the file it points at (with malformed-JSON handling, caching, and the actual settings
+merge) lives in `AgentService` (`src/agentService.ts`), not here. See `agent-service.md`'s
+"Vault settings layer (issue #194)".

@@ -89,8 +89,9 @@ it reaches both `sessionScopePermissions()` and the `PermissionUpdate` type thro
 re-exports rather than importing the SDK directly. See `chat-view.md`'s "Tool approval never
 persists to disk" for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses this
 (and why its auto-allow branch sends no `updatedPermissions` at all instead). Where a deliberate
-*persistent* grant should live is out of scope here — tracked separately (#194,
-`_synapse/settings.json`).
+*persistent* grant (an "Always allow" that writes into `_synapse/settings.json`, the vault
+settings layer described below) should live is out of scope here — tracked separately (#197).
+#194 (below) reads and merges that file; it never writes to it.
 
 ### In-memory tool-approval grants across the per-`send()` respawn (issue #193 round 2)
 
@@ -127,9 +128,93 @@ them into every query rather than relying on the CLI's own process-local state:
 The accumulator itself (`SynapseView.sessionToolGrants`) and the call sites that populate/consume
 it live in the view layer — see `chat-view.md`'s "In-memory tool-approval grants" for where the
 set lives, how it survives a `configDirty` `Session` rebuild, and when it's cleared. Nothing here
-is ever written to disk; the grants die with the conversation. This is the same seam #194's
-persistent-grant feature (`_synapse/settings.json`) is expected to extend, sourcing its own
-allow-list into the same `Options.settings` merge point instead of adding a second one.
+is ever written to disk; the grants die with the conversation. #194's vault settings layer (below)
+merges *underneath* whatever this produces — see "Vault settings layer (issue #194)" — rather than
+adding a second, separate merge point.
+
+## Vault settings layer (issue #194)
+
+`_synapse/settings.json` is the vault's own settings layer — vault-scoped configuration that
+follows the vault regardless of a session's `cwd` (unlike the pre-#193 behavior of whatever the
+CLI persisted into `<cwd>/.claude/settings.local.json`, which changed meaning when `cwd` was
+scoped to a subfolder, and #193 stopped persisting to entirely). It sits alongside `agents/*.md`,
+`skills/*/SKILL.md`, and `.mcp.json` as vault-local customization (`wiki/Customization.md`), but
+is applied inside `AgentService`, not written by the plugin.
+
+**Applied at a single choke point, not threaded through every caller.** All three real query
+paths — `chat()`, `inlineChat()`, and `Session.send()` (via `AgentService.createQuery()`) — funnel
+through the private `routeQueryOptions(options, app?)`, which already resolves the bound model and
+merges the delegation MCP server. The vault settings layer is merged there too, so none of the ~7
+call sites that build `Options` (`chat-view.md`'s `buildSessionConfig()`, `runExecutor.ts`,
+`editorMenu.ts`, `editModal.ts`, `searchPanel.ts` x2, `telegramBot.ts`) needed to change their own
+settings-building logic — they only needed to pass the `App` handle they already have (see
+"Caller wiring" below).
+
+**Read as a parsed object, never the path-string form.** `Options.settings` accepts `string |
+Settings`; `AgentService` always resolves to the object form. This is deliberate, not incidental:
+`buildInMemoryPermissionSettings(grants, existing)` (#193 round 2, above) treats a *string*
+`existing` as an untouched passthrough — folding an in-memory grant list into an arbitrary file
+path would mean writing to it, which that feature must never do. Passing the vault layer as a
+path string would silently defeat that merge (session grants would vanish into the ignored-string
+branch) the moment a caller's `settings` became a path. Reading and parsing the file plugin-side
+keeps everything on the object-merge branch.
+
+- **`getSynapseSettingsPath(app): string`** (`vaultPaths.ts`) derives `<basePath>/_synapse/settings.json`
+  — pure path derivation, no fs access, matching `getSynapsePluginConfig()`'s existing pattern.
+  `vaultPaths.ts` stays dependency-free (no `node:fs`, no internal imports) per its own spec.
+- **`AgentService.loadVaultSettings(app): Settings | undefined`** does the actual read: a
+  synchronous `fs.statSync`/`fs.readFileSync`/`JSON.parse` (desktop-only plugin, tiny file — a
+  sync read keeps `routeQueryOptions()`, which every query passes through, synchronous). Cached
+  per-instance by `{path, mtimeMs}` (`vaultSettingsCache`) so an edit to the file is picked up on
+  the very next query (AC-5) without re-parsing an unchanged file on every turn. `fs` is imported
+  statically (`import * as fs from 'node:fs'`) rather than through the lazy `window.require` gate
+  used elsewhere in this file for `node:fs/promises` — that gate exists for a one-time async
+  fallback off the hot path (`ensureConnected()`); this method runs on every query build and must
+  stay synchronous, and a static import also works in the test environment where
+  `window.require` is unavailable. Mirrors `mcpBridge.ts`'s `_synapse/.mcp.json` read, the closest
+  existing precedent for a small vault-local JSON config.
+  - **Absent file → `undefined`, silently** (AC-2): a missing `_synapse/settings.json` behaves
+    exactly as before this issue. The plugin never creates the file itself.
+  - **Malformed JSON → `undefined`, with exactly one `[synapse]`-prefixed `Notice` + `debugTrace`**
+    (AC-4): the query proceeds without the layer rather than crashing. A second `Map` keyed by
+    path (`malformedSettingsWarnedAt: Map<string, number>`) tracks the mtime of the last warning,
+    so repeated queries against the same broken file warn once, not once per turn; a new mtime
+    (the user edited the file, whether fixed or re-broken) clears the dedup and allows one more.
+- **`mergeVaultSettingsLayer(vaultSettings, existing?): Options['settings']`** (exported, pure)
+  merges the vault object underneath whatever `Options.settings` the caller/session already
+  carries. `vaultSettings` is always the base; `existing` is layered on top:
+  - `permissions.allow`/`deny`/`ask` are **unioned**, not one side replacing the other — this is
+    what makes AC-3 hold: a session's in-memory tool-approval grant
+    (`Session.applyToolGrants()` -> `buildInMemoryPermissionSettings()`, folded into
+    `this.config.settings` before `send()` ever reaches `routeQueryOptions()`) only ever *adds*
+    to `permissions.allow`, so unioning both sides means the vault's own `deny`/`ask` rules
+    survive that merge instead of being dropped by it.
+  - Every other top-level key prefers `existing`'s value when both sides set it (plain object
+    spread, `existing` last) — a caller's/session's explicit setting wins on conflict, per the
+    issue's decision.
+  - If `existing` is a settings *file path* rather than an object, it's returned unchanged — same
+    defensive convention as `buildInMemoryPermissionSettings()`'s `existing` handling, for the
+    same reason (no way to fold an object into an arbitrary path without writing to it). No
+    caller in this codebase sets a string `Options.settings` today.
+
+**Caller wiring.** `routeQueryOptions(options, app?)` only applies the layer when `app` is
+present — `AgentService` holds no `App` reference of its own (architecture rule: SDK/session
+plumbing stays UI-agnostic), so every caller passes its own handle:
+
+- `chat()` gained an `app?: App` option (it had none before this issue) — unused for anything
+  else (no vault tools offered by this one-shot helper).
+- `inlineChat()`/`Session.send()` already had `app?: App` from #150/#138's local-model vault-tool
+  gate; it's now *also* read on the real Agent SDK path (previously ignored there). `SynapseView`
+  already passed `app: this.app` unconditionally on every `Session.send()` call, and
+  `searchPanel.ts`'s two `inlineChat()` calls already passed `app: this.app` (#167) — no change
+  needed for the chat panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`,
+  `telegramBot.ts`, and `runExecutor.ts`'s `executeWithClaude()` (batch loops/runs) did not
+  previously pass `app` to `inlineChat()` and were updated to pass it, purely to make the vault
+  path derivable — none of their own settings-building logic changed.
+- Passing `app` alone does not newly enable the local-model branch's `vaultTools` gate
+  (`supportsTools && options.app && options.canUseTool` — see #150/#138 above): every site updated
+  here still omits `canUseTool`, so that gate remains closed exactly as before, per #167's
+  `editorMenu.ts` tests.
 
 ## Named Agent Model Binding & Routing
 

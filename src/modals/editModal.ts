@@ -458,6 +458,7 @@ export class EditModal extends Modal {
 			`Do not add any labels, numbers, or headings before each choice.`;
 
 		const {content: result, sessionId} = await this.plugin.agentService!.inlineChat({
+			app: this.plugin.app,
 			prompt,
 			agent: this.plugin.settings.featureAgents?.inline || undefined,
 			plugins: getSynapsePluginConfig(this.plugin.app),

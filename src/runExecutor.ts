@@ -269,6 +269,7 @@ async function executeWithClaude(
 
 	const result = await plugin.agentService.inlineChat({
 		prompt,
+		app: plugin.app,
 		model: options.model,
 		agent: options.agent,
 		// Both callers use body/instruction-as-prompt; the Claude Code preset
