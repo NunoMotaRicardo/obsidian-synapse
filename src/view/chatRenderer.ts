@@ -32,6 +32,33 @@ function createThinkingIndicator(parent: HTMLElement, label: string): HTMLElemen
 	return indicator;
 }
 
+/** Format a compact inline single-line summary of tool arguments for the monospace ledger rail. */
+function formatToolArgsSummary(args: unknown): string {
+	if (!args || typeof args !== 'object') return '';
+	const record = args as Record<string, unknown>;
+	const primaryKeys = [
+		'path', 'file_path', 'filePath', 'SearchPath', 'searchPath',
+		'pattern', 'Pattern', 'query', 'Query',
+		'command', 'CommandLine', 'commandLine', 'cmd',
+		'url', 'Url', 'prompt', 'Prompt', 'description', 'Description',
+	];
+	for (const key of primaryKeys) {
+		const val = record[key];
+		if (typeof val === 'string' && val.trim().length > 0) {
+			return val.replace(/\s+/g, ' ').trim();
+		}
+	}
+	for (const val of Object.values(record)) {
+		if (typeof val === 'string' && val.trim().length > 0) {
+			return val.replace(/\s+/g, ' ').trim();
+		}
+		if (typeof val === 'number') {
+			return String(val);
+		}
+	}
+	return '';
+}
+
 declare module '../synapseView' {
 	interface SynapseView {
 		addUserMessage(content: string, attachments: ChatAttachment[], scopePaths: string[]): void;
@@ -105,6 +132,11 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			el.createSpan({text: msg.content});
 			return Promise.resolve();
 		}
+
+		// Speaker label
+		const speakerCls = msg.role === 'user' ? 'you' : 'ai';
+		const speakerText = msg.role === 'user' ? 'YOU' : 'SYNAPSE';
+		this.chatContainer.createDiv({cls: `synapse-speaker ${speakerCls}`, text: speakerText});
 
 		const wrapper = this.chatContainer.createDiv({
 			cls: `synapse-msg synapse-msg-${msg.role}`,
@@ -251,10 +283,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	proto.renderReasoningBlock = function (reasoning: string, parent: HTMLElement): Promise<void> {
 		const details = parent.createEl('details', {cls: 'synapse-reasoning'});
-		const summary = details.createEl('summary', {cls: 'synapse-reasoning-summary'});
-		const iconEl = summary.createSpan({cls: 'synapse-reasoning-icon'});
-		setIcon(iconEl, 'lightbulb');
-		summary.appendText('Reasoning');
+		details.createEl('summary', {cls: 'synapse-reasoning-summary', text: 'REASONING'});
 		const body = details.createDiv({cls: 'synapse-reasoning-body'});
 		return renderMarkdownSafe(this.app, reasoning, body, this.streamingComponent ?? this);
 	};
@@ -267,6 +296,8 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.addAssistantPlaceholder = function (): void {
+		this.chatContainer.createDiv({cls: 'synapse-speaker ai', text: 'SYNAPSE'});
+
 		const wrapper = this.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-assistant'});
 
 		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
@@ -338,15 +369,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (thinking) thinking.remove();
 
 		const details = createEl('details');
-		details.className = 'synapse-reasoning';
+		details.className = 'synapse-reasoning is-live';
 		details.open = true;
 
 		const summary = createEl('summary');
 		summary.className = 'synapse-reasoning-summary';
-		const spinner = createSpan();
-		spinner.className = 'synapse-reasoning-spinner';
-		summary.appendChild(spinner);
-		summary.appendChild(document.createTextNode('Thinking\u2026'));
+		summary.appendChild(document.createTextNode('THINKING\u2026'));
 		details.appendChild(summary);
 
 		const body = createDiv();
@@ -409,15 +437,13 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		void this.doFullReasoningRender();
 
 		if (this.reasoningEl) {
+			this.reasoningEl.removeClass('is-live');
 			// Collapse the block
 			this.reasoningEl.removeAttribute('open');
-			// Swap spinner for a static icon and change label
 			const summary = this.reasoningEl.querySelector<HTMLElement>('summary');
 			if (summary) {
 				summary.empty();
-				const iconEl = summary.createSpan({cls: 'synapse-reasoning-icon'});
-				setIcon(iconEl, 'lightbulb');
-				summary.appendText('Reasoning');
+				summary.appendText('REASONING');
 			}
 		}
 
@@ -612,22 +638,24 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (!this.toolCallsContainer) return;
 
 		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-tool-call'});
-		const summary = details.createEl('summary', {cls: 'synapse-tool-call-summary'});
-		const iconEl = summary.createSpan({cls: 'synapse-tool-call-icon'});
-		setIcon(iconEl, 'wrench');
-		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName});
-		const spinner = summary.createSpan({cls: 'synapse-tool-call-spinner'});
-		setIcon(spinner, 'loader');
+		const summary = details.createEl('summary', {cls: 'synapse-tool-call-summary is-live'});
+		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName.toUpperCase()});
+		const argSummary = formatToolArgsSummary(args);
+		if (argSummary) {
+			summary.createSpan({cls: 'synapse-tool-call-arg', text: argSummary});
+		}
+		summary.createSpan({cls: 'synapse-tool-call-time', text: '···'});
 
 		// Input section
-		if (args && Object.keys(args).length > 0) {
+		if (args && typeof args === 'object' && Object.keys(args).length > 0) {
 			const inputSection = details.createDiv({cls: 'synapse-tool-call-section'});
 			inputSection.createDiv({cls: 'synapse-tool-call-label', text: 'Input'});
 			const pre = inputSection.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: JSON.stringify(args, null, 2)});
 		}
 
-		this.activeToolCalls.set(toolCallId, {toolName, detailsEl: details});
+		const startTime = Date.now();
+		this.activeToolCalls.set(toolCallId, {toolName, detailsEl: details, startTime});
 
 		// Show "Processing ..." animation while tools are running
 		this.showProcessingIndicator();
@@ -639,15 +667,22 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const entry = this.activeToolCalls.get(toolCallId);
 		if (!entry) return;
 
-		const {detailsEl} = entry;
+		const {detailsEl, startTime} = entry;
 
-		// Remove spinner, add status icon
-		const spinner = detailsEl.querySelector('.synapse-tool-call-spinner');
-		if (spinner) spinner.remove();
-		const summaryEl = detailsEl.querySelector('summary');
+		const summaryEl = detailsEl.querySelector<HTMLElement>('.synapse-tool-call-summary');
 		if (summaryEl) {
-			const statusEl = summaryEl.createSpan({cls: `synapse-tool-call-status ${success ? 'is-success' : 'is-error'}`});
-			setIcon(statusEl, success ? 'check' : 'x');
+			summaryEl.removeClass('is-live');
+			const timeEl = summaryEl.querySelector<HTMLElement>('.synapse-tool-call-time');
+			if (timeEl) {
+				const elapsed = startTime ? Date.now() - startTime : 0;
+				const timeText = elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`;
+				if (success) {
+					timeEl.setText(timeText);
+				} else {
+					timeEl.setText(timeText ? `${timeText} (err)` : 'err');
+					timeEl.addClass('is-error');
+				}
+			}
 		}
 
 		// Output section

@@ -709,3 +709,63 @@ mechanisms handle failures:
   attachment/file (via a tool result) before acting on its content, stopping to ask for
   clarification or re-attachment instead of proceeding with guessed/fabricated content if a
   referenced file can't be found or read.
+
+## Editorial design language & primitives (issue #207)
+
+Part of the visual restyle (#206) based on `.docs/design/variant-b-editorial.html`. The chat transcript
+is set like a printed page rather than a messaging app: speech bubbles, avatars, badges, and colored
+pill backgrounds are eliminated. Structural clarity is achieved via typography, hairline rules, and
+monospace margin rails, with color reserved exclusively for the interactive accent.
+
+### Typography & bundled serif
+- **Newsreader 400 (Latin subset):** Embedded directly in `styles.css` as a `data:font/woff2;base64,...`
+  data URI (~76 KB base64, ~57 KB raw), ensuring zero runtime network activity, offline operation, and
+  seamless compatibility with BRAT/vault installs without external assets.
+- **SIL OFL 1.1 licence compliance:** Full licence text and copyright notice
+  (`Copyright 2020 The Newsreader Project Authors`) are embedded in a comment header in `styles.css`
+  directly above the `@font-face` declaration, alongside provenance and reproducible `pyftsubset`
+  command. An accompanying `OFL.txt` is also committed at the repository root.
+- **Fallback stack:** Declared via `--synapse-font-serif`:
+  `Newsreader, Georgia, 'Iowan Old Style', 'Times New Roman', serif`.
+- **Voice split:**
+  - Assistant voice: bundled serif (`Newsreader`), ~15.5px, line-height 1.62. Links styled with a
+    hairline accent bottom border. Inline code remains monospace with subtle background.
+  - User voice: Obsidian interface sans (`--font-interface`), 13.5px, line-height 1.55.
+
+### Shared primitives
+- `--synapse-rule`: hairline border token (`var(--background-modifier-border)`).
+- `--synapse-rule-soft`: softer divider token (`var(--background-modifier-border-focus, var(--background-modifier-border))`).
+- `.synapse-rule`: hairline horizontal divider (`height: 1px; background: var(--synapse-rule); border: none;`).
+- `.synapse-speaker`: letterspaced small-caps speaker label (`YOU` / `SYNAPSE`), 10px, font-weight 500,
+  letter-spacing 0.15em, with trailing hairline rule via `::after` filling remaining width.
+  Modifiers: `.you` (`var(--text-muted)`), `.ai` (`var(--interactive-accent)`).
+- `.synapse-findings`: ruled definition list container for structured outputs (findings, decisions,
+  key-values).
+  - `.synapse-finding`: definition item with subtle horizontal borders.
+  - `.synapse-finding-key`: uppercase letterspaced key label (10.5px, font-weight 500, letter-spacing
+    0.09em, fixed width 74px, faint text).
+  - `.synapse-finding-val`: definition value (14px, line-height 1.5).
+- `.synapse-ledger` / `.synapse-ledger-row`: monospace margin rail for tool execution.
+  - `.synapse-ledger-name`: uppercase bold tool identifier (e.g. `GLOB`, `READ`, `GREP`).
+  - `.synapse-ledger-arg`: monospace argument preview with overflow ellipsis.
+  - `.synapse-ledger-time`: right-aligned elapsed duration or status with `font-variant-numeric: tabular-nums`.
+  - `.live`: pulsing accent animation (`@keyframes synapse-pulse`) for in-flight calls.
+
+### Transcript elements
+- **User turn (`.synapse-msg-user`):** rendered as a washed block with a 2px solid interactive accent
+  left border (`border-left: 2px solid var(--interactive-accent)`). The wash color uses
+  `color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary))` with a
+  `--background-secondary` fallback. No bubble border-radius, full container width, interface sans
+  typography. Copy button is positioned at the top-right of the block and fades in on hover.
+- **Assistant turn (`.synapse-msg-assistant`):** clean serif body copy, generous measure, unboxed.
+- **Tool calls (`.synapse-tool-calls`, `.synapse-tool-call`):** indented margin rail with single
+  hairline left border (`border-left: 1px solid var(--synapse-rule)`). Summary row functions as a
+  ledger row: tool name in uppercase, compact arguments summary (`.synapse-tool-call-arg`),
+  right-aligned tabular elapsed time (`.synapse-tool-call-time`). Live calls pulse the accent (`is-live`);
+  no spinner icon. Expanding a call reveals the input and output detail sections as collapsible code blocks.
+- **Reasoning blocks (`.synapse-reasoning`):** single hairline left rule, uppercase letterspaced
+  summary label (`THINKING…` while streaming with accent pulse, `REASONING` when complete or historical),
+  serif body matching the assistant's voice.
+- **Thinking indicator (`.synapse-thinking`):** serif italic status indicator matching the assistant's
+  voice.
+

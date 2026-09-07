@@ -23,7 +23,7 @@ export interface BackgroundSession {
 	turnStartTime: number;
 	turnToolsUsed: string[];
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null;
-	activeToolCalls: Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>;
+	activeToolCalls: Map<string, {toolName: string; detailsEl: HTMLDetailsElement; startTime?: number}>;
 	/** Streaming component for Markdown rendering. */
 	streamingComponent: Component | null;
 	streamingBodyEl: HTMLElement | null;
