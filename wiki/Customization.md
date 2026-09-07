@@ -224,6 +224,21 @@ Any field from the Claude Code settings schema is accepted — `permissions`, `e
   applying any of it — it won't repeatedly warn you on every message for the same broken file,
   and a syntax error here never blocks a query outright.
 
+### Relationship to Claude Code's own settings files
+
+This file is separate from — and takes priority over — the settings files the underlying Claude
+CLI itself understands (`~/.claude/settings.json`, a vault-root `.claude/settings.json`,
+`.claude/settings.local.json`). Synapse tells the CLI which of *those* to load:
+
+- Your **global** `~/.claude/settings.json` still applies, same as using the CLI directly.
+- A **vault-root** `.claude/settings.json` (and any vault-root `CLAUDE.md`) still applies too.
+- A **`.claude/settings.local.json`** — the CLI's own local, machine-specific override file,
+  normally meant to be gitignored per-project — is **never read** by Synapse. This closes a leak
+  from an earlier version of the plugin, which briefly wrote stale tool-approval grants into that
+  file; those grants no longer apply even if the file still exists in your vault. There's no
+  setting to change this — if you rely on `.claude/settings.local.json` outside Synapse (e.g. with
+  the CLI directly), it still works there, it's just invisible to Synapse-initiated queries.
+
 ---
 
 ## 6. How the SDK discovers your customizations

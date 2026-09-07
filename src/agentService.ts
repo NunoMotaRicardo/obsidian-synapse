@@ -1149,15 +1149,24 @@ export class AgentService {
 	}
 
 	/**
-	 * Route query options. Resolves bound model for named agent if configured, and layers in
-	 * the vault's `_synapse/settings.json` (issue #194) beneath whatever `Options.settings` the
-	 * caller already built (including any in-memory tool-approval grants) — see
-	 * `mergeVaultSettingsLayer()`. `app` is optional because not every caller has one
-	 * (`AgentService` holds no `App` reference of its own, per the architecture rule); no `app`
-	 * means no layer, same as a vault with no `_synapse/settings.json`.
+	 * Route query options. Resolves bound model for named agent if configured, defaults
+	 * `settingSources` to `['user', 'project']` (issue #196) unless a caller already set its
+	 * own, and layers in the vault's `_synapse/settings.json` (issue #194) beneath whatever
+	 * `Options.settings` the caller already built (including any in-memory tool-approval
+	 * grants) — see `mergeVaultSettingsLayer()`. `app` is optional because not every caller has
+	 * one (`AgentService` holds no `App` reference of its own, per the architecture rule); no
+	 * `app` means no `_synapse/settings.json` layer, same as a vault with no such file.
 	 */
 	private routeQueryOptions(options: Options, app?: App): Options {
 		const opts = {...options};
+		if (!opts.settingSources) {
+			// Deliberately drops the SDK default's 'local' source: that's exactly the
+			// `<cwd>/.claude/settings.local.json` leak issue #196 closes (including the stale
+			// drive-wide grants #193 used to write there). 'project' is kept so a vault
+			// `.claude/settings.json` and any vault `CLAUDE.md` still load; 'user' is kept so
+			// the user's global `~/.claude/settings.json` keeps applying as it does today.
+			opts.settingSources = ['user', 'project'];
+		}
 		if (opts.model) {
 			opts.model = this.isLocalModel(opts.model) ? undefined : this.resolveValidModel(opts.model);
 		}

@@ -3,7 +3,7 @@ import {mkdtempSync, writeFileSync, mkdirSync, utimesSync, rmSync} from 'node:fs
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {App} from 'obsidian';
-import type {Settings} from '@anthropic-ai/claude-agent-sdk';
+import type {Settings, SettingSource} from '@anthropic-ai/claude-agent-sdk';
 import {AgentService, mergeVaultSettingsLayer} from '../src/agentService';
 import {getSynapseSettingsPath} from '../src/vaultPaths';
 
@@ -65,7 +65,10 @@ describe('mergeVaultSettingsLayer', () => {
 
 interface AgentServiceInternals {
 	loadVaultSettings(app: App): Settings | undefined;
-	routeQueryOptions(options: {settings?: string | Settings}, app?: App): {settings?: string | Settings};
+	routeQueryOptions(
+		options: {settings?: string | Settings; settingSources?: SettingSource[]},
+		app?: App
+	): {settings?: string | Settings; settingSources?: SettingSource[]};
 }
 
 function internals(service: AgentService): AgentServiceInternals {
@@ -175,5 +178,32 @@ describe('AgentService vault settings layer (#194)', () => {
 		// error. This documents that behavior explicitly.
 		rmSync(settingsPath);
 		expect(internals(service).loadVaultSettings(app)).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Issue #196 — routeQueryOptions() defaults settingSources to ['user',
+// 'project'], dropping the SDK's 'local' default (the <cwd>/.claude/
+// settings.local.json leak). Unrelated to the _synapse/settings.json layer
+// above, but the same choke point, so covered alongside it.
+// ---------------------------------------------------------------------------
+
+describe('AgentService settingSources default (#196)', () => {
+	it('defaults to [\'user\', \'project\'] when the caller sets none', () => {
+		const service = new AgentService();
+		const opts = internals(service).routeQueryOptions({});
+		expect(opts.settingSources).toEqual(['user', 'project']);
+	});
+
+	it('does not include \'local\' — the <cwd>/.claude/settings.local.json leak this issue closes', () => {
+		const service = new AgentService();
+		const opts = internals(service).routeQueryOptions({});
+		expect(opts.settingSources).not.toContain('local');
+	});
+
+	it('leaves an explicit caller-provided settingSources untouched', () => {
+		const service = new AgentService();
+		const opts = internals(service).routeQueryOptions({settingSources: ['local']});
+		expect(opts.settingSources).toEqual(['local']);
 	});
 });

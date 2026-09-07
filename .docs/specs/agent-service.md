@@ -216,6 +216,27 @@ plumbing stays UI-agnostic), so every caller passes its own handle:
   here still omits `canUseTool`, so that gate remains closed exactly as before, per #167's
   `editorMenu.ts` tests.
 
+**`settingSources` default (issue #196).** `routeQueryOptions()` also defaults
+`Options.settingSources` to `['user', 'project']` when a caller hasn't set one, dropping the Agent
+SDK's own default of `['user', 'project', 'local']`:
+
+- **`'local'` is dropped.** It maps to `<cwd>/.claude/settings.local.json` — a file this plugin no
+  longer writes (#193) but that can still exist and silently apply if `cwd` happens to contain one
+  (including stale drive-wide grants #193 used to write there before that fix). Dropping it closes
+  that leak without adding a settings toggle: the plugin never reads or writes
+  `.claude/settings.local.json` itself, so there is nothing for a user to configure.
+- **`'project'` is kept** so a vault-root `.claude/settings.json` and any vault `CLAUDE.md` still
+  load — the Agent SDK requires `'project'` in `settingSources` for `CLAUDE.md` to be picked up at
+  all. Nothing in `src/` depends on this today, but a vault owner may have one.
+- **`'user'` is kept** so the user's global `~/.claude/settings.json` keeps applying exactly as it
+  does today.
+- **A caller-set `settingSources` always wins** — the default only fills in when `options.settingSources`
+  is unset, same "caller's explicit value wins" convention as the rest of `routeQueryOptions()`.
+- This is orthogonal to the vault-settings layer above: `_synapse/settings.json` is read and merged
+  by the plugin directly into `Options.settings` (the higher-priority flag-settings layer, per the
+  SDK's own precedence), never through `settingSources`/`SettingSource` — so this default has no
+  effect on whether `_synapse/settings.json` applies.
+
 ## Named Agent Model Binding & Routing
 
 Named agents parsed from `_synapse/agents/*.md` carry an optional `model` binding (Claude
