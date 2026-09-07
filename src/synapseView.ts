@@ -112,6 +112,14 @@ export class SynapseView extends ItemView {
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
 	workingDir = '';
+	/**
+	 * A working-directory change deferred by `decideWorkingDirAutoUpdate()` (issue #108,
+	 * restored by #202) because the active note switched folders while a conversation was
+	 * in progress. Applied the next time a conversation is not in progress — see
+	 * `newConversation()`. Manual overrides (`setWorkingDir()`) bypass this entirely and
+	 * apply immediately, since only the silent auto-update path is deferred.
+	 */
+	pendingWorkingDir: string | null = null;
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
 
@@ -1203,6 +1211,13 @@ export class SynapseView extends ItemView {
 		this.isStreaming = false;
 		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
 		this.selectedModel = '';
+		// Apply any working-directory change deferred while the previous conversation was
+		// in progress (issue #108 / #202) — safe now that there's no live session to rebuild.
+		if (this.pendingWorkingDir !== null) {
+			this.workingDir = this.pendingWorkingDir;
+			this.pendingWorkingDir = null;
+			this.updateCwdButton();
+		}
 		this.updateConfigUI();
 		this.updateContextIndicator();
 		this.configDirty = true;

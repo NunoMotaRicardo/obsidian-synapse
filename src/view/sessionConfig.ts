@@ -620,41 +620,47 @@ export function buildSelfImproveHint(agentName: string): string {
 		` Current agent: ${agentName}.`;
 }
 
+/** Result of {@link decideWorkingDirAutoUpdate}. */
+export interface WorkingDirAutoUpdateDecision {
+	/** Whether `workingDir` should be updated (and the session config marked dirty) right now. */
+	applyNow: boolean;
+	/**
+	 * The directory that should become pending — applied once the conversation ends —
+	 * when `applyNow` is false and the note actually moved to a different folder.
+	 * `null` when there is nothing to defer (directory unchanged, or applied now).
+	 */
+	pendingDir: string | null;
+}
+
 /**
- * Decide whether an active-note-driven working-directory change (issue #108) should be
- * applied.
+ * Decide whether an active-note-driven working-directory change should be applied
+ * immediately or deferred until the conversation ends (issue #108, restored by #202).
  *
- * Historically (issue #108) this deferred the change whenever a conversation was in
- * progress: applying a `cwd` change mid-conversation forced `ensureSession()` to tear down
- * the live `Session` and build a replacement whose `_sessionId` started empty, so the next
- * turn silently began a fresh CLI session with no history. Since users switch notes
- * constantly *between* turns, that fired on nearly every follow-up message and was the
- * likely root cause of #93.
+ * Applying a `cwd` change mid-conversation makes `ensureSession()` tear down the live
+ * `Session` and rebuild it, resuming by id. A resumed session is a **new CLI process that
+ * replays the whole transcript**, so every rebuild re-writes the entire conversation to the
+ * prompt cache. Users switch the active note between essentially every turn, so an
+ * immediate-apply policy pays that replay cost on a large share of follow-up messages.
  *
- * **That conversation-loss mechanism no longer exists (issue #104):** `ensureSession()` now
- * seeds the rebuilt `SessionConfig` with the outgoing session's id (`resume`), and
- * `Session.send()` falls back to it via `resolveResumeSessionId()` (`agentService.ts`) whenever
- * the new `Session`'s own `_sessionId` is still empty — see `agent-service.md`'s "Carrying a
- * conversation across a rebuilt Session" section. A rebuild triggered by a `cwd` change no
- * longer drops the transcript.
- *
- * **The remaining candidate justification — that resuming a session under a changed `cwd`
- * would degrade the model's handling of paths referenced in earlier turns — was tested
- * empirically for issue #131 and did not hold:** a session queried with `cwd` at folder A,
- * resumed with `cwd` at folder B, correctly recalled folder-A content from the transcript
- * without re-reading, correctly resolved new relative references against folder B, and (when
- * explicitly asked to re-read a stale relative path against the new `cwd`) reported the file
- * not found rather than hallucinating — i.e. it degrades gracefully, not silently. See
- * `.docs/decisions/2026-09-03-cwd-deferral-removed.md` for the full test and results.
- *
- * With no surviving justification, the deferral has been removed: an active-note-driven
- * `cwd` change now applies immediately regardless of whether a conversation is in progress.
+ * This is a pure token-cost concern, not a correctness one: `ensureSession()` already seeds
+ * the rebuilt `SessionConfig` with the outgoing session's id (issue #104's `resume`
+ * fallback via `resolveResumeSessionId()` in `agentService.ts`), so no transcript is lost,
+ * and resuming under a changed `cwd` has been verified not to degrade the model's path
+ * handling (see `.docs/decisions/2026-09-03-cwd-deferral-removed.md`). Deferring simply
+ * avoids paying for a rebuild on every note switch: the directory change is held in
+ * `pendingWorkingDir` while a conversation is in progress — the working-directory button
+ * doesn't move and no rebuild happens — and applied the next time a conversation is *not*
+ * in progress (`newConversation()`).
  */
 export function decideWorkingDirAutoUpdate(params: {
 	newDir: string;
 	currentWorkingDir: string;
-}): boolean {
-	return params.newDir !== params.currentWorkingDir;
+	conversationInProgress: boolean;
+}): WorkingDirAutoUpdateDecision {
+	const {newDir, currentWorkingDir, conversationInProgress} = params;
+	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null};
+	if (conversationInProgress) return {applyNow: false, pendingDir: newDir};
+	return {applyNow: true, pendingDir: null};
 }
 
 /**

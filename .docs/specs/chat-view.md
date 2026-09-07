@@ -219,32 +219,31 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   `tool_result` blocks are skipped — tool-call replay is a separate follow-up. An unreadable or
   missing transcript degrades to the welcome screen rather than throwing.
 - The active note is attached as context. When `settings.autoUpdateWorkingDirectory` is enabled (default `true`),
-  the working directory auto-updates to the active note's parent folder on note switch, applying immediately
-  even mid-conversation. When disabled, the working directory is not changed automatically (it defaults to the
-  vault root unless overridden manually). The active note's folder can also be overridden manually in the toolbar
-  at any time — an auto-update on the next note switch will still overwrite that manual pick, same as before this
-  default flipped.
-  - **Applies immediately, no longer deferred (issue #108 / #93 / #131):** applying this auto-update
-    unconditionally used to force `ensureSession()` (`synapseView.ts`) to tear down the live
-    `Session` and rebuild it with an empty `_sessionId` on every folder-crossing note switch —
-    the rebuilt `Session`'s very next message silently started a brand-new CLI session with no
-    history. Since users switch notes constantly *between* turns, this was the likely root cause
-    of #93 ("chat is losing context of the conversation in each turn"), so the change used to be
-    deferred until the conversation ended (`SynapseView.pendingWorkingDir`). Issue #104 fixed the
-    underlying rebuild to always carry `resume` forward (see the bullet below), removing that
-    justification, and issue #131 tested the one other candidate justification — that resuming a
-    session under a *changed* `cwd` might degrade the model's handling of paths referenced in
-    earlier turns — empirically against a real CLI session and found no degradation: the model
-    correctly recalled prior-turn content from context without re-reading, correctly resolved new
-    relative references against the new `cwd`, and reported "not found" rather than hallucinating
-    when explicitly asked to re-read a stale relative path under the new `cwd`. See
-    `.docs/decisions/2026-09-03-cwd-deferral-removed.md`. With no surviving justification, the
-    deferral was removed: `updateActiveNote()` (`inputArea.ts`) calls the pure
-    `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`), which now only checks whether the
-    folder actually changed, and applies `workingDir`/`configDirty` immediately when it did. A
-    session reset genuinely tied to a *manual* working-directory override
-    (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) is a deliberate
-    user action, not a silent side effect of navigation, and is unaffected by this change.
+  the working directory auto-updates to the active note's parent folder on note switch. While a conversation is
+  in progress, that update is deferred rather than applied immediately (see the bullet below). When disabled,
+  the working directory is not changed automatically (it defaults to the vault root unless overridden manually).
+  The active note's folder can also be overridden manually in the toolbar at any time — a manual override
+  (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) always applies immediately,
+  deferral or not, and an auto-update on the next note switch will still overwrite that manual pick, same as
+  before this default flipped.
+  - **Active-note-driven changes are deferred while a conversation is in progress (issue #108, restored by
+    #202):** applying this auto-update unconditionally makes `ensureSession()` (`synapseView.ts`) tear down the
+    live `Session` and rebuild it, resuming by id — a **new CLI process that replays the whole transcript**, so
+    the entire conversation is re-written to the prompt cache on every folder-crossing note switch. Since users
+    switch notes constantly *between* turns, an immediate-apply policy pays that replay cost on a large share of
+    follow-up messages. This is a pure token-cost concern, not a correctness one: issue #104 already fixed the
+    rebuild to always carry `resume` forward (see the bullet below), so no transcript is lost, and issue #131
+    separately verified — empirically, against a real CLI session — that resuming under a *changed* `cwd` does
+    not degrade the model's handling of paths referenced in earlier turns (see
+    `.docs/decisions/2026-09-03-cwd-deferral-removed.md`); neither of those findings is being revisited. What
+    changed is a cost tradeoff #131 never weighed: `updateActiveNote()` (`inputArea.ts`) calls
+    `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`) with a `conversationInProgress` flag
+    (`currentSession !== null && messages.length > 0`); when true and the folder actually changed, the new
+    directory is held in `SynapseView.pendingWorkingDir` instead of being applied — the working-directory button
+    doesn't move and no rebuild happens — and applied the next time a conversation is *not* in progress
+    (`newConversation()`). A *manual* working-directory override (`SynapseView.setWorkingDir()`) bypasses this
+    function entirely and always applies immediately, since it's a deliberate user action rather than a silent
+    side effect of navigation.
   - **Every `configDirty` rebuild now carries the conversation forward (issue #104):** the
     toolbar-toggle pattern above (agent/model/reasoning/tools) still marks `configDirty` and lets
     `ensureSession()` rebuild the `Session` — that part is unchanged, and deliberately so (see
