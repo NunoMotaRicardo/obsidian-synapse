@@ -191,13 +191,20 @@ scoped to a subfolder.
     "allow": ["Read"]
   },
   "env": {
-    "SOME_TOOL_TOKEN": "..."
+    "SOME_NON_SECRET_FLAG": "1"
   }
 }
 ```
 
 Any field from the Claude Code settings schema is accepted — `permissions`, `env`, `model`,
 `fallbackModel`, and more.
+
+> **Don't put secrets here.** This file is plaintext inside your vault, so it travels with
+> everything that copies the vault — Obsidian Sync, git, a backup, a shared folder. API keys and
+> tokens belong in Synapse's own settings (Settings → **Synapse**), which keeps them out of the
+> vault. Note also that `permissions.allow` rules in this file grant tools silently, with no
+> approval prompt — treat a vault someone else wrote this file for the same way you'd treat their
+> `.mcp.json`.
 
 ### How it's applied
 
