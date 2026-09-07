@@ -734,6 +734,115 @@
 	margin-top: 8px;
 }
 
+/* ── Ask-user-question modal (issue #182) ─────────────────────── */
+
+.synapse-askq-modal h3 {
+	margin-top: 0;
+	margin-bottom: 12px;
+}
+
+.synapse-askq-list {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+	margin-bottom: 16px;
+}
+
+.synapse-askq-question {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.synapse-askq-header-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.synapse-askq-chip {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	border-radius: var(--radius-s);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.synapse-askq-chip-muted {
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-weight: normal;
+}
+
+.synapse-askq-question-text {
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold);
+}
+
+.synapse-askq-options {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.synapse-askq-option {
+	padding: 8px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	background: var(--background-primary);
+}
+
+.synapse-askq-option:hover {
+	border-color: var(--interactive-accent);
+}
+
+.synapse-askq-option.is-selected {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+
+.synapse-askq-option-label {
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-small);
+}
+
+.synapse-askq-option-description {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+
+.synapse-askq-option-other {
+	cursor: default;
+}
+
+.synapse-askq-other-input {
+	width: 100%;
+	margin-top: 6px;
+	padding: 6px 8px;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.synapse-askq-other-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+.synapse-askq-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 8px;
+}
+
 /* ── Message metadata footer ──────────────────────────────────── */
 
 .synapse-msg-metadata {
