@@ -216,7 +216,6 @@ export class SynapseView extends ItemView {
 	stateNoteEl!: HTMLElement;
 	stateAgentEl!: HTMLElement;
 	stateModelEl!: HTMLElement;
-	modelPickerBtn!: HTMLButtonElement;
 	chatPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
 	chatContainer!: HTMLElement;
@@ -580,7 +579,6 @@ export class SynapseView extends ItemView {
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 
 		// Update search panel dropdowns
@@ -1286,7 +1284,6 @@ export class SynapseView extends ItemView {
 		this.updateToolbarLock();
 		this.renderSessionList();
 		this.updateMastheadKicker();
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	}
 

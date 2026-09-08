@@ -25,8 +25,6 @@ declare module '../synapseView' {
 		setPromptText(text: string): void;
 		addSelectionAttachment(text: string, info: SelectionInfo): void;
 		updateStateLine(): void;
-		updateModelPickerButton(): void;
-		openModelPickerMenu(e: MouseEvent): void;
 
 		// Slash-command skill popup
 		handleInputKeydownForSkillPopup(e: KeyboardEvent): boolean;
@@ -184,9 +182,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 		foot.createSpan({cls: 'synapse-composer-spacer'});
 
-		this.modelPickerBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-model', attr: {title: 'Select model', type: 'button'}});
-		this.modelPickerBtn.addEventListener('click', (e) => this.openModelPickerMenu(e));
-
 		this.sendBtn = foot.createEl('button', {
 			cls: 'clickable-icon synapse-send-btn',
 			attr: {title: 'Send message', type: 'button'},
@@ -201,7 +196,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		});
 
 		this.updateStateLine();
-		this.updateModelPickerButton();
 	};
 
 	proto.handleAttachFile = function (): void {
@@ -681,7 +675,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.updateStateLine();
 	};
 
-	// ── State line & model picker (Editorial restyle #208) ───────
+	// ── State line (Editorial restyle #208) ───────────────────────
 
 	proto.updateStateLine = function (): void {
 		if (!this.stateLineEl) return;
@@ -722,39 +716,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.stateModelEl.setText(modelText);
 			this.stateModelEl.setAttribute('title', `Model: ${modelText}`);
 		}
-	};
-
-	proto.updateModelPickerButton = function (): void {
-		if (!this.modelPickerBtn) return;
-		let modelText = 'Default model';
-		if (this.selectedModel) {
-			const found = this.models.find(m => m.id === this.selectedModel);
-			modelText = found?.name || this.selectedModel;
-		}
-		this.modelPickerBtn.setText(modelText);
-	};
-
-	proto.openModelPickerMenu = function (e: MouseEvent): void {
-		// Delegates to `setModel()` (configToolbar.ts) — the single place that mutates
-		// `selectedModel` and runs its side effects, shared with the toolbar's `modelSelect`
-		// change handler so the two don't duplicate this list independently (#215 AC-2 follow-up).
-		const menu = new Menu();
-		menu.addItem(item => {
-			item.setTitle('Default model')
-				.setChecked(this.selectedModel === '')
-				.onClick(() => this.setModel(''));
-		});
-		if (this.models.length > 0) {
-			menu.addSeparator();
-			for (const model of this.models) {
-				menu.addItem(item => {
-					item.setTitle(model.name)
-						.setChecked(this.selectedModel === model.id)
-						.onClick(() => this.setModel(model.id));
-				});
-			}
-		}
-		menu.showAtMouseEvent(e);
 	};
 
 	// ── Slash-command skill popup ───────────────────────────────

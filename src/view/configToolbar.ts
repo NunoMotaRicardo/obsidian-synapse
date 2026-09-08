@@ -127,7 +127,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	};
 
@@ -136,9 +135,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	/**
-	 * Single source of truth for a model change, shared by the toolbar's `modelSelect` and the
-	 * composer's model-picker menu (`inputArea.ts`'s `openModelPickerMenu`) — both used to
-	 * independently duplicate this side-effect list (#215 AC-2 follow-up).
+	 * Single source of truth for a model change — the toolbar's `modelSelect` is the sole
+	 * model-switching UI (the composer's duplicate model-picker button was removed, #215 AC-2).
 	 *
 	 * Resets any reasoning effort the new model doesn't support first, then carries the
 	 * (now-valid) effort + summary into the mid-session switch.
@@ -150,7 +148,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 		this.updateReasoningBadge();
 		this.applyReasoningToSession();
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	};
 
@@ -319,7 +316,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 		this.applyAgentToolsAndSkills(agent);
 		this.configDirty = true;
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	};
 
