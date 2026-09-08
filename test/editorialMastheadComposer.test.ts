@@ -148,12 +148,12 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 	});
 
 	describe('AC-5: Textarea serif and italic placeholder', () => {
-		it('sets textarea in bundled serif font and 16px size', () => {
+		it('sets textarea in bundled serif font and 14px size', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-input\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-input\s*\{[^}]*font-size:\s*16px/
+				/\.synapse-input\s*\{[^}]*font-size:\s*14px/
 			);
 		});
 

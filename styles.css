@@ -1564,7 +1564,7 @@
 	resize: none;
 	outline: none;
 	font-family: var(--synapse-font-serif);
-	font-size: 16px;
+	font-size: 14px;
 	color: var(--text-normal);
 	height: var(--input-height, auto);
 	min-height: 46px;
@@ -2742,7 +2742,7 @@ body.synapse-no-select {
 	resize: none;
 	outline: none;
 	font-family: var(--synapse-font-serif);
-	font-size: 16px;
+	font-size: 14px;
 	line-height: 1.5;
 	color: var(--text-normal);
 	padding: 6px 0;
