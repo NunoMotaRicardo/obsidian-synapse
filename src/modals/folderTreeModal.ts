@@ -27,7 +27,7 @@ export class FolderTreeModal extends Modal {
 		const {contentEl} = this;
 		contentEl.addClass('synapse-scope-modal');
 
-		contentEl.createEl('h3', {text: 'Select working directory'});
+		contentEl.createEl('h3', {cls: 'synapse-modal-title', text: 'Select working directory'});
 
 		this.searchInput = contentEl.createEl('input', {
 			type: 'text',

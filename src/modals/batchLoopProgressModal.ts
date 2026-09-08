@@ -30,6 +30,8 @@ export class BatchLoopProgressModal extends Modal {
 	private readonly budget?: BatchLoopBudget;
 
 	private statusEl!: HTMLElement;
+	private progressMeter!: HTMLElement;
+	private progressFill!: HTMLElement;
 	private fileEl!: HTMLElement;
 	private budgetEl!: HTMLElement;
 	private buttonRow!: HTMLElement;
@@ -48,9 +50,12 @@ export class BatchLoopProgressModal extends Modal {
 		const {contentEl} = this;
 		contentEl.addClass('synapse-batch-progress-modal');
 
-		contentEl.createEl('h3', {text: 'Batch loop running'});
+		contentEl.createEl('h3', {cls: 'synapse-modal-title', text: 'Batch loop running'});
 
 		this.statusEl = contentEl.createDiv({cls: 'synapse-batch-progress-status'});
+		this.progressMeter = contentEl.createDiv({cls: 'synapse-batch-progress-meter synapse-gauge-track'});
+		this.progressFill = this.progressMeter.createDiv({cls: 'synapse-batch-progress-fill synapse-gauge-fill'});
+		this.progressFill.setCssProps({'--progress-width': '0%'});
 		this.fileEl = contentEl.createDiv({cls: 'synapse-batch-progress-file'});
 		this.budgetEl = contentEl.createDiv({cls: 'synapse-batch-progress-budget'});
 
@@ -72,6 +77,8 @@ export class BatchLoopProgressModal extends Modal {
 		if (this.completed) return;
 		const done = progress.phase === 'done' ? progress.index : progress.index - 1;
 		this.statusEl.setText(`${done}/${progress.total} processed`);
+		const pct = this.total > 0 ? Math.min(100, Math.round((done / this.total) * 100)) : 0;
+		this.progressFill.setCssProps({'--progress-width': `${pct}%`});
 		this.fileEl.setText(
 			progress.phase === 'done' ? `Finished: ${progress.filePath}` : `Processing: ${progress.filePath}`,
 		);
@@ -84,6 +91,8 @@ export class BatchLoopProgressModal extends Modal {
 
 		const attempted = result.processed + result.failed;
 		this.statusEl.setText(`${attempted}/${this.total} attempted`);
+		const pct = this.total > 0 ? Math.min(100, Math.round((attempted / this.total) * 100)) : 0;
+		this.progressFill.setCssProps({'--progress-width': `${pct}%`});
 		this.renderBudget(usage);
 
 		this.fileEl.empty();

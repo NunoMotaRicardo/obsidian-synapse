@@ -92,8 +92,9 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 
 	describe('AC-2: Speaker labels', () => {
 		it('styles.css defines .synapse-speaker with uppercase letterspacing and trailing hairline rule', () => {
+			// Uppercase/weight/color come from the shared `.synapse-label-base` primitive (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-speaker\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-speaker\s*\{[^}]*letter-spacing:\s*0\.15em/
@@ -158,8 +159,10 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-reasoning\s*\{[^}]*border-left:\s*1px solid var\(--synapse-rule\)/
 			);
+			// Uppercase/weight/color come from the shared `.synapse-label-base` primitive (#217),
+			// added alongside `.synapse-reasoning-summary` in chatRenderer.ts.
 			expect(stylesContent).toMatch(
-				/\.synapse-reasoning\s*>\s*summary\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-reasoning-body\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/

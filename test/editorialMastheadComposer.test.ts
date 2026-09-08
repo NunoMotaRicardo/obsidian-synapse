@@ -51,8 +51,9 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 		});
 
 		it('styles kicker in uppercase letterspaced faint text', () => {
+			// Uppercase/weight/color come from the shared `.synapse-label-base` primitive (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-masthead-kicker\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-masthead-kicker\s*\{[^}]*letter-spacing:\s*0\.14em/
@@ -63,9 +64,12 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 		});
 
 		it('styles text tabs as uppercase letterspaced with active underline', () => {
+			// Uppercase/weight/color come from the shared `.synapse-label-base` primitive (#217),
+			// added alongside `.synapse-masthead-tab`/`.synapse-tab` in synapseView.ts.
 			expect(stylesContent).toMatch(
-				/\.synapse-masthead-tab[^{]*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
+			expect(synapseViewSource).toContain("synapse-masthead-tab synapse-tab synapse-label-base");
 			expect(stylesContent).toMatch(
 				/\.synapse-masthead-tab[^{]*\{[^}]*letter-spacing:\s*0\.1em/
 			);
@@ -112,14 +116,16 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 
 	describe('AC-4: State line', () => {
 		it('defines .synapse-state-line above input in uppercase letterspaced layout', () => {
+			// Typography lives in the shared toolbar-row label family rule (#217) —
+			// `.synapse-state-line` is one of several selectors grouped there.
 			expect(stylesContent).toMatch(
-				/\.synapse-state-line\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-state-line,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-state-line\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-state-line,[\s\S]*?\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-state-line\s*\{[^}]*font-size:\s*10px/
+				/\.synapse-state-line,[\s\S]*?\{[^}]*font-size:\s*10px/
 			);
 		});
 

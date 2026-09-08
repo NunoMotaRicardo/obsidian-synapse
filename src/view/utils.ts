@@ -1,6 +1,16 @@
 import {App, MarkdownRenderer} from 'obsidian';
 import type {Component} from 'obsidian';
 
+/**
+ * Strip the leading session-type prefix (`[chat]`, `[inline]`, `[trigger]`, `[search]`) that
+ * session names are stored with internally, for display or agent-name parsing. Shared by
+ * sessionSidebar.ts (`getSessionDisplayName`, `restoreAgentFromSessionName`) and
+ * synapseView.ts (`updateMastheadKicker`) so the prefix scheme only needs updating once (#217).
+ */
+export function stripSessionTypePrefix(raw: string): string {
+	return raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
+}
+
 export function formatTimeAgo(d: Date): string {
 	const now = Date.now();
 	const diff = now - d.getTime();

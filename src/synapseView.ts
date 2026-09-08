@@ -30,6 +30,7 @@ import type {BackgroundSession} from './view/types';
 
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
+import {stripSessionTypePrefix} from './view/utils';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
@@ -395,7 +396,7 @@ export class SynapseView extends ItemView {
 		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar synapse-masthead'});
 		this.tabBarEl.createSpan({cls: 'synapse-masthead-wordmark', text: 'Synapse'});
 		this.tabBarEl.createSpan({cls: 'synapse-rule-dot'});
-		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker', text: 'Chat'});
+		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker synapse-label-base', text: 'Chat'});
 		this.tabBarEl.createSpan({cls: 'synapse-masthead-spacer'});
 
 		const tabs: {id: 'chat' | 'search'; label: string}[] = [
@@ -403,7 +404,7 @@ export class SynapseView extends ItemView {
 			{id: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
-			const btn = this.tabBarEl.createDiv({cls: 'synapse-masthead-tab synapse-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
+			const btn = this.tabBarEl.createDiv({cls: 'synapse-masthead-tab synapse-tab synapse-label-base' + (tab.id === this.activeTab ? ' is-active' : '')});
 			btn.dataset.tab = tab.id;
 			btn.createSpan({cls: 'synapse-masthead-tab-label', text: tab.label});
 			btn.addEventListener('click', () => this.switchTab(tab.id));
@@ -443,10 +444,30 @@ export class SynapseView extends ItemView {
 			const raw = this.sessionNames[this.currentSessionId]
 				|| this.sessionList.find(s => s.sessionId === this.currentSessionId)?.summary;
 			if (raw) {
-				title = raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '').trim();
+				title = stripSessionTypePrefix(raw).trim();
 			}
 		}
 		this.kickerEl.setText(title || 'Chat');
+	}
+
+	/**
+	 * Refresh every display element that reflects which session is active and what
+	 * agent/model/note it's currently using — the state line above the composer and the
+	 * masthead kicker. Session-level mutations (switching sessions, restoring one from the
+	 * background, resetting to a new conversation) can change both at once, e.g. via
+	 * `restoreAgentFromSessionName()` changing `selectedAgent`; calling this single method at
+	 * those sites — instead of remembering which of the individual `update*()` methods apply —
+	 * is what keeps a future mutation site from forgetting one of them (issue #217; the two
+	 * bugs fixed in 8a95229 were exactly this: a call site that mutated state but only
+	 * refreshed one of the two).
+	 *
+	 * Not for every state mutation: a change that's purely local to one control (attachments,
+	 * cwd, scope — see inputArea.ts) has no bearing on the masthead kicker, so those keep
+	 * calling `updateStateLine()` directly rather than pulling in this wider refresh.
+	 */
+	refreshComposerState(): void {
+		this.updateStateLine?.();
+		this.updateMastheadKicker();
 	}
 
 	// ── Config loading ───────────────────────────────────────────
@@ -581,13 +602,13 @@ export class SynapseView extends ItemView {
 		}
 		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 
-		// Apply agent's tools and skills filter
+		// Apply agent's tools and skills filter — applyAgentToolsAndSkills() already calls
+		// updateToolsBadge() internally, and populateModelSelect() above already calls
+		// updateStateLine(), so neither is repeated here (#217).
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
-		this.updateToolsBadge();
 		this.updateCwdButton();
-		this.updateStateLine?.();
 
 		// Update search panel dropdowns
 		if (this.searchAgentSelect) {
@@ -1291,8 +1312,9 @@ export class SynapseView extends ItemView {
 		this.updateSendButton();
 		this.updateToolbarLock();
 		this.renderSessionList();
-		this.updateMastheadKicker();
-		this.updateStateLine?.();
+		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
+		// above, so both the kicker and the state line need to reflect it (#217).
+		this.refreshComposerState();
 	}
 
 	// ── Session config building ──────────────────────────────────

@@ -70,8 +70,9 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 
 	describe('AC-3: Sidebar section headings', () => {
 		it('renders section headings with uppercase letterspaced typography and trailing hairline rule', () => {
+			// Uppercase/weight/color come from the shared `.synapse-label-base` primitive (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-sidebar-heading\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-sidebar-heading\s*\{[^}]*letter-spacing:\s*0\.14em/
@@ -85,8 +86,8 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 		});
 
 		it('renders Background section heading when active background sessions exist', () => {
-			expect(sessionSidebarSource).toContain("cls: 'synapse-sidebar-heading', text: 'Background'");
-			expect(sessionSidebarSource).toContain("cls: 'synapse-sidebar-heading', text: 'Sessions'");
+			expect(sessionSidebarSource).toContain("cls: 'synapse-sidebar-heading synapse-label-base', text: 'Background'");
+			expect(sessionSidebarSource).toContain("cls: 'synapse-sidebar-heading synapse-label-base', text: 'Sessions'");
 		});
 	});
 
