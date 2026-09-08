@@ -1479,12 +1479,13 @@
 	color: var(--text-faint);
 	cursor: pointer;
 	white-space: nowrap;
-	background: transparent;
-	border: none;
-	border-bottom: 1px solid transparent;
-	border-radius: 0;
-	padding: 2px 0;
-	box-shadow: none;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	border-radius: 0 !important;
+	padding: 2px 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
 	line-height: 1;
 	user-select: none;
 	-webkit-user-select: none;
@@ -1493,8 +1494,13 @@
 
 .synapse-f-btn:hover {
 	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
-	background: transparent;
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
+}
+
+.synapse-f-btn:focus-visible {
+	outline: 1px solid var(--interactive-accent);
+	outline-offset: -1px;
 }
 
 .synapse-f-btn-icon {
@@ -1683,11 +1689,13 @@
 	letter-spacing: 0.13em;
 	text-transform: uppercase;
 	color: var(--text-faint);
-	background: transparent;
-	border: none;
-	border-bottom: 1px solid transparent;
-	padding: 2px 0;
-	border-radius: 0;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	padding: 2px 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
 	cursor: pointer;
 	-webkit-appearance: none;
 	appearance: none;
@@ -1700,7 +1708,8 @@
 
 .synapse-config-toolbar .synapse-select:hover {
 	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
 }
 
 .synapse-config-toolbar .synapse-model-select {
@@ -1714,10 +1723,13 @@
 	letter-spacing: 0.13em;
 	text-transform: uppercase;
 	color: var(--text-faint);
-	background: transparent;
-	border: none;
-	border-bottom: 1px solid transparent;
-	padding: 2px 0;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	padding: 2px 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
 	cursor: pointer;
 	transition: color 0.15s ease, border-bottom-color 0.15s ease;
 	white-space: nowrap;
@@ -1725,7 +1737,8 @@
 
 .synapse-toolbar-btn:hover {
 	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
 }
 
 .synapse-toolbar-btn.is-active {
@@ -2343,7 +2356,7 @@ body.synapse-no-select {
 	align-items: center;
 	gap: 8px;
 	padding: 8px 10px;
-	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-bottom: none;
 	background: transparent;
 	cursor: pointer;
 	transition: color 0.15s ease, border-color 0.15s ease;
@@ -2422,8 +2435,8 @@ body.synapse-no-select {
 }
 
 .synapse-session-name {
-	font-family: var(--font-interface);
-	font-size: 13px;
+	font-family: var(--synapse-font-serif);
+	font-size: 14px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;

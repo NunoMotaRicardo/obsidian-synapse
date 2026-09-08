@@ -14,19 +14,19 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
-	describe('AC-1: Session sidebar ruled rows and metadata', () => {
-		it('styles session item as a ruled row with hairline separator and transparent background', () => {
+	describe('AC-1: Session sidebar rows and metadata', () => {
+		it('styles session item as a row with transparent background and no divider lines', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-session-item\s*\{[^}]*border-bottom:\s*1px solid var\(--synapse-rule-soft\)/
+				/\.synapse-session-item\s*\{[^}]*border-bottom:\s*none/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-session-item\s*\{[^}]*background:\s*transparent/
 			);
 		});
 
-		it('styles session title in interface sans', () => {
+		it('styles session title in bundled serif', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-session-name\s*\{[^}]*font-family:\s*var\(--font-interface\)/
+				/\.synapse-session-name\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
 		});
 

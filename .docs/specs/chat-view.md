@@ -802,9 +802,9 @@ The input area transforms from a floating card into an editorial ruled footer:
 
 ### Session sidebar (issue #209)
 
-The session sidebar adopts the prototype's starter list pattern (ruled contents column):
-- **Ruled rows:** Each session item (`.synapse-session-item`) renders with a hairline bottom separator (`border-bottom: 1px solid var(--synapse-rule-soft);`), transparent background, and no card borders or drop shadows.
-- **Typography & metadata:** Session titles use the interface sans (`font-family: var(--font-interface); font-size: 13px;`). Relative timestamps and message counts are right-aligned, muted (`color: var(--text-faint);`), and set with `font-variant-numeric: tabular-nums`.
+The session sidebar adopts the prototype's starter list pattern (clean unlined contents column):
+- **Unlined rows:** Each session item (`.synapse-session-item`) renders with a transparent background, no card borders or drop shadows, and no bottom hairline separator (`border-bottom: none;`).
+- **Typography & metadata:** Session titles use the bundled serif (`font-family: var(--synapse-font-serif); font-size: 14px;`). Relative timestamps and message counts are right-aligned, muted (`color: var(--text-faint);`), and set with `font-variant-numeric: tabular-nums`.
 - **Active session accent:** Marked exclusively by a 2px solid interactive accent left border (`border-left: 2px solid var(--interactive-accent);`) and accent title color, retaining a transparent background rather than a filled pill or card background.
 - **Section headings (`.synapse-sidebar-heading`):** Follow the uppercase letterspaced label primitive (10px, font-weight 500, letter-spacing 0.14em, faint text) with a trailing hairline rule filling the remaining width via `::after`. Renders a "Background" section when active background sessions exist alongside a "Sessions" section.
 - **Underline-on-hover affordances:** Header icon controls (new, filter, sort, refresh, bulk delete) and inline row action buttons (rename, delete) use transparent backgrounds with the underline-on-hover border transition (`border-bottom-color: var(--interactive-accent)`), eliminating filled buttons.
