@@ -2542,42 +2542,43 @@ body.synapse-no-select {
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
-	padding: 14px 20px;
-	gap: 12px;
+	padding: 10px 20px 14px;
+	gap: 6px;
 	background: var(--background-primary);
+}
+
+.synapse-search-composer {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.synapse-search-state-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	padding: 0 0 4px;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 .synapse-search-toolbar {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 0 0 8px;
-	border-bottom: 1px solid var(--synapse-rule-soft);
-	flex-shrink: 0;
-}
-
-.synapse-search-toolbar button {
-	background: transparent;
+	padding: 4px 0 0;
+	margin-top: 2px;
 	border: none;
-	border-bottom: 1px solid transparent;
-	border-radius: 0;
-	box-shadow: none;
-	color: var(--text-faint);
-	cursor: pointer;
-	padding: 3px 2px;
-	line-height: 1;
-	transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.synapse-search-toolbar button:hover {
-	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
-	background: transparent;
-}
-
-.synapse-search-toolbar button.is-active {
-	color: var(--interactive-accent);
-	border-bottom-color: var(--interactive-accent);
+	border-top: 1px solid var(--synapse-rule);
+	border-bottom: none;
+	flex-shrink: 0;
 }
 
 .synapse-search-advanced-group {
@@ -2605,7 +2606,9 @@ body.synapse-no-select {
 	font-size: 16px;
 	line-height: 1.5;
 	color: var(--text-normal);
-	padding: 4px 0;
+	padding: 6px 0;
+	min-height: 46px;
+	max-height: 200px;
 	box-shadow: none;
 }
 
@@ -2619,8 +2622,8 @@ body.synapse-no-select {
 }
 
 .synapse-search-btn {
-	width: 30px;
-	height: 30px;
+	width: 24px;
+	height: 24px;
 	border-radius: 2px;
 	display: grid;
 	place-items: center;
@@ -2643,8 +2646,8 @@ body.synapse-no-select {
 }
 
 .synapse-search-btn svg {
-	width: 15px;
-	height: 15px;
+	width: 13px;
+	height: 13px;
 	stroke: var(--text-on-accent);
 }
 
@@ -2653,6 +2656,9 @@ body.synapse-no-select {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
+	border-top: 1px solid var(--synapse-rule-soft);
+	margin-top: 6px;
+	padding-top: 6px;
 }
 
 .synapse-search-result {

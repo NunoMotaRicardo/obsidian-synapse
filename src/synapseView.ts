@@ -199,6 +199,8 @@ export class SynapseView extends ItemView {
 	searchModelSelect!: HTMLSelectElement;
 	searchToolsBtnEl!: HTMLButtonElement;
 	searchCwdBtnEl!: HTMLButtonElement;
+	searchScopeBtn?: HTMLButtonElement;
+	searchStateLineEl?: HTMLElement;
 	searchInputEl!: HTMLTextAreaElement;
 	searchBtnEl!: HTMLButtonElement;
 	searchResultsEl!: HTMLElement;

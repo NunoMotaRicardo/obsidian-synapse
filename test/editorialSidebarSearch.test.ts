@@ -132,12 +132,12 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 			);
 		});
 
-		it('styles search button as a 30px square accent block with 2px radius', () => {
+		it('styles search button as a compact 24px square accent block with 2px radius', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-search-btn\s*\{[^}]*width:\s*30px/
+				/\.synapse-search-btn\s*\{[^}]*width:\s*24px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-search-btn\s*\{[^}]*height:\s*30px/
+				/\.synapse-search-btn\s*\{[^}]*height:\s*24px/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-search-btn\s*\{[^}]*border-radius:\s*2px/
@@ -147,10 +147,14 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 			);
 		});
 
-		it('preserves search basic and advanced mode switching', () => {
+		it('preserves search basic and advanced mode switching with unified toolbar and state line', () => {
 			expect(searchPanelSource).toContain('toggleSearchMode(): void');
 			expect(searchPanelSource).toContain('updateSearchModeToggle(): void');
 			expect(searchPanelSource).toContain('updateSearchAdvancedVisibility(): void');
+			expect(searchPanelSource).toContain('synapse-search-composer');
+			expect(searchPanelSource).toContain('synapse-search-state-line');
+			expect(searchPanelSource).toContain('synapse-search-toolbar');
+			expect(searchPanelSource).toContain('synapse-toolbar-sep');
 		});
 	});
 
