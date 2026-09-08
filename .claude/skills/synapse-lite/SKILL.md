@@ -18,7 +18,7 @@ Only run this cycle when the user explicitly asks for "lite" — default to `/sy
    - implements in a single pass
    - builds, lints, and runs the **deploy-test** skill — required even in lite mode, only the
      issue/reviewer ceremony is skipped
-   - updates `.docs/specs/<module>.md` if behavior changed
+   - updates `specs/<module>.md` if behavior changed
    - commits its work
 
 2. Push and open a **draft** PR:

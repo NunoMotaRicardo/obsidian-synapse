@@ -31,7 +31,7 @@ export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
  * SDK plugin config pointing at the vault's `_synapse/` folder, in the
  * shape `agentService.ts`'s `SdkPluginConfig` expects. Defined locally
  * (rather than importing `SdkPluginConfig` from `agentService.ts`) to keep
- * this module free of internal imports — see `.docs/specs/vault-paths.md`
+ * this module free of internal imports — see `specs/vault-paths.md`
  * for the import-cycle check this avoids. Structurally assignable to
  * `SdkPluginConfig[]` (a strict subset: no `skipMcpDiscovery`).
  */

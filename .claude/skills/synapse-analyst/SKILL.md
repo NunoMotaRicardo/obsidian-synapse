@@ -30,7 +30,7 @@ wiki/
   images/       # screenshots referenced from guides
 ```
 
-Never write to `.docs/specs/`, GitHub issues, or `src/` — those belong to
+Never write to `specs/`, GitHub issues, or `src/` — those belong to
 `synapse-technical-planner` and `synapse-coder`.
 
 ## Mode A — Functional analysis (synthesis)
@@ -56,7 +56,7 @@ What's explicitly out of scope for now.
 Unresolved items.
 
 ## Hand-off Notes for the Technical Planner
-The functional intent that synapse-technical-planner must turn into .docs/specs/ updates and
+The functional intent that synapse-technical-planner must turn into specs/ updates and
 GitHub issues (no technical design here — module names, file paths, or API shapes are the
 planner's job).
 ```
@@ -75,7 +75,7 @@ link it from the decision record.
 
 ## Rules
 - Confirm material product decisions with the user before recording them as final.
-- Keep `wiki/` readable by a non-engineer where possible — plain language; link to `.docs/specs/`
+- Keep `wiki/` readable by a non-engineer where possible — plain language; link to `specs/`
   for technical depth instead of duplicating it.
 - Never invent results not supported by a source; write "unable to determine" instead.
 - Never include secrets/API keys/tokens; use placeholders.

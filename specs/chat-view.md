@@ -312,7 +312,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   (`sessionConfig.ts`), deduplicates against manual attachments, and auto-attaches the first N
   images (capped at `min(settings.maxNoteImages, model.capabilities.limits.vision.max_prompt_images)`)
   as `{type: 'image'}` `ChatAttachment` items. Images beyond the cap are silently skipped.
-  The shared `IMAGE_EXTS` constant (`types.ts`) defines the supported image extensions
+  The shared `IMAGE_EXTS` constant (`src/types.ts`, not `src/view/types.ts`) defines the supported image extensions
   (`png, jpg, jpeg, gif, webp, bmp, svg`). Non-vision models are unaffected (the SDK/model
   handles or ignores image attachments gracefully).
 - **Tool approval never persists to disk (issue #193).** `buildSessionConfig()`'s `permissionHandler`
@@ -609,7 +609,7 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
   doesn't match what the user typed. `src/budget.ts` (extracted from `batchLoopExecutor.ts` in
   this same change) still backs the batch-loop launch flow's free-text budget; it wasn't reused
   verbatim for these settings-backed thresholds since the input shape differs (persisted numeric
-  setting vs. one-off free-text prompt) — see `.docs/specs/batch-loops.md`.
+  setting vs. one-off free-text prompt) — see `batch-loops.md`.
 - **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
   distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
   `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`

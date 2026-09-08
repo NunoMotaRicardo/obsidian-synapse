@@ -43,7 +43,7 @@ either for local development.
 
 ## Documentation
 
-- If your change alters a module's behavior, update the matching `.docs/specs/<module>.md` **in
+- If your change alters a module's behavior, update the matching `specs/<module>.md` **in
   the same pull request**. Specs are the source of truth for how each module works; a PR that
   changes behavior without updating its spec will not be merged as-is.
 - If your change affects setup, providers, or customization behavior, update `README.md` too.

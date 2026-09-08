@@ -252,7 +252,7 @@ the Claude desktop app). Runtime-manager (`src/runtimeManager.ts`) resolves the 
 is found, a platform-specific installation Notice is shown.
 
 See [`.docs/decisions/2026-06-14-copilot-cli-runtime-manager.md`](../decisions/2026-06-14-copilot-cli-runtime-manager.md)
-for the history of the resolution approach, and [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md)
+for the history of the resolution approach, and [`.docs/specs/runtime-manager.md`](../../specs/runtime-manager.md)
 for the current spec.
 
 ### Local models (Ollama, Foundry Local, or any OpenAI-compatible endpoint)

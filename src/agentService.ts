@@ -360,7 +360,7 @@ export function permissionRuleToString(rule: PermissionRuleValue): string {
  * Extract allow-rule strings from a set of CLI-suggested `PermissionUpdate`s, for accumulating
  * into the in-memory grant set `sessionScopePermissions()`'s `'session'` destination can't
  * survive across a query() respawn (issue #193 round 2 — see "In-memory tool-approval grants" in
- * `.docs/specs/agent-service.md`).
+ * `specs/agent-service.md`).
  *
  * Only `addRules` updates with `behavior: 'allow'` translate into an allow-rule. Every other
  * update type this union carries — `replaceRules`/`removeRules` (there is no faithful way to
@@ -1256,7 +1256,7 @@ export class AgentService {
  * `AgentService.createSession()`'s `onEvent` callback). Keys are the exact string literals
  * `Session.convertToSessionEvent()` and `Session.send()` dispatch; each payload type is derived
  * from what the producer actually sends and what the (sole) consumer(s) actually read — see
- * "Session event map" in `.docs/specs/agent-service.md`. Adding a new dispatched event, or a new
+ * "Session event map" in `specs/agent-service.md`. Adding a new dispatched event, or a new
  * field a handler reads, means adding it here first: `dispatch`/`on` are generic over this map,
  * so an unlisted event name or a payload that doesn't match is a compile error in both
  * directions (AC-1/AC-2 of #179).
@@ -1510,7 +1510,7 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
  * read-only (`app.vault.read()` / `getFiles()` / `getMarkdownFiles()` only — no
  * `modify`/`create`/`delete`/`rename`), so this handler reproduces the Claude path's own
  * shipped behavior for the local-model path rather than inventing a laxer one. See
- * "Tool approval for inlineChat()'s read-only callers" in `.docs/specs/agent-service.md`.
+ * "Tool approval for inlineChat()'s read-only callers" in `specs/agent-service.md`.
  *
  * The read-only set is **enforced here**, not merely assumed of the caller: any tool outside
  * `READ_ONLY_TOOL_NAMES` is denied. `inlineChat()` forwards the same `canUseTool` to the raw

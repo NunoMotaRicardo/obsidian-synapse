@@ -5,7 +5,10 @@
 - `telegramApi.ts`: thin long-polling Bot API client (no webhooks). `telegramBot.ts`: bridge.
 - Allowlist of numeric user ids; messages from others are silently ignored.
 - One session per chat/topic; `/new` resets, `/help` explains.
-- Attachments (photo/document/audio/video) are downloaded and passed as SDK attachments.
+- Attachments (photo/document/audio/video) are downloaded to `_synapse/bot-attachments/` and their
+  absolute paths are inlined into the outgoing prompt text (the Agent SDK's `Options` has no
+  top-level attachments field — a real path the model can `Read` itself is the only way the content
+  reaches it, the same mechanism the chat view's `buildPrompt()` uses).
 - Uses the default agent from settings; skills and MCP servers are discovered natively via the
   `_synapse/` plugin registration (passed in session `Options.plugins`).
 - The `[Self-Improve]` detection block (its static body only — `buildSelfImproveHint()`,
@@ -24,10 +27,14 @@
   unconditionally, in `buildBotSessionConfig()`. This is a standing exception to the unified policy
   batch loops now follow (see "Tool approval policy" under
   [run-executor.md](run-executor.md)): the bot's whole purpose is unattended remote control of the
-  vault from a phone, and unlike a batch loop it has no per-message frontmatter to opt back into
-  `'allow'` with — so making the bot follow `'ask'` would silently stop it from writing the moment
-  someone flips the global setting for an unrelated reason (e.g. wanting search/editor actions to
-  prompt), with no way to recover write access for just the bot. The bot's actual safety control is
+  vault from a phone, and — like a batch loop — it has no per-run override to opt back into
+  `'allow'` if the global setting is `'ask'` (`resolveToolApprovalPolicy()` only ever reads
+  `settings.toolApproval`) — so making the bot follow `'ask'` would silently stop it from writing the
+  moment someone flips the global setting for an unrelated reason (e.g. wanting search/editor actions
+  to prompt), with no way to recover write access for just the bot. Unlike a batch loop, the bot
+  doesn't go through `runExecutor.ts`'s policy machinery at all (it calls `AgentService.inlineChat()`
+  directly with the permission options hardcoded in `buildBotSessionConfig()`), so an `'ask'` denial
+  there wouldn't even land in a report the way a batch loop's does. The bot's actual safety control is
   the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`) — see
-  [SECURITY.md](../../SECURITY.md) #1. A bot-specific approval setting is a possible follow-up, not
+  [SECURITY.md](../SECURITY.md) #1. A bot-specific approval setting is a possible follow-up, not
   something this issue does silently.

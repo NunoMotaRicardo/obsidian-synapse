@@ -389,6 +389,12 @@ ln -s _synapse .github
 
 ---
 
+## Contributing
+
+Working on the codebase (human or AI agent)? Start with [`specs/architecture.md`](specs/architecture.md)
+for a system overview and the module map, then the matching `specs/<module>.md` for the module
+you're changing. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev workflow.
+
 ## Feedback
 
 Found a bug or missing a feature? [Open an issue](https://github.com/NunoMotaRicardo/obsidian-synapse/issues) — all feedback is welcome.

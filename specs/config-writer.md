@@ -122,15 +122,17 @@ which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent gra
 
 ## Vault structure scanner
 
-`scanVaultStructure(app, synapseFolder)` scans top-level vault folders (name + child count),
-excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by
-`buildVaultContextBlock()` in `sessionConfig.ts` for the system prompt.
+`scanVaultStructure(app)` scans top-level vault folders (name only, no counts — see the
+"issue #201" note below), excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders.
+Used by `buildVaultContextBlock()` in `sessionConfig.ts` for the system prompt.
 
 ## Self-improve hint
 
-`buildSelfImproveHint(agentName)` in `sessionConfig.ts` teaches agents to recognize
-customization intent. Mentions "agent" and "skill" as artifact types.
-Skipped when the user is already using the `improve-synapse` skill.
+`buildSelfImproveHint()` in `sessionConfig.ts` teaches agents to recognize customization intent.
+Mentions "agent" and "skill" as artifact types. Session-stable and takes no arguments (issue
+#201) — the volatile "Current agent" line it used to append is now delivered per-turn by
+`buildCurrentAgentLine(agentName)` instead, so this static hint doesn't invalidate the cached
+system-prompt prefix when the selected agent changes.
 
 ## First-run seeding
 

@@ -344,7 +344,7 @@ configurations between machines.
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.
 - [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md) —
   the migration decision that introduced the agent-first routing model.
-- [`.docs/specs/config-writer.md`](../.docs/specs/config-writer.md) — technical spec for config-writer
+- [`specs/config-writer.md`](../specs/config-writer.md) — technical spec for config-writer
   (`writeAgent`, `writeSkill`, etc.).
 - [Claude Agent SDK documentation](https://docs.anthropic.com/en/docs/claude-code/sdk) —
   authoritative reference for `AgentDefinition` fields, `Options`, MCP config, and skills.

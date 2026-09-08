@@ -12,7 +12,7 @@
  * issue #154). Triggers were removed in issue #188; issue #189 then
  * collapsed the trigger-shaped generality this pipeline carried while it had
  * two callers (a `surface` union, a per-item tool-approval override, a
- * `{{files}}` template alias — see `.docs/specs/run-executor.md`'s "Current
+ * `{{files}}` template alias — see `specs/run-executor.md`'s "Current
  * status" for the full history).
  *
  * `runItem()` deliberately does not catch execution errors: `batchLoopExecutor.ts`
@@ -27,7 +27,7 @@
  * Unattended tool-approval policy (issue #151): this is also the place that maps
  * `settings.toolApproval` to what the Claude branch (`executeWithClaude()`) hands the SDK. See
  * `resolveToolApprovalPolicy()` and the "Tool approval policy" section of
- * `.docs/specs/run-executor.md`.
+ * `specs/run-executor.md`.
  */
 
 import {App, TFile, normalizePath} from 'obsidian';
@@ -107,7 +107,7 @@ export async function appendReportBlock(app: App, target: ReportTarget, block: s
  * `bypassPermissions` (the model's tool calls proceed without asking);
  * `'ask'` maps to `permissionMode: 'default'` plus a `canUseTool` that always
  * denies — there is no human in an unattended run to ask, so "ask" can only
- * mean "deny" (see `.docs/specs/run-executor.md`).
+ * mean "deny" (see `specs/run-executor.md`).
  */
 type ToolApprovalPolicy = 'allow' | 'ask';
 
@@ -176,7 +176,7 @@ function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
  *
  * No current caller passes a `model`, so `runItem()` never selects this
  * branch today (local-model routing for batch loops was out of scope for
- * #73 and remains so; see `.docs/specs/run-executor.md`).
+ * #73 and remains so; see `specs/run-executor.md`).
  */
 async function executeWithLocalModel(
 	plugin: SynapsePlugin,
@@ -338,7 +338,7 @@ async function routeAndRun(
  *
  * No current caller sets anything but the default: `batchLoopExecutor.ts`
  * always passes `undefined` (it has no equivalent config field), so it
- * always takes the "append to report" branch. See `.docs/specs/run-executor.md`.
+ * always takes the "append to report" branch. See `specs/run-executor.md`.
  */
 type WriteMode = boolean | 'frontmatter' | undefined;
 

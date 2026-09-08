@@ -15,7 +15,7 @@
  * budget for the duration of the run.
  *
  * Budget/turn-cap enforcement (this file, `budget.ts`) is batch-loop-only —
- * see the "Budget" note in `.docs/specs/run-executor.md` for why the
+ * see the "Budget" note in `specs/run-executor.md` for why the
  * now-removed trigger executor stayed exempt.
  */
 

@@ -16,8 +16,8 @@ shared across tabs, so nothing needed to become a class-level field.
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
 - **Feature Map & Agents** (replaces legacy Models tab) — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
-- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/` and `_synapse/skills/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `.docs/specs/chat-view.md` "Loop turn/cost thresholds" for enforcement details. All code uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly; see the `synapseFolder` removal note under Invariants (issue #148).
-- **Tools** — tools approval mode (`ask` or `allow`), and MCP input variable management (with secure storage for password inputs).
+- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/` and `_synapse/skills/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails" (issue #88), opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `chat-view.md` "Loop turn/cost thresholds" for enforcement details. All code uses the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) directly; see the `synapseFolder` removal note under Invariants (issue #148).
+- **Tools** — tools approval mode (`ask` or `allow`).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
 
 ## Feature Map & Agents (Issue #6)
@@ -83,7 +83,7 @@ For the `ollama` preset specifically:
   when the `ollama` preset is selected.
 
 The `github` BYOK preset was removed as part of the Claude Agent SDK migration (see
-`wiki/decisions/2026-06-28-claude-agent-sdk-migration.md`). Only local/OpenAI-compatible
+`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`). Only local/OpenAI-compatible
 presets remain; all use the `fetchProviderModels()` path described above.
 
 ### Legacy preset migration (issue #117)
@@ -116,10 +116,12 @@ per vault — after the first post-upgrade load, the persisted value is already 
 legacy branch no longer matches. The `providerPreset` settings key itself is unchanged; only its
 set of valid values narrowed.
 
-`fetchProviderModels()` is also the basis for `buildOnListModels()`'s `onListModels` callback
-(used by `AgentService` for the inline-operations model dropdown today; the sidebar BYOK
-model picker wiring is Phase 2, not yet built — `populateModelSelect()` in
-`src/view/configToolbar.ts` still echoes the free-text **Model name** for BYOK).
+`fetchProviderModels()` also drives the sidebar model picker: `main.ts#initAgentService()` fires
+it whenever `providerBaseUrl` is set, and a successful result flows through
+`plugin.setProviderModels()` → `AgentService#setCustomModels()` →
+`plugin.notifySidebarModelsChanged()` → `SynapseView#refreshProviderModels()`, which populates
+the view's model list and calls `populateModelSelect()` (`src/view/configToolbar.ts`) to build
+the toolbar's model `<select>` with the fetched BYOK models alongside the Claude ones.
 
 **Auth headers** (`fetchProviderModels()`, shared by Test and `onListModels`): mirrors the
 SDK's `ProviderConfig` precedence — `bearerToken` wins over `apiKey` when both are set — and
@@ -325,7 +327,7 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   - `supportsTools` isn't just UI gating — since issue #138 it also decides whether the chat
     panel's local-model branch (`Session.send()`, `agentService.ts`) offers `vaultTools` to a
     model at all, using the same `modelInfo?.supportsTools !== false` test `runExecutor.ts`
-    already used. See `.docs/specs/agent-service.md` "Vault tools and approval gate in the chat
+    already used. See `agent-service.md` "Vault tools and approval gate in the chat
     panel (issue #138)" for the tool-execution/approval side of this (not part of this module).
 
 ## Invariants
@@ -365,6 +367,6 @@ To enable appropriate feature UI/UX gating (such as vision support for image att
   [config-writer.md](config-writer.md) for that vault-content invariant.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
-- All BYOK provider HTTP calls (Test, `onListModels`) go through `fetchProviderModels()`
-  (`src/providerModels.ts`) — don't duplicate the `/v1/models` / `/api/tags` fetch-and-parse
-  logic inline in `settings.ts` or `main.ts`.
+- All BYOK provider HTTP calls (the Test buttons, `main.ts#initAgentService()`'s discovery
+  request) go through `fetchProviderModels()` (`src/providerModels.ts`) — don't duplicate the
+  `/v1/models` / `/api/tags` fetch-and-parse logic inline in `settings.ts` or `main.ts`.

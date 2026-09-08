@@ -8,33 +8,43 @@ which is mirrored to the GitHub Wiki tab.
 browsing of the repo, and out of the way if this repo is ever opened as an Obsidian vault
 (Obsidian hides dot-folders). It is tracked normally in git; nothing here is gitignored.
 
+The living architecture overview and per-module specs live at the repo root in
+[`specs/`](../specs/), not here — they're the entry point for an AI agent or contributor reading
+this codebase cold, so they need to be visible without digging into a dot-folder. Everything else
+that's specific to *developing* Synapse (decisions, research, audits, manual test procedures,
+design canvases) stays in `.docs/`, private to this repo's maintainers.
+
 ## Layout
 
 ```
 .docs/
   README.md      ← this file
-  architecture.md            ← start here — system overview, promoted from specs/00-architecture.md
-  specs/                     ← one file per module, living documentation
-    agent-service.md
-    chat-view.md
-    batch-loops.md
-    bots-triggers.md
-    config-writer.md
-    editor.md
-    lock-manager.md
-    mcp-bridge.md
-    runtime-manager.md
-    settings.md
   decisions/                 ← ADRs, date-prefixed, append-only history
   research/                  ← point-in-time investigations: PRDs, spikes, landscape scans
   audits/                    ← point-in-time code/quality audits
   testing/                   ← manual test procedures
   design/                    ← design canvases and mockups
+
+specs/                       ← repo root — architecture overview + one file per module
+  architecture.md            ← start here — system overview, module table
+  agent-service.md
+  chat-view.md
+  batch-loops.md
+  config-writer.md
+  editor.md
+  lock-manager.md
+  mcp-bridge.md
+  run-executor.md
+  runtime-manager.md
+  settings.md
+  vault-paths.md
+  bots.md
 ```
 
 ## What goes where — and how to keep it that way
 
-- **`architecture.md`** — the single entry point for understanding the system. Read this first.
+- **[`specs/architecture.md`](../specs/architecture.md)** — the single entry point for
+  understanding the system. Read this first.
 - **`specs/<module>.md`** — one spec per module in `src/`, kept current. `CLAUDE.md` requires the
   matching spec to be updated in the same change that alters a module's behavior. These are
   **living documents** — if a spec and the code disagree, the spec is stale and needs fixing, not
@@ -57,8 +67,12 @@ browsing of the repo, and out of the way if this repo is ever opened as an Obsid
 
 Nothing in `.docs/` is user-facing. If a document explains how to *use* the plugin (install,
 configure, write agents/skills/prompts for `_synapse/`), it belongs in `wiki/`, not here. If a
-document explains how the plugin *is built* (architecture, module internals, decisions, audits,
-research), it belongs here, not in `wiki/`.
+document describes *current* module behavior (what a module does, its contracts, its
+invariants), it belongs in root [`specs/`](../specs/), not here — specs are the one piece of
+developer-facing documentation that's public and root-level, because that's what an AI coding
+agent or new contributor reads first. Everything else about how the plugin *came to be built*
+this way — decisions, research, audits — belongs here, not in `wiki/` or `specs/`.
 
-When in doubt: would a plugin user ever need to read this to use Synapse? If yes, `wiki/`. If it's
-only useful to someone changing `src/`, `.docs/`.
+When in doubt: would a plugin user ever need to read this to use Synapse? If yes, `wiki/`. Would
+someone changing `src/` need it to know what a module is supposed to do *right now*? If yes,
+`specs/`. Otherwise, `.docs/`.

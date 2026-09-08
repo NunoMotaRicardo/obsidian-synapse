@@ -21,7 +21,7 @@ drives the fixes: this skill reviews the PR's **diff**; `synapse-pr-comments` ad
 3. **Review the diff** — `git diff main...HEAD`. Run **`/code-review`** and **`/security-review`**
    on it, the same built-ins `synapse-reviewer` uses — don't hand-maintain a second copy of that
    rubric. Cross-reference the findings against the originating issue's Acceptance Criteria and
-   `.docs/specs/*.md`.
+   `specs/*.md`.
 
 4. **Write the review** — save it to a file in the session scratchpad directory (see your system
    prompt for the path), structured: Inconsistencies & UX Gaps, Security Review, Code Quality &

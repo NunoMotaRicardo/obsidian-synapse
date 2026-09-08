@@ -11,7 +11,7 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 	const sessionSidebarSource = readFileSync(sessionSidebarPath, 'utf8');
 	const searchPanelPath = resolve(repoRoot, 'src/view/searchPanel.ts');
 	const searchPanelSource = readFileSync(searchPanelPath, 'utf8');
-	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
+	const specPath = resolve(repoRoot, 'specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
 	describe('AC-1: Session sidebar rows and metadata', () => {
@@ -250,7 +250,7 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 		});
 	});
 
-	describe('AC-9: Documentation in .docs/specs/chat-view.md', () => {
+	describe('AC-9: Documentation in specs/chat-view.md', () => {
 		it('documents Session sidebar and Search tab Editorial specifications in chat-view.md', () => {
 			expect(specContent).toContain('### Session sidebar (issue #209)');
 			expect(specContent).toContain('starter list pattern');

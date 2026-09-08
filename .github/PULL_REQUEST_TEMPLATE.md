@@ -22,5 +22,5 @@
 
 ## Documentation
 
-- [ ] Updated the matching `.docs/specs/<module>.md` if this changes module behavior
+- [ ] Updated the matching `specs/<module>.md` if this changes module behavior
 - [ ] Updated `README.md` if this affects setup, providers, or customization behavior

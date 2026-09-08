@@ -13,7 +13,7 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 	const inputAreaSource = readFileSync(inputAreaPath, 'utf8');
 	const configToolbarPath = resolve(repoRoot, 'src/view/configToolbar.ts');
 	const configToolbarSource = readFileSync(configToolbarPath, 'utf8');
-	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
+	const specPath = resolve(repoRoot, 'specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
 	describe('AC-1 & AC-2: Masthead', () => {

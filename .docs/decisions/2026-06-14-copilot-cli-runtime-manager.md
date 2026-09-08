@@ -39,7 +39,7 @@ tracked by GitHub issue **#2** (the runtime manager) and its three sub-issues **
 
 The *how* — the exact resolution-chain order, the download URL scheme, build-time version
 pinning, and the safety invariants — lives in the technical spec and is not duplicated here:
-see [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md).
+see [`.docs/specs/runtime-manager.md`](../../specs/runtime-manager.md).
 
 ## Rationale
 
@@ -106,7 +106,7 @@ the foundation is proven.
 ## Hand-off Notes for the Technical Planner
 
 - The functional intent is captured above and in issues #2 / #13 / #14 / #15; the technical
-  design already lives in [`.docs/specs/runtime-manager.md`](../specs/runtime-manager.md) (status:
+  design already lives in [`.docs/specs/runtime-manager.md`](../../specs/runtime-manager.md) (status:
   planned). Keep that spec the single home for resolution-chain order, URL scheme, version
   pinning, invariants, and non-goals — this record intentionally does not restate them.
 - The one functional guarantee worth enforcing across all three slices: **a system-installed

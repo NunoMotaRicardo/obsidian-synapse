@@ -13,7 +13,7 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 	const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
 	const inputAreaPath = resolve(repoRoot, 'src/view/inputArea.ts');
 	const inputAreaSource = readFileSync(inputAreaPath, 'utf8');
-	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
+	const specPath = resolve(repoRoot, 'specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
 	describe('AC-1: Config toolbar text controls and slash dividers', () => {

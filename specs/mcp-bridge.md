@@ -12,8 +12,12 @@ duration of a single local-model run (currently: one batch-loop item, via `runEx
    negotiates `initialize` + `tools/list` via JSON-RPC 2.0, returns a flat `LocalTool[]`.
 2. The caller merges these with the built-in `vaultTools` and passes the combined list to
    `executeLocalProviderQuery()`.
-3. **`stop()`** — kills all spawned processes. Always called in a `finally` block so servers
-   are shut down even if the ReAct loop throws.
+3. **`stop()`** — kills all spawned processes, including their child processes (on win32, servers
+   started via `npx`/`npm`/`pnpm`/`yarn` run as a `.cmd` wrapper, so the spawned process is
+   `cmd.exe` with the real server as a grandchild; `ChildProcess#kill()` alone would leave that
+   grandchild running, so `stop()` uses `taskkill /pid <pid> /t /f` first on win32, falling back to
+   a direct `kill()`). Always called in a `finally` block so servers are shut down even if the
+   ReAct loop throws.
 
 One session per run. Sessions are never reused across calls.
 

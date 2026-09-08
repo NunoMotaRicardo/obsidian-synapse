@@ -72,8 +72,10 @@ export function todayString(): string
   imports (only `type {App} from 'obsidian'`), so `settings.ts → vaultPaths.ts` cannot cycle back —
   even though `settings.ts ↔ configWriter.ts` already had a pre-existing mutual import (unrelated
   to this change, and unaffected by it). All other consumers (`batchLoopExecutor.ts`,
-  `bots/telegramBot.ts`, `mcpBridge.ts`, `synapseView.ts`, `triggerExecutor.ts`, `triggers.ts`) were
-  switched to import `SYNAPSE_FOLDER` directly from `./vaultPaths`.
+  `bots/telegramBot.ts`, `mcpBridge.ts`, `synapseView.ts`) were switched to import
+  `SYNAPSE_FOLDER` directly from `./vaultPaths`. (The former `triggerExecutor.ts`/`triggers.ts`
+  consumers no longer exist — issue #188 folded the trigger executor into `runExecutor.ts`, which
+  does not itself need `SYNAPSE_FOLDER`.)
 - **`LocalPluginConfig` is a locally-defined structural type, not an import of `SdkPluginConfig`
   from `agentService.ts`.** Importing it would pull `vaultPaths.ts` into `agentService.ts`'s
   dependency graph (`agentService.ts → vaultTools.ts → triggers.ts → settings.ts →

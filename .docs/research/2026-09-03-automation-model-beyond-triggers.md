@@ -384,8 +384,8 @@ becomes unmaintainable in public.
   which presets survive.
 - [`2026-09-03-open-source-readiness-code-quality.md`](2026-09-03-open-source-readiness-code-quality.md)
   — §4 is the prerequisite refactor for all of this.
-- [`../specs/bots-triggers.md`](../specs/bots-triggers.md) — current behaviour (note: partly stale).
-- [`../specs/batch-loops.md`](../specs/batch-loops.md) — the fourth behaviour.
+- [`../specs/bots-triggers.md`](../../specs/bots-triggers.md) — current behaviour (note: partly stale).
+- [`../specs/batch-loops.md`](../../specs/batch-loops.md) — the fourth behaviour.
 - [`../decisions/2026-06-29-native-sdk-customization-model.md`](../decisions/2026-06-29-native-sdk-customization-model.md)
   — deferred triggers with the note "SDK hooks ≠ cron/glob background tasks." Still correct, and
   §2.1 above is the detailed evidence for why.

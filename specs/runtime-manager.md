@@ -40,13 +40,13 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
 
 1. **Resolve** the Claude CLI binary, in priority order:
    1. Explicit path from settings (`claudeLocation`, when non-empty). Handled in `AgentService.resolveCliPath()`.
-   2. Global npm prefix: native package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`) under `%APPDATA%\npm\node_modules` (Windows) or `__dirname/node_modules`. Note: `.cmd` wrapper files (created by npm for global installs) are **not** used as binary candidates — they cannot be passed to `execFile()` or to `pathToClaudeCodeExecutable`.
+   2. Global npm prefix: native package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`, also checked nested under `@anthropic-ai/claude-agent-sdk`'s and `@anthropic-ai/claude-code`'s own `node_modules`, plus `@anthropic-ai/claude-code/bin/claude(.exe)`) under `%APPDATA%\npm\node_modules` (Windows), or on other platforms `~/.nvm/versions/node/current/lib/node_modules`, `/usr/local/lib/node_modules`, `/opt/homebrew/lib/node_modules` — and `__dirname/node_modules` on every platform. Note: `.cmd` wrapper files (created by npm for global installs) are **not** used as binary candidates — they cannot be passed to `execFile()` or to `pathToClaudeCodeExecutable`.
    3. OS links: WinGet links (`%LOCALAPPDATA%\Microsoft\WinGet\Links\claude.exe`), `~/.claude/bin/claude`, `/usr/local/bin/claude`, `/usr/bin/claude`, `~/.local/bin/claude`.
    4. SDK package binary fallback — both nested and flat paths under `__dirname/node_modules` are existence-checked. Returns the canonical expected path if neither exists (so `ensureConnected()` can surface a clear error).
 
 2. **Version check** (#4):
    - After connect, `AgentService` calls `getCliVersion(resolved.path)` fire-and-forget and fires its `onVersionInfo` constructor callback with `{version, path}`.
-   - `main.ts` wires the callback to log `Synapse: Claude CLI v%s at %s` to console.
+   - `main.ts` wires the callback to `debugTrace('Synapse: Claude CLI v%s at %s')` — only printed to console when debug mode is on.
    - Settings display: the resolved binary path line in Settings → Claude shows version info after connect, e.g. `Resolved CLI: C:\...\claude.exe (from global npm install) — v2.1.258 (SDK v0.3.258)`.
 
 3. **CLI/SDK version-skew detection** (#102):

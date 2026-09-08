@@ -109,7 +109,7 @@ export interface ProviderPresetMigrationResult {
  * Resolves a possibly-legacy `providerPreset` value (as read from `data.json`) to one of
  * the three current presets. Silent for `other-openai`/`foundry-local`; callers should show
  * a one-time notice when `wasAnthropic` is true, since that migration changes which key
- * drives chat (see `.docs/specs/settings.md`).
+ * drives chat (see `specs/settings.md`).
  *
  * An absent/empty/whitespace-only value is **not** a legacy alias — it means no
  * `providerPreset` was ever persisted (fresh install, or a `data.json` that predates this
@@ -718,7 +718,7 @@ export async function executeLocalProviderQuery(
 		/**
 		 * Prior conversation turns (#135), oldest first. Optional and omitted by one-shot
 		 * callers (batch loops, inline edits, the in-process delegation tools) that have no
-		 * ongoing conversation to carry — see `.docs/specs/agent-service.md` "BYOK local
+		 * ongoing conversation to carry — see `specs/agent-service.md` "BYOK local
 		 * provider conversation history" for which call sites pass this and why. Budgeted to a
 		 * character budget (see `computeHistoryCharBudget`) and mapped to wire messages the
 		 * same way the current turn is.

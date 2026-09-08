@@ -13,9 +13,10 @@ Model for this extraction: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) 
 modules that extract exactly the logic that was duplicated, not a new abstraction layer on top of
 it.
 
-Only `runItem()`, `appendReportBlock()`, and the `ReportTarget` type are exported — everything else
-in this module (template substitution, tool-approval policy resolution, write-mode application, and
-their supporting types) has no reader outside the file and is module-private (issue #189).
+Only `runItem()`, `appendReportBlock()`, and the `ReportTarget`/`RunItemOptions` types are exported —
+everything else in this module (template substitution, tool-approval policy resolution, write-mode
+application, and their supporting types) has no reader outside the file and is module-private (issue
+#189).
 
 ## The pipeline
 
@@ -113,7 +114,7 @@ affects the Claude branch.
 
 **Telegram bot is a deliberate, separate exception**, not driven by this policy at all — see
 "Tool approval policy — deliberately not `settings.toolApproval`" under
-[bots.md](bots.md) and [SECURITY.md](../../SECURITY.md) #1.
+[bots.md](bots.md) and [SECURITY.md](../SECURITY.md) #1.
 
 ## Current status
 

@@ -50,16 +50,16 @@ Key query option fields used:
 
 `AgentService.resolveCliPath()` returns a `ResolvedCliPath`:
 
-1. If `claudeLocation` is set in settings, validate and use it (`source: 'settings'`).
+1. If `claudeLocation` is set in settings, use it as-is (`source: 'settings'`).
 2. Otherwise, call `resolveDefaultCliPath()` from `runtimeManager.ts` which walks the chain:
    global npm → OS links (WinGet, `~/.claude/bin/`) → SDK fallback.
 
-Before each query, `fs.access(resolved.path)` is called to surface a clear "binary not found"
-error before attempting to spawn.
+Either way, `fs.access(resolved.path)` is called (in `ensureConnected()`, ahead of every query) to
+surface a clear "binary not found" error before attempting to spawn.
 
 On first resolution, `getCliVersion(resolved.path)` is called fire-and-forget (try/catch — must
-not block). On success, the `onVersionInfo` constructor callback is fired with
-`{version, protocolVersion, path}`. `main.ts` wires this to a console log; the settings UI
+not block). On success, the `onVersionInfo` constructor callback (`VersionInfoCallback`) is fired
+with `{version, path}`. `main.ts` wires this to a console log; the settings UI
 reads `getVersionInfo()` to display the resolved binary path, source, and version.
 
 ## Auth model
@@ -84,14 +84,16 @@ for chat sessions — including blanket, drive-wide grants such as `Read(//d//**
 `'session'` keeps the approval in effect only for the rest of the current conversation (so the
 user isn't re-prompted for the same path) without ever persisting a rule to disk.
 
-`ToolApprovalModal`'s **Allow** button (`src/modals/toolApprovalModal.ts`) is the sole caller —
-it reaches both `sessionScopePermissions()` and the `PermissionUpdate` type through this module's
+`ToolApprovalModal`'s **Allow** and **Always allow** buttons (`src/modals/toolApprovalModal.ts`)
+are the sole callers — both reach `sessionScopePermissions()` and the `PermissionUpdate` type through this module's
 re-exports rather than importing the SDK directly. See `chat-view.md`'s "Tool approval never
-persists to disk" for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses this
-(and why its auto-allow branch sends no `updatedPermissions` at all instead). Where a deliberate
-*persistent* grant (an "Always allow" that writes into `_synapse/settings.json`, the vault
-settings layer described below) should live is out of scope here — tracked separately (#197).
-#194 (below) reads and merges that file; it never writes to it.
+persists to disk" section for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses
+this (and why its auto-allow branch sends no `updatedPermissions` at all instead). A deliberate
+*persistent* grant is a separate mechanism, added later (issue #197): the modal's **Always allow**
+button calls `persistToolApprovalRules()` (`src/configWriter.ts`), which writes the same rule
+string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive directly into
+`_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
+#194 (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
 ### In-memory tool-approval grants across the per-`send()` respawn (issue #193 round 2)
 
@@ -239,12 +241,18 @@ SDK's own default of `['user', 'project', 'local']`:
 
 ## Named Agent Model Binding & Routing
 
-Named agents parsed from `_synapse/agents/*.md` carry an optional `model` binding (Claude
-model alias or local backend model ID).
+Named agents parsed from `_synapse/agents/*.md` (`configWriter.ts`'s `scanAgents()`, into
+`AgentConfig[]`) carry an optional `model` binding (Claude model alias or local backend model ID).
 
-`AgentService` includes `routeQueryOptions(baseOptions, agentDef)` which intercepts queries.
-When a named agent carries a `model` binding, it overrides the effective model in query options.
-Tool delegation to subagents via the Agent tool similarly resolves each subagent's bound model.
+This resolution does not happen inside `AgentService`. `resolveModelForAgent(agent, models,
+fallback)` (`view/sessionConfig.ts`) matches the agent's `model` string against the available
+`ModelInfo[]` (exact id/name/`resolvedModel` match, then substring, then a `haiku`/`sonnet`/
+`opus`/`flash`/`pro` keyword fallback — the same tiers `AgentService#resolveValidModel` uses, see
+"Model list mapping" above) and falls back to the caller-supplied default when nothing matches.
+Callers resolve the model this way *before* building `Options` — `configToolbar.ts`,
+`synapseView.ts`, `searchPanel.ts`, and `telegramBot.ts` all call it directly — so by the time
+`AgentService.routeQueryOptions(options, app?)` (private; see "Vault settings layer" above) runs,
+`options.model` is already the resolved id. `routeQueryOptions()` takes no `agentDef` parameter.
 
 ## Dynamic Delegation via MCP Tool
 
@@ -342,8 +350,9 @@ plumbing to add yet.
 
 ### Adaptive indexing/search timeouts
 
-`getAdaptiveTimeout(app, scopePath, configuredTimeoutSec)` calculates the client-side timeout
-dynamically based on the number of files in scope:
+`getAdaptiveTimeout(app, scopePath, configuredTimeoutSec)` (`view/sessionConfig.ts`, not
+`agentService.ts`) calculates the client-side timeout dynamically based on the number of files in
+scope:
 
 - Formula: `Math.max(120_000, Math.min(600_000, 30_000 + fileCount * 200))` (floor 120s, cap 10m)
 - The result is compared against `providerRequestTimeout` (settings, seconds → ms) and the
@@ -448,7 +457,8 @@ valid model identifiers.
 
 `mapSdkModel()` only carries over fields the SDK's `ModelInfo` actually publishes — `resolvedModel`,
 `description`, `supportsAdaptiveThinking`, `supportsFastMode`, `supportsAutoMode`, plus
-`reasoningEffort`/`supportedReasoningEfforts` derived from `supportsEffort`/`supportedEffortLevels`.
+`capabilities.supports.reasoningEffort`/`capabilities.supportedReasoningEfforts` derived from
+`supportsEffort`/`supportedEffortLevels`.
 It used to also stamp every model with a hardcoded `limits: {max_context_window_tokens: 200000}`
 (wrong for 1M-context variants, and unread by any consumer) and a blanket `vision: true`/
 `tools: true` (invented — the SDK's `ModelInfo` has no vision or tool-support field at all). Both
@@ -791,8 +801,14 @@ outgoing wire prompt does).
 
 ### Vault tools and approval gate in the chat panel (issue #138)
 
+> **Triggers were removed entirely in issue #188** (`src/triggers.ts`, `src/triggerExecutor.ts`
+> both deleted; see `run-executor.md`'s "Current status"). The trigger references below describe
+> the design rationale as it stood when #138/#150/#167 were written, when triggers were still the
+> only unattended caller of `vaultTools`/`executeLocalProviderQuery()`'s ReAct loop; that
+> unattended-caller role is now filled by `batchLoopExecutor.ts` alone, via `runExecutor.ts`.
+
 Before #138, `vaultTools` (`vaultTools.ts` — `read_note`, `list_notes`, `search_notes`) was wired
-into exactly one call site, `triggerExecutor.ts`. `Session.send()`'s local-model branch called
+into exactly one call site, the now-removed `triggerExecutor.ts`. `Session.send()`'s local-model branch called
 `executeLocalProviderQuery()` with `prompt`/`systemPrompt`/`model`/`images`/`history` but no
 `tools`, so a local/BYOK model's ReAct loop degenerated to a single completion in chat — it could
 not read, list or search notes, even though the same model could do exactly that when driving a
@@ -910,8 +926,8 @@ untouched.
 **The blocking question this issue had to resolve: what approves a local tool call for a caller
 whose UI is attended but whose turn budget (`maxTurns: 40`) makes per-call approval unusable.**
 #150's `inlineChat()` gate is deliberately fail-closed — `supportsTools && app && canUseTool` all
-required, with no "unattended by design" fallback the way `Session.send()`/`triggerExecutor.ts`
-have — so wiring search naively (reusing the chat panel's `ToolApprovalModal`-backed
+required, with no "unattended by design" fallback the way `Session.send()` (and, at the time,
+`triggerExecutor.ts`) have — so wiring search naively (reusing the chat panel's `ToolApprovalModal`-backed
 `canUseTool`) would mean up to 40 approval modals for a single search. Approving each call
 individually was rejected as unusable UX; running fully ungated (no `canUseTool` at all) would
 have meant reintroducing exactly the silent-fail-open pattern #150's method comment explicitly
@@ -922,8 +938,9 @@ rules out.
 either.** This is deliberately narrower than both:
 
 - It is **not** #151's policy (`src/runExecutor.ts`, "Tool approval policy" — governs
-  `triggerExecutor.ts`/`batchLoopExecutor.ts`'s unattended runs, where `'ask'` means "no human to
-  ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
+  `batchLoopExecutor.ts`'s unattended runs via `runExecutor.ts`, where `'ask'` means "no human to
+  ask, so deny" because those runs may request write-capable tools; at the time #151 was written
+  this also governed the since-removed trigger executor — see the note above). `autoApproveReadOnlyTools`
   is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
   the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only vs.
   write-capable) and are kept as two separate mechanisms rather than unified, so neither

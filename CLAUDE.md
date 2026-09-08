@@ -15,7 +15,9 @@ triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed
 
 ## Architecture
 
-Read `.docs/architecture.md` first; one spec per module in `.docs/specs/`. Rules:
+Read [`specs/architecture.md`](specs/architecture.md) first; one spec per module in
+[`specs/`](specs/) — these are checked into the repo root (not `.docs/`) so external AI agents
+and contributors can find them without digging. Rules:
 
 - **All SDK access goes through the single service in `src/agentService.ts`** (`AgentService`). Other modules import
   SDK types only via its re-exports.
@@ -46,8 +48,8 @@ remains; the rest are **skills** run in the main thread (warm context, no cold-s
 - **synapse-coder** (`.claude/agents/synapse-coder.md`) — the one spawned agent. Implements one issue
   (full mode) or one description (lite mode) in small, verified increments (build + lint +
   deploy-test), on a `claude/<slug>` branch. Isolated because implementation is long and noisy.
-- **synapse-technical-planner** (skill) — audits `.docs/specs/`/`src/` against a request, creates/scopes a
-  GitHub issue, splits oversized work. Owns `.docs/specs/<module>.md`. Heavy audits → spawn a generic
+- **synapse-technical-planner** (skill) — audits `specs/`/`src/` against a request, creates/scopes a
+  GitHub issue, splits oversized work. Owns `specs/<module>.md`. Heavy audits → spawn a generic
   `Explore` agent for the read-only sweep.
 - **synapse-reviewer** (skill) — diff-only quality + security gate (`/code-review` +
   `/security-review`), verdict + PR description draft.

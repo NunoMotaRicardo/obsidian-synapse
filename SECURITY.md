@@ -68,7 +68,7 @@ you're the one at the keyboard. Understand what you're turning off before you tu
 The same setting also drives triggers and batch loops (`src/runExecutor.ts`, issue #151): `allow`
 lets them write without asking, same as above; `ask` (the default) denies their tool calls instead
 of prompting, since a standing trigger or an unattended batch run has no one at the keyboard to
-prompt — see [.docs/specs/run-executor.md](.docs/specs/run-executor.md). A single trigger can be
+prompt — see [specs/run-executor.md](specs/run-executor.md). A single trigger can be
 opted into `allow` independently via a `toolApproval: allow` field in its own frontmatter, without
 loosening the global setting for everything else.
 
