@@ -494,6 +494,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			if (this.activeSelection) {
 				this.activeSelection = null;
 				this.renderActiveNoteBar();
+				this.updateStateLine();
 			}
 			this.cursorPosition = null;
 			return;

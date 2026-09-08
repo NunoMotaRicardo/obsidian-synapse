@@ -1380,10 +1380,6 @@
 	margin-bottom: 2px;
 }
 
-.synapse-input-chips:empty {
-	display: none;
-}
-
 .synapse-attachment-tag {
 	display: inline-flex;
 	align-items: center;
@@ -1577,6 +1573,10 @@
 	box-shadow: none;
 }
 
+.synapse-input:focus {
+	box-shadow: 0 1px 0 0 var(--interactive-accent);
+}
+
 .synapse-input::placeholder {
 	color: var(--text-faint);
 	font-style: italic;
@@ -1588,6 +1588,7 @@
 .synapse-input-actions {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: 14px;
 	padding-top: 6px;
 	border-top: 1px solid var(--synapse-rule);

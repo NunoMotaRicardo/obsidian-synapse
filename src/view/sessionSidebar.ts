@@ -910,6 +910,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.renderWelcome();
 			this.currentSessionId = null;
 			this.renderSessionList();
+			this.updateMastheadKicker();
 		}
 	};
 
