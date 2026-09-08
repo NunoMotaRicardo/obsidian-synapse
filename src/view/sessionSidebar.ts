@@ -4,7 +4,7 @@ import type {SessionMetadata, SessionMessage} from '../agentService';
 import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
-import {formatTimeAgo, stripSessionTypePrefix} from './utils';
+import {formatTimeAgo, stripSessionTypePrefix, stripInjectedPromptContext} from './utils';
 import type {BackgroundSession} from './types';
 
 declare module '../synapseView' {
@@ -920,8 +920,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				const timestamp = rawTimestamp ? new Date(rawTimestamp).getTime() : fallbackTimestamp;
 
 				if (sm.type === 'user') {
-					const text = extractMessageText(sm.message);
+					let text = extractMessageText(sm.message);
 					if (!text || isSyntheticWrapperText(text)) continue;
+					text = stripInjectedPromptContext(text);
+					if (!text) continue;
 					const msg: ChatMessage = {
 						id: sm.uuid,
 						role: 'user',

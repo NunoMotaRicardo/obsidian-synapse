@@ -88,6 +88,8 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 		it('synapseView.ts provides updateMastheadKicker and updates kicker on tab and session changes', () => {
 			expect(synapseViewSource).toContain('updateMastheadKicker(text?: string): void');
 			expect(synapseViewSource).toContain('this.updateMastheadKicker();');
+			expect(synapseViewSource).toContain("this.kickerEl.setAttribute('title', fullTitle);");
+			expect(synapseViewSource).toContain("title.replace(/^[^:]+:\\s*/, '').trim()");
 		});
 	});
 
@@ -217,17 +219,18 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 				/\.synapse-attachment-tag\s*\{[^}]*border:\s*1px solid var\(--synapse-rule-soft\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-attachment-tag\s*\{[^}]*border-radius:\s*2px/
+				/\.synapse-attachment-tag\s*\{[^}]*border-radius:\s*3px/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-attachment-tag\s*\{[^}]*font-size:\s*11px/
 			);
 		});
 
-		it('active note and selection chips feature a remove button', () => {
+		it('selection chips feature a remove button and active note is not repeated in chips', () => {
 			expect(inputAreaSource).toContain('synapse-active-note-tag');
 			expect(inputAreaSource).toContain('synapse-attachment-remove');
-			expect(inputAreaSource).toContain('this.activeNotePath = null;');
+			expect(inputAreaSource).toContain('this.activeSelection = null;');
+			expect(inputAreaSource).toContain('The active note is already displayed in the top state line');
 		});
 	});
 

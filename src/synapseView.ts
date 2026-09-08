@@ -432,10 +432,12 @@ export class SynapseView extends ItemView {
 		if (!this.kickerEl) return;
 		if (text !== undefined) {
 			this.kickerEl.setText(text);
+			this.kickerEl.setAttribute('title', text);
 			return;
 		}
 		if (this.activeTab === 'search') {
 			this.kickerEl.setText('Search');
+			this.kickerEl.setAttribute('title', 'Search');
 			return;
 		}
 		// In chat tab: show active session title if one exists, otherwise 'Chat'
@@ -445,9 +447,14 @@ export class SynapseView extends ItemView {
 				|| this.sessionList.find(s => s.sessionId === this.currentSessionId)?.summary;
 			if (raw) {
 				title = stripSessionTypePrefix(raw).trim();
+				// Strip leading agent prefix if present (e.g. "General: ", "improve-synapse: ")
+				title = title.replace(/^[^:]+:\s*/, '').trim();
 			}
 		}
-		this.kickerEl.setText(title || 'Chat');
+		const fullTitle = title || 'Chat';
+		const displayTitle = fullTitle.length > 38 ? fullTitle.slice(0, 37).trim() + '…' : fullTitle;
+		this.kickerEl.setText(displayTitle);
+		this.kickerEl.setAttribute('title', fullTitle);
 	}
 
 	/**

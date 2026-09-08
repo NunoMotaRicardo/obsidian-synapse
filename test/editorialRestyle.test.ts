@@ -2,6 +2,7 @@ import {describe, it, expect} from 'vitest';
 import {readFileSync, existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {formatToolArgsSummary} from '../src/view/chatRenderer';
+import {stripInjectedPromptContext} from '../src/view/utils';
 
 const repoRoot = resolve(__dirname, '..');
 
@@ -64,15 +65,15 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 	});
 
 	describe('AC-1 & AC-3: Transcript voice split and user washed block', () => {
-		it('assistant message body renders in the bundled serif at ~15.5px', () => {
+		it('assistant message body renders in the bundled serif at 14px', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-msg-assistant\s+\.synapse-msg-body\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-msg-assistant\s+\.synapse-msg-body\s*\{[^}]*font-size:\s*15\.5px/
+				/\.synapse-msg-assistant\s+\.synapse-msg-body\s*\{[^}]*font-size:\s*14px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-msg-assistant\s+\.synapse-msg-body\s*\{[^}]*line-height:\s*1\.62/
+				/\.synapse-msg-assistant\s+\.synapse-msg-body\s*\{[^}]*line-height:\s*1\.5/
 			);
 		});
 
@@ -233,6 +234,67 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			expect(formatToolArgsSummary(42)).toBe('');
 			expect(formatToolArgsSummary({})).toBe('');
 			expect(formatToolArgsSummary({path: ''})).toBe('');
+		});
+	});
+
+	describe('Transcript cleanliness: stripInjectedPromptContext', () => {
+		it('leaves clean user prompts untouched', () => {
+			const prompt = 'Go through this week\'s meeting notes and pull out unresolved items.';
+			expect(stripInjectedPromptContext(prompt)).toBe(prompt);
+		});
+
+		it('strips multiline file and image attachments and cursor positions', () => {
+			const raw = `Read D:/Temp/notes.txt and check contents.
+
+---
+Attached file: general.agent.md
+Path: D:\\vault\\agents\\general.agent.md
+
+---
+Current cursor position: agents/general.agent.md, line 5, column 0`;
+			expect(stripInjectedPromptContext(raw)).toBe('Read D:/Temp/notes.txt and check contents.');
+		});
+
+		it('strips inline attachments and cursor positions on single line', () => {
+			const raw = `Read D:/Temp/notes.txt again. --- Attached file: general.agent.md Path: D:\\vault\\general.agent.md --- Current cursor position: general.agent.md, line 5, column 0`;
+			expect(stripInjectedPromptContext(raw)).toBe('Read D:/Temp/notes.txt again.');
+		});
+
+		it('strips workspace path information, vault structure, and self-improve blocks', () => {
+			const raw = `Find notes on project X.
+
+[Workspace Path Information]
+Active note: D:/vault/Projects/X.md
+Working directory: Projects
+
+[Vault Structure]
+- Projects
+- Daily`;
+			expect(stripInjectedPromptContext(raw)).toBe('Find notes on project X.');
+		});
+
+		it('strips scope and selection blocks', () => {
+			const raw = `Analyze this code.
+
+---
+Scope folders:
+- src/view
+
+---
+Selected text from src/view/chatRenderer.ts (lines 10-20):
+function render() {}`;
+			expect(stripInjectedPromptContext(raw)).toBe('Analyze this code.');
+		});
+	});
+
+	describe('Tool ledger visibility & debug gating', () => {
+		it('.synapse-tool-calls is NOT hidden by .synapse-hide-debug so the margin rail is always visible', () => {
+			expect(stylesContent).not.toMatch(
+				/\.synapse-hide-debug\s+\.synapse-tool-calls/
+			);
+			expect(stylesContent).toMatch(
+				/\.synapse-hide-debug\s+\.synapse-msg-metadata\s*\{[^}]*display:\s*none/
+			);
 		});
 	});
 });

@@ -362,17 +362,22 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.scopeBar.empty();
 		if (this.scopePaths.length === 0) {
 			this.scopeBar.addClass('is-hidden');
+			this.scopeBar.removeClass('synapse-attachment-tag');
+			this.scopeBar.removeClass('synapse-scope-tag');
 			return;
 		}
 		this.scopeBar.removeClass('is-hidden');
+		this.scopeBar.addClass('synapse-attachment-tag');
+		this.scopeBar.addClass('synapse-scope-tag');
 
 		const label = this.scopeBar.createSpan({cls: 'synapse-scope-label'});
-		setIcon(label, 'folder-tree');
+		const ic = label.createSpan({cls: 'synapse-attachment-icon'});
+		setIcon(ic, 'folder-tree');
 		const isEntireVault = this.scopePaths.length === 1 && this.scopePaths[0] === '/';
 		const scopeText = isEntireVault
-			? ' Entire vault scope'
-			: ` ${this.scopePaths.length} item(s) in scope`;
-		label.appendText(scopeText);
+			? 'Entire vault scope'
+			: `${this.scopePaths.length} item(s) in scope`;
+		label.createSpan({text: scopeText, cls: 'synapse-scope-name'});
 
 		const tooltipItems = this.scopePaths.map(p => p === '/' ? this.app.vault.getName() : p).join('\n');
 		label.setAttribute('title', tooltipItems);
@@ -385,7 +390,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			menu.showAtMouseEvent(e);
 		});
 
-		const removeBtn = this.scopeBar.createSpan({cls: 'synapse-scope-remove'});
+		const removeBtn = this.scopeBar.createSpan({cls: 'synapse-attachment-remove synapse-scope-remove'});
 		setIcon(removeBtn, 'x');
 		removeBtn.addEventListener('click', () => {
 			this.scopePaths = [];
@@ -557,31 +562,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			return;
 		}
 
-		if (!this.activeNotePath) {
-			this.activeNoteBar.addClass('is-hidden');
-			return;
-		}
-		// Don't show the active note file chip when a selection attachment for the
-		// same file already exists — the selection supersedes the whole-file context.
-		if (this.attachments.some(a => a.type === 'selection' && a.path === this.activeNotePath)) {
-			this.activeNoteBar.addClass('is-hidden');
-			return;
-		}
-		this.activeNoteBar.removeClass('is-hidden');
-		const tag = this.activeNoteBar.createDiv({cls: 'synapse-attachment-tag synapse-active-note-tag'});
-		const ic = tag.createSpan({cls: 'synapse-attachment-icon'});
-		setIcon(ic, 'file-text');
-		const name = this.activeNotePath.split('/').pop() || this.activeNotePath;
-		tag.createSpan({text: name, cls: 'synapse-attachment-name'});
-		const removeBtn = tag.createSpan({cls: 'synapse-attachment-remove'});
-		setIcon(removeBtn, 'x');
-		removeBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.activeNotePath = null;
-			this.renderActiveNoteBar();
-			this.updateStateLine();
-		});
-		tag.setAttribute('title', `Active note: ${this.activeNotePath}`);
+		// The active note is already displayed in the top state line (this.stateNoteEl),
+		// so it does not need to appear repeated in the second row.
+		this.activeNoteBar.addClass('is-hidden');
 	};
 
 	proto.openScopeModal = function (): void {
