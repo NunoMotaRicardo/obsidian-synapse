@@ -579,6 +579,7 @@ export class SynapseView extends ItemView {
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
+		this.updateToolsBadge();
 		this.updateStateLine?.();
 
 		// Update search panel dropdowns

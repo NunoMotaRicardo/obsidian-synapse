@@ -93,6 +93,17 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			expect(configToolbarSource).toContain('synapse-debug-toggle');
 			expect(configToolbarSource).toContain('synapse-toolbar-sep');
 		});
+
+		it('reasoning button displays only the effort level when selected, and falls back to Reasoning only when no level is selected', () => {
+			expect(configToolbarSource).toMatch(
+				/const\s+setLabel\s*=\s*\([^)]*\)\s*:\s*void\s*=>\s*\{[^}]*this\.reasoningBtnEl\.setText\(\s*effort\s*\|\|\s*'Reasoning'\s*\);/
+			);
+		});
+
+		it('tools button displays only the approval level selected', () => {
+			expect(configToolbarSource).toContain("const label = approval === 'allow' ? 'Allow' : 'Ask';");
+			expect(configToolbarSource).toMatch(/this\.toolsBtnEl\.setText\(label\)/);
+		});
 	});
 
 	describe('AC-2: State line and toolbar relationship resolution', () => {

@@ -74,12 +74,14 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// and reachable like the Tools/Dir buttons it sits alongside (#215).
 		this.reasoningBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-reasoning-btn', text: 'Reasoning', attr: {type: 'button'}});
 		this.reasoningBtnEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
+		this.updateReasoningBadge();
 
 		addSep();
 
-		// Tools button
-		this.toolsBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-tools-btn', text: 'Tools', attr: {title: 'Tools', type: 'button'}});
+		// Tools button — displays selected approval mode ('Ask' | 'Allow')
+		this.toolsBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-tools-btn', attr: {type: 'button'}});
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
+		this.updateToolsBadge();
 
 		addSep();
 
@@ -211,7 +213,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// Text stays sentence case; `.synapse-toolbar-btn`'s CSS `text-transform: uppercase`
 		// handles the visual presentation (#215) — see the same reasoning on `updateCwdButton()`.
 		const setLabel = (effort?: string): void => {
-			this.reasoningBtnEl.setText(effort ? `Reasoning · ${effort}` : 'Reasoning');
+			this.reasoningBtnEl.setText(effort || 'Reasoning');
 		};
 
 		if (this.selectedModel === '') {
@@ -265,6 +267,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 					.onClick(async () => {
 						this.plugin.settings.toolApproval = 'allow';
 						await this.plugin.saveSettings();
+						this.updateToolsBadge();
 					});
 			});
 			sub.addItem(si => {
@@ -273,6 +276,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 					.onClick(async () => {
 						this.plugin.settings.toolApproval = 'ask';
 						await this.plugin.saveSettings();
+						this.updateToolsBadge();
 					});
 			});
 		});
@@ -336,12 +340,12 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateToolsBadge = function(): void {
-		// MCP is now SDK-native; badge always shows inactive. The label is a constant today —
-		// only rewrite it when it differs, so this stays safe if it ever becomes dynamic (#215).
+		const approval = this.plugin.settings.toolApproval;
+		const label = approval === 'allow' ? 'Allow' : 'Ask';
 		this.toolsBtnEl.toggleClass('is-active', false);
-		this.toolsBtnEl.setAttribute('title', 'Tools');
-		if (this.toolsBtnEl.textContent !== 'Tools') {
-			this.toolsBtnEl.setText('Tools');
+		this.toolsBtnEl.setAttribute('title', `Tools approval: ${approval === 'allow' ? 'Allow (auto-approve)' : 'Ask (require approval)'}`);
+		if (this.toolsBtnEl.textContent !== label) {
+			this.toolsBtnEl.setText(label);
 		}
 	};
 
