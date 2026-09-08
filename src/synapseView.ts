@@ -229,12 +229,15 @@ export class SynapseView extends ItemView {
 	sendBtn!: HTMLButtonElement;
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;
-	modelIconEl!: HTMLSpanElement;
+	reasoningBtnEl!: HTMLButtonElement;
 	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
 	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
 	contextIndicatorEl!: HTMLElement;
 	contextSepEl?: HTMLElement;
+	/** Gauge track/fill/value nodes, built once and reused in place so the CSS width transition can animate (#215). */
+	gaugeFillEl?: HTMLElement;
+	gaugeValueEl?: HTMLElement;
 	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;

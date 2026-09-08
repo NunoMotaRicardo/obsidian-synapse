@@ -15,22 +15,26 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 	const specContent = readFileSync(specPath, 'utf8');
 
 	describe('AC-1: Config toolbar text controls and slash dividers', () => {
-		it('styles .synapse-toolbar with uppercase letterspaced typography and no card border', () => {
+		it('styles .synapse-config-toolbar with uppercase letterspaced typography and no card border', () => {
+			// Scoped to `.synapse-config-toolbar` (not the bare `.synapse-toolbar`) so the
+			// search tab's toolbar — which reuses `.synapse-toolbar` for its own pre-existing
+			// appearance — doesn't inherit this restyle (#215).
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-config-toolbar\s*\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-config-toolbar\s*\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar\s*\{[^}]*font-size:\s*10px/
+				/\.synapse-config-toolbar\s*\{[^}]*font-size:\s*10px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar\s*\{[^}]*border:\s*none/
+				/\.synapse-config-toolbar\s*\{[^}]*border:\s*none/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar\s*\{[^}]*background:\s*transparent/
+				/\.synapse-config-toolbar\s*\{[^}]*background:\s*transparent/
 			);
+			expect(configToolbarSource).toContain('synapse-config-toolbar');
 		});
 
 		it('styles .synapse-toolbar-sep as thin slash dividers', () => {
@@ -42,21 +46,29 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			);
 		});
 
-		it('styles .synapse-select without rectangular dropdown borders or backgrounds', () => {
+		it('styles .synapse-config-toolbar .synapse-select without rectangular dropdown borders or backgrounds', () => {
+			// Scoped under `.synapse-config-toolbar` (#215) — the search tab reuses the bare
+			// `.synapse-select` class and keeps its own bordered dropdown appearance.
 			expect(stylesContent).toMatch(
-				/\.synapse-select\s*\{[^}]*background:\s*transparent/
+				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*background:\s*transparent/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-select\s*\{[^}]*border:\s*none/
+				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*border:\s*none/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-select\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-select\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-select:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
+				/\.synapse-config-toolbar \.synapse-select:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
+			);
+		});
+
+		it('gives keyboard focus a visible indicator on .synapse-select and .synapse-toolbar-btn', () => {
+			expect(stylesContent).toMatch(
+				/\.synapse-select:focus-visible,\s*\n?\s*\.synapse-toolbar-btn:focus-visible\s*\{[^}]*outline:\s*1px solid var\(--interactive-accent\)/
 			);
 		});
 
@@ -180,12 +192,15 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			);
 		});
 
-		it('styles status in left column uppercase with 74px width', () => {
+		it('styles status in left column uppercase with 74px width by reusing .synapse-finding-key', () => {
+			// The task-status element carries both classes rather than forking a copy of
+			// .synapse-finding-key's typography (issue #210's explicit instruction; #215).
+			expect(chatRendererSource).toContain("cls: 'synapse-task-item-status synapse-finding-key'");
 			expect(stylesContent).toMatch(
-				/\.synapse-task-item-status\s*\{[^}]*width:\s*74px/
+				/\.synapse-finding-key\s*\{[^}]*width:\s*74px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-task-item-status\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-finding-key\s*\{[^}]*text-transform:\s*uppercase/
 			);
 		});
 	});

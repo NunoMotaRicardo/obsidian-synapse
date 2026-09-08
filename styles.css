@@ -1595,6 +1595,19 @@
 .synapse-toolbar {
 	display: flex;
 	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+/*
+ * Editorial config-toolbar look (#210), scoped to `.synapse-config-toolbar` — the extra
+ * modifier class configToolbar.ts sets alongside `.synapse-toolbar` — rather than the bare
+ * `.synapse-toolbar`/`.synapse-select`/`.synapse-toolbar-group`/`.synapse-toolbar-icon`
+ * classes. Those bare classes are also reused as-is by the search tab's toolbar
+ * (searchPanel.ts, `.synapse-search-toolbar`) for its own pre-existing appearance, and must
+ * not inherit this restyle (#215).
+ */
+.synapse-config-toolbar {
 	gap: 8px;
 	padding: 6px 0 2px;
 	font-family: var(--font-interface);
@@ -1605,7 +1618,6 @@
 	color: var(--text-faint);
 	user-select: none;
 	-webkit-user-select: none;
-	flex-wrap: wrap;
 	background: transparent;
 	border: none;
 	border-radius: 0;
@@ -1626,13 +1638,13 @@
 .synapse-toolbar-group {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 3px;
 }
 
 .synapse-toolbar-icon svg {
-	width: 13px;
-	height: 13px;
-	color: var(--text-faint);
+	width: 14px;
+	height: 14px;
+	color: var(--text-muted);
 }
 
 .synapse-toolbar-icon.is-active svg {
@@ -1640,6 +1652,35 @@
 }
 
 .synapse-select {
+	font-size: var(--font-ui-smaller);
+	padding: 2px 4px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	max-width: 140px;
+	cursor: pointer;
+}
+
+.synapse-select:focus-visible,
+.synapse-toolbar-btn:focus-visible {
+	outline: 1px solid var(--interactive-accent);
+	outline-offset: -1px;
+}
+
+.synapse-select option {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+.synapse-model-select {
+	width: 17ch;
+}
+
+.synapse-config-toolbar .synapse-select {
 	font-family: var(--font-interface);
 	font-size: 10px;
 	font-weight: 500;
@@ -1652,7 +1693,6 @@
 	padding: 2px 0;
 	border-radius: 0;
 	cursor: pointer;
-	outline: none;
 	-webkit-appearance: none;
 	appearance: none;
 	transition: color 0.15s ease, border-bottom-color 0.15s ease;
@@ -1662,20 +1702,12 @@
 	white-space: nowrap;
 }
 
-.synapse-select:hover {
+.synapse-config-toolbar .synapse-select:hover {
 	color: var(--text-normal);
 	border-bottom-color: var(--interactive-accent);
 }
 
-.synapse-select option {
-	background: var(--background-primary);
-	color: var(--text-normal);
-	font-size: var(--font-ui-small);
-	letter-spacing: normal;
-	text-transform: none;
-}
-
-.synapse-model-select {
+.synapse-config-toolbar .synapse-model-select {
 	max-width: 17ch;
 }
 
@@ -1770,6 +1802,9 @@
 }
 
 .synapse-gauge-fill {
+	/* CSS custom property (not inline `style.width`) so this stays consistent with any other
+	   consumer of the shared `.synapse-gauge-fill`/`.synapse-gauge-track` classes (#215). */
+	width: var(--progress-width, 0%);
 	height: 100%;
 	background: var(--interactive-accent);
 	transition: width 0.2s ease;
@@ -1910,15 +1945,12 @@
 	border-top: 1px solid var(--synapse-rule-soft);
 }
 
+/*
+ * Typography, color, and width come from `.synapse-finding-key` — the task-status element
+ * carries both classes (chatRenderer.ts's `renderTaskPanel`) since it's that primitive's
+ * second consumer (issue #210). Only the genuinely new layout lives here (#215).
+ */
 .synapse-task-item-status {
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	font-weight: 500;
-	letter-spacing: 0.09em;
-	text-transform: uppercase;
-	color: var(--text-faint);
-	width: 74px;
-	flex-shrink: 0;
 	display: flex;
 	align-items: center;
 }

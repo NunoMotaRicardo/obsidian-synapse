@@ -735,20 +735,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.openModelPickerMenu = function (e: MouseEvent): void {
+		// Delegates to `setModel()` (configToolbar.ts) — the single place that mutates
+		// `selectedModel` and runs its side effects, shared with the toolbar's `modelSelect`
+		// change handler so the two don't duplicate this list independently (#215 AC-2 follow-up).
 		const menu = new Menu();
 		menu.addItem(item => {
 			item.setTitle('Default model')
 				.setChecked(this.selectedModel === '')
-				.onClick(() => {
-					this.selectedModel = '';
-					if (this.modelSelect) {
-						this.modelSelect.value = '';
-					}
-					this.updateReasoningBadge?.();
-					this.applyReasoningToSession?.();
-					this.updateModelPickerButton();
-					this.updateStateLine();
-				});
+				.onClick(() => this.setModel(''));
 		});
 		if (this.models.length > 0) {
 			menu.addSeparator();
@@ -756,16 +750,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				menu.addItem(item => {
 					item.setTitle(model.name)
 						.setChecked(this.selectedModel === model.id)
-						.onClick(() => {
-							this.selectedModel = model.id;
-							if (this.modelSelect) {
-								this.modelSelect.value = model.id;
-							}
-							this.updateReasoningBadge?.();
-							this.applyReasoningToSession?.();
-							this.updateModelPickerButton();
-							this.updateStateLine();
-						});
+						.onClick(() => this.setModel(model.id));
 				});
 			}
 		}
