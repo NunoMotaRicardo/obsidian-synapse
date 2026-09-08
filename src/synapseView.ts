@@ -450,6 +450,26 @@ export class SynapseView extends ItemView {
 		this.kickerEl.setText(title || 'Chat');
 	}
 
+	/**
+	 * Refresh every display element that reflects which session is active and what
+	 * agent/model/note it's currently using — the state line above the composer and the
+	 * masthead kicker. Session-level mutations (switching sessions, restoring one from the
+	 * background, resetting to a new conversation) can change both at once, e.g. via
+	 * `restoreAgentFromSessionName()` changing `selectedAgent`; calling this single method at
+	 * those sites — instead of remembering which of the individual `update*()` methods apply —
+	 * is what keeps a future mutation site from forgetting one of them (issue #217; the two
+	 * bugs fixed in 8a95229 were exactly this: a call site that mutated state but only
+	 * refreshed one of the two).
+	 *
+	 * Not for every state mutation: a change that's purely local to one control (attachments,
+	 * cwd, scope — see inputArea.ts) has no bearing on the masthead kicker, so those keep
+	 * calling `updateStateLine()` directly rather than pulling in this wider refresh.
+	 */
+	refreshComposerState(): void {
+		this.updateStateLine?.();
+		this.updateMastheadKicker();
+	}
+
 	// ── Config loading ───────────────────────────────────────────
 
 	async loadAllConfigs(options?: {silent?: boolean}): Promise<void> {
@@ -582,13 +602,13 @@ export class SynapseView extends ItemView {
 		}
 		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 
-		// Apply agent's tools and skills filter
+		// Apply agent's tools and skills filter — applyAgentToolsAndSkills() already calls
+		// updateToolsBadge() internally, and populateModelSelect() above already calls
+		// updateStateLine(), so neither is repeated here (#217).
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
-		this.updateToolsBadge();
 		this.updateCwdButton();
-		this.updateStateLine?.();
 
 		// Update search panel dropdowns
 		if (this.searchAgentSelect) {
@@ -1292,8 +1312,9 @@ export class SynapseView extends ItemView {
 		this.updateSendButton();
 		this.updateToolbarLock();
 		this.renderSessionList();
-		this.updateMastheadKicker();
-		this.updateStateLine?.();
+		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
+		// above, so both the kicker and the state line need to reflect it (#217).
+		this.refreshComposerState();
 	}
 
 	// ── Session config building ──────────────────────────────────

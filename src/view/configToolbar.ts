@@ -305,6 +305,9 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.agentSelect.toggleClass('is-active', false);
 			this.applyAgentToolsAndSkills(undefined);
 			this.configDirty = true;
+			// Deselecting was previously the one branch that didn't refresh the state line
+			// (#217) — it displays the active agent, so it needs to reflect "Auto" too.
+			this.updateStateLine?.();
 			return;
 		}
 		const effectiveAgents = this.getEffectiveAgents();

@@ -672,7 +672,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		// Force scroll to end
 		this.forceScrollToBottom();
-		this.updateMastheadKicker();
+		// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
+		// state line too, not just the kicker (#217).
+		this.refreshComposerState();
 	};
 
 	proto.registerBackgroundEvents = function (bg: BackgroundSession): void {
@@ -978,13 +980,15 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 			this.renderSessionList();
 			this.updateSendButton();
-			this.updateMastheadKicker();
+			// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
+			// state line too, not just the kicker (#217).
+			this.refreshComposerState();
 		} catch (e) {
 			this.addInfoMessage(`Failed to load session: ${String(e)}`);
 			this.renderWelcome();
 			this.currentSessionId = null;
 			this.renderSessionList();
-			this.updateMastheadKicker();
+			this.refreshComposerState();
 		}
 	};
 
