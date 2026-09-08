@@ -11,6 +11,8 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 	const synapseViewSource = readFileSync(synapseViewPath, 'utf8');
 	const inputAreaPath = resolve(repoRoot, 'src/view/inputArea.ts');
 	const inputAreaSource = readFileSync(inputAreaPath, 'utf8');
+	const configToolbarPath = resolve(repoRoot, 'src/view/configToolbar.ts');
+	const configToolbarSource = readFileSync(configToolbarPath, 'utf8');
 	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
@@ -187,12 +189,12 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			expect(stylesContent).not.toContain('.synapse-f-btn-model');
 		});
 
-		it('styles send button as a small 30px square accent block with 2px radius', () => {
+		it('styles send button as a compact 24px square accent block with 2px radius', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-send-btn\s*\{[^}]*width:\s*30px/
+				/\.synapse-send-btn\s*\{[^}]*width:\s*24px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-send-btn\s*\{[^}]*height:\s*30px/
+				/\.synapse-send-btn\s*\{[^}]*height:\s*24px/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-send-btn\s*\{[^}]*border-radius:\s*2px/
@@ -231,9 +233,10 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			expect(inputAreaSource).toContain('handleFileDrop');
 		});
 
-		it('retains send/abort streaming state transitions', () => {
-			expect(inputAreaSource).toContain('handleAbort()');
+		it('retains send/abort streaming state transitions across composer and unified toolbar', () => {
 			expect(inputAreaSource).toContain('handleSend()');
+			expect(configToolbarSource).toContain('handleAbort()');
+			expect(configToolbarSource).toContain('handleSend()');
 		});
 	});
 

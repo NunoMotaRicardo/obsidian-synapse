@@ -86,13 +86,14 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			);
 		});
 
-		it('configToolbar.ts builds agent, model, reasoning, tools, and debug controls with slash dividers', () => {
+		it('configToolbar.ts builds agent, model, reasoning, tools, debug, and send controls with slash dividers', () => {
 			expect(configToolbarSource).toContain('synapse-agent-select');
 			expect(configToolbarSource).toContain('synapse-model-select');
 			expect(configToolbarSource).toContain('synapse-reasoning-btn');
 			expect(configToolbarSource).toContain('synapse-tools-btn');
 			expect(configToolbarSource).toContain('synapse-debug-toggle');
 			expect(configToolbarSource).toContain('synapse-toolbar-sep');
+			expect(configToolbarSource).toContain('synapse-send-btn');
 		});
 
 		it('inputArea.ts builds cwd, scope, attach, and active note controls in the top state line', () => {

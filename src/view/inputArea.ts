@@ -180,25 +180,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			inputArea.removeClass('synapse-drag-over');
 			this.handleFileDrop(e);
 		});
-
-		// Composer actions footer
-		const foot = inputArea.createDiv({cls: 'synapse-input-actions synapse-composer-foot'});
-
-		foot.createSpan({cls: 'synapse-composer-spacer'});
-
-		this.sendBtn = foot.createEl('button', {
-			cls: 'clickable-icon synapse-send-btn',
-			attr: {title: 'Send message', type: 'button'},
-		});
-		setIcon(this.sendBtn, 'arrow-up');
-		this.sendBtn.addEventListener('click', () => {
-			if (this.isStreaming) {
-				void this.handleAbort();
-			} else {
-				void this.handleSend();
-			}
-		});
-
 		this.updateStateLine();
 	};
 

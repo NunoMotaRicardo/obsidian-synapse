@@ -1528,8 +1528,8 @@
 }
 
 .synapse-send-btn {
-	width: 30px;
-	height: 30px;
+	width: 24px;
+	height: 24px;
 	border-radius: 2px;
 	display: grid;
 	place-items: center;
@@ -1552,8 +1552,8 @@
 }
 
 .synapse-send-btn svg {
-	width: 15px;
-	height: 15px;
+	width: 13px;
+	height: 13px;
 	stroke: var(--text-on-accent);
 }
 
@@ -1625,7 +1625,8 @@
  */
 .synapse-config-toolbar {
 	gap: 8px;
-	padding: 6px 0 2px;
+	padding: 4px 0 0;
+	margin-top: 2px;
 	font-family: var(--font-interface);
 	font-size: 10px;
 	font-weight: 500;
@@ -1636,6 +1637,7 @@
 	-webkit-user-select: none;
 	background: transparent;
 	border: none;
+	border-top: 1px solid var(--synapse-rule);
 	border-radius: 0;
 	box-shadow: none;
 }
@@ -1790,9 +1792,9 @@
 	border: none;
 	border-bottom: 1px solid transparent;
 	padding: 2px 0;
+	line-height: 1;
 	cursor: pointer;
 	transition: color 0.15s ease, border-bottom-color 0.15s ease;
-	margin-left: auto;
 }
 
 .synapse-debug-toggle:hover {

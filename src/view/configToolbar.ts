@@ -1,4 +1,4 @@
-import {Menu} from 'obsidian';
+import {Menu, setIcon} from 'obsidian';
 import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
@@ -110,6 +110,20 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			if (e.target !== debugCheck) {
 				debugCheck.checked = !debugCheck.checked;
 				debugCheck.dispatchEvent(new Event('change'));
+			}
+		});
+
+		// Send button (#215) — aligned on the unified single-row footer
+		this.sendBtn = toolbar.createEl('button', {
+			cls: 'clickable-icon synapse-send-btn',
+			attr: {title: 'Send message', type: 'button'},
+		});
+		setIcon(this.sendBtn, 'arrow-up');
+		this.sendBtn.addEventListener('click', () => {
+			if (this.isStreaming) {
+				void this.handleAbort();
+			} else {
+				void this.handleSend();
 			}
 		});
 	};
