@@ -104,6 +104,25 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			expect(configToolbarSource).toContain("const label = approval === 'allow' ? 'Allow' : 'Ask';");
 			expect(configToolbarSource).toMatch(/this\.toolsBtnEl\.setText\(label\)/);
 		});
+
+		it('normalizes control colors: faint when default/unselected and accent when active', () => {
+			expect(stylesContent).toMatch(
+				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*color:\s*var\(--text-faint\)\s*!important/
+			);
+			expect(stylesContent).toMatch(
+				/\.synapse-config-toolbar \.synapse-select\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)\s*!important/
+			);
+			expect(stylesContent).toMatch(
+				/\.synapse-toolbar-btn\s*\{[^}]*color:\s*var\(--text-faint\)\s*!important/
+			);
+			expect(stylesContent).toMatch(
+				/\.synapse-toolbar-btn\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)\s*!important/
+			);
+			expect(configToolbarSource).toContain("this.agentSelect.toggleClass('is-active', this.selectedAgent !== '')");
+			expect(configToolbarSource).toContain("this.modelSelect.toggleClass('is-active', this.selectedModel !== '')");
+			expect(configToolbarSource).toContain("this.toolsBtnEl.toggleClass('is-active', approval === 'allow')");
+			expect(configToolbarSource).toMatch(/this\.cwdBtnEl\.toggleClass\('is-active',\s*hasFolder\)/);
+		});
 	});
 
 	describe('AC-2: State line and toolbar relationship resolution', () => {
@@ -297,6 +316,7 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 		it('chat-view.md documents config toolbar, gauge, and task panel editorial specifications', () => {
 			expect(specContent).toContain('### Config toolbar, gauge & task panel (issue #210)');
 			expect(specContent).toContain('Config toolbar controls:');
+			expect(specContent).toContain('Normalized control color states:');
 			expect(specContent).toContain('Context-window gauge hairline meter:');
 			expect(specContent).toContain('Semantic warning and critical gauge states:');
 			expect(specContent).toContain('Ruled definition list task panel:');

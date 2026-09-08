@@ -57,6 +57,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 
 		// Agent dropdown
 		this.agentSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-agent-select'});
+		this.agentSelect.toggleClass('is-active', this.selectedAgent !== '');
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
 			this.updateStateLine?.();
@@ -66,6 +67,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 
 		// Model dropdown
 		this.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 		this.modelSelect.addEventListener('change', () => this.setModel(this.modelSelect.value));
 
 		addSep();
@@ -127,6 +129,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
+		this.modelSelect.value = this.selectedModel;
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 		this.updateStateLine?.();
 	};
 
@@ -145,6 +149,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.selectedModel = modelId;
 		if (this.modelSelect) {
 			this.modelSelect.value = modelId;
+			this.modelSelect.toggleClass('is-active', modelId !== '');
 		}
 		this.updateReasoningBadge();
 		this.applyReasoningToSession();
@@ -217,7 +222,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		};
 
 		if (this.selectedModel === '') {
-			const active = level !== '' || !infiniteSessions;
+			const active = level !== '';
 			this.reasoningBtnEl.toggleClass('is-active', active);
 			this.reasoningBtnEl.toggleClass('is-non-interactive', false);
 			setLabel(level !== '' ? effortLabel(level) : undefined);
@@ -239,7 +244,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const current = this.plugin.settings.reasoningEffort;
 		// The button stays interactive even without reasoning support, because the menu
 		// always offers the infinite-sessions toggle.
-		const active = (current !== '' && supportsReasoning) || !infiniteSessions;
+		const active = current !== '' && supportsReasoning;
 		this.reasoningBtnEl.toggleClass('is-active', active);
 		this.reasoningBtnEl.toggleClass('is-non-interactive', false);
 		setLabel(supportsReasoning && current !== '' ? effortLabel(current) : undefined);
@@ -290,6 +295,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.agentSelect.value = '';
 			this.agentSelect.selectedIndex = 0;
 			this.agentSelect.title = '';
+			this.agentSelect.toggleClass('is-active', false);
 			this.applyAgentToolsAndSkills(undefined);
 			this.configDirty = true;
 			return;
@@ -302,6 +308,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.selectedAgent = agent.name;
 		// Update the dropdown — set both .value and .selectedIndex for reliability
 		this.agentSelect.value = agent.name;
+		this.agentSelect.toggleClass('is-active', true);
 		const opts = this.agentSelect.options;
 		for (let i = 0; i < opts.length; i++) {
 			if (opts[i]!.value === agent.name) {
@@ -315,6 +322,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		if (resolvedModel && resolvedModel !== this.selectedModel) {
 			this.selectedModel = resolvedModel;
 			this.modelSelect.value = resolvedModel;
+			this.modelSelect.toggleClass('is-active', resolvedModel !== '');
 		}
 		this.applyAgentToolsAndSkills(agent);
 		this.configDirty = true;
@@ -342,7 +350,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	proto.updateToolsBadge = function(): void {
 		const approval = this.plugin.settings.toolApproval;
 		const label = approval === 'allow' ? 'Allow' : 'Ask';
-		this.toolsBtnEl.toggleClass('is-active', false);
+		this.toolsBtnEl.toggleClass('is-active', approval === 'allow');
 		this.toolsBtnEl.setAttribute('title', `Tools approval: ${approval === 'allow' ? 'Allow (auto-approve)' : 'Ask (require approval)'}`);
 		if (this.toolsBtnEl.textContent !== label) {
 			this.toolsBtnEl.setText(label);
@@ -361,7 +369,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const vaultName = this.app.vault.getName();
 		const label = `Working directory: ${vaultName}/${this.workingDir}`;
 		this.cwdBtnEl.setAttribute('title', label);
-		this.cwdBtnEl.toggleClass('is-active', true);
+		const hasFolder = Boolean(this.workingDir && this.workingDir !== '' && this.workingDir !== '/');
+		this.cwdBtnEl.toggleClass('is-active', hasFolder);
 		const folderName = this.workingDir ? (this.workingDir.split('/').pop() || this.workingDir) : '';
 		// Truncate only the folder-name portion so a long name doesn't squeeze the toolbar row
 		// (#215); the full name is always available via the `title` set above. Written in

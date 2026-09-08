@@ -556,6 +556,7 @@ export class SynapseView extends ItemView {
 			this.agentSelect.value = '';
 			this.agentSelect.title = '';
 		}
+		this.agentSelect.toggleClass('is-active', this.selectedAgent !== '');
 
 		// Auto-select agent's preferred model
 		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
@@ -574,12 +575,14 @@ export class SynapseView extends ItemView {
 			this.selectedModel = '';
 			this.modelSelect.value = '';
 		}
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 
 		// Apply agent's tools and skills filter
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
 		this.updateToolsBadge();
+		this.updateCwdButton();
 		this.updateStateLine?.();
 
 		// Update search panel dropdowns

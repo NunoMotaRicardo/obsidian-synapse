@@ -1688,7 +1688,7 @@
 	font-weight: 500;
 	letter-spacing: 0.13em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--text-faint) !important;
 	background: transparent !important;
 	border: none !important;
 	border-bottom: 1px solid transparent !important;
@@ -1707,9 +1707,18 @@
 }
 
 .synapse-config-toolbar .synapse-select:hover {
-	color: var(--text-normal);
+	color: var(--text-normal) !important;
 	border-bottom-color: var(--interactive-accent) !important;
 	background: transparent !important;
+}
+
+.synapse-config-toolbar .synapse-select.is-active {
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-config-toolbar .synapse-select.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
 }
 
 .synapse-config-toolbar .synapse-model-select {
@@ -1722,7 +1731,7 @@
 	font-weight: 500;
 	letter-spacing: 0.13em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--text-faint) !important;
 	background: transparent !important;
 	border: none !important;
 	border-bottom: 1px solid transparent !important;
@@ -1736,13 +1745,18 @@
 }
 
 .synapse-toolbar-btn:hover {
-	color: var(--text-normal);
+	color: var(--text-normal) !important;
 	border-bottom-color: var(--interactive-accent) !important;
 	background: transparent !important;
 }
 
 .synapse-toolbar-btn.is-active {
-	color: var(--interactive-accent);
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-toolbar-btn.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
 }
 
 .synapse-toolbar-spacer {
