@@ -30,6 +30,7 @@ import type {BackgroundSession} from './view/types';
 
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, resolveImageAttachments, buildLocalHistory, buildSdkHistoryInjection, computeSdkHistoryGap, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError} from './toolErrors';
+import {stripSessionTypePrefix} from './view/utils';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
@@ -443,7 +444,7 @@ export class SynapseView extends ItemView {
 			const raw = this.sessionNames[this.currentSessionId]
 				|| this.sessionList.find(s => s.sessionId === this.currentSessionId)?.summary;
 			if (raw) {
-				title = raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '').trim();
+				title = stripSessionTypePrefix(raw).trim();
 			}
 		}
 		this.kickerEl.setText(title || 'Chat');

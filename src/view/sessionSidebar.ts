@@ -4,7 +4,7 @@ import type {SessionMetadata, SessionMessage} from '../agentService';
 import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
-import {formatTimeAgo} from './utils';
+import {formatTimeAgo, stripSessionTypePrefix} from './utils';
 import type {BackgroundSession} from './types';
 
 declare module '../synapseView' {
@@ -400,7 +400,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			|| session.summary
 			|| `Session ${session.sessionId.slice(0, 8)}`;
 		// Strip session type prefix for display
-		return raw.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
+		return stripSessionTypePrefix(raw);
 	};
 
 	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
@@ -812,7 +812,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.restoreAgentFromSessionName = function (sessionId: string): void {
 		let sessionName = this.sessionNames[sessionId] || '';
 		// Strip session type prefix
-		sessionName = sessionName.replace(/^\[(chat|inline|trigger|search)\]\s*/, '');
+		sessionName = stripSessionTypePrefix(sessionName);
 		const colonIdx = sessionName.indexOf(':');
 		if (colonIdx > 0) {
 			const agentName = sessionName.substring(0, colonIdx).trim();
