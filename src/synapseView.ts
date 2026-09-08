@@ -225,6 +225,8 @@ export class SynapseView extends ItemView {
 	attachmentsBar!: HTMLElement;
 	activeNoteBar!: HTMLElement;
 	scopeBar!: HTMLElement;
+	scopeBtn?: HTMLButtonElement;
+	attachBtn?: HTMLButtonElement;
 	sendBtn!: HTMLButtonElement;
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;

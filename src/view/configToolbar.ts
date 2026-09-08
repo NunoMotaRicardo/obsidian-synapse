@@ -85,13 +85,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
 		this.updateToolsBadge();
 
-		addSep();
-
-		// Working directory button
-		this.cwdBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-cwd-btn', attr: {type: 'button'}});
-		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
-		this.updateCwdButton();
-
 		// Separator for context indicator (hidden until indicator is visible)
 		this.contextSepEl = addSep('synapse-context-sep is-hidden');
 
@@ -366,13 +359,16 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateCwdButton = function(): void {
+		if (!this.cwdBtnEl) return;
 		const vaultName = this.app.vault.getName();
-		const label = `Working directory: ${vaultName}/${this.workingDir}`;
+		const label = this.workingDir
+			? `Working directory: ${vaultName}/${this.workingDir}`
+			: `Working directory: ${vaultName} (vault root)`;
 		this.cwdBtnEl.setAttribute('title', label);
 		const hasFolder = Boolean(this.workingDir && this.workingDir !== '' && this.workingDir !== '/');
 		this.cwdBtnEl.toggleClass('is-active', hasFolder);
 		const folderName = this.workingDir ? (this.workingDir.split('/').pop() || this.workingDir) : '';
-		// Truncate only the folder-name portion so a long name doesn't squeeze the toolbar row
+		// Truncate only the folder-name portion so a long name doesn't squeeze the state line row
 		// (#215); the full name is always available via the `title` set above. Written in
 		// sentence case — `.synapse-toolbar-btn`'s CSS `text-transform: uppercase` handles the
 		// visual presentation, avoiding a bare `toUpperCase()` call (locale-sensitive, and it
@@ -380,7 +376,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const truncated = folderName.length > CWD_LABEL_MAX_CHARS
 			? `${folderName.slice(0, CWD_LABEL_MAX_CHARS - 1)}…`
 			: folderName;
-		this.cwdBtnEl.setText(truncated ? `Dir: ${truncated}` : 'Dir');
+		this.cwdBtnEl.setText(truncated ? truncated : 'Dir');
 	};
 
 	/**

@@ -49,8 +49,37 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	const proto = ViewClass.prototype as SynapseView;
 
 	proto.buildInputArea = function (parent: HTMLElement): void {
-		// State line above input (NOTE / AGENT / MODEL)
+		// State line above input (DIR / SCOPE / ATTACH / NOTE / AGENT / MODEL)
 		this.stateLineEl = parent.createDiv({cls: 'synapse-state-line'});
+
+		// Working directory button (moved to top row)
+		this.cwdBtnEl = this.stateLineEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-cwd-btn',
+			attr: {type: 'button'},
+		});
+		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
+		this.updateCwdButton();
+
+		// Scope button (icon only)
+		this.scopeBtn = this.stateLineEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-f-btn synapse-f-btn-scope',
+			attr: {title: 'Select vault scope', 'aria-label': 'Scope', type: 'button'},
+		});
+		const scopeIcon = this.scopeBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(scopeIcon, 'folder');
+		this.scopeBtn.toggleClass('is-active', this.scopePaths.length > 0);
+		this.scopeBtn.addEventListener('click', () => this.openScopeModal());
+
+		// Attach button (icon only)
+		this.attachBtn = this.stateLineEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-f-btn synapse-f-btn-attach',
+			attr: {title: 'Attach file', 'aria-label': 'Attach', type: 'button'},
+		});
+		const attachIcon = this.attachBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(attachIcon, 'paperclip');
+		this.attachBtn.toggleClass('is-active', this.attachments.length > 0);
+		this.attachBtn.addEventListener('click', () => this.handleAttachFile());
+
 		this.stateNoteEl = this.stateLineEl.createSpan({cls: 'synapse-state-note', text: 'No note'});
 		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
 		this.stateAgentEl = this.stateLineEl.createSpan({cls: 'synapse-state-agent', text: 'General'});
@@ -154,18 +183,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 		// Composer actions footer
 		const foot = inputArea.createDiv({cls: 'synapse-input-actions synapse-composer-foot'});
-
-		const scopeBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-scope', attr: {title: 'Select vault scope', type: 'button'}});
-		const scopeIcon = scopeBtn.createSpan({cls: 'synapse-f-btn-icon'});
-		setIcon(scopeIcon, 'folder');
-		scopeBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Scope'});
-		scopeBtn.addEventListener('click', () => this.openScopeModal());
-
-		const attachBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-attach', attr: {title: 'Attach file', type: 'button'}});
-		const attachIcon = attachBtn.createSpan({cls: 'synapse-f-btn-icon'});
-		setIcon(attachIcon, 'paperclip');
-		attachBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Attach'});
-		attachBtn.addEventListener('click', () => this.handleAttachFile());
 
 		foot.createSpan({cls: 'synapse-composer-spacer'});
 
@@ -332,6 +349,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.renderAttachments = function (): void {
+		this.attachBtn?.toggleClass('is-active', this.attachments.length > 0);
 		this.attachmentsBar.empty();
 		if (this.attachments.length === 0) {
 			this.attachmentsBar.addClass('is-hidden');
@@ -359,6 +377,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.renderScopeBar = function (): void {
+		this.scopeBtn?.toggleClass('is-active', this.scopePaths.length > 0);
 		this.scopeBar.empty();
 		if (this.scopePaths.length === 0) {
 			this.scopeBar.addClass('is-hidden');

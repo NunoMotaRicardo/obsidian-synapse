@@ -1365,6 +1365,11 @@
 	white-space: nowrap;
 }
 
+.synapse-state-line .synapse-toolbar-btn,
+.synapse-state-line .synapse-f-btn {
+	flex-shrink: 0;
+}
+
 .synapse-state-note {
 	color: var(--interactive-accent);
 	overflow: hidden;
@@ -1476,7 +1481,7 @@
 	font-weight: 500;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--text-faint) !important;
 	cursor: pointer;
 	white-space: nowrap;
 	background: transparent !important;
@@ -1493,9 +1498,18 @@
 }
 
 .synapse-f-btn:hover {
-	color: var(--text-normal);
+	color: var(--text-normal) !important;
 	border-bottom-color: var(--interactive-accent) !important;
 	background: transparent !important;
+}
+
+.synapse-f-btn.is-active {
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-f-btn.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
 }
 
 .synapse-f-btn:focus-visible {

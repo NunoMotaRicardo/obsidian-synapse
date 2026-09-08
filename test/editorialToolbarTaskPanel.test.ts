@@ -11,6 +11,8 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 	const configToolbarSource = readFileSync(configToolbarPath, 'utf8');
 	const chatRendererPath = resolve(repoRoot, 'src/view/chatRenderer.ts');
 	const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
+	const inputAreaPath = resolve(repoRoot, 'src/view/inputArea.ts');
+	const inputAreaSource = readFileSync(inputAreaPath, 'utf8');
 	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
@@ -84,14 +86,24 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			);
 		});
 
-		it('configToolbar.ts builds agent, model, reasoning, tools, cwd, and debug controls with slash dividers', () => {
+		it('configToolbar.ts builds agent, model, reasoning, tools, and debug controls with slash dividers', () => {
 			expect(configToolbarSource).toContain('synapse-agent-select');
 			expect(configToolbarSource).toContain('synapse-model-select');
 			expect(configToolbarSource).toContain('synapse-reasoning-btn');
 			expect(configToolbarSource).toContain('synapse-tools-btn');
-			expect(configToolbarSource).toContain('synapse-cwd-btn');
 			expect(configToolbarSource).toContain('synapse-debug-toggle');
 			expect(configToolbarSource).toContain('synapse-toolbar-sep');
+		});
+
+		it('inputArea.ts builds cwd, scope, attach, and active note controls in the top state line', () => {
+			expect(inputAreaSource).toContain('synapse-cwd-btn');
+			expect(inputAreaSource).toContain('synapse-f-btn-scope');
+			expect(inputAreaSource).toContain('synapse-f-btn-attach');
+			expect(inputAreaSource).toContain('synapse-state-note');
+		});
+
+		it('cwd button displays only the folder name when selected, and falls back to Dir when at vault root', () => {
+			expect(configToolbarSource).toMatch(/this\.cwdBtnEl\.setText\(\s*truncated\s*\?\s*truncated\s*:\s*'Dir'\s*\)/);
 		});
 
 		it('reasoning button displays only the effort level when selected, and falls back to Reasoning only when no level is selected', () => {
