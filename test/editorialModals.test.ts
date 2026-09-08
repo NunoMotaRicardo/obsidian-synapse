@@ -33,14 +33,13 @@ describe('editorial restyle: modals (#211)', () => {
 			);
 		});
 
-		it('modal title selectors cover all modal classes and headings', () => {
-			expect(stylesContent).toContain('.synapse-approval-modal h3');
-			expect(stylesContent).toContain('.synapse-userinput-modal h3');
-			expect(stylesContent).toContain('.synapse-askq-modal h3');
-			expect(stylesContent).toContain('.synapse-elicitation-modal h3');
-			expect(stylesContent).toContain('.synapse-scope-modal h3');
-			expect(stylesContent).toContain('.synapse-batch-progress-modal h3');
+		it('modal title styling is scoped to the shared synapse-modal-title class only', () => {
+			// Every modal applies `synapse-modal-title` directly to its title element
+			// (see the sibling test below), so the shared selector doesn't need — and
+			// must not use — a wildcard `.modal:has([class*="synapse-"])` fallback that
+			// would bleed into unrelated Obsidian modals (#216 review).
 			expect(stylesContent).toContain('.synapse-modal-title');
+			expect(stylesContent).not.toMatch(/\.modal:has\(\[class\*=["']synapse-["']\]\)/);
 		});
 
 		it('all modal TypeScript sources add synapse-modal-title or render titles', () => {
@@ -305,7 +304,7 @@ describe('editorial restyle: modals (#211)', () => {
 				/\.synapse-scope-item\s*\{[^}]*background:\s*transparent/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-scope-item:hover\s*\{[^}]*background:\s*transparent/
+				/\.synapse-scope-item:hover\s*\{[^}]*background:\s*var\(--background-modifier-hover\)/
 			);
 		});
 
@@ -364,11 +363,14 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-batch-progress-meter\s*\{[^}]*background:\s*var\(--synapse-rule-soft\)/
 			);
+			// The fill itself is the shared `.synapse-gauge-fill` primitive (#215) —
+			// `.synapse-batch-progress-fill` no longer carries its own duplicate rule.
 			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-fill\s*\{[^}]*background:\s*var\(--interactive-accent\)/
+				/\.synapse-gauge-fill\s*\{[^}]*background:\s*var\(--interactive-accent\)/
 			);
 			expect(batchLoopProgressSource).toContain('synapse-batch-progress-meter');
 			expect(batchLoopProgressSource).toContain('synapse-batch-progress-fill');
+			expect(batchLoopProgressSource).toContain('synapse-gauge-fill');
 		});
 	});
 

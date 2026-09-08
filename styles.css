@@ -753,15 +753,7 @@
 
 /* ── Modal Titles Masthead Treatment (AC-1) ─────────────────────── */
 
-.synapse-modal-title,
-.synapse-approval-modal h3,
-.synapse-userinput-modal h3,
-.synapse-askq-modal h3,
-.synapse-elicitation-modal h3,
-.synapse-scope-modal h3,
-.synapse-batch-progress-modal h3,
-.modal:has(.synapse-edit-modal) .modal-title,
-.modal:has([class*="synapse-"]) .modal-title {
+.synapse-modal-title {
 	font-family: var(--synapse-font-serif);
 	font-size: 20px;
 	font-weight: 400;
@@ -824,6 +816,10 @@
 .synapse-batch-progress-buttons button.mod-cta:hover,
 .synapse-edit-btn-primary:hover {
 	opacity: 0.9;
+}
+
+.synapse-edit-btn-primary.is-streaming {
+	background: var(--background-modifier-error);
 }
 
 .synapse-approval-buttons button:not(.mod-cta),
@@ -1127,7 +1123,8 @@
 }
 
 .synapse-askq-option:focus-visible {
-	outline: none;
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
 	border-bottom-color: var(--interactive-accent);
 }
 
@@ -2270,7 +2267,7 @@
 }
 
 .synapse-scope-item:hover {
-	background: transparent;
+	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
@@ -2351,13 +2348,6 @@
 	margin-bottom: 12px;
 	overflow: hidden;
 	width: 100%;
-}
-
-.synapse-batch-progress-fill {
-	height: 100%;
-	width: var(--progress-width, 0%);
-	background: var(--interactive-accent);
-	transition: width 0.2s ease;
 }
 
 .synapse-batch-progress-file {
@@ -3215,47 +3205,6 @@ body.synapse-no-select {
 
 .synapse-edit-btn-spacer {
 	flex: 1;
-}
-
-.synapse-edit-btn-primary {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	padding: 6px 14px;
-	font-size: var(--font-ui-small);
-	font-weight: 500;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border: none;
-	border-radius: var(--radius-s);
-	cursor: pointer;
-	transition: opacity 0.15s;
-}
-
-.synapse-edit-btn-primary:hover {
-	opacity: 0.9;
-}
-
-.synapse-edit-btn-primary.is-streaming {
-	background: var(--background-modifier-error);
-}
-
-.synapse-edit-btn-secondary {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	padding: 6px 14px;
-	font-size: var(--font-ui-small);
-	background: transparent;
-	color: var(--text-muted);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	cursor: pointer;
-	transition: color 0.15s;
-}
-
-.synapse-edit-btn-secondary:hover {
-	color: var(--text-normal);
 }
 
 .synapse-edit-btn-icon {

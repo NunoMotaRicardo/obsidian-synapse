@@ -91,7 +91,8 @@ export class BatchLoopProgressModal extends Modal {
 
 		const attempted = result.processed + result.failed;
 		this.statusEl.setText(`${attempted}/${this.total} attempted`);
-		this.progressFill.setCssProps({'--progress-width': '100%'});
+		const pct = this.total > 0 ? Math.min(100, Math.round((attempted / this.total) * 100)) : 0;
+		this.progressFill.setCssProps({'--progress-width': `${pct}%`});
 		this.renderBudget(usage);
 
 		this.fileEl.empty();
