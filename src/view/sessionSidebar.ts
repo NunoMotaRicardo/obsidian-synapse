@@ -284,7 +284,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		if (bgSessions.length > 0) {
 			if (isExpanded) {
-				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Background'});
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading synapse-label-base', text: 'Background'});
 			}
 			for (const session of bgSessions) {
 				this.renderSessionItem(this.sidebarListEl, session, {
@@ -294,7 +294,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				});
 			}
 			if (isExpanded && otherSessions.length > 0) {
-				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Sessions'});
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading synapse-label-base', text: 'Sessions'});
 			}
 			for (const session of otherSessions) {
 				this.renderSessionItem(this.sidebarListEl, session, {
@@ -305,7 +305,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			}
 		} else {
 			if (isExpanded) {
-				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Sessions'});
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading synapse-label-base', text: 'Sessions'});
 			}
 			for (const session of displayedSessions) {
 				this.renderSessionItem(this.sidebarListEl, session, {

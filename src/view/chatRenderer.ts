@@ -135,7 +135,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const speakerText = msg.role === 'user' ? 'You' : 'Synapse';
 		const speakerId = `synapse-speaker-${msg.id || Date.now()}`;
 		this.chatContainer.createDiv({
-			cls: `synapse-speaker ${speakerCls}`,
+			cls: `synapse-speaker synapse-label-base ${speakerCls}`,
 			text: speakerText,
 			attr: {id: speakerId},
 		});
@@ -286,7 +286,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 	proto.renderReasoningBlock = function (reasoning: string, parent: HTMLElement): Promise<void> {
 		const details = parent.createEl('details', {cls: 'synapse-reasoning'});
-		details.createEl('summary', {cls: 'synapse-reasoning-summary', text: 'Reasoning'});
+		details.createEl('summary', {cls: 'synapse-reasoning-summary synapse-label-base', text: 'Reasoning'});
 		const body = details.createDiv({cls: 'synapse-reasoning-body'});
 		return renderMarkdownSafe(this.app, reasoning, body, this.streamingComponent ?? this);
 	};
@@ -301,7 +301,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 	proto.addAssistantPlaceholder = function (): void {
 		const speakerId = `synapse-speaker-placeholder-${Date.now()}`;
 		this.chatContainer.createDiv({
-			cls: 'synapse-speaker ai',
+			cls: 'synapse-speaker synapse-label-base ai',
 			text: 'Synapse',
 			attr: {id: speakerId},
 		});
@@ -384,7 +384,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		details.open = true;
 
 		const summary = createEl('summary');
-		summary.className = 'synapse-reasoning-summary';
+		summary.className = 'synapse-reasoning-summary synapse-label-base';
 		summary.appendChild(document.createTextNode('Thinking\u2026'));
 		details.appendChild(summary);
 
@@ -660,7 +660,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		// Input section
 		if (args && typeof args === 'object' && Object.keys(args).length > 0) {
 			const inputSection = details.createDiv({cls: 'synapse-tool-call-section'});
-			inputSection.createDiv({cls: 'synapse-tool-call-label', text: 'Input'});
+			inputSection.createDiv({cls: 'synapse-tool-call-label synapse-label-base', text: 'Input'});
 			const pre = inputSection.createEl('pre', {cls: 'synapse-tool-call-code'});
 			pre.createEl('code', {text: JSON.stringify(args, null, 2)});
 		}
@@ -700,7 +700,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const output = error ? `Error: ${error.message}` : (result?.detailedContent || result?.content || '');
 		if (output) {
 			const outputSection = detailsEl.createDiv({cls: 'synapse-tool-call-section'});
-			outputSection.createDiv({cls: 'synapse-tool-call-label', text: success ? 'Output' : 'Error'});
+			outputSection.createDiv({cls: 'synapse-tool-call-label synapse-label-base', text: success ? 'Output' : 'Error'});
 			const pre = outputSection.createEl('pre', {cls: 'synapse-tool-call-code'});
 			const displayText = output.length > MAX_DEBUG_DISPLAY_LEN ? output.slice(0, MAX_DEBUG_DISPLAY_LEN) + '\n… (truncated)' : output;
 			pre.createEl('code', {text: displayText});
@@ -742,14 +742,14 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		panel.open = wasOpen;
 
 		const summary = panel.createEl('summary', {cls: 'synapse-task-panel-header'});
-		summary.createSpan({cls: 'synapse-task-panel-title', text: 'PLAN'});
+		summary.createSpan({cls: 'synapse-task-panel-title synapse-label-base', text: 'PLAN'});
 		const elapsedSpan = summary.createSpan({cls: 'synapse-task-panel-elapsed'});
 		elapsedSpan.setAttribute('data-synapse-task-elapsed', 'true');
 
 		const list = panel.createDiv({cls: 'synapse-task-list'});
 		for (const todo of todos) {
 			const item = list.createDiv({cls: `synapse-task-item synapse-finding is-${todo.status}`});
-			const statusEl = item.createSpan({cls: 'synapse-task-item-status synapse-finding-key'});
+			const statusEl = item.createSpan({cls: 'synapse-task-item-status synapse-finding-key synapse-label-base'});
 			if (todo.status === 'in_progress') {
 				statusEl.createSpan({cls: 'synapse-task-active-dot'});
 			}
@@ -797,7 +797,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		if (!this.toolCallsContainer) return;
 
 		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
-		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary'});
+		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary synapse-label-base'});
 		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
 		setIcon(iconEl, 'archive');
 		summary.createSpan({text: 'Compaction complete'});

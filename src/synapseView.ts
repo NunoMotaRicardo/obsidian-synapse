@@ -395,7 +395,7 @@ export class SynapseView extends ItemView {
 		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar synapse-masthead'});
 		this.tabBarEl.createSpan({cls: 'synapse-masthead-wordmark', text: 'Synapse'});
 		this.tabBarEl.createSpan({cls: 'synapse-rule-dot'});
-		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker', text: 'Chat'});
+		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker synapse-label-base', text: 'Chat'});
 		this.tabBarEl.createSpan({cls: 'synapse-masthead-spacer'});
 
 		const tabs: {id: 'chat' | 'search'; label: string}[] = [
@@ -403,7 +403,7 @@ export class SynapseView extends ItemView {
 			{id: 'search', label: 'Search'},
 		];
 		for (const tab of tabs) {
-			const btn = this.tabBarEl.createDiv({cls: 'synapse-masthead-tab synapse-tab' + (tab.id === this.activeTab ? ' is-active' : '')});
+			const btn = this.tabBarEl.createDiv({cls: 'synapse-masthead-tab synapse-tab synapse-label-base' + (tab.id === this.activeTab ? ' is-active' : '')});
 			btn.dataset.tab = tab.id;
 			btn.createSpan({cls: 'synapse-masthead-tab-label', text: tab.label});
 			btn.addEventListener('click', () => this.switchTab(tab.id));

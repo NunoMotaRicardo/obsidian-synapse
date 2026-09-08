@@ -559,7 +559,7 @@ export class EditModal extends Modal {
 			expandBtn.title = expanded ? 'Collapse' : 'Expand';
 		});
 
-		cardHeader.createSpan({text: `Choice ${index}`, cls: 'synapse-edit-card-title'});
+		cardHeader.createSpan({text: `Choice ${index}`, cls: 'synapse-edit-card-title synapse-label-base'});
 
 		const actions = cardHeader.createDiv({cls: 'synapse-edit-card-actions'});
 

@@ -141,6 +141,9 @@
 	--synapse-font-serif: 'Newsreader', Georgia, 'Iowan Old Style', 'Times New Roman', serif;
 	--synapse-rule: var(--background-modifier-border);
 	--synapse-rule-soft: var(--background-modifier-border-focus, var(--background-modifier-border));
+	/* A third, heavier hairline weight (vs. -rule/-rule-soft above) is intentional, not drift:
+	 * it marks a page/modal-title closing rule, a distinct visual role from the two lighter
+	 * hairlines used for row/section dividers, and is now relied on in 15+ places (#217). */
 	--synapse-rule-heavy: var(--text-normal);
 	--synapse-user-wash: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
 }
@@ -168,15 +171,46 @@
 	margin: 0;
 }
 
+/*
+ * Faint uppercase letterspaced label — the base traits shared by every "kicker"/label style
+ * in the editorial restyle (#206). Only letter-spacing (and occasionally font-size/margin)
+ * genuinely varies per consumer, so those stay declared on each selector below; this class
+ * carries only the properties that are byte-for-byte identical everywhere (#217). Add it
+ * alongside a component's own class in markup; where a selector is scoped by an ancestor
+ * (e.g. `.synapse-config-toolbar .synapse-select`) these traits are folded into the grouped
+ * rules further down instead, since the element itself must not always render this way.
+ */
+.synapse-label-base,
+.synapse-f-btn {
+	font-weight: 500;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+/*
+ * Modal/panel field-label family — `.synapse-elicitation-label`, `.synapse-batch-progress-file
+ * h4`, `.synapse-modal-label` and `.synapse-edit-label` also share one exact font-family/size/
+ * weight/letter-spacing/transform/color combination; declared once here, same rationale as the
+ * toolbar-row family above (#217).
+ */
+.synapse-elicitation-label,
+.synapse-batch-progress-file h4,
+.synapse-modal-label,
+.synapse-edit-label {
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
 .synapse-speaker {
 	display: flex;
 	align-items: center;
 	gap: 9px;
 	font-size: 10px;
-	font-weight: 500;
 	letter-spacing: 0.15em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	padding: 16px 0 6px;
 	user-select: none;
 	-webkit-user-select: none;
@@ -220,10 +254,7 @@
 .synapse-finding-key {
 	font-family: var(--font-interface);
 	font-size: 10.5px;
-	font-weight: 500;
 	letter-spacing: 0.09em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	width: 74px;
 	flex-shrink: 0;
 	padding-top: 3px;
@@ -337,10 +368,7 @@
 
 .synapse-tool-call-label {
 	font-size: 10px;
-	font-weight: 500;
-	color: var(--text-faint);
 	margin-bottom: 4px;
-	text-transform: uppercase;
 	letter-spacing: 0.08em;
 }
 
@@ -409,10 +437,7 @@
 
 .synapse-masthead-kicker {
 	font-size: 10px;
-	font-weight: 500;
 	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	line-height: 1;
 	user-select: none;
 	-webkit-user-select: none;
@@ -431,10 +456,7 @@
 	display: inline-flex;
 	align-items: center;
 	font-size: 10.5px;
-	font-weight: 500;
 	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	cursor: pointer;
 	padding: 3px 0;
 	border: none;
@@ -980,15 +1002,6 @@
 	gap: 4px;
 }
 
-.synapse-elicitation-label {
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	font-weight: 500;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
-}
-
 .synapse-elicitation-description {
 	font-size: 12px;
 	line-height: 1.45;
@@ -1271,10 +1284,7 @@
 	align-items: center;
 	gap: 6px;
 	font-size: 10px;
-	font-weight: 500;
 	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	padding: 2px 0;
 	user-select: none;
 	-webkit-user-select: none;
@@ -1493,12 +1503,6 @@
 	align-items: center;
 	gap: 8px;
 	padding: 0 0 4px;
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	user-select: none;
 	-webkit-user-select: none;
 	overflow: hidden;
@@ -1618,10 +1622,7 @@
 	gap: 6px;
 	font-family: var(--font-interface);
 	font-size: 11px;
-	font-weight: 500;
 	letter-spacing: 0.07em;
-	text-transform: uppercase;
-	color: var(--text-faint) !important;
 	cursor: pointer;
 	white-space: nowrap;
 	background: transparent !important;
@@ -1655,6 +1656,38 @@
 .synapse-f-btn:focus-visible {
 	outline: 1px solid var(--interactive-accent);
 	outline-offset: -1px;
+}
+
+/*
+ * Toolbar-row label family — `.synapse-config-toolbar`, its scoped `.synapse-select`,
+ * `.synapse-toolbar-btn`, `.synapse-debug-toggle`, `.synapse-state-line` and
+ * `.synapse-search-state-line` all happen to share the exact same font-family/size/weight/
+ * letter-spacing/transform/color, so that intersection is declared once here rather than
+ * six times. Each selector below keeps only what's genuinely its own (padding, borders,
+ * background, etc.). This rule must stay declared AFTER `.synapse-f-btn` above: several
+ * buttons carry both `.synapse-toolbar-btn` and `.synapse-f-btn` (e.g. the scope/attach
+ * buttons), and `.synapse-toolbar-btn`'s font-size/letter-spacing/etc. are meant to win that
+ * cascade — matching the pre-existing (pre-#217) source order (#217).
+ */
+.synapse-config-toolbar,
+.synapse-config-toolbar .synapse-select,
+.synapse-toolbar-btn,
+.synapse-debug-toggle,
+.synapse-state-line,
+.synapse-search-state-line {
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+/* Obsidian's native <select>/<button> styling needs `!important` to lose to the above on these
+ * two — the plain shared color declaration above isn't always specific enough (#217). */
+.synapse-config-toolbar .synapse-select,
+.synapse-toolbar-btn {
+	color: var(--text-faint) !important;
 }
 
 .synapse-f-btn-icon {
@@ -1767,12 +1800,6 @@
 	gap: 8px;
 	padding: 4px 0 0;
 	margin-top: 2px;
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	user-select: none;
 	-webkit-user-select: none;
 	background: transparent;
@@ -1839,12 +1866,6 @@
 }
 
 .synapse-config-toolbar .synapse-select {
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint) !important;
 	background: transparent !important;
 	border: none !important;
 	border-bottom: 1px solid transparent !important;
@@ -1882,12 +1903,6 @@
 }
 
 .synapse-toolbar-btn {
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint) !important;
 	background: transparent !important;
 	border: none !important;
 	border-bottom: 1px solid transparent !important;
@@ -1922,12 +1937,6 @@
 .synapse-debug-toggle {
 	display: inline-flex;
 	align-items: center;
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	background: transparent;
 	border: none;
 	border-bottom: 1px solid transparent;
@@ -2037,10 +2046,7 @@
 	list-style: none;
 	font-family: var(--font-interface);
 	font-size: 10.5px;
-	font-weight: 500;
 	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 }
 
 .synapse-compaction-summary::-webkit-details-marker {
@@ -2087,9 +2093,6 @@
 
 .synapse-task-panel-title {
 	font-family: var(--font-interface);
-	font-weight: 500;
-	color: var(--text-faint);
-	text-transform: uppercase;
 	letter-spacing: 0.14em;
 	font-size: 10px;
 	transition: color 0.15s ease;
@@ -2360,12 +2363,6 @@
 }
 
 .synapse-batch-progress-file h4 {
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	font-weight: 500;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	margin: 12px 0 8px;
 }
 
@@ -2509,10 +2506,7 @@ body.synapse-no-select {
 	align-items: center;
 	gap: 8px;
 	font-size: 10px;
-	font-weight: 500;
 	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	padding: 14px 10px 6px;
 	user-select: none;
 	-webkit-user-select: none;
@@ -2726,12 +2720,6 @@ body.synapse-no-select {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-family: var(--font-interface);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.13em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	padding: 0 0 4px;
 	user-select: none;
 	-webkit-user-select: none;
@@ -3016,12 +3004,6 @@ body.synapse-no-select {
 
 .synapse-modal-label {
 	display: block;
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	font-weight: 500;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	margin-bottom: 4px;
 }
 
@@ -3069,12 +3051,6 @@ body.synapse-no-select {
 
 .synapse-edit-label {
 	display: block;
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	font-weight: 500;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 	margin-bottom: 4px;
 }
 
@@ -3276,10 +3252,7 @@ body.synapse-no-select {
 .synapse-edit-card-title {
 	font-family: var(--font-interface);
 	font-size: 10.5px;
-	font-weight: 500;
 	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 }
 
 .synapse-edit-card-actions {

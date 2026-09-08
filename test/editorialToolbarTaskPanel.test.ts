@@ -21,14 +21,17 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			// Scoped to `.synapse-config-toolbar` (not the bare `.synapse-toolbar`) so the
 			// search tab's toolbar — which reuses `.synapse-toolbar` for its own pre-existing
 			// appearance — doesn't inherit this restyle (#215).
+			// Typography (uppercase/letter-spacing/font-size) lives in the shared
+			// toolbar-row label family rule (#217) — `.synapse-config-toolbar` is one of
+			// several selectors grouped there rather than declaring it alone.
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-config-toolbar,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-config-toolbar,[\s\S]*?\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar\s*\{[^}]*font-size:\s*10px/
+				/\.synapse-config-toolbar,[\s\S]*?\{[^}]*font-size:\s*10px/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-config-toolbar\s*\{[^}]*border:\s*none/
@@ -57,11 +60,12 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*border:\s*none/
 			);
+			// Typography lives in the shared toolbar-row label family rule (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-config-toolbar \.synapse-select,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-config-toolbar \.synapse-select,[\s\S]*?\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-config-toolbar \.synapse-select:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
@@ -75,11 +79,12 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 		});
 
 		it('styles .synapse-toolbar-btn as uppercase letterspaced with accent hover underline', () => {
+			// Typography lives in the shared toolbar-row label family rule (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar-btn\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-toolbar-btn,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar-btn\s*\{[^}]*letter-spacing:\s*0\.13em/
+				/\.synapse-toolbar-btn,[\s\S]*?\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-toolbar-btn:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
@@ -119,8 +124,11 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 		});
 
 		it('normalizes control colors: faint when default/unselected and accent when active', () => {
+			// The `!important` faint color is asserted separately from the shared toolbar-row
+			// typography rule, since Obsidian's native <select>/<button> styling needs it to
+			// win (#217).
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*color:\s*var\(--text-faint\)\s*!important/
+				/\.synapse-config-toolbar \.synapse-select,[\s\S]*?\{[^}]*color:\s*var\(--text-faint\)\s*!important/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-config-toolbar \.synapse-select\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)\s*!important/
@@ -238,12 +246,14 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 		it('styles status in left column uppercase with 74px width by reusing .synapse-finding-key', () => {
 			// The task-status element carries both classes rather than forking a copy of
 			// .synapse-finding-key's typography (issue #210's explicit instruction; #215).
-			expect(chatRendererSource).toContain("cls: 'synapse-task-item-status synapse-finding-key'");
+			// It also carries `.synapse-label-base` (#217), the shared primitive that now
+			// supplies the uppercase/weight/color base traits.
+			expect(chatRendererSource).toContain("cls: 'synapse-task-item-status synapse-finding-key synapse-label-base'");
 			expect(stylesContent).toMatch(
 				/\.synapse-finding-key\s*\{[^}]*width:\s*74px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-finding-key\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 		});
 	});

@@ -77,20 +77,23 @@ describe('editorial restyle: modals (#211)', () => {
 		});
 
 		it('styles form labels with uppercase letterspaced interface sans', () => {
+			// `.synapse-modal-label`/`.synapse-edit-label`/`.synapse-elicitation-label` share
+			// one exact typography combination and are declared together in a grouped rule
+			// (#217) rather than three times.
 			expect(stylesContent).toMatch(
-				/\.synapse-modal-label\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-modal-label,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-modal-label\s*\{[^}]*letter-spacing:\s*0\.12em/
+				/\.synapse-elicitation-label,[\s\S]*?\.synapse-modal-label,[\s\S]*?\{[^}]*letter-spacing:\s*0\.12em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-modal-label\s*\{[^}]*font-family:\s*var\(--font-interface\)/
+				/\.synapse-elicitation-label,[\s\S]*?\.synapse-modal-label,[\s\S]*?\{[^}]*font-family:\s*var\(--font-interface\)/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-edit-label\s*\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-elicitation-label\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-elicitation-label,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-askq-chip\s*\{[^}]*text-transform:\s*uppercase/
