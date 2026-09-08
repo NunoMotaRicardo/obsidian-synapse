@@ -33,6 +33,7 @@ declare module '../synapseView' {
 		showSessionContextMenu(e: MouseEvent, sessionId: string): void;
 		renameSession(sessionId: string): void;
 		deleteSessionById(sessionId: string): Promise<void>;
+		confirmDeleteSession(sessionId: string): void;
 		confirmDeleteDisplayedSessions(): void;
 		getDisplayedSessions(): SessionMetadata[];
 		deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void>;
@@ -266,23 +267,54 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.sidebarDeleteEl.toggleClass('is-hidden', !isExpanded);
 		}
 
-		for (const session of this.sessionList) {
-			// Apply type filter
-			if (this.sessionTypeFilter.size > 0) {
-				const type = this.getSessionType(session);
-				if (!this.sessionTypeFilter.has(type)) continue;
+		const displayedSessions = this.getDisplayedSessions();
+		if (displayedSessions.length === 0) {
+			if (isExpanded) {
+				this.sidebarListEl.createDiv({
+					cls: 'synapse-sidebar-empty',
+					text: this.sessionFilter ? 'No matching sessions' : 'No sessions yet',
+				});
 			}
-
-			const name = this.getSessionDisplayName(session);
-			if (this.sessionFilter && !name.toLowerCase().includes(this.sessionFilter)) continue;
-
-			this.renderSessionItem(this.sidebarListEl, session, {
-				expanded: isExpanded,
-				onClick: () => void this.selectSession(session.sessionId),
-				onContextMenu: (e) => this.showSessionContextMenu(e, session.sessionId),
-			});
+			return;
 		}
 
+		// Partition into active background sessions and regular/recent sessions
+		const bgSessions = displayedSessions.filter(s => this.activeSessions.has(s.sessionId) && s.sessionId !== this.currentSessionId);
+		const otherSessions = displayedSessions.filter(s => !this.activeSessions.has(s.sessionId) || s.sessionId === this.currentSessionId);
+
+		if (bgSessions.length > 0) {
+			if (isExpanded) {
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Background'});
+			}
+			for (const session of bgSessions) {
+				this.renderSessionItem(this.sidebarListEl, session, {
+					expanded: isExpanded,
+					onClick: () => void this.selectSession(session.sessionId),
+					onContextMenu: (e) => this.showSessionContextMenu(e, session.sessionId),
+				});
+			}
+			if (isExpanded && otherSessions.length > 0) {
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Sessions'});
+			}
+			for (const session of otherSessions) {
+				this.renderSessionItem(this.sidebarListEl, session, {
+					expanded: isExpanded,
+					onClick: () => void this.selectSession(session.sessionId),
+					onContextMenu: (e) => this.showSessionContextMenu(e, session.sessionId),
+				});
+			}
+		} else {
+			if (isExpanded) {
+				this.sidebarListEl.createDiv({cls: 'synapse-sidebar-heading', text: 'Sessions'});
+			}
+			for (const session of displayedSessions) {
+				this.renderSessionItem(this.sidebarListEl, session, {
+					expanded: isExpanded,
+					onClick: () => void this.selectSession(session.sessionId),
+					onContextMenu: (e) => this.showSessionContextMenu(e, session.sessionId),
+				});
+			}
+		}
 	};
 
 	proto.renderSessionItem = function (container: HTMLElement, session: SessionMetadata, opts: {
@@ -313,12 +345,54 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			const details = item.createDiv({cls: 'synapse-session-details'});
 			details.createDiv({cls: 'synapse-session-name', text: name});
 			const modTime = new Date(session.lastModified);
-			details.createDiv({cls: 'synapse-session-time', text: formatTimeAgo(modTime)});
+			const rawCount = (session.sessionId === this.currentSessionId ? this.messages.length : undefined)
+				?? this.activeSessions.get(session.sessionId)?.messages.length;
+			const timeAgo = formatTimeAgo(modTime);
+			const metaText = rawCount !== undefined && rawCount > 0
+				? `${timeAgo} · ${rawCount} msg${rawCount === 1 ? '' : 's'}`
+				: timeAgo;
+			details.createDiv({cls: 'synapse-session-time', text: metaText});
+
+			const actions = item.createDiv({cls: 'synapse-session-actions'});
+			const renameBtn = actions.createEl('button', {
+				cls: 'clickable-icon synapse-session-action-btn',
+				attr: {title: 'Rename session', 'aria-label': 'Rename session'},
+			});
+			setIcon(renameBtn, 'pencil');
+			renameBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				this.renameSession(session.sessionId);
+			});
+
+			const deleteBtn = actions.createEl('button', {
+				cls: 'clickable-icon synapse-session-action-btn mod-delete',
+				attr: {title: 'Delete session', 'aria-label': 'Delete session'},
+			});
+			setIcon(deleteBtn, 'trash-2');
+			deleteBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				this.confirmDeleteSession(session.sessionId);
+			});
 		}
 
 		item.setAttribute('title', name);
+		item.setAttribute('tabindex', '0');
+		item.setAttribute('role', 'button');
+		item.setAttribute('aria-label', name);
 		item.addEventListener('click', opts.onClick);
 		item.addEventListener('contextmenu', opts.onContextMenu);
+		item.addEventListener('keydown', (ke: KeyboardEvent) => {
+			if (ke.key === 'Enter' || ke.key === ' ') {
+				ke.preventDefault();
+				opts.onClick();
+			} else if (ke.key === 'F2') {
+				ke.preventDefault();
+				this.renameSession(session.sessionId);
+			} else if (ke.key === 'Delete') {
+				ke.preventDefault();
+				this.confirmDeleteSession(session.sessionId);
+			}
+		});
 	};
 
 	proto.getSessionDisplayName = function (session: SessionMetadata): string {
@@ -979,6 +1053,13 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.deleteSessionById = async function (sessionId: string): Promise<void> {
+		// If this is the foreground session and it's actively streaming, interrupt
+		// the in-flight run first (same abort path as the stop button) so we don't
+		// delete the session out from under a still-running stream.
+		if (sessionId === this.currentSessionId && this.isStreaming) {
+			await this.handleAbort();
+		}
+
 		// Clean up background session if it exists
 		const bg = this.activeSessions.get(sessionId);
 		if (bg) {
@@ -1009,6 +1090,25 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		this.renderSessionList();
 		new Notice('Session deleted.');
+	};
+
+	proto.confirmDeleteSession = function (sessionId: string): void {
+		const session = this.sessionList.find(s => s.sessionId === sessionId);
+		const name = session ? this.getSessionDisplayName(session) : 'this session';
+
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('Delete session');
+		modal.contentEl.createEl('p', {
+			text: `Are you sure you want to delete "${name}"?`,
+		});
+		const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
+		btnRow.createEl('button', {text: 'Cancel', cls: 'mod-cancel'}).addEventListener('click', () => modal.close());
+		const confirmBtn = btnRow.createEl('button', {text: 'Delete', cls: 'mod-warning'});
+		confirmBtn.addEventListener('click', () => {
+			modal.close();
+			void this.deleteSessionById(sessionId);
+		});
+		modal.open();
 	};
 
 	proto.confirmDeleteDisplayedSessions = function (): void {
