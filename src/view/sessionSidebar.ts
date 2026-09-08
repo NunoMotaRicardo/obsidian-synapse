@@ -598,6 +598,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		// Force scroll to end
 		this.forceScrollToBottom();
+		this.updateMastheadKicker();
 	};
 
 	proto.registerBackgroundEvents = function (bg: BackgroundSession): void {
@@ -903,11 +904,13 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 			this.renderSessionList();
 			this.updateSendButton();
+			this.updateMastheadKicker();
 		} catch (e) {
 			this.addInfoMessage(`Failed to load session: ${String(e)}`);
 			this.renderWelcome();
 			this.currentSessionId = null;
 			this.renderSessionList();
+			this.updateMastheadKicker();
 		}
 	};
 
@@ -954,6 +957,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				this.sessionNames[sessionId] = `${prefix}${newName}`;
 				this.saveSessionNames();
 				this.renderSessionList();
+				this.updateMastheadKicker();
 			}
 			modal.close();
 		});

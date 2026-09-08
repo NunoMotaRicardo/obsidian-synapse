@@ -53,6 +53,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.agentSelect = agentGroup.createEl('select', {cls: 'synapse-select'});
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
+			this.updateStateLine?.();
 		});
 
 		// Model dropdown
@@ -68,6 +69,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			// carry the (now-valid) effort + summary into the mid-session switch.
 			this.updateReasoningBadge();
 			this.applyReasoningToSession();
+			this.updateModelPickerButton?.();
+			this.updateStateLine?.();
 		});
 
 		// Tools button
@@ -116,6 +119,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
+		this.updateModelPickerButton?.();
+		this.updateStateLine?.();
 	};
 
 	proto.getSelectedModelInfo = function(): ModelInfo | undefined {
@@ -280,6 +285,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		}
 		this.applyAgentToolsAndSkills(agent);
 		this.configDirty = true;
+		this.updateModelPickerButton?.();
+		this.updateStateLine?.();
 	};
 
 	proto.applyAgentToolsAndSkills = function(agent?: AgentConfig): void {

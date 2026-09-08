@@ -24,6 +24,9 @@ declare module '../synapseView' {
 		setWorkingDir(folderPath: string): void;
 		setPromptText(text: string): void;
 		addSelectionAttachment(text: string, info: SelectionInfo): void;
+		updateStateLine(): void;
+		updateModelPickerButton(): void;
+		openModelPickerMenu(e: MouseEvent): void;
 
 		// Slash-command skill popup
 		handleInputKeydownForSkillPopup(e: KeyboardEvent): boolean;
@@ -49,31 +52,24 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	const proto = ViewClass.prototype as SynapseView;
 
 	proto.buildInputArea = function (parent: HTMLElement): void {
+		// State line above input (NOTE / AGENT / MODEL)
+		this.stateLineEl = parent.createDiv({cls: 'synapse-state-line'});
+		this.stateNoteEl = this.stateLineEl.createSpan({cls: 'synapse-state-note', text: 'No note'});
+		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
+		this.stateAgentEl = this.stateLineEl.createSpan({cls: 'synapse-state-agent', text: 'General'});
+		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
+		this.stateModelEl = this.stateLineEl.createSpan({cls: 'synapse-state-model', text: 'Default model'});
+
 		const inputArea = parent.createDiv({cls: 'synapse-input-area'});
 
-		// Attach buttons row above textarea
-		const inputActions = inputArea.createDiv({cls: 'synapse-input-actions'});
+		// Chips row for attachments, active note & scope
+		const chipsContainer = inputArea.createDiv({cls: 'synapse-input-chips'});
+		this.attachmentsBar = chipsContainer.createDiv({cls: 'synapse-attachments-bar is-hidden'});
+		this.activeNoteBar = chipsContainer.createDiv({cls: 'synapse-active-note-bar is-hidden'});
+		this.scopeBar = chipsContainer.createDiv({cls: 'synapse-scope-bar is-hidden'});
 
-		const scopeBtn = inputActions.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Select vault scope'}});
-		setIcon(scopeBtn, 'folder');
-		scopeBtn.addEventListener('click', () => this.openScopeModal());
-
-		const attachBtn = inputActions.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Attach file'}});
-		setIcon(attachBtn, 'paperclip');
-		attachBtn.addEventListener('click', () => this.handleAttachFile());
-
-		const clipBtn = inputActions.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Paste clipboard'}});
-		setIcon(clipBtn, 'clipboard-paste');
-		clipBtn.addEventListener('click', () => void this.handleClipboard());
-
-		// Attachments, active note & scope (shown inline after action buttons)
-		this.attachmentsBar = inputActions.createDiv({cls: 'synapse-attachments-bar'});
-		this.activeNoteBar = inputActions.createDiv({cls: 'synapse-active-note-bar'});
-		this.scopeBar = inputActions.createDiv({cls: 'synapse-scope-bar'});
-
-		// Row for textarea + send button
+		// Textarea
 		const inputRow = inputArea.createDiv({cls: 'synapse-input-row'});
-
 		this.inputEl = inputRow.createEl('textarea', {
 			cls: 'synapse-input',
 			attr: {placeholder: 'Ask or paste something to work on...', rows: '1'},
@@ -159,15 +155,41 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.handleFileDrop(e);
 		});
 
-		// Edit button (opens Edit modal with chat input text)
-		const editBtn = inputRow.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Edit text'}});
-		setIcon(editBtn, 'pencil-line');
+		// Composer actions footer
+		const foot = inputArea.createDiv({cls: 'synapse-input-actions synapse-composer-foot'});
+
+		const scopeBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-scope', attr: {title: 'Select vault scope', type: 'button'}});
+		const scopeIcon = scopeBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(scopeIcon, 'folder');
+		scopeBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Scope'});
+		scopeBtn.addEventListener('click', () => this.openScopeModal());
+
+		const attachBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-attach', attr: {title: 'Attach file', type: 'button'}});
+		const attachIcon = attachBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(attachIcon, 'paperclip');
+		attachBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Attach'});
+		attachBtn.addEventListener('click', () => this.handleAttachFile());
+
+		const clipBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-clip', attr: {title: 'Paste clipboard', type: 'button'}});
+		const clipIcon = clipBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(clipIcon, 'clipboard-paste');
+		clipBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Paste'});
+		clipBtn.addEventListener('click', () => void this.handleClipboard());
+
+		const editBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-edit', attr: {title: 'Edit text', type: 'button'}});
+		const editIcon = editBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(editIcon, 'pencil-line');
+		editBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Edit'});
 		editBtn.addEventListener('click', () => this.openEditFromChat());
 
-		// Send / Stop button
-		this.sendBtn = inputRow.createEl('button', {
+		foot.createSpan({cls: 'synapse-composer-spacer'});
+
+		this.modelPickerBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-model', attr: {title: 'Select model', type: 'button'}});
+		this.modelPickerBtn.addEventListener('click', (e) => this.openModelPickerMenu(e));
+
+		this.sendBtn = foot.createEl('button', {
 			cls: 'clickable-icon synapse-send-btn',
-			attr: {title: 'Send message'},
+			attr: {title: 'Send message', type: 'button'},
 		});
 		setIcon(this.sendBtn, 'arrow-up');
 		this.sendBtn.addEventListener('click', () => {
@@ -177,6 +199,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				void this.handleSend();
 			}
 		});
+
+		this.updateStateLine();
+		this.updateModelPickerButton();
 	};
 
 	proto.handleAttachFile = function (): void {
@@ -408,6 +433,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Clear selection when switching files — pollSelection will pick up the new one
 		this.activeSelection = null;
 		this.renderActiveNoteBar();
+		this.updateStateLine();
 
 		// Update working directory to the parent folder of the active note — deferred
 		// while a conversation is in progress so switching notes mid-conversation doesn't
@@ -468,6 +494,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			if (this.activeSelection) {
 				this.activeSelection = null;
 				this.renderActiveNoteBar();
+				this.updateStateLine();
 			}
 			this.cursorPosition = null;
 			return;
@@ -508,6 +535,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			if (this.activeSelection) {
 				this.activeSelection = null;
 				this.renderActiveNoteBar();
+				this.updateStateLine();
 			}
 			return;
 		}
@@ -534,6 +562,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			endChar: to.ch,
 		};
 		this.renderActiveNoteBar();
+		this.updateStateLine();
 	};
 
 	proto.renderActiveNoteBar = function (): void {
@@ -550,6 +579,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				? `${sel.fileName}:${sel.startLine}`
 				: `${sel.fileName}:${sel.startLine}-${sel.endLine}`;
 			tag.createSpan({text: displayName, cls: 'synapse-attachment-name'});
+			const removeBtn = tag.createSpan({cls: 'synapse-attachment-remove'});
+			setIcon(removeBtn, 'x');
+			removeBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				this.activeSelection = null;
+				this.renderActiveNoteBar();
+				this.updateStateLine();
+			});
 			tag.setAttribute('title', `Selection in ${sel.filePath} (${sel.startLine === sel.endLine ? `line ${sel.startLine}` : `lines ${sel.startLine}-${sel.endLine}`})`);
 			return;
 		}
@@ -570,6 +607,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		setIcon(ic, 'file-text');
 		const name = this.activeNotePath.split('/').pop() || this.activeNotePath;
 		tag.createSpan({text: name, cls: 'synapse-attachment-name'});
+		const removeBtn = tag.createSpan({cls: 'synapse-attachment-remove'});
+		setIcon(removeBtn, 'x');
+		removeBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.activeNotePath = null;
+			this.renderActiveNoteBar();
+			this.updateStateLine();
+		});
 		tag.setAttribute('title', `Active note: ${this.activeNotePath}`);
 	};
 
@@ -633,6 +678,98 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		});
 		this.renderAttachments();
 		this.renderActiveNoteBar();
+		this.updateStateLine();
+	};
+
+	// ── State line & model picker (Editorial restyle #208) ───────
+
+	proto.updateStateLine = function (): void {
+		if (!this.stateLineEl) return;
+
+		// Note
+		let noteText = 'No note';
+		if (this.activeSelection) {
+			const sel = this.activeSelection;
+			noteText = sel.startLine === sel.endLine
+				? `${sel.fileName}:${sel.startLine}`
+				: `${sel.fileName}:${sel.startLine}-${sel.endLine}`;
+		} else if (this.activeNotePath) {
+			noteText = this.activeNotePath.split('/').pop() || this.activeNotePath;
+		}
+		if (this.stateNoteEl) {
+			this.stateNoteEl.setText(noteText);
+			this.stateNoteEl.setAttribute('title', this.activeSelection ? `Selection: ${noteText}` : (this.activeNotePath ? `Active note: ${this.activeNotePath}` : 'No active note'));
+		}
+
+		// Agent
+		let agentText = 'General';
+		if (this.selectedAgent) {
+			const found = this.agents.find(a => a.name === this.selectedAgent);
+			agentText = found?.name || this.selectedAgent;
+		}
+		if (this.stateAgentEl) {
+			this.stateAgentEl.setText(agentText);
+			this.stateAgentEl.setAttribute('title', `Agent: ${agentText}`);
+		}
+
+		// Model
+		let modelText = 'Default model';
+		if (this.selectedModel) {
+			const found = this.models.find(m => m.id === this.selectedModel);
+			modelText = found?.name || this.selectedModel;
+		}
+		if (this.stateModelEl) {
+			this.stateModelEl.setText(modelText);
+			this.stateModelEl.setAttribute('title', `Model: ${modelText}`);
+		}
+	};
+
+	proto.updateModelPickerButton = function (): void {
+		if (!this.modelPickerBtn) return;
+		let modelText = 'Default model';
+		if (this.selectedModel) {
+			const found = this.models.find(m => m.id === this.selectedModel);
+			modelText = found?.name || this.selectedModel;
+		}
+		this.modelPickerBtn.setText(modelText);
+	};
+
+	proto.openModelPickerMenu = function (e: MouseEvent): void {
+		const menu = new Menu();
+		menu.addItem(item => {
+			item.setTitle('Default model')
+				.setChecked(this.selectedModel === '')
+				.onClick(() => {
+					this.selectedModel = '';
+					if (this.modelSelect) {
+						this.modelSelect.value = '';
+					}
+					this.updateReasoningBadge?.();
+					this.applyReasoningToSession?.();
+					this.updateModelPickerButton();
+					this.updateStateLine();
+				});
+		});
+		if (this.models.length > 0) {
+			menu.addSeparator();
+			for (const model of this.models) {
+				menu.addItem(item => {
+					item.setTitle(model.name)
+						.setChecked(this.selectedModel === model.id)
+						.onClick(() => {
+							this.selectedModel = model.id;
+							if (this.modelSelect) {
+								this.modelSelect.value = model.id;
+							}
+							this.updateReasoningBadge?.();
+							this.applyReasoningToSession?.();
+							this.updateModelPickerButton();
+							this.updateStateLine();
+						});
+				});
+			}
+		}
+		menu.showAtMouseEvent(e);
 	};
 
 	// ── Slash-command skill popup ───────────────────────────────
