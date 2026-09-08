@@ -390,6 +390,8 @@ vi.mock('obsidian', () => {
 		},
 		MarkdownView: class {},
 		MarkdownRenderer: class {},
+		ItemView: class {},
+		WorkspaceLeaf: class {},
 		Component: class {
 			load() {}
 			unload() {}

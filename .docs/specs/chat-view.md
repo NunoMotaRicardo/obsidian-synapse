@@ -709,3 +709,72 @@ mechanisms handle failures:
   attachment/file (via a tool result) before acting on its content, stopping to ask for
   clarification or re-attachment instead of proceeding with guessed/fabricated content if a
   referenced file can't be found or read.
+
+## Editorial design language & primitives (issue #207)
+
+Part of the visual restyle (#206) based on `.docs/design/variant-b-editorial.html`. The chat transcript
+is set like a printed page rather than a messaging app: speech bubbles, avatars, badges, and colored
+pill backgrounds are eliminated. Structural clarity is achieved via typography, hairline rules, and
+monospace margin rails, with color reserved exclusively for the interactive accent.
+
+### Typography & bundled serif
+- **Newsreader, upright + italic (Latin subset):** Two `@font-face` declarations embedded directly in
+  `styles.css` as `data:font/woff2;base64,...` data URIs (~163 KB base64, ~123 KB raw combined),
+  ensuring zero runtime network activity, offline operation, and seamless compatibility with
+  BRAT/vault installs without external assets.
+- **Variable weight axis:** Both files are variable fonts carrying the full `200 800` axis, declared
+  as `font-weight: 200 800`. One face per style therefore covers every weight the stylesheet asks for
+  — 400 body copy, 500 masthead wordmark, 600 `strong` in assistant prose — so the browser never
+  synthesizes faux-bold, and the italic face means `em` never renders as a sheared oblique. This is
+  load-bearing for the design: assistant replies are Markdown, so `strong` and `em` appear constantly.
+- **SIL OFL 1.1 licence compliance:** Full licence text and copyright notice
+  (`Copyright 2020 The Newsreader Project Authors`) are embedded in a comment header in `styles.css`
+  directly above the `@font-face` declarations, alongside provenance: the upstream `fonts.gstatic.com`
+  URL for each file and the `css2` query that produced them. The bytes are Google's own Latin subset —
+  no local subsetting step is involved. An accompanying `OFL.txt` is also committed at the repository
+  root.
+- **Fallback stack:** Declared via `--synapse-font-serif`:
+  `Newsreader, Georgia, 'Iowan Old Style', 'Times New Roman', serif`.
+  The bundled subset is Latin-only (`U+0000-00FF` plus punctuation); non-Latin scripts (Greek, Cyrillic,
+  CJK) in assistant prose gracefully fall back to the declared serif fallback stack (`Georgia, 'Iowan Old Style', 'Times New Roman', serif`).
+- **Voice split:**
+  - Assistant voice: bundled serif (`Newsreader`), ~15.5px, line-height 1.62. Links styled with a
+    hairline accent bottom border. Inline code remains monospace with subtle background.
+  - User voice: Obsidian interface sans (`--font-interface`), 13.5px, line-height 1.55.
+
+### Shared primitives
+- `--synapse-rule`: hairline border token (`var(--background-modifier-border)`).
+- `--synapse-rule-soft`: softer divider token (`var(--background-modifier-border-focus, var(--background-modifier-border))`).
+- `.synapse-rule`: hairline horizontal divider (`height: 1px; background: var(--synapse-rule); border: none;`).
+- `.synapse-speaker`: letterspaced small-caps speaker label (`You` / `Synapse` in DOM, rendered uppercase via
+  `text-transform: uppercase`), 10px, font-weight 500, letter-spacing 0.15em, with trailing hairline rule
+  via `::after` filling remaining width. Associated with the message wrapper via `aria-labelledby`.
+  Modifiers: `.you` (`var(--text-muted)`), `.ai` (`var(--interactive-accent)`).
+- `.synapse-findings`: ruled definition list container for structured outputs (findings, decisions,
+  key-values).
+  - `.synapse-finding`: definition item with subtle horizontal borders.
+  - `.synapse-finding-key`: uppercase letterspaced key label (10.5px, font-weight 500, letter-spacing
+    0.09em, fixed width 74px, faint text).
+  - `.synapse-finding-val`: definition value (14px, line-height 1.5).
+- `.synapse-ledger`: monospace margin rail container primitive (`border-left: 1px solid var(--synapse-rule); padding-left: 13px;`).
+  Used for tool calls container (`.synapse-tool-calls`) and approval modal detail blocks.
+
+### Transcript elements
+- **User turn (`.synapse-msg-user`):** rendered as a washed block with a 2px solid interactive accent
+  left border (`border-left: 2px solid var(--interactive-accent)`). The wash color uses
+  `color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary))` with a
+  `--background-secondary` fallback. No bubble border-radius, full container width, interface sans
+  typography. Copy button is positioned at the top-right of the block and fades in on hover.
+- **Assistant turn (`.synapse-msg-assistant`):** clean serif body copy, generous measure, unboxed.
+- **Tool calls (`.synapse-tool-calls`, `.synapse-tool-call`):** indented margin rail with single
+  hairline left border (`border-left: 1px solid var(--synapse-rule)`). Summary row functions as a
+  ledger row: tool name (rendered uppercase via CSS), compact arguments summary (`.synapse-tool-call-arg`),
+  right-aligned tabular elapsed time (`.synapse-tool-call-time`). Live calls pulse the accent (`is-live`);
+  no spinner icon. Expanding a call reveals the input and output detail sections as collapsible code blocks.
+- **Reasoning blocks (`.synapse-reasoning`):** single hairline left rule, uppercase letterspaced
+  summary label (`Thinking…` while streaming with accent pulse, `Reasoning` when complete or historical;
+  sentence case in DOM, rendered uppercase via CSS), serif body matching the assistant's voice.
+- **Thinking indicator (`.synapse-thinking`):** serif status indicator matching the assistant's
+  voice (upright Newsreader). Set upright rather than italic; with the italic face now bundled this is
+  a style choice rather than a constraint.
+

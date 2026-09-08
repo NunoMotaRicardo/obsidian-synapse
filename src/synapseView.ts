@@ -151,7 +151,7 @@ export class SynapseView extends ItemView {
 	turnStartTime = 0;
 	turnToolsUsed: string[] = [];
 	turnUsage: {inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; model?: string} | null = null;
-	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement}>();
+	activeToolCalls = new Map<string, {toolName: string; detailsEl: HTMLDetailsElement; startTime?: number}>();
 
 	// ── Run-level guardrail counters (issue #88) ────────────────
 	// Unlike turnStartTime/turnUsage above (reset per rendered assistant
