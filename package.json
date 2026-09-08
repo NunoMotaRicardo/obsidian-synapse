@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-synapse",
-	"version": "1.4.0",
+	"version": "1.5.0",
 	"description": "Synapse — your Claude-native AI assistant for Obsidian.",
 	"main": "main.js",
 	"type": "module",

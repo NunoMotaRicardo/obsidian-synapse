@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-08
+
+The **Editorial** redesign (#206) transforms Synapse from a chat box into a printed page that lives naturally alongside your notes. Chat bubbles, avatars, badges, and colored pill backgrounds are replaced by intentional typography, hairline rules, and monospace margin rails.
+
+### Added
+
+- **Editorial design language (Variant B) across all surfaces (#206):**
+  - **Bundled Newsreader serif:** Assistant responses speak in bundled Latin-subset Newsreader (upright and italic, OFL 1.1) with zero runtime network requests, while the user's voice remains in interface sans (#207).
+  - **Ruled transcript:** Letterspaced small-caps speaker labels (`YOU` / `SYNAPSE`) with trailing hairline rules; user turns set in a washed block with a clay left rule (#207).
+  - **Tool margin rail (ledger):** Tool calls render down an indented monospace rail as quiet footnotes to the text, pulsing the accent when running and showing completions and denials cleanly (#207).
+  - **Ruled page masthead & colophon composer:** The panel header replaces the old tab bar with an editorial page head (serif wordmark, kicker, text tabs); the composer transforms from a floating card into a ruled colophon with serif input and softened context chips (#208).
+  - **Ruled session sidebar & search tab:** Session list adopts unlined rows with serif titles and accent left border on active session; search tab mirrors the ruled composer and hairline results (#209).
+  - **Config toolbar & context-window gauge:** Upper-case letterspaced controls, hairline meter context gauge, and definition-list task tracking (#210).
+  - **Editorial modals:** All plugin modals (tool approval, ask-user-question, elicitation, edit, vault scope, batch progress) restyled with serif titles and ruled forms (#211).
+- **Transcript context stripping:** Replaying session transcripts automatically strips internal prompt transport scaffolding (`--- Attached file: ...`, cursor positions, workspace path information) so only genuine user prompts appear in the chat view.
+
+### Changed
+
+- **Stable vs. volatile prompt split (#201):** Vault structure, active note, and working directory are delivered as part of the user message rather than `systemPrompt.append`, preventing cache-invalidation of the entire conversation on note switches and drastically reducing token costs.
+- **Working directory auto-update deferral (#202):** Active-note-driven working directory changes are deferred while a conversation is in progress, eliminating unnecessary CLI process restarts and full transcript replay cache churn.
+- **Unified single-row composer footer:** Sits debug and send alongside session config controls with softened chips and enclosed scope remove affordances.
+
 ## [1.4.0] - 2026-09-07
 
 Highlights of the ~40 pull requests merged since 1.3.0; see the
