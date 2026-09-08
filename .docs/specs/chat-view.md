@@ -536,9 +536,10 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
 `Session`-side mechanism and its one-turn-stale/timing caveats.
 
 - **The gauge** (`.synapse-context-indicator`, built in `configToolbar.ts`'s
-  `buildConfigToolbar()`, before the debug-toggle spacer): a small pill reading `"NN% context"`
-  with a tooltip giving the raw token counts (`~totalTokens / maxTokens`) and a note that the
-  figure is one turn stale. `updateContextIndicator()` reads
+  `buildConfigToolbar()`, before the debug-toggle spacer): an editorial hairline meter
+  (`.synapse-gauge-track` with accent `.synapse-gauge-fill` and a tabular mono percentage
+  `.synapse-gauge-value`) with a tooltip giving the raw token counts (`~totalTokens / maxTokens`)
+  and a note that the figure is one turn stale. `updateContextIndicator()` reads
   `this.currentSession?.cachedContextUsage` and:
   - **Renders nothing** (`is-hidden`, empty text) when it's `undefined` — before any session has
     captured a value, and for the entire conversation on a BYOK local model (see
@@ -793,17 +794,17 @@ The input area transforms from a floating card into an editorial ruled footer:
 - **Opening rule:** opened by a heavy rule (`border-top: 1px solid var(--synapse-rule-heavy);`). It is **not** a card: no border radius, no drop shadow, and no inset background panel (`background: transparent; border: none; box-shadow: none;`).
 - **State line (`.synapse-state-line`):** uppercase letterspaced status line (10px, font-weight 500, letter-spacing 0.13em) positioned above the input and chips. Prints the active context as `NOTE / AGENT / MODEL`. The active note/selection is rendered in the accent color (`.synapse-state-note`), separators in subtle rule color, and agent and model in faint text. Updates live via `updateStateLine()` on note switches, selection changes, and agent/model picks.
 - **Textarea (`.synapse-input`):** set in the bundled serif (`--synapse-font-serif`, 16px, line-height 1.5) with an italic placeholder (`color: var(--text-faint); font-style: italic;`), giving prompt writing the tactile feel of writing a note.
-- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope`, `Attach`, `Paste`, and `Edit`, styled with uppercase letterspaced typography (11px, letter-spacing 0.07em) and underlined on hover with the accent color, replacing filled icon buttons.
-- **Model picker button:** quick-picker text button displaying the active model name, underlined on hover and opening a selection menu directly from the composer footer while keeping state line and toolbar synchronized.
-- **Send button (`.synapse-send-btn`):** 30px square accent block with 2px border radius and centered icon. Transitions to error color and stop icon when streaming is active.
+- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope` and `Attach`, styled with uppercase letterspaced typography (11px, letter-spacing 0.07em) and underlined on hover with the accent color, replacing filled icon buttons. (The composer previously also had `Paste` and `Edit` buttons; both were removed to match the design reference — `Paste` read clipboard text into an attachment via `handleClipboard()`, `Edit` opened the current draft in `EditModal` via `openEditFromChat()`.)
+- **Send button (`.synapse-send-btn`):** 24px square accent block with 2px border radius and centered icon, aligned on the unified single-row footer directly alongside the debug toggle. Transitions to error color and stop icon when streaming is active.
 - **Editorial chips (`.synapse-input-chips`):** attachment, active-note, and vault-scope chips adopt hairline borders (`--synapse-rule-soft`), rectangular 2px border radius, and muted typography. All chips remain removable via a hoverable `x` button.
-- **Toolbar coexistence decision:** The state line displays `NOTE / AGENT / MODEL` above the input. The config toolbar continues to function alongside it as a separate row below the composer until slice #210 restyles the toolbar and context gauge. Leaving the toolbar intact avoids a half-migrated interface and ensures working directory selection, reasoning effort menu, tool toggle, and context window gauge remain fully usable.
+- **Toolbar coexistence decision:** The state line was established in #208 displaying `NOTE / AGENT / MODEL`. In slice #210, the coexistence is resolved: the composer state line focuses strictly on the active note / selection context (`.synapse-state-note`), while the restyled config toolbar below houses the interactive controls (agent, model, reasoning effort, tools, working directory, context gauge, debug), completely eliminating duplicated agent/model readouts across the two surfaces.
+- **Sole model control (#215 AC-2 follow-up):** #213 had briefly added its own composer-footer model-picker button (`.synapse-f-btn-model`, `openModelPickerMenu()`), duplicating the toolbar's model `<select>` — the model name was shown twice in the UI. That button has been removed; the toolbar's `modelSelect` (`configToolbar.ts`) is the sole model-switching control, changed via the shared `setModel()` method.
 
 ### Session sidebar (issue #209)
 
-The session sidebar adopts the prototype's starter list pattern (ruled contents column):
-- **Ruled rows:** Each session item (`.synapse-session-item`) renders with a hairline bottom separator (`border-bottom: 1px solid var(--synapse-rule-soft);`), transparent background, and no card borders or drop shadows.
-- **Typography & metadata:** Session titles use the interface sans (`font-family: var(--font-interface); font-size: 13px;`). Relative timestamps and message counts are right-aligned, muted (`color: var(--text-faint);`), and set with `font-variant-numeric: tabular-nums`.
+The session sidebar adopts the prototype's starter list pattern (clean unlined contents column):
+- **Unlined rows:** Each session item (`.synapse-session-item`) renders with a transparent background, no card borders or drop shadows, and no bottom hairline separator (`border-bottom: none;`).
+- **Typography & metadata:** Session titles use the bundled serif (`font-family: var(--synapse-font-serif); font-size: 14px;`). Relative timestamps and message counts are right-aligned, muted (`color: var(--text-faint);`), and set with `font-variant-numeric: tabular-nums`.
 - **Active session accent:** Marked exclusively by a 2px solid interactive accent left border (`border-left: 2px solid var(--interactive-accent);`) and accent title color, retaining a transparent background rather than a filled pill or card background.
 - **Section headings (`.synapse-sidebar-heading`):** Follow the uppercase letterspaced label primitive (10px, font-weight 500, letter-spacing 0.14em, faint text) with a trailing hairline rule filling the remaining width via `::after`. Renders a "Background" section when active background sessions exist alongside a "Sessions" section.
 - **Underline-on-hover affordances:** Header icon controls (new, filter, sort, refresh, bulk delete) and inline row action buttons (rename, delete) use transparent backgrounds with the underline-on-hover border transition (`border-bottom-color: var(--interactive-accent)`), eliminating filled buttons.
@@ -813,11 +814,42 @@ The session sidebar adopts the prototype's starter list pattern (ruled contents 
 ### Search tab (issue #209)
 
 The vault search tab is restyled to align with the Editorial design language:
-- **Ruled query input:** The search textarea (`.synapse-search-input`) adopts the composer's ruled treatment with a bottom hairline border (`border-bottom: 1px solid var(--synapse-rule);`), transparent background, bundled serif typography (`font-family: var(--synapse-font-serif); font-size: 16px;`), and an italic placeholder.
-- **Square accent search button:** 30px square accent block (`.synapse-search-btn`) with 2px border radius matching the composer's send button. Turns to error background with a stop icon when a search is running to allow cancellation.
-- **Preserved mode switching:** Basic mode (fast single-turn exploration) and Advanced mode (full agent session with config options) remain togglable from the search toolbar, which adopts underline-on-hover icon buttons.
+- **Search composer & state line:** The search interface mirrors the chat view's ruled composer layout:
+  - Top state line (`.synapse-search-state-line`) houses the working directory button (`.synapse-cwd-btn`) and folder icon button (`.synapse-f-btn-scope`), displaying the scoped folder name in interactive accent or `DIR` in faint grey at vault root.
+  - Textarea (`.synapse-search-input`) set in the bundled serif (`--synapse-font-serif`, 16px, line-height 1.5) with an italic placeholder (`color: var(--text-faint); font-style: italic;`), transparent background, and no boxed card borders.
+  - Unified single-row toolbar (`.synapse-search-toolbar`, `.synapse-config-toolbar`) below the input, separated by a hairline divider (`border-top: 1px solid var(--synapse-rule);`).
+- **Compact accent search button:** 24px square accent block (`.synapse-search-btn`) with 2px border radius and 13px search icon matching the composer's send button, aligned on the far right of the unified toolbar row. Turns to error background with a stop icon when a search is running to allow cancellation.
+- **Unified toolbar controls & mode switching:**
+  - Mode toggle: text button (`.synapse-search-mode-btn`) displaying `BASIC` (faint grey, default) or `ADVANCED` (accent orange, active). Clicking toggles between fast exploration and advanced agent-driven search.
+  - Advanced controls group (`.synapse-search-advanced-group`): visible only in advanced mode, housing Agent dropdown (`.synapse-agent-select`), Model dropdown (`.synapse-model-select`), and Tools approval button (`.synapse-tools-btn`, showing `ALLOW` or `ASK`), separated by `/` dividers (`.synapse-toolbar-sep`). Boxed selects, rectangular borders, and bot/cpu/plug icons are eliminated.
+  - Normalized control colors: active selections render in `var(--interactive-accent)`, default/unselected states render in `var(--text-faint)`.
 - **Ruled search results:** Result rows (`.synapse-search-result`) render as ruled rows with hairline dividers (`border-bottom: 1px solid var(--synapse-rule-soft);`). Note titles are set in interface sans with accent hover underline, parent folder paths are right-aligned in faint tabular text, and matched excerpts or reasons are set in the bundled serif (`--synapse-font-serif`, 14.5px, line-height 1.55).
 - **Accent match highlighting:** Search query terms inside excerpts are highlighted using `.synapse-search-highlight` with the interactive accent text color and a subtle bottom accent border over a transparent background, completely eliminating yellow highlight fills.
 - **Sliding hairline loading state:** While searching, `.synapse-search-loading` displays "Searching vault…" in serif italic alongside an animated sliding hairline bar (`.synapse-search-loading-bar` with `@keyframes synapse-slide`), completely eliminating spinners from the search experience. Empty search results render as a serif italic line ("No results found").
+
+### Config toolbar, gauge & task panel (issue #210)
+
+The config toolbar, context-window gauge, and live task/plan panel adopt the Editorial design language:
+- **Config toolbar controls:** Agent, model, reasoning effort, tools approval, and debug toggle render as uppercase letterspaced text controls (10px, font-weight 500, letter-spacing 0.13em) separated by thin `/` dividers (`.synapse-toolbar-sep`). Bordered rectangular dropdowns, card containers, and pill badges are eliminated. The reasoning button displays only the selected effort level (e.g. `MEDIUM`), falling back to `REASONING` only when no level is selected. The tools button displays only the selected approval mode directly (`ASK` or `ALLOW`).
+- **Normalized control color states:** All toolbar and state line controls follow a uniform color state rule: controls with an active or non-default selection render in the interactive accent color (`var(--interactive-accent)` via `.is-active`), while controls at their default or unselected state render in faint grey (`var(--text-faint)`). Specifically:
+  - Agent dropdown (`.synapse-agent-select`): accent orange when a specific agent is selected (`selectedAgent !== ''`), faint grey when on default "Auto" (`''`).
+  - Model dropdown (`.synapse-model-select`): accent orange when a specific model is selected (`selectedModel !== ''`), faint grey when on "Default model".
+  - Reasoning button (`.synapse-reasoning-btn`): accent orange when an effort level is selected (`level !== ''`), faint grey when no reasoning effort is selected (`REASONING`).
+  - Tools button (`.synapse-tools-btn`): faint grey on default `ASK` (`is-active = false`), accent orange on non-default `ALLOW` (`is-active = true`).
+  - Working directory button (`.synapse-cwd-btn`): faint grey when at vault root (`Dir`), accent orange when scoped to a specific directory (displays just the folder name without `DIR:` prefix).
+  - Scope button (`.synapse-f-btn-scope`): faint grey when no scope is set, accent orange when vault scope paths are active.
+  - Attach button (`.synapse-f-btn-attach`): faint grey when no attachments exist, accent orange when attachments are present.
+  - Debug toggle (`.synapse-debug-toggle`): accent orange when enabled, faint grey when disabled.
+- **Top state line & unified toolbar layout:** The top state line (`.synapse-state-line`) houses context-and-scope controls positioned directly before the active note: the working directory button (`.synapse-cwd-btn`), scope icon button (`.synapse-f-btn-scope`, folder icon), and attach icon button (`.synapse-f-btn-attach`, paperclip icon), followed by the active note name (`.synapse-state-note`). Scope and Attach buttons are icon-only without text labels. The bottom config toolbar houses session configuration controls (Agent, Model, Reasoning Effort, Tools Approval, Context Gauge) on the left, and Debug toggle alongside the compact 24px Send button on the right in a single unified ~26-28px row, eliminating the redundant empty composer-footer row.
+- **Toolbar & State line relationship:** The state line focuses strictly on active note and scope/file context, while the config toolbar below houses the interactive session controls, eliminating duplicated agent/model readouts across the two surfaces.
+- **Context-window gauge hairline meter:** The context-window gauge (`.synapse-context-gauge`, `.synapse-context-indicator`) renders as a hairline meter: a 2px track (`.synapse-gauge-track`) filling with the interactive accent (`.synapse-gauge-fill`), paired with a tabular mono numeric readout (`.synapse-gauge-value`). Rounded pills, card borders, and gradient fills are eliminated.
+- **Semantic warning and critical gauge states:** Warning (≥75%) and critical (≥90%) states are conveyed using Obsidian's semantic theme color variables (`--text-warning`, `--text-error`) and increased font weight (600 for warning, 700 for critical), introducing no raw hex colors or foreign hues.
+- **Ruled definition list task panel:** The task/plan panel (`.synapse-task-panel`) reuses the ruled definition list primitive (`.synapse-findings`), rendering uppercase status (`TODO`, `ACTIVE`, `DONE`) in the left column (`.synapse-finding-key`, 10.5px, letter-spacing 0.09em) and task prose in the right column (`.synapse-finding-val`). Separators are hairlines (`--synapse-rule-soft`), with transparent backgrounds and no boxed card styling.
+- **Typographical task states:** Task states are distinguished typographically rather than with colored chips or Lucide icons:
+  - Active tasks (`.is-in_progress`) use interactive accent status, font-weight 600, and a 5px circular accent mark (`.synapse-task-active-dot`).
+  - Pending tasks (`.is-pending`) use faint status and muted prose.
+  - Completed tasks (`.is-completed`) use faint status, faint prose, and line-through text decoration.
+- **Collapsible behavior & live updates:** The task panel uses native `<details>` and `<summary>` elements (`.synapse-task-panel-header`), providing collapse/expand while preserving the user's toggle state across live `TodoWrite` rebuilds and maintaining live tabular elapsed time tracking.
+- **Theme compliance:** All status indicators, rules, and backgrounds strictly consume Obsidian CSS variables with zero raw hex values across light and dark modes.
 
 

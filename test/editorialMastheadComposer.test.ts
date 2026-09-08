@@ -11,6 +11,8 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 	const synapseViewSource = readFileSync(synapseViewPath, 'utf8');
 	const inputAreaPath = resolve(repoRoot, 'src/view/inputArea.ts');
 	const inputAreaSource = readFileSync(inputAreaPath, 'utf8');
+	const configToolbarPath = resolve(repoRoot, 'src/view/configToolbar.ts');
+	const configToolbarSource = readFileSync(configToolbarPath, 'utf8');
 	const specPath = resolve(repoRoot, '.docs/specs/chat-view.md');
 	const specContent = readFileSync(specPath, 'utf8');
 
@@ -170,22 +172,29 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			);
 		});
 
-		it('inputArea.ts builds text buttons for Scope, Attach, Paste, Edit, and Model picker', () => {
+		it('inputArea.ts builds icon buttons for Scope and Attach only — Paste and Edit were removed to match the design reference', () => {
 			expect(inputAreaSource).toContain("'Scope'");
 			expect(inputAreaSource).toContain("'Attach'");
-			expect(inputAreaSource).toContain("'Paste'");
-			expect(inputAreaSource).toContain("'Edit'");
-			expect(inputAreaSource).toContain('synapse-f-btn-model');
-			expect(inputAreaSource).toContain('proto.openModelPickerMenu');
-			expect(inputAreaSource).toContain('proto.updateModelPickerButton');
+			expect(inputAreaSource).not.toContain('synapse-f-btn-clip');
+			expect(inputAreaSource).not.toContain('synapse-f-btn-edit');
+			expect(inputAreaSource).not.toContain('handleClipboard');
+			expect(inputAreaSource).not.toContain('openEditFromChat');
+			expect(inputAreaSource).not.toContain('synapse-f-btn-label');
 		});
 
-		it('styles send button as a small 30px square accent block with 2px radius', () => {
+		it('does not duplicate a model picker in the composer footer — the toolbar select is the sole model control (#215 AC-2)', () => {
+			expect(inputAreaSource).not.toContain('synapse-f-btn-model');
+			expect(inputAreaSource).not.toContain('openModelPickerMenu');
+			expect(inputAreaSource).not.toContain('updateModelPickerButton');
+			expect(stylesContent).not.toContain('.synapse-f-btn-model');
+		});
+
+		it('styles send button as a compact 24px square accent block with 2px radius', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-send-btn\s*\{[^}]*width:\s*30px/
+				/\.synapse-send-btn\s*\{[^}]*width:\s*24px/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-send-btn\s*\{[^}]*height:\s*30px/
+				/\.synapse-send-btn\s*\{[^}]*height:\s*24px/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-send-btn\s*\{[^}]*border-radius:\s*2px/
@@ -224,9 +233,10 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			expect(inputAreaSource).toContain('handleFileDrop');
 		});
 
-		it('retains send/abort streaming state transitions', () => {
-			expect(inputAreaSource).toContain('handleAbort()');
+		it('retains send/abort streaming state transitions across composer and unified toolbar', () => {
 			expect(inputAreaSource).toContain('handleSend()');
+			expect(configToolbarSource).toContain('handleAbort()');
+			expect(configToolbarSource).toContain('handleSend()');
 		});
 	});
 

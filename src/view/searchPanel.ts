@@ -9,6 +9,9 @@ import {getSynapsePluginConfig} from '../vaultPaths';
 /** Read-only file tools for vault search — no write/exec access needed. */
 const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
 
+/** Max characters shown for the working-directory folder name before truncating with an ellipsis (#215). */
+const CWD_LABEL_MAX_CHARS = 14;
+
 /** Shared search prompt: instructs tool-driven exploration + strict JSON output. */
 function buildSearchPrompt(query: string): string {
 	return 'Search the vault (your working directory) for files matching the query below. ' +
@@ -79,66 +82,30 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.buildSearchPanel = function (this: SynapseView, parent: HTMLElement): void {
 		const wrapper = parent.createDiv({cls: 'synapse-search-wrapper'});
 
-		// ── Toolbar row: scope | mode toggle | [advanced: agent | model | skills | tools] ──
-		const toolbar = wrapper.createDiv({cls: 'synapse-toolbar synapse-search-toolbar'});
+		// Composer container (state line + textarea + unified toolbar)
+		const composer = wrapper.createDiv({cls: 'synapse-search-composer'});
 
-		// Search scope (folder picker) — always visible
-		this.searchCwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Search scope'}});
-		setIcon(this.searchCwdBtnEl, 'folder');
+		// ── State line: working directory / scope ──
+		this.searchStateLineEl = composer.createDiv({cls: 'synapse-state-line synapse-search-state-line'});
+
+		this.searchCwdBtnEl = this.searchStateLineEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-cwd-btn',
+			attr: {type: 'button'},
+		});
 		this.searchCwdBtnEl.addEventListener('click', () => this.openSearchScopePicker());
+
+		this.searchScopeBtn = this.searchStateLineEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-f-btn synapse-f-btn-scope',
+			attr: {title: 'Select search scope', 'aria-label': 'Scope', type: 'button'},
+		});
+		const scopeIcon = this.searchScopeBtn.createSpan({cls: 'synapse-f-btn-icon'});
+		setIcon(scopeIcon, 'folder');
+		this.searchScopeBtn.addEventListener('click', () => this.openSearchScopePicker());
 		this.updateSearchCwdButton();
 
-		// Mode toggle (basic / advanced)
-		this.searchModeToggleEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Toggle basic/advanced mode'}});
-		this.searchModeToggleEl.addEventListener('click', () => this.toggleSearchMode());
-		this.updateSearchModeToggle();
-
-		// Advanced controls group — hidden in basic mode
-		this.searchAdvancedToolbarEl = toolbar.createDiv({cls: 'synapse-search-advanced-group'});
-
-		// Agent dropdown
-		const agentGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'synapse-toolbar-group'});
-		const agentIcon = agentGroup.createSpan({cls: 'synapse-toolbar-icon'});
-		setIcon(agentIcon, 'bot');
-		this.searchAgentSelect = agentGroup.createEl('select', {cls: 'synapse-select'});
-		this.searchAgentSelect.addEventListener('change', () => {
-			this.searchAgent = this.searchAgentSelect.value;
-			const agent = this.agents.find(a => a.name === this.searchAgent);
-			this.searchAgentSelect.title = agent ? agent.instructions : '';
-			// Auto-select agent's preferred model
-			const resolvedModel = this.resolveModelForAgent(agent, this.searchModel || undefined);
-			if (resolvedModel && resolvedModel !== this.searchModel) {
-				this.searchModel = resolvedModel;
-				this.searchModelSelect.value = resolvedModel;
-			}
-			// Apply agent's tools and skills filter for search
-			this.applySearchAgentToolsAndSkills(agent);
-			// Persist
-			this.plugin.settings.searchAgent = this.searchAgent;
-			void this.plugin.saveSettings();
-		});
-
-		// Model dropdown
-		const modelGroup = this.searchAdvancedToolbarEl.createDiv({cls: 'synapse-toolbar-group'});
-		const modelIcon = modelGroup.createSpan({cls: 'synapse-toolbar-icon'});
-		setIcon(modelIcon, 'cpu');
-		this.searchModelSelect = modelGroup.createEl('select', {cls: 'synapse-select synapse-model-select'});
-		this.searchModelSelect.addEventListener('change', () => {
-			this.searchModel = this.searchModelSelect.value;
-		});
-
-		// Tools button
-		this.searchToolsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
-		setIcon(this.searchToolsBtnEl, 'plug');
-		this.searchToolsBtnEl.addEventListener('click', (e) => this.openSearchToolsMenu(e));
-
-		// Apply initial visibility
-		this.updateSearchAdvancedVisibility();
-
-		// ── Search input + button ──
-		const inputRow = wrapper.createDiv({cls: 'synapse-search-input-row'});
-		this.searchInputEl = inputRow.createEl('textarea', {
-			cls: 'synapse-search-input',
+		// ── Search input ──
+		this.searchInputEl = composer.createEl('textarea', {
+			cls: 'synapse-search-input synapse-input',
 			attr: {placeholder: 'Describe what you\'re looking for…', rows: '2'},
 		});
 		this.searchInputEl.addEventListener('keydown', (e) => {
@@ -148,7 +115,84 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			}
 		});
 
-		this.searchBtnEl = inputRow.createEl('button', {cls: 'synapse-search-btn', attr: {title: 'Search'}});
+		// ── Unified toolbar row: mode toggle | [advanced: agent | model | tools] | spacer | search button ──
+		const toolbar = composer.createDiv({cls: 'synapse-toolbar synapse-config-toolbar synapse-search-toolbar'});
+
+		// Mode toggle (basic / advanced)
+		this.searchModeToggleEl = toolbar.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-search-mode-btn',
+			attr: {title: 'Toggle basic/advanced mode', type: 'button'},
+		});
+		this.searchModeToggleEl.addEventListener('click', () => this.toggleSearchMode());
+		this.updateSearchModeToggle();
+
+		// Advanced controls group — hidden in basic mode
+		this.searchAdvancedToolbarEl = toolbar.createDiv({cls: 'synapse-search-advanced-group'});
+
+		const addSep = (): HTMLElement =>
+			this.searchAdvancedToolbarEl.createSpan({
+				cls: 'synapse-toolbar-sep',
+				text: '/',
+				attr: {'aria-hidden': 'true'},
+			});
+
+		addSep();
+
+		// Agent dropdown
+		this.searchAgentSelect = this.searchAdvancedToolbarEl.createEl('select', {
+			cls: 'synapse-select synapse-agent-select',
+		});
+		this.searchAgentSelect.addEventListener('change', () => {
+			this.searchAgent = this.searchAgentSelect.value;
+			this.searchAgentSelect.toggleClass('is-active', this.searchAgent !== '');
+			const agent = this.agents.find(a => a.name === this.searchAgent);
+			this.searchAgentSelect.title = agent ? agent.instructions : '';
+			// Auto-select agent's preferred model
+			const resolvedModel = this.resolveModelForAgent(agent, this.searchModel || undefined);
+			if (resolvedModel && resolvedModel !== this.searchModel) {
+				this.searchModel = resolvedModel;
+				this.searchModelSelect.value = resolvedModel;
+				this.searchModelSelect.toggleClass('is-active', resolvedModel !== '');
+			}
+			// Apply agent's tools and skills filter for search
+			this.applySearchAgentToolsAndSkills(agent);
+			// Persist
+			this.plugin.settings.searchAgent = this.searchAgent;
+			void this.plugin.saveSettings();
+		});
+
+		addSep();
+
+		// Model dropdown
+		this.searchModelSelect = this.searchAdvancedToolbarEl.createEl('select', {
+			cls: 'synapse-select synapse-model-select',
+		});
+		this.searchModelSelect.addEventListener('change', () => {
+			this.searchModel = this.searchModelSelect.value;
+			this.searchModelSelect.toggleClass('is-active', this.searchModel !== '');
+		});
+
+		addSep();
+
+		// Tools button
+		this.searchToolsBtnEl = this.searchAdvancedToolbarEl.createEl('button', {
+			cls: 'synapse-toolbar-btn synapse-tools-btn',
+			attr: {title: 'Tools', type: 'button'},
+		});
+		this.searchToolsBtnEl.addEventListener('click', (e) => this.openSearchToolsMenu(e));
+		this.updateSearchToolsBadge();
+
+		// Apply initial visibility
+		this.updateSearchAdvancedVisibility();
+
+		// Spacer to push search button to the right
+		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
+
+		// Search button
+		this.searchBtnEl = toolbar.createEl('button', {
+			cls: 'clickable-icon synapse-search-btn',
+			attr: {title: 'Search', type: 'button'},
+		});
 		setIcon(this.searchBtnEl, 'search');
 		this.searchBtnEl.addEventListener('click', () => void this.handleSearch());
 
@@ -175,19 +219,23 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateSearchModeToggle = function (this: SynapseView): void {
+		if (!this.searchModeToggleEl) return;
 		this.searchModeToggleEl.empty();
 		if (this.searchMode === 'basic') {
-			setIcon(this.searchModeToggleEl, 'settings');
+			this.searchModeToggleEl.setText('Basic');
 			this.searchModeToggleEl.title = 'Basic mode (fast) — click for advanced';
+			this.searchModeToggleEl.toggleClass('is-active', false);
 		} else {
-			setIcon(this.searchModeToggleEl, 'settings');
+			this.searchModeToggleEl.setText('Advanced');
 			this.searchModeToggleEl.title = 'Advanced mode — click for basic (fast)';
+			this.searchModeToggleEl.toggleClass('is-active', true);
 		}
-		this.searchModeToggleEl.toggleClass('is-active', this.searchMode === 'advanced');
 	};
 
 	proto.updateSearchAdvancedVisibility = function (this: SynapseView): void {
-		this.searchAdvancedToolbarEl.toggleClass('is-hidden', this.searchMode !== 'advanced');
+		if (this.searchAdvancedToolbarEl) {
+			this.searchAdvancedToolbarEl.toggleClass('is-hidden', this.searchMode !== 'advanced');
+		}
 	};
 
 	proto.updateSearchConfigUI = function (this: SynapseView): void {
@@ -209,6 +257,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			const selAgent = this.agents.find(a => a.name === savedAgent);
 			this.searchAgentSelect.title = selAgent ? selAgent.instructions : '';
 		}
+		this.searchAgentSelect.toggleClass('is-active', this.searchAgent !== '');
 
 		// Auto-select agent's preferred model
 		const agentConfig = this.agents.find(a => a.name === this.searchAgent);
@@ -233,6 +282,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			this.searchModel = '';
 			this.searchModelSelect.value = '';
 		}
+		this.searchModelSelect.toggleClass('is-active', this.searchModel !== '');
 
 		// Apply agent's tools and skills filter
 		this.applySearchAgentToolsAndSkills(agentConfig);
@@ -259,13 +309,42 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	proto.openSearchToolsMenu = function (this: SynapseView, e: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
+		menu.addSeparator();
+		const currentApproval = this.plugin.settings.toolApproval;
+		menu.addItem(item => {
+			item.setTitle('Approval mode');
+			const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
+			sub.addItem(si => {
+				si.setTitle('Allow (auto-approve)')
+					.setChecked(currentApproval === 'allow')
+					.onClick(async () => {
+						this.plugin.settings.toolApproval = 'allow';
+						await this.plugin.saveSettings();
+						this.updateSearchToolsBadge();
+						this.updateToolsBadge?.();
+					});
+			});
+			sub.addItem(si => {
+				si.setTitle('Ask (require approval)')
+					.setChecked(currentApproval === 'ask')
+					.onClick(async () => {
+						this.plugin.settings.toolApproval = 'ask';
+						await this.plugin.saveSettings();
+						this.updateSearchToolsBadge();
+						this.updateToolsBadge?.();
+					});
+			});
+		});
 		menu.showAtMouseEvent(e);
 	};
 
 	proto.updateSearchToolsBadge = function (this: SynapseView): void {
-		// MCP is now SDK-native; badge always shows inactive
-		this.searchToolsBtnEl.toggleClass('is-active', false);
-		this.searchToolsBtnEl.setAttribute('title', 'Tools');
+		if (!this.searchToolsBtnEl) return;
+		const approval = this.plugin.settings.toolApproval;
+		const label = approval === 'allow' ? 'Allow' : 'Ask';
+		this.searchToolsBtnEl.setText(label);
+		this.searchToolsBtnEl.toggleClass('is-active', approval === 'allow');
+		this.searchToolsBtnEl.setAttribute('title', `Tools (${approval === 'allow' ? 'auto-approve' : 'ask before running'})`);
 	};
 
 	proto.openSearchScopePicker = function (this: SynapseView): void {
@@ -276,12 +355,21 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateSearchCwdButton = function (this: SynapseView): void {
+		if (!this.searchCwdBtnEl) return;
 		const vaultName = this.app.vault.getName();
 		const label = this.searchWorkingDir
 			? `Search scope: ${vaultName}/${this.searchWorkingDir}`
 			: `Search scope: ${vaultName} (entire vault)`;
 		this.searchCwdBtnEl.setAttribute('title', label);
-		this.searchCwdBtnEl.toggleClass('is-active', !!this.searchWorkingDir);
+		this.searchScopeBtn?.setAttribute('title', label);
+		const hasFolder = Boolean(this.searchWorkingDir && this.searchWorkingDir !== '' && this.searchWorkingDir !== '/');
+		this.searchCwdBtnEl.toggleClass('is-active', hasFolder);
+		this.searchScopeBtn?.toggleClass('is-active', hasFolder);
+		const folderName = this.searchWorkingDir ? (this.searchWorkingDir.split('/').pop() || this.searchWorkingDir) : '';
+		const truncated = folderName.length > CWD_LABEL_MAX_CHARS
+			? `${folderName.slice(0, CWD_LABEL_MAX_CHARS - 1)}…`
+			: folderName;
+		this.searchCwdBtnEl.setText(truncated ? truncated : 'Dir');
 	};
 
 	proto.getSearchWorkingDirectory = function (this: SynapseView): string {

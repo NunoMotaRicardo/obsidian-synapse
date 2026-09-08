@@ -199,6 +199,8 @@ export class SynapseView extends ItemView {
 	searchModelSelect!: HTMLSelectElement;
 	searchToolsBtnEl!: HTMLButtonElement;
 	searchCwdBtnEl!: HTMLButtonElement;
+	searchScopeBtn?: HTMLButtonElement;
+	searchStateLineEl?: HTMLElement;
 	searchInputEl!: HTMLTextAreaElement;
 	searchBtnEl!: HTMLButtonElement;
 	searchResultsEl!: HTMLElement;
@@ -216,7 +218,6 @@ export class SynapseView extends ItemView {
 	stateNoteEl!: HTMLElement;
 	stateAgentEl!: HTMLElement;
 	stateModelEl!: HTMLElement;
-	modelPickerBtn!: HTMLButtonElement;
 	chatPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
 	chatContainer!: HTMLElement;
@@ -226,14 +227,20 @@ export class SynapseView extends ItemView {
 	attachmentsBar!: HTMLElement;
 	activeNoteBar!: HTMLElement;
 	scopeBar!: HTMLElement;
+	scopeBtn?: HTMLButtonElement;
+	attachBtn?: HTMLButtonElement;
 	sendBtn!: HTMLButtonElement;
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;
-	modelIconEl!: HTMLSpanElement;
+	reasoningBtnEl!: HTMLButtonElement;
 	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
 	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
 	contextIndicatorEl!: HTMLElement;
+	contextSepEl?: HTMLElement;
+	/** Gauge track/fill/value nodes, built once and reused in place so the CSS width transition can animate (#215). */
+	gaugeFillEl?: HTMLElement;
+	gaugeValueEl?: HTMLElement;
 	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;
@@ -553,6 +560,7 @@ export class SynapseView extends ItemView {
 			this.agentSelect.value = '';
 			this.agentSelect.title = '';
 		}
+		this.agentSelect.toggleClass('is-active', this.selectedAgent !== '');
 
 		// Auto-select agent's preferred model
 		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
@@ -571,12 +579,14 @@ export class SynapseView extends ItemView {
 			this.selectedModel = '';
 			this.modelSelect.value = '';
 		}
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 
 		// Apply agent's tools and skills filter
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
 		this.applyAgentToolsAndSkills(selectedAgentForFilter);
 		this.updateReasoningBadge();
-		this.updateModelPickerButton?.();
+		this.updateToolsBadge();
+		this.updateCwdButton();
 		this.updateStateLine?.();
 
 		// Update search panel dropdowns
@@ -1282,7 +1292,6 @@ export class SynapseView extends ItemView {
 		this.updateToolbarLock();
 		this.renderSessionList();
 		this.updateMastheadKicker();
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	}
 

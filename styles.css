@@ -1365,6 +1365,11 @@
 	white-space: nowrap;
 }
 
+.synapse-state-line .synapse-toolbar-btn,
+.synapse-state-line .synapse-f-btn {
+	flex-shrink: 0;
+}
+
 .synapse-state-note {
 	color: var(--interactive-accent);
 	overflow: hidden;
@@ -1383,11 +1388,13 @@
 	opacity: 0.5;
 }
 
+/* Duplication resolution between state line and toolbar (#210 AC-2):
+   The state line focuses strictly on the active note / selection context;
+   agent and model controls live in the config toolbar below. */
 .synapse-state-agent,
-.synapse-state-model {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.synapse-state-model,
+.synapse-state-sep {
+	display: none;
 }
 
 /* ── Input area (Editorial #208) ─────────────────────────────── */
@@ -1474,15 +1481,16 @@
 	font-weight: 500;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--text-faint) !important;
 	cursor: pointer;
 	white-space: nowrap;
-	background: transparent;
-	border: none;
-	border-bottom: 1px solid transparent;
-	border-radius: 0;
-	padding: 2px 0;
-	box-shadow: none;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	border-radius: 0 !important;
+	padding: 2px 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
 	line-height: 1;
 	user-select: none;
 	-webkit-user-select: none;
@@ -1490,9 +1498,23 @@
 }
 
 .synapse-f-btn:hover {
-	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
-	background: transparent;
+	color: var(--text-normal) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
+}
+
+.synapse-f-btn.is-active {
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-f-btn.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+}
+
+.synapse-f-btn:focus-visible {
+	outline: 1px solid var(--interactive-accent);
+	outline-offset: -1px;
 }
 
 .synapse-f-btn-icon {
@@ -1505,13 +1527,9 @@
 	height: 13px;
 }
 
-.synapse-f-btn-model {
-	color: var(--text-muted);
-}
-
 .synapse-send-btn {
-	width: 30px;
-	height: 30px;
+	width: 24px;
+	height: 24px;
 	border-radius: 2px;
 	display: grid;
 	place-items: center;
@@ -1534,8 +1552,8 @@
 }
 
 .synapse-send-btn svg {
-	width: 15px;
-	height: 15px;
+	width: 13px;
+	height: 13px;
 	stroke: var(--text-on-accent);
 }
 
@@ -1588,7 +1606,7 @@
 	white-space: nowrap;
 }
 
-/* ── Config toolbar ───────────────────────────────────────────── */
+/* ── Config toolbar (Editorial #210) ─────────────────────────── */
 
 .synapse-toolbar {
 	display: flex;
@@ -1597,184 +1615,42 @@
 	flex-wrap: wrap;
 }
 
-.synapse-toolbar-spacer {
-	flex: 1;
-}
-
-.synapse-debug-toggle {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	padding: 2px 6px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	cursor: pointer;
-	transition: all 0.15s ease;
-	margin-left: auto;
-}
-
-.synapse-debug-toggle:hover {
-	border-color: var(--interactive-accent);
-	color: var(--text-normal);
-}
-
-/* ── Context-window gauge (issue #130) ───────────────────────── */
-
-.synapse-context-indicator {
-	display: inline-flex;
-	align-items: center;
-	padding: 2px 6px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	white-space: nowrap;
-}
-
-.synapse-context-indicator.is-context-warning {
-	color: var(--text-warning, var(--color-orange));
-	border-color: var(--text-warning, var(--color-orange));
-}
-
-.synapse-context-indicator.is-context-critical {
-	color: var(--text-error);
-	border-color: var(--text-error);
-}
-
-.synapse-debug-toggle:has(.synapse-debug-checkbox:checked) {
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-}
-
-.synapse-debug-icon svg {
-	width: 14px;
-	height: 14px;
-}
-
-.synapse-debug-checkbox {
-	display: none;
-}
-
-/* Hide debug info (tool calls + metadata + compaction blocks) when unchecked */
-.synapse-hide-debug .synapse-tool-calls,
-.synapse-hide-debug .synapse-msg-metadata {
-	display: none;
-}
-
-/* ── Compaction debug blocks ─────────────────────────────────── */
-
-.synapse-compaction-block {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	margin: 4px 0;
-	padding: 0;
-}
-
-.synapse-compaction-summary {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 8px;
-	cursor: pointer;
-	user-select: none;
-}
-
-.synapse-compaction-icon svg {
-	width: 14px;
-	height: 14px;
-	color: var(--text-muted);
-}
-
-.synapse-compaction-body {
-	padding: 4px 8px 8px;
-	border-top: 1px solid var(--background-modifier-border);
-}
-
-/* ── Task/plan tracking panel (TodoWrite) ────────────────────── */
-
-.synapse-task-panel {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-secondary);
-	font-size: var(--font-ui-smaller);
-	padding: 6px 8px;
-}
-
-.synapse-task-panel-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 4px;
-}
-
-.synapse-task-panel-title {
-	font-weight: var(--font-semibold);
-	color: var(--text-muted);
+/*
+ * Editorial config-toolbar look (#210), scoped to `.synapse-config-toolbar` — the extra
+ * modifier class configToolbar.ts sets alongside `.synapse-toolbar` — rather than the bare
+ * `.synapse-toolbar`/`.synapse-select`/`.synapse-toolbar-group`/`.synapse-toolbar-icon`
+ * classes. Those bare classes are also reused as-is by the search tab's toolbar
+ * (searchPanel.ts, `.synapse-search-toolbar`) for its own pre-existing appearance, and must
+ * not inherit this restyle (#215).
+ */
+.synapse-config-toolbar {
+	gap: 8px;
+	padding: 4px 0 0;
+	margin-top: 2px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	font-size: var(--font-ui-smaller);
-}
-
-.synapse-task-panel-elapsed {
 	color: var(--text-faint);
-	font-variant-numeric: tabular-nums;
+	user-select: none;
+	-webkit-user-select: none;
+	background: transparent;
+	border: none;
+	border-top: 1px solid var(--synapse-rule);
+	border-radius: 0;
+	box-shadow: none;
 }
 
-.synapse-task-list {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.synapse-task-item {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 2px 0;
-	color: var(--text-muted);
-}
-
-.synapse-task-item-icon {
-	display: flex;
+.synapse-toolbar-sep {
+	color: var(--synapse-rule);
+	font-size: 10px;
 	flex-shrink: 0;
 }
 
-.synapse-task-item-icon svg {
-	width: 13px;
-	height: 13px;
-}
-
-.synapse-task-item.is-pending .synapse-task-item-icon {
+.theme-dark .synapse-toolbar-sep {
 	color: var(--text-faint);
-}
-
-.synapse-task-item.is-completed {
-	color: var(--text-faint);
-}
-
-.synapse-task-item.is-completed .synapse-task-item-label {
-	text-decoration: line-through;
-}
-
-.synapse-task-item.is-completed .synapse-task-item-icon {
-	color: var(--text-success);
-}
-
-.synapse-task-item.is-in_progress {
-	color: var(--text-normal);
-	font-weight: var(--font-semibold);
-}
-
-.synapse-task-item.is-in_progress .synapse-task-item-icon {
-	color: var(--text-accent);
-	animation: synapse-spin 1s linear infinite;
+	opacity: 0.5;
 }
 
 .synapse-toolbar-group {
@@ -1787,20 +1663,6 @@
 	width: 14px;
 	height: 14px;
 	color: var(--text-muted);
-}
-
-.synapse-toolbar-icon.clickable-icon {
-	cursor: pointer;
-	border-radius: var(--radius-s);
-	padding: 2px;
-}
-
-.synapse-toolbar-icon.clickable-icon:hover {
-	background: var(--background-modifier-hover);
-}
-
-.synapse-toolbar-icon.clickable-icon.is-non-interactive {
-	cursor: default;
 }
 
 .synapse-toolbar-icon.is-active svg {
@@ -1818,17 +1680,367 @@
 	cursor: pointer;
 }
 
+.synapse-select:focus-visible,
+.synapse-toolbar-btn:focus-visible {
+	outline: 1px solid var(--interactive-accent);
+	outline-offset: -1px;
+}
+
+.synapse-select option {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	letter-spacing: normal;
+	text-transform: none;
+}
+
 .synapse-model-select {
 	width: 17ch;
 }
 
-.synapse-toolbar-actions {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	margin-left: auto;
+.synapse-config-toolbar .synapse-select {
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint) !important;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	padding: 2px 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
+	cursor: pointer;
+	-webkit-appearance: none;
+	appearance: none;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
+.synapse-config-toolbar .synapse-select:hover {
+	color: var(--text-normal) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
+}
+
+.synapse-config-toolbar .synapse-select.is-active {
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-config-toolbar .synapse-select.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+}
+
+.synapse-config-toolbar .synapse-model-select {
+	max-width: 17ch;
+}
+
+.synapse-toolbar-btn {
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint) !important;
+	background: transparent !important;
+	border: none !important;
+	border-bottom: 1px solid transparent !important;
+	padding: 2px 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	height: auto !important;
+	cursor: pointer;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
+	white-space: nowrap;
+}
+
+.synapse-toolbar-btn:hover {
+	color: var(--text-normal) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+	background: transparent !important;
+}
+
+.synapse-toolbar-btn.is-active {
+	color: var(--interactive-accent) !important;
+}
+
+.synapse-toolbar-btn.is-active:hover {
+	color: var(--interactive-accent) !important;
+	border-bottom-color: var(--interactive-accent) !important;
+}
+
+.synapse-toolbar-spacer {
+	flex: 1;
+}
+
+.synapse-debug-toggle {
+	display: inline-flex;
+	align-items: center;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid transparent;
+	padding: 2px 0;
+	line-height: 1;
+	cursor: pointer;
+	transition: color 0.15s ease, border-bottom-color 0.15s ease;
+}
+
+.synapse-debug-toggle:hover {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.synapse-debug-toggle.is-active,
+.synapse-debug-toggle:has(.synapse-debug-checkbox:checked) {
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.synapse-debug-checkbox {
+	display: none;
+}
+
+/* Hide debug info (tool calls + metadata + compaction blocks) when unchecked */
+.synapse-hide-debug .synapse-tool-calls,
+.synapse-hide-debug .synapse-msg-metadata {
+	display: none;
+}
+
+/* ── Context-window gauge (issue #130, #210) ─────────────────── */
+
+.synapse-context-gauge,
+.synapse-context-indicator {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: transparent;
+	border: none;
+	padding: 0;
+	white-space: nowrap;
+}
+
+.synapse-gauge-track {
+	width: 36px;
+	height: 2px;
+	background: var(--synapse-rule-soft);
+	overflow: hidden;
+	position: relative;
+	border-radius: 0;
+}
+
+.synapse-gauge-fill {
+	/* CSS custom property (not inline `style.width`) so this stays consistent with any other
+	   consumer of the shared `.synapse-gauge-fill`/`.synapse-gauge-track` classes (#215). */
+	width: var(--progress-width, 0%);
+	height: 100%;
+	background: var(--interactive-accent);
+	transition: width 0.2s ease;
+	border-radius: 0;
+}
+
+.synapse-gauge-value {
+	font-family: var(--font-monospace);
+	font-size: 10px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+
+/* Warning & critical states conveyed by accent/semantic variables and weight (AC-4) */
+.synapse-context-indicator.is-context-warning .synapse-gauge-fill {
+	background: var(--text-warning, var(--interactive-accent));
+}
+
+.synapse-context-indicator.is-context-warning .synapse-gauge-value {
+	color: var(--text-warning, var(--interactive-accent));
+	font-weight: 600;
+}
+
+.synapse-context-indicator.is-context-critical .synapse-gauge-fill {
+	background: var(--text-error);
+}
+
+.synapse-context-indicator.is-context-critical .synapse-gauge-value {
+	color: var(--text-error);
+	font-weight: 700;
+}
+
+/* ── Compaction debug blocks (Editorial #210) ─────────────────── */
+
+.synapse-compaction-block {
+	border-left: 1px solid var(--synapse-rule);
+	padding-left: 12px;
+	margin: 4px 0;
+	color: var(--text-muted);
+}
+
+.synapse-compaction-summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	list-style: none;
+	font-family: var(--font-interface);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.synapse-compaction-summary::-webkit-details-marker {
+	display: none;
+}
+
+.synapse-compaction-summary:hover {
+	color: var(--text-normal);
+}
+
+.synapse-compaction-icon svg {
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
+}
+
+.synapse-compaction-body {
+	padding: 4px 0;
+}
+
+/* ── Task/plan tracking panel (TodoWrite #210) ────────────────── */
+
+.synapse-task-panel {
+	border: none;
+	background: transparent;
+	padding: 4px 0 8px;
+	margin: 6px 0 10px;
+}
+
+.synapse-task-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	list-style: none;
+	padding: 4px 0 6px;
+}
+
+.synapse-task-panel-header::-webkit-details-marker {
+	display: none;
+}
+
+.synapse-task-panel-title {
+	font-family: var(--font-interface);
+	font-weight: 500;
+	color: var(--text-faint);
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	font-size: 10px;
+	transition: color 0.15s ease;
+}
+
+.synapse-task-panel-header:hover .synapse-task-panel-title {
+	color: var(--interactive-accent);
+}
+
+.synapse-task-panel-elapsed {
+	color: var(--text-faint);
+	font-family: var(--font-monospace);
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+}
+
+.synapse-task-list {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Task items reuse .synapse-finding (ruled definition row primitive) */
+.synapse-task-item {
+	display: flex;
+	gap: 12px;
+	padding: 7px 0;
+	border-bottom: 1px solid var(--synapse-rule-soft);
+	align-items: baseline;
+}
+
+.synapse-task-item:first-child {
+	border-top: 1px solid var(--synapse-rule-soft);
+}
+
+/*
+ * Typography, color, and width come from `.synapse-finding-key` — the task-status element
+ * carries both classes (chatRenderer.ts's `renderTaskPanel`) since it's that primitive's
+ * second consumer (issue #210). Only the genuinely new layout lives here (#215).
+ */
+.synapse-task-item-status {
+	display: flex;
+	align-items: center;
+}
+
+.synapse-task-item-label {
+	font-size: 13.5px;
+	line-height: 1.5;
+	flex: 1;
+	min-width: 0;
+	color: var(--text-muted);
+}
+
+/* Typographical state distinction (AC-6) */
+.synapse-task-item.is-pending .synapse-task-item-status {
+	color: var(--text-faint);
+}
+
+.synapse-task-item.is-pending .synapse-task-item-label {
+	color: var(--text-muted);
+}
+
+.synapse-task-item.is-in_progress .synapse-task-item-status {
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.synapse-task-item.is-in_progress .synapse-task-item-label {
+	color: var(--text-normal);
+	font-weight: 600;
+}
+
+.synapse-task-active-dot {
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	margin-right: 6px;
+	flex-shrink: 0;
+}
+
+.synapse-task-item.is-completed .synapse-task-item-status {
+	color: var(--text-faint);
+}
+
+.synapse-task-item.is-completed .synapse-task-item-label {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
+/* Icon button fallback for search and session headers */
 .synapse-icon-btn {
 	display: flex;
 	align-items: center;
@@ -1857,46 +2069,6 @@
 	width: 16px;
 	height: 16px;
 	stroke-width: 2px;
-}
-
-/* ── Skills & tools chips (inline in toolbar) ─────────────────── */
-
-.synapse-toolbar-chips {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 3px;
-	align-items: center;
-}
-
-.synapse-chips-empty {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
-	font-style: italic;
-}
-
-.synapse-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	padding: 2px 8px;
-	border-radius: 999px;
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	cursor: pointer;
-	transition: all 0.15s ease;
-}
-
-.synapse-chip:hover {
-	border-color: var(--interactive-accent);
-	color: var(--text-normal);
-}
-
-.synapse-chip.is-active {
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
 }
 
 /* ── Vault scope modal ────────────────────────────────────────── */
@@ -2214,7 +2386,7 @@ body.synapse-no-select {
 	align-items: center;
 	gap: 8px;
 	padding: 8px 10px;
-	border-bottom: 1px solid var(--synapse-rule-soft);
+	border-bottom: none;
 	background: transparent;
 	cursor: pointer;
 	transition: color 0.15s ease, border-color 0.15s ease;
@@ -2293,8 +2465,8 @@ body.synapse-no-select {
 }
 
 .synapse-session-name {
-	font-family: var(--font-interface);
-	font-size: 13px;
+	font-family: var(--synapse-font-serif);
+	font-size: 14px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -2370,42 +2542,43 @@ body.synapse-no-select {
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
-	padding: 14px 20px;
-	gap: 12px;
+	padding: 10px 20px 14px;
+	gap: 6px;
 	background: var(--background-primary);
+}
+
+.synapse-search-composer {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.synapse-search-state-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--font-interface);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	padding: 0 0 4px;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 .synapse-search-toolbar {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 0 0 8px;
-	border-bottom: 1px solid var(--synapse-rule-soft);
-	flex-shrink: 0;
-}
-
-.synapse-search-toolbar button {
-	background: transparent;
+	padding: 4px 0 0;
+	margin-top: 2px;
 	border: none;
-	border-bottom: 1px solid transparent;
-	border-radius: 0;
-	box-shadow: none;
-	color: var(--text-faint);
-	cursor: pointer;
-	padding: 3px 2px;
-	line-height: 1;
-	transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.synapse-search-toolbar button:hover {
-	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
-	background: transparent;
-}
-
-.synapse-search-toolbar button.is-active {
-	color: var(--interactive-accent);
-	border-bottom-color: var(--interactive-accent);
+	border-top: 1px solid var(--synapse-rule);
+	border-bottom: none;
+	flex-shrink: 0;
 }
 
 .synapse-search-advanced-group {
@@ -2433,7 +2606,9 @@ body.synapse-no-select {
 	font-size: 16px;
 	line-height: 1.5;
 	color: var(--text-normal);
-	padding: 4px 0;
+	padding: 6px 0;
+	min-height: 46px;
+	max-height: 200px;
 	box-shadow: none;
 }
 
@@ -2447,8 +2622,8 @@ body.synapse-no-select {
 }
 
 .synapse-search-btn {
-	width: 30px;
-	height: 30px;
+	width: 24px;
+	height: 24px;
 	border-radius: 2px;
 	display: grid;
 	place-items: center;
@@ -2471,8 +2646,8 @@ body.synapse-no-select {
 }
 
 .synapse-search-btn svg {
-	width: 15px;
-	height: 15px;
+	width: 13px;
+	height: 13px;
 	stroke: var(--text-on-accent);
 }
 
@@ -2481,6 +2656,9 @@ body.synapse-no-select {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
+	border-top: 1px solid var(--synapse-rule-soft);
+	margin-top: 6px;
+	padding-top: 6px;
 }
 
 .synapse-search-result {

@@ -3,7 +3,6 @@ import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
-import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
 import {resolveModelForAgent, mergeLiveAgents, mergeLiveSkills} from './sessionConfig';
 
@@ -13,11 +12,15 @@ function effortLabel(level: string): string {
 	return level.charAt(0).toUpperCase() + level.slice(1);
 }
 
+/** Max characters shown for the working-directory folder name before truncating with an ellipsis (#215). */
+const CWD_LABEL_MAX_CHARS = 14;
+
 declare module '../synapseView' {
 	interface SynapseView {
 		buildConfigToolbar(parent: HTMLElement): void;
 		populateModelSelect(): void;
 		getSelectedModelInfo(): ModelInfo | undefined;
+		setModel(modelId: string): void;
 		openReasoningMenu(e: MouseEvent): void;
 		updateReasoningBadge(): void;
 		applyReasoningToSession(): void;
@@ -27,7 +30,6 @@ declare module '../synapseView' {
 		updateToolsBadge(): void;
 		openCwdPicker(): void;
 		updateCwdButton(): void;
-		openEditFromChat(): void;
 		resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined;
 		getEffectiveAgents(): AgentConfig[];
 		getEffectiveSkills(): SkillInfo[];
@@ -39,67 +41,68 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	const proto = ViewClass.prototype as SynapseView;
 
 	proto.buildConfigToolbar = function(parent: HTMLElement): void {
-		const toolbar = parent.createDiv({cls: 'synapse-toolbar'});
+		// `synapse-config-toolbar` scopes the editorial (#210) look to this toolbar only — the
+		// search tab's toolbar (searchPanel.ts) reuses the bare `.synapse-toolbar`/`.synapse-select`
+		// classes for its own pre-existing appearance and must not inherit this restyle (#215).
+		const toolbar = parent.createDiv({cls: 'synapse-toolbar synapse-config-toolbar'});
 
-		// New conversation button
-		const newChatBtn = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'New conversation'}});
-		setIcon(newChatBtn, 'plus');
-		newChatBtn.addEventListener('click', () => void this.newConversation());
+		// Decorative divider between toolbar controls — hidden from screen readers (#215) so
+		// they don't announce "slash" between every Agent/Model/Reasoning/Tools/Dir control.
+		const addSep = (extraCls?: string): HTMLElement =>
+			toolbar.createSpan({
+				cls: extraCls ? `synapse-toolbar-sep ${extraCls}` : 'synapse-toolbar-sep',
+				text: '/',
+				attr: {'aria-hidden': 'true'},
+			});
 
 		// Agent dropdown
-		const agentGroup = toolbar.createDiv({cls: 'synapse-toolbar-group'});
-		const agentIcon = agentGroup.createSpan({cls: 'synapse-toolbar-icon'});
-		setIcon(agentIcon, 'bot');
-		this.agentSelect = agentGroup.createEl('select', {cls: 'synapse-select'});
+		this.agentSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-agent-select'});
+		this.agentSelect.toggleClass('is-active', this.selectedAgent !== '');
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
 			this.updateStateLine?.();
 		});
 
+		addSep();
+
 		// Model dropdown
-		const modelGroup = toolbar.createDiv({cls: 'synapse-toolbar-group'});
-		this.modelIconEl = modelGroup.createSpan({cls: 'synapse-toolbar-icon clickable-icon'});
-		setIcon(this.modelIconEl, 'cpu');
-		this.modelIconEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
-		this.modelSelect = modelGroup.createEl('select', {cls: 'synapse-select synapse-model-select'});
-		this.modelSelect.addEventListener('change', () => {
-			const newModel = this.modelSelect.value;
-			this.selectedModel = newModel;
-			// Reset any reasoning effort the new model doesn't support first, then
-			// carry the (now-valid) effort + summary into the mid-session switch.
-			this.updateReasoningBadge();
-			this.applyReasoningToSession();
-			this.updateModelPickerButton?.();
-			this.updateStateLine?.();
-		});
+		this.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
+		this.modelSelect.addEventListener('change', () => this.setModel(this.modelSelect.value));
 
-		// Tools button
-		this.toolsBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Tools'}});
-		setIcon(this.toolsBtnEl, 'plug');
+		addSep();
+
+		// Reasoning effort button — a real <button> (not a <span>) so it's keyboard-focusable
+		// and reachable like the Tools/Dir buttons it sits alongside (#215).
+		this.reasoningBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-reasoning-btn', text: 'Reasoning', attr: {type: 'button'}});
+		this.reasoningBtnEl.addEventListener('click', (e) => { e.stopPropagation(); this.openReasoningMenu(e); });
+		this.updateReasoningBadge();
+
+		addSep();
+
+		// Tools button — displays selected approval mode ('Ask' | 'Allow')
+		this.toolsBtnEl = toolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-tools-btn', attr: {type: 'button'}});
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
+		this.updateToolsBadge();
 
-		// Working directory button
-		this.cwdBtnEl = toolbar.createEl('button', {cls: 'clickable-icon synapse-icon-btn', attr: {title: 'Working directory'}});
-		setIcon(this.cwdBtnEl, 'hard-drive-download');
-		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
-		this.updateCwdButton();
+		// Separator for context indicator (hidden until indicator is visible)
+		this.contextSepEl = addSep('synapse-context-sep is-hidden');
 
-		// Context-window gauge (issue #130) — hidden until the first successful capture;
-		// only ever populated for the real Agent SDK path (BYOK local models never produce
-		// a Query control-request response). See `updateContextIndicator()`.
-		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator is-hidden'});
+		// Context-window gauge (issue #130, #210) — hairline meter
+		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator synapse-context-gauge is-hidden'});
 
 		// Spacer to push debug toggle to the right
 		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
 
 		// Debug toggle
 		this.debugBtnEl = toolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
-		const debugIcon = this.debugBtnEl.createSpan({cls: 'synapse-debug-icon'});
-		setIcon(debugIcon, 'bug');
+		this.debugBtnEl.createSpan({cls: 'synapse-debug-label', text: 'Debug'});
 		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'synapse-debug-checkbox'});
 		debugCheck.checked = this.showDebugInfo;
+		this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
 		debugCheck.addEventListener('change', () => {
 			this.showDebugInfo = debugCheck.checked;
+			this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
 			setDebugEnabled(this.showDebugInfo);
 			this.chatContainer.toggleClass('synapse-hide-debug', !this.showDebugInfo);
 		});
@@ -107,6 +110,20 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			if (e.target !== debugCheck) {
 				debugCheck.checked = !debugCheck.checked;
 				debugCheck.dispatchEvent(new Event('change'));
+			}
+		});
+
+		// Send button (#215) — aligned on the unified single-row footer
+		this.sendBtn = toolbar.createEl('button', {
+			cls: 'clickable-icon synapse-send-btn',
+			attr: {title: 'Send message', type: 'button'},
+		});
+		setIcon(this.sendBtn, 'arrow-up');
+		this.sendBtn.addEventListener('click', () => {
+			if (this.isStreaming) {
+				void this.handleAbort();
+			} else {
+				void this.handleSend();
 			}
 		});
 	};
@@ -119,12 +136,31 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
-		this.updateModelPickerButton?.();
+		this.modelSelect.value = this.selectedModel;
+		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 		this.updateStateLine?.();
 	};
 
 	proto.getSelectedModelInfo = function(): ModelInfo | undefined {
 		return this.models.find(m => m.id === this.selectedModel);
+	};
+
+	/**
+	 * Single source of truth for a model change — the toolbar's `modelSelect` is the sole
+	 * model-switching UI (the composer's duplicate model-picker button was removed, #215 AC-2).
+	 *
+	 * Resets any reasoning effort the new model doesn't support first, then carries the
+	 * (now-valid) effort + summary into the mid-session switch.
+	 */
+	proto.setModel = function(modelId: string): void {
+		this.selectedModel = modelId;
+		if (this.modelSelect) {
+			this.modelSelect.value = modelId;
+			this.modelSelect.toggleClass('is-active', modelId !== '');
+		}
+		this.updateReasoningBadge();
+		this.applyReasoningToSession();
+		this.updateStateLine?.();
 	};
 
 	proto.openReasoningMenu = function(e: MouseEvent): void {
@@ -186,15 +222,21 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	proto.updateReasoningBadge = function(): void {
 		const level = this.plugin.settings.reasoningEffort;
 		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
+		// Text stays sentence case; `.synapse-toolbar-btn`'s CSS `text-transform: uppercase`
+		// handles the visual presentation (#215) — see the same reasoning on `updateCwdButton()`.
+		const setLabel = (effort?: string): void => {
+			this.reasoningBtnEl.setText(effort || 'Reasoning');
+		};
 
 		if (this.selectedModel === '') {
-			const active = level !== '' || !infiniteSessions;
-			this.modelIconEl.toggleClass('is-active', active);
-			this.modelIconEl.toggleClass('is-non-interactive', false);
+			const active = level !== '';
+			this.reasoningBtnEl.toggleClass('is-active', active);
+			this.reasoningBtnEl.toggleClass('is-non-interactive', false);
+			setLabel(level !== '' ? effortLabel(level) : undefined);
 			const parts: string[] = [];
 			if (level !== '') parts.push(`effort ${effortLabel(level).toLowerCase()}`);
 			if (!infiniteSessions) parts.push('infinite sessions off');
-			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context (default model)');
+			this.reasoningBtnEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context (default model)');
 			return;
 		}
 
@@ -207,18 +249,19 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			void this.plugin.saveSettings();
 		}
 		const current = this.plugin.settings.reasoningEffort;
-		// The icon stays interactive even without reasoning support, because the menu
+		// The button stays interactive even without reasoning support, because the menu
 		// always offers the infinite-sessions toggle.
-		const active = (current !== '' && supportsReasoning) || !infiniteSessions;
-		this.modelIconEl.toggleClass('is-active', active);
-		this.modelIconEl.toggleClass('is-non-interactive', false);
+		const active = current !== '' && supportsReasoning;
+		this.reasoningBtnEl.toggleClass('is-active', active);
+		this.reasoningBtnEl.toggleClass('is-non-interactive', false);
+		setLabel(supportsReasoning && current !== '' ? effortLabel(current) : undefined);
 		const parts: string[] = [];
 		if (supportsReasoning && current !== '') parts.push(`effort ${effortLabel(current).toLowerCase()}`);
 		if (!infiniteSessions) parts.push('infinite sessions off');
 		if (!supportsReasoning && infiniteSessions) {
-			this.modelIconEl.setAttribute('title', 'Reasoning & context (model does not support reasoning effort)');
+			this.reasoningBtnEl.setAttribute('title', 'Reasoning & context (model does not support reasoning effort)');
 		} else {
-			this.modelIconEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
+			this.reasoningBtnEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
 		}
 	};
 
@@ -236,6 +279,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 					.onClick(async () => {
 						this.plugin.settings.toolApproval = 'allow';
 						await this.plugin.saveSettings();
+						this.updateToolsBadge();
 					});
 			});
 			sub.addItem(si => {
@@ -244,6 +288,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 					.onClick(async () => {
 						this.plugin.settings.toolApproval = 'ask';
 						await this.plugin.saveSettings();
+						this.updateToolsBadge();
 					});
 			});
 		});
@@ -257,6 +302,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			this.agentSelect.value = '';
 			this.agentSelect.selectedIndex = 0;
 			this.agentSelect.title = '';
+			this.agentSelect.toggleClass('is-active', false);
 			this.applyAgentToolsAndSkills(undefined);
 			this.configDirty = true;
 			return;
@@ -269,6 +315,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.selectedAgent = agent.name;
 		// Update the dropdown — set both .value and .selectedIndex for reliability
 		this.agentSelect.value = agent.name;
+		this.agentSelect.toggleClass('is-active', true);
 		const opts = this.agentSelect.options;
 		for (let i = 0; i < opts.length; i++) {
 			if (opts[i]!.value === agent.name) {
@@ -282,10 +329,10 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		if (resolvedModel && resolvedModel !== this.selectedModel) {
 			this.selectedModel = resolvedModel;
 			this.modelSelect.value = resolvedModel;
+			this.modelSelect.toggleClass('is-active', resolvedModel !== '');
 		}
 		this.applyAgentToolsAndSkills(agent);
 		this.configDirty = true;
-		this.updateModelPickerButton?.();
 		this.updateStateLine?.();
 	};
 
@@ -308,9 +355,13 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateToolsBadge = function(): void {
-		// MCP is now SDK-native; badge always shows inactive
-		this.toolsBtnEl.toggleClass('is-active', false);
-		this.toolsBtnEl.setAttribute('title', 'Tools');
+		const approval = this.plugin.settings.toolApproval;
+		const label = approval === 'allow' ? 'Allow' : 'Ask';
+		this.toolsBtnEl.toggleClass('is-active', approval === 'allow');
+		this.toolsBtnEl.setAttribute('title', `Tools approval: ${approval === 'allow' ? 'Allow (auto-approve)' : 'Ask (require approval)'}`);
+		if (this.toolsBtnEl.textContent !== label) {
+			this.toolsBtnEl.setText(label);
+		}
 	};
 
 	proto.openCwdPicker = function(): void {
@@ -322,10 +373,24 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	proto.updateCwdButton = function(): void {
+		if (!this.cwdBtnEl) return;
 		const vaultName = this.app.vault.getName();
-		const label = `Working directory: ${vaultName}/${this.workingDir}`;
+		const label = this.workingDir
+			? `Working directory: ${vaultName}/${this.workingDir}`
+			: `Working directory: ${vaultName} (vault root)`;
 		this.cwdBtnEl.setAttribute('title', label);
-		this.cwdBtnEl.toggleClass('is-active', true);
+		const hasFolder = Boolean(this.workingDir && this.workingDir !== '' && this.workingDir !== '/');
+		this.cwdBtnEl.toggleClass('is-active', hasFolder);
+		const folderName = this.workingDir ? (this.workingDir.split('/').pop() || this.workingDir) : '';
+		// Truncate only the folder-name portion so a long name doesn't squeeze the state line row
+		// (#215); the full name is always available via the `title` set above. Written in
+		// sentence case — `.synapse-toolbar-btn`'s CSS `text-transform: uppercase` handles the
+		// visual presentation, avoiding a bare `toUpperCase()` call (locale-sensitive, and it
+		// would make screen readers spell out "DIR colon RESEARCH" instead of natural case).
+		const truncated = folderName.length > CWD_LABEL_MAX_CHARS
+			? `${folderName.slice(0, CWD_LABEL_MAX_CHARS - 1)}…`
+			: folderName;
+		this.cwdBtnEl.setText(truncated ? truncated : 'Dir');
 	};
 
 	/**
@@ -363,39 +428,51 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	};
 
 	/**
-	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130) in the toolbar
-	 * gauge. Renders nothing — not a zero, not a placeholder — until the first successful
-	 * capture, and applies only to the real Agent SDK path: a BYOK local model's `Session`
-	 * never populates `cachedContextUsage`, so the indicator stays absent for the entire
+	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130, #210) in the toolbar
+	 * gauge. Renders as a hairline meter: a 2px track that fills with the accent, with its
+	 * numeric readout in tabular mono.
+	 *
+	 * Renders nothing — not a zero, not a placeholder — until the first successful capture,
+	 * and applies only to the real Agent SDK path: a BYOK local model's `Session` never
+	 * populates `cachedContextUsage`, so the indicator stays absent for the entire
 	 * conversation rather than showing a number that was never actually measured.
 	 */
 	proto.updateContextIndicator = function(): void {
 		const usage = this.currentSession?.cachedContextUsage;
 		if (!usage) {
 			this.contextIndicatorEl.addClass('is-hidden');
-			this.contextIndicatorEl.setText('');
+			if (this.contextSepEl) this.contextSepEl.addClass('is-hidden');
 			return;
 		}
-		const pct = Math.round(usage.percentage);
+		// Round once and use the rounded value for BOTH the displayed text and the
+		// warning/critical thresholds, so the number and its severity color never disagree
+		// (#215) — e.g. a raw 74.6% used to show "75%" while staying un-highlighted.
+		const pct = Math.min(100, Math.max(0, Math.round(usage.percentage)));
 		this.contextIndicatorEl.removeClass('is-hidden');
-		this.contextIndicatorEl.setText(`${pct}% context`);
+		if (this.contextSepEl) this.contextSepEl.removeClass('is-hidden');
+
+		// Build the track/fill/value nodes once and update them in place on subsequent calls
+		// (#215) — recreating them every update discarded the element the CSS `transition:
+		// width 0.2s ease` rule on `.synapse-gauge-fill` was meant to animate.
+		if (!this.gaugeFillEl || !this.gaugeValueEl) {
+			this.contextIndicatorEl.empty();
+			const track = this.contextIndicatorEl.createDiv({cls: 'synapse-gauge-track'});
+			this.gaugeFillEl = track.createDiv({cls: 'synapse-gauge-fill'});
+			this.gaugeValueEl = this.contextIndicatorEl.createSpan({cls: 'synapse-gauge-value'});
+		}
+
+		// A CSS custom property (not inline `style.width`) so this stays consistent with the
+		// same shared `.synapse-gauge-fill`/`.synapse-gauge-track` classes elsewhere (#215).
+		this.gaugeFillEl.setCssProps({'--progress-width': `${pct}%`});
+		this.gaugeValueEl.setText(`${pct}%`);
+
 		this.contextIndicatorEl.setAttribute(
 			'title',
 			`Context window: ~${usage.totalTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} tokens (${pct}%). ` +
 				'One turn stale — refreshed at the end of each turn.'
 		);
-		this.contextIndicatorEl.toggleClass('is-context-warning', usage.percentage >= 75 && usage.percentage < 90);
-		this.contextIndicatorEl.toggleClass('is-context-critical', usage.percentage >= 90);
-	};
-
-	proto.openEditFromChat = function(): void {
-		const text = this.inputEl.value.trim();
-		new EditModal(this.plugin, text, (result) => {
-			this.inputEl.value = result;
-			this.inputEl.setCssProps({'--input-height': 'auto'});
-			this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
-			this.inputEl.focus();
-		}).open();
+		this.contextIndicatorEl.toggleClass('is-context-warning', pct >= 75 && pct < 90);
+		this.contextIndicatorEl.toggleClass('is-context-critical', pct >= 90);
 	};
 
 	proto.resolveModelForAgent = function(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {
