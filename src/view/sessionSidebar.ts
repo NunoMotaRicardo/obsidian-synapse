@@ -33,6 +33,7 @@ declare module '../synapseView' {
 		showSessionContextMenu(e: MouseEvent, sessionId: string): void;
 		renameSession(sessionId: string): void;
 		deleteSessionById(sessionId: string): Promise<void>;
+		confirmDeleteSession(sessionId: string): void;
 		confirmDeleteDisplayedSessions(): void;
 		getDisplayedSessions(): SessionMetadata[];
 		deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void>;
@@ -344,8 +345,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			const details = item.createDiv({cls: 'synapse-session-details'});
 			details.createDiv({cls: 'synapse-session-name', text: name});
 			const modTime = new Date(session.lastModified);
-			const rawCount = (session as {messageCount?: number}).messageCount
-				?? (session.sessionId === this.currentSessionId ? this.messages.length : undefined)
+			const rawCount = (session.sessionId === this.currentSessionId ? this.messages.length : undefined)
 				?? this.activeSessions.get(session.sessionId)?.messages.length;
 			const timeAgo = formatTimeAgo(modTime);
 			const metaText = rawCount !== undefined && rawCount > 0
@@ -371,7 +371,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			setIcon(deleteBtn, 'trash-2');
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				void this.deleteSessionById(session.sessionId);
+				this.confirmDeleteSession(session.sessionId);
 			});
 		}
 
@@ -390,7 +390,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				this.renameSession(session.sessionId);
 			} else if (ke.key === 'Delete') {
 				ke.preventDefault();
-				void this.deleteSessionById(session.sessionId);
+				this.confirmDeleteSession(session.sessionId);
 			}
 		});
 	};
@@ -1053,6 +1053,13 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	};
 
 	proto.deleteSessionById = async function (sessionId: string): Promise<void> {
+		// If this is the foreground session and it's actively streaming, interrupt
+		// the in-flight run first (same abort path as the stop button) so we don't
+		// delete the session out from under a still-running stream.
+		if (sessionId === this.currentSessionId && this.isStreaming) {
+			await this.handleAbort();
+		}
+
 		// Clean up background session if it exists
 		const bg = this.activeSessions.get(sessionId);
 		if (bg) {
@@ -1083,6 +1090,25 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		this.renderSessionList();
 		new Notice('Session deleted.');
+	};
+
+	proto.confirmDeleteSession = function (sessionId: string): void {
+		const session = this.sessionList.find(s => s.sessionId === sessionId);
+		const name = session ? this.getSessionDisplayName(session) : 'this session';
+
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('Delete session');
+		modal.contentEl.createEl('p', {
+			text: `Are you sure you want to delete "${name}"?`,
+		});
+		const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
+		btnRow.createEl('button', {text: 'Cancel', cls: 'mod-cancel'}).addEventListener('click', () => modal.close());
+		const confirmBtn = btnRow.createEl('button', {text: 'Delete', cls: 'mod-warning'});
+		confirmBtn.addEventListener('click', () => {
+			modal.close();
+			void this.deleteSessionById(sessionId);
+		});
+		modal.open();
 	};
 
 	proto.confirmDeleteDisplayedSessions = function (): void {

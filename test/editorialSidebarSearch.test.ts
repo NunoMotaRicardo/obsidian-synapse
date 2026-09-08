@@ -43,7 +43,7 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 		});
 
 		it('formats metadata with relative date and message count when available', () => {
-			expect(sessionSidebarSource).toContain('messageCount');
+			expect(sessionSidebarSource).toContain('this.messages.length');
 			expect(sessionSidebarSource).toContain('msg');
 		});
 	});
