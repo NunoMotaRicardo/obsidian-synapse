@@ -170,11 +170,13 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			);
 		});
 
-		it('inputArea.ts builds text buttons for Scope, Attach, Paste, and Edit', () => {
+		it('inputArea.ts builds text buttons for Scope and Attach only — Paste and Edit were removed to match the design reference', () => {
 			expect(inputAreaSource).toContain("'Scope'");
 			expect(inputAreaSource).toContain("'Attach'");
-			expect(inputAreaSource).toContain("'Paste'");
-			expect(inputAreaSource).toContain("'Edit'");
+			expect(inputAreaSource).not.toContain('synapse-f-btn-clip');
+			expect(inputAreaSource).not.toContain('synapse-f-btn-edit');
+			expect(inputAreaSource).not.toContain('handleClipboard');
+			expect(inputAreaSource).not.toContain('openEditFromChat');
 		});
 
 		it('does not duplicate a model picker in the composer footer — the toolbar select is the sole model control (#215 AC-2)', () => {

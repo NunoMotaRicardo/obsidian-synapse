@@ -3,7 +3,6 @@ import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
-import {EditModal} from '../modals/editModal';
 import {setDebugEnabled} from '../debug';
 import {resolveModelForAgent, mergeLiveAgents, mergeLiveSkills} from './sessionConfig';
 
@@ -31,7 +30,6 @@ declare module '../synapseView' {
 		updateToolsBadge(): void;
 		openCwdPicker(): void;
 		updateCwdButton(): void;
-		openEditFromChat(): void;
 		resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined;
 		getEffectiveAgents(): AgentConfig[];
 		getEffectiveSkills(): SkillInfo[];
@@ -452,16 +450,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		);
 		this.contextIndicatorEl.toggleClass('is-context-warning', pct >= 75 && pct < 90);
 		this.contextIndicatorEl.toggleClass('is-context-critical', pct >= 90);
-	};
-
-	proto.openEditFromChat = function(): void {
-		const text = this.inputEl.value.trim();
-		new EditModal(this.plugin, text, (result) => {
-			this.inputEl.value = result;
-			this.inputEl.setCssProps({'--input-height': 'auto'});
-			this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
-			this.inputEl.focus();
-		}).open();
 	};
 
 	proto.resolveModelForAgent = function(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {

@@ -8,7 +8,6 @@ declare module '../synapseView' {
 	interface SynapseView {
 		buildInputArea(parent: HTMLElement): void;
 		handleAttachFile(): void;
-		handleClipboard(): Promise<void>;
 		handleImagePaste(blob: File): Promise<void>;
 		handleFileDrop(e: DragEvent): void;
 
@@ -168,18 +167,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		attachBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Attach'});
 		attachBtn.addEventListener('click', () => this.handleAttachFile());
 
-		const clipBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-clip', attr: {title: 'Paste clipboard', type: 'button'}});
-		const clipIcon = clipBtn.createSpan({cls: 'synapse-f-btn-icon'});
-		setIcon(clipIcon, 'clipboard-paste');
-		clipBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Paste'});
-		clipBtn.addEventListener('click', () => void this.handleClipboard());
-
-		const editBtn = foot.createEl('button', {cls: 'synapse-f-btn synapse-f-btn-edit', attr: {title: 'Edit text', type: 'button'}});
-		const editIcon = editBtn.createSpan({cls: 'synapse-f-btn-icon'});
-		setIcon(editIcon, 'pencil-line');
-		editBtn.createSpan({cls: 'synapse-f-btn-label', text: 'Edit'});
-		editBtn.addEventListener('click', () => this.openEditFromChat());
-
 		foot.createSpan({cls: 'synapse-composer-spacer'});
 
 		this.sendBtn = foot.createEl('button', {
@@ -236,21 +223,6 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 		input.addEventListener('cancel', () => input.remove());
 		input.click();
-	};
-
-	proto.handleClipboard = async function (): Promise<void> {
-		try {
-			const text = await navigator.clipboard.readText();
-			if (!text.trim()) {
-				new Notice('Clipboard is empty.');
-				return;
-			}
-			const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
-			this.attachments.push({type: 'clipboard', name: `Clipboard: ${preview}`, content: text});
-			this.renderAttachments();
-		} catch (e) {
-			new Notice(`Failed to read clipboard: ${String(e)}`);
-		}
 	};
 
 	proto.handleImagePaste = async function (blob: File): Promise<void> {
