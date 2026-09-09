@@ -154,11 +154,10 @@ import type {
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
-import {isLocalBackendConfigured, executeLocalProviderQuery, resolveDefaultModel, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
-import {vaultTools} from './vaultTools';
+import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
 import {getSynapseSettingsPath} from './vaultPaths';
-// Static import (matching mcpBridge.ts's `_synapse/.mcp.json` read, the closest existing
+// Static import (matching the now-removed mcpBridge.ts's `_synapse/.mcp.json` read, the closest
 // precedent for reading a small vault-local JSON config synchronously) rather than the lazy
 // `window.require`-gated pattern used elsewhere in this file for fs/promises — that gate exists
 // because those call sites' `await import()` fallback only fires once, off the hot path
@@ -333,10 +332,10 @@ export interface AuthConfig {
 /**
  * A user-configured local agent endpoint (issue #122) — a Messages-API-speaking backend
  * (Ollama v0.14.0+ natively, or another compatible endpoint) that the CLI is repointed at via
- * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` for local-model queries, instead of routing them
- * through the separate `executeLocalProviderQuery()` ReAct loop. Independent of `AuthConfig` —
- * this only ever overrides the env for queries `isLocalModel()` already classifies as local; it
- * never affects Claude-model queries.
+ * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` for local-model queries — the only way local models
+ * run since the OpenAI-compatible provider matrix and its hand-rolled ReAct loop were removed
+ * (#220). Independent of `AuthConfig` — this only ever overrides the env for queries
+ * `isLocalModel()` already classifies as local; it never affects Claude-model queries.
  */
 export interface LocalAgentEndpointConfig {
 	/** Base URL of the Messages-API-speaking endpoint, e.g. `http://localhost:11434`. */
@@ -521,7 +520,6 @@ export async function sendAndWaitWithAbort<T>(
 export class AgentService {
 	private state: ConnectionState = 'disconnected';
 	private readonly auth: AuthConfig;
-	private readonly providerConfig?: import('./providerModels').ProviderConfigOptions;
 	private readonly localAgentEndpoint?: LocalAgentEndpointConfig;
 	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
@@ -549,14 +547,12 @@ export class AgentService {
 
 	constructor(opts?: {
 		auth?: AuthConfig;
-		providerConfig?: import('./providerModels').ProviderConfigOptions;
 		localAgentEndpoint?: LocalAgentEndpointConfig;
 		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
 		onVersionInfo?: VersionInfoCallback;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
-		this.providerConfig = opts?.providerConfig;
 		this.localAgentEndpoint = opts?.localAgentEndpoint;
 		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
@@ -566,9 +562,8 @@ export class AgentService {
 	/**
 	 * Whether a local agent endpoint (issue #122) is configured, i.e. a non-empty base URL was
 	 * supplied. When true, `isLocalModel()` queries route through the real Agent SDK/CLI with
-	 * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at it, instead of
-	 * `executeLocalProviderQuery()`'s ReAct loop — see `buildEnv()` and each local-model branch
-	 * (`chat()`, `inlineChat()`, `Session.send()`).
+	 * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at it — the only way local models run
+	 * since the hand-rolled local ReAct loop was removed (#220).
 	 */
 	isLocalAgentEndpointConfigured(): boolean {
 		return !!this.localAgentEndpoint?.baseUrl?.trim();
@@ -579,16 +574,10 @@ export class AgentService {
 	 *
 	 * - When `modelId` is classified local (`isLocalModel()`) AND a local agent endpoint (issue
 	 *   #122) is configured, `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` are repointed at that
-	 *   endpoint for this call only — additive to, not a replacement of, the branches below. This
-	 *   is a per-call decision, not a global one: a Claude-model query in the same session is
-	 *   unaffected.
+	 *   endpoint for this call only. This is a per-call decision, not a global one: a
+	 *   Claude-model query in the same session is unaffected.
 	 * - Otherwise, for API key auth, sets ANTHROPIC_API_KEY from `auth.apiKey`.
 	 * - For subscription auth (and no local override), inherits process env (CLI handles OAuth).
-	 *
-	 * Without a configured local agent endpoint, local models still never flow through the CLI
-	 * subprocess — they run through the separate `executeLocalProviderQuery` ReAct loop in
-	 * providerModels.ts (see each local-model branch's own routing condition, which checks
-	 * `isLocalAgentEndpointConfigured()` before falling back to that loop).
 	 */
 	private buildEnv(modelId?: string): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
@@ -728,36 +717,31 @@ export class AgentService {
 		return this.getModels();
 	}
 
-	/** Check if local backend is configured and available for dynamic delegation. */
-	isLocalBackendAvailable(): boolean {
-		return isLocalBackendConfigured(this.providerConfig);
-	}
-
-	getProviderConfig(): import('./providerModels').ProviderConfigOptions | undefined {
-		return this.providerConfig;
-	}
-
 	/**
-	 * Check if a model ID is handled by the local provider backend.
+	 * Check if a model ID is handled by the local agent endpoint (issue #122).
 	 *
 	 * SDK-known ids are checked FIRST, before the `customModels` membership test, and
 	 * `customModels` membership is never sufficient on its own. This is deliberate: `customModels`
-	 * is populated from whatever a provider's `/v1/models` catalogue returns (setCustomModels(),
-	 * agentService.ts:483), and some providers/aggregators (e.g. an OpenRouter-style
-	 * `anthropic/claude-*` id, or a provider that simply echoes real `claude-*` ids) can return
-	 * ids that collide with — or otherwise still identify — genuine Claude models. If membership
-	 * in `customModels` alone were enough to classify a model as local, any such catalogue would
-	 * silently misroute Claude models down the degraded local one-shot loop (no skills, subagents,
-	 * sessions, permissions or streaming) with no indication to the user. Checking `sdkModels` and
-	 * the `/^claude-/i` guard first ensures an SDK-known/Claude-shaped id can never be classified
-	 * local, regardless of what a local catalogue happens to contain.
+	 * is populated from whatever the endpoint's `/v1/models` catalogue returns
+	 * (`fetchEndpointModels()` → `setCustomModels()`), and an endpoint (or an aggregator behind
+	 * it) can return ids that collide with — or otherwise still identify — genuine Claude models.
+	 * If membership in `customModels` alone were enough to classify a model as local, any such
+	 * catalogue would silently misroute Claude models away from their real auth. Checking
+	 * `sdkModels` and the `/^claude-/i` guard first ensures an SDK-known/Claude-shaped id can
+	 * never be classified local, regardless of what an endpoint catalogue happens to contain.
+	 *
+	 * Post-#220 this classifier has exactly one consumer-facing meaning: when true, the query
+	 * routes through the Agent SDK with the endpoint repointed via `buildEnv()` (and the model id
+	 * preserved by `routeQueryOptions()`). There is no local ReAct loop to fall back to anymore.
+	 * The final fallback returns true for an unknown id when the endpoint is configured (the CLI
+	 * surfaces a bad id as a query error) and false otherwise (nothing local exists to serve it).
 	 */
 	isLocalModel(modelId?: string): boolean {
 		if (!modelId) return false;
 		if (this.sdkModels.some(m => m.id === modelId)) return false;
 		if (/^claude-/i.test(modelId)) return false;
 		if (this.customModels.some(m => m.id === modelId)) return true;
-		if (this.isLocalBackendAvailable()) return true;
+		if (this.isLocalAgentEndpointConfigured()) return true;
 		return false;
 	}
 
@@ -790,15 +774,44 @@ export class AgentService {
 		return match ? match.id : undefined;
 	}
 
-	/** Invalidate the cached delegation server (call when provider config changes). */
+	/** Invalidate the cached delegation server (call when the local agent endpoint config changes). */
 	clearDelegationCache(): void {
 		this.cachedDelegationServer = null;
-		clearCachedDefaultModel();
+		this.cachedEndpointDefaultModel = null;
+	}
+
+	/**
+	 * Cached first catalogue entry from `fetchEndpointModels()` — the delegation tools' default
+	 * model. Cached because the tools resolve it per tool-use, and a fresh `/v1/models` request
+	 * on every tool call would be both slow and pointless: the endpoint's model list doesn't
+	 * change mid-conversation in any way a user can't also surface by editing the setting
+	 * (which rebuilds `AgentService` and clears this via `clearDelegationCache()`'s path).
+	 */
+	private cachedEndpointDefaultModel: {baseUrl: string; model: string} | null = null;
+
+	/**
+	 * Resolve the default model for the delegation tools: the first entry of the configured
+	 * endpoint's `/v1/models` catalogue (`fetchEndpointModels()`), replacing the old
+	 * `resolveDefaultModel()` over the removed BYOK provider config (#220). Returns
+	 * `undefined` when the catalogue can't be fetched or is empty — the tools then run
+	 * without an explicit `model` and the CLI picks its own default (a degraded but
+	 * functional fallback, same as before).
+	 */
+	private async resolveEndpointDefaultModel(): Promise<string | undefined> {
+		if (!this.localAgentEndpoint?.baseUrl?.trim()) return undefined;
+		const baseUrl = this.localAgentEndpoint.baseUrl.trim();
+		if (this.cachedEndpointDefaultModel && this.cachedEndpointDefaultModel.baseUrl === baseUrl) {
+			return this.cachedEndpointDefaultModel.model;
+		}
+		const res = await fetchEndpointModels({baseUrl, apiKey: this.localAgentEndpoint.apiKey});
+		if (!res.ok || res.models.length === 0) return undefined;
+		this.cachedEndpointDefaultModel = {baseUrl, model: res.models[0]!.id};
+		return res.models[0]!.id;
 	}
 
 	/** Get or create the in-process dynamic delegation MCP server config. */
 	getDelegationMcpServer(): McpServerConfig | undefined {
-		if (!this.isLocalBackendAvailable()) {
+		if (!this.isLocalAgentEndpointConfigured()) {
 			this.cachedDelegationServer = null;
 			return undefined;
 		}
@@ -814,23 +827,12 @@ export class AgentService {
 				systemPrompt: z.string().optional().describe('Optional instructions for the sub-task'),
 			}).shape,
 			async (args) => {
-				if (this.isLocalAgentEndpointConfigured()) {
-					try {
-						const model = await resolveDefaultModel(this.providerConfig!);
-						const text = await this.chat({prompt: args.prompt, systemMessage: args.systemPrompt, model});
-						return {content: [{type: 'text', text: text || ''}]};
-					} catch (e) {
-						return {content: [{type: 'text', text: `Local agent execution failed: ${e instanceof Error ? e.message : String(e)}`}], isError: true};
-					}
-				}
-				const res = await executeLocalProviderQuery(this.providerConfig!, {
-					prompt: args.prompt,
-					systemPrompt: args.systemPrompt,
-				});
-				if (res.ok) {
-					return {content: [{type: 'text', text: res.content}]};
-				} else {
-					return {content: [{type: 'text', text: `Local agent execution failed: ${res.error}`}], isError: true};
+				try {
+					const model = await this.resolveEndpointDefaultModel();
+					const text = await this.chat({prompt: args.prompt, systemMessage: args.systemPrompt, ...(model ? {model} : {})});
+					return {content: [{type: 'text', text: text || ''}]};
+				} catch (e) {
+					return {content: [{type: 'text', text: `Local agent execution failed: ${e instanceof Error ? e.message : String(e)}`}], isError: true};
 				}
 			}
 		);
@@ -844,19 +846,11 @@ export class AgentService {
 			}).shape,
 			async (args) => {
 				const sysPrompt = args.instruction ? `Summarize concisely according to instruction: ${args.instruction}` : 'Summarize the following text concisely.';
-				const useEndpoint = this.isLocalAgentEndpointConfigured();
-				const endpointModel = useEndpoint ? await resolveDefaultModel(this.providerConfig!) : undefined;
+				const model = await this.resolveEndpointDefaultModel();
 				const settled = await Promise.allSettled(
 					args.items.map(async (item, i) => {
-						if (useEndpoint) {
-							const text = await this.chat({prompt: item, systemMessage: sysPrompt, model: endpointModel});
-							return `Item ${i + 1}:\n${text || ''}`;
-						}
-						const res = await executeLocalProviderQuery(this.providerConfig!, {
-							prompt: item,
-							systemPrompt: sysPrompt,
-						});
-						return res.ok ? `Item ${i + 1}:\n${res.content}` : `Item ${i + 1} failed: ${res.error}`;
+						const text = await this.chat({prompt: item, systemMessage: sysPrompt, ...(model ? {model} : {})});
+						return `Item ${i + 1}:\n${text || ''}`;
 					})
 				);
 				const results = settled.map((r) => r.status === 'fulfilled' ? r.value : `Item failed: ${String(r.reason)}`);
@@ -929,16 +923,6 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
-				if (options.model && this.isLocalModel(options.model) && this.providerConfig && !this.isLocalAgentEndpointConfigured()) {
-					const res = await executeLocalProviderQuery(this.providerConfig, {
-						prompt: options.prompt,
-						systemPrompt: options.systemMessage,
-						model: options.model,
-					});
-					if (!res.ok) throw new Error(res.error);
-					return res.content || undefined;
-				}
-
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
@@ -973,19 +957,19 @@ export class AgentService {
 	 * Send a prompt and return the response text along with the session ID.
 	 * The session persists and can be resumed later.
 	 *
-	 * `app` (#150, mirroring #138's `Session.send()`) is only used in the local-model branch,
-	 * forwarded to `executeLocalProviderQuery()` as the `App` instance the three built-in vault
-	 * tools (`read_note`, `list_notes`, `search_notes`) execute against. `AgentService` holds no
-	 * `App` reference of its own (architecture rule: SDK/session plumbing stays UI-agnostic), so
-	 * each editor action/edit modal/search caller passes it per call.
+	 * `app` (#194, mirroring `Session.send()`) is read on the real Agent SDK path
+	 * (`createQuery()` -> `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path
+	 * for the vault settings layer. `AgentService` holds no `App` reference of its own
+	 * (architecture rule: SDK/session plumbing stays UI-agnostic), so each editor action/edit
+	 * modal/search caller passes it per call.
 	 *
-	 * Unlike `Session.send()`, tools are only offered here when the caller *also* supplies
-	 * `canUseTool` — editor actions are one-shot rather than an ongoing attended conversation, so
-	 * there is no "unattended by design" precedent (`runExecutor.ts`) to fall back to running
-	 * ungated; every tool call this method makes must go through the same approval path as the
-	 * chat panel's, never a silent auto-approve. A caller with `app` but no `canUseTool` gets no
-	 * tools rather than an ungated one (fails closed, not "always denied" — the tool is simply
-	 * never offered, so the model degrades to the current bare one-shot instead of a broken loop).
+	 * Tools are only offered here when the caller *also* supplies `canUseTool` — editor actions
+	 * are one-shot rather than an ongoing attended conversation, so there is no "unattended by
+	 * design" precedent (`runExecutor.ts`) to fall back to running ungated; every tool call this
+	 * method makes must go through the same approval path as the chat panel's, never a silent
+	 * auto-approve. A caller with `app` but no `canUseTool` gets no tools rather than an
+	 * ungated one (fails closed, not "always denied" — the tool is simply never offered, so the
+	 * model degrades to the current bare one-shot instead of a broken loop).
 	 */
 	async inlineChat(options: {
 		prompt: string;
@@ -1014,48 +998,6 @@ export class AgentService {
 		return sendAndWaitWithAbort(async (controller) => {
 			try {
 				await this.ensureConnected();
-
-				if (options.model && this.isLocalModel(options.model) && this.providerConfig && !this.isLocalAgentEndpointConfigured()) {
-					const sysPrompt = options.systemMessage ?? (typeof options.systemPrompt === 'string' ? options.systemPrompt : undefined);
-
-					// Vault tools for inlineChat's local-model branch (#150) — same
-					// `supportsTools !== false` capability gate as `Session.send()` (#138) and
-					// `runExecutor.ts`. See the method doc comment above for why reachability
-					// also requires `canUseTool` here, unlike `Session.send()`.
-					//
-					// MCP tools are deliberately NOT offered here either, for the same
-					// spawn/teardown-cost reasoning as `Session.send()` — see its comment. That
-					// reasoning is about paying the cost once per turn in a back-and-forth
-					// conversation; it doesn't automatically carry over to inlineChat's one-shot
-					// calls, but extending to MCP is a separate question this issue leaves alone.
-					const modelInfo = this.getModels().find(m => m.id === options.model);
-					const supportsTools = modelInfo?.supportsTools !== false;
-					const localTools = (supportsTools && options.app && options.canUseTool) ? vaultTools : undefined;
-					const onApproveTool: LocalToolApprovalHandler | undefined = (localTools && options.canUseTool)
-						? adaptCanUseToolToLocalApproval(options.canUseTool, controller.signal)
-						: undefined;
-
-					const res = await executeLocalProviderQuery(this.providerConfig, {
-						prompt: options.prompt,
-						systemPrompt: sysPrompt,
-						model: options.model,
-						...(localTools ? {tools: localTools, app: options.app} : {}),
-						...(onApproveTool ? {onApproveTool} : {}),
-					});
-					if (!res.ok) throw new Error(res.error);
-					const localSessionId = `local-${Date.now()}`;
-					if (options.onEvent && res.content) {
-						options.onEvent({
-							type: 'assistant',
-							session_id: localSessionId,
-							message: {
-								role: 'assistant',
-								content: [{type: 'text', text: res.content}],
-							},
-						} as unknown as SDKMessage);
-					}
-					return {content: res.content || undefined, sessionId: localSessionId};
-				}
 
 				const stream = query({
 					prompt: options.prompt,
@@ -1226,16 +1168,17 @@ export class AgentService {
 			if (this.isLocalModel(opts.model)) {
 				// Preserve the local model id when routing it through the local agent endpoint
 				// (issue #122) so it reaches the endpoint (e.g. Ollama) via ANTHROPIC_BASE_URL as
-				// the requested model. Without the endpoint configured, this branch is only
-				// reached at all when `providerConfig` is missing (the local-loop branches above
-				// short-circuit before `routeQueryOptions()` otherwise) — there is no Claude model
-				// this id could resolve to, so the CLI is left to pick its own default.
+				// the requested model. Without the endpoint configured, `isLocalModel()`'s final
+				// fallback returns false for an unknown id, so this branch isn't reached at all
+				// — but a `customModels` id with no endpoint still has no local route to run
+				// through (the ReAct loop is gone, #220), so the CLI is left to pick its own
+				// default rather than being sent an id no backend serves.
 				opts.model = this.isLocalAgentEndpointConfigured() ? opts.model : undefined;
 			} else {
 				opts.model = this.resolveValidModel(opts.model);
 			}
 		}
-		if (this.isLocalBackendAvailable()) {
+		if (this.isLocalAgentEndpointConfigured()) {
 			const delegationServer = this.getDelegationMcpServer();
 			if (delegationServer) {
 				opts.mcpServers = {
@@ -1529,41 +1472,9 @@ export async function refreshQueryMetadataCache(
 }
 
 /**
- * Adapt an Agent SDK `CanUseTool` (the interactive approval handler already threaded through
- * `SessionConfig`/`inlineChat()` — `ToolApprovalModal`/`permissionHandler`) into
- * `providerModels.ts`'s neutral `LocalToolApprovalHandler` shape consulted by
- * `executeLocalProviderQuery()`'s local-model tool loop (#138).
- *
- * `providerModels.ts` must not import view/SDK types, so this translation lives here — the one
- * file that already imports both — and in exactly this one place. Both of the local-model
- * branches that offer vault tools (`Session.send()` for the chat panel, `AgentService.inlineChat()`
- * for editor actions/edit modal/search, #150) call this rather than each writing their own
- * adapter.
- */
-function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSignal): LocalToolApprovalHandler {
-	return async (toolName, input, context) => {
-		const result = await canUseTool(toolName, input, {
-			signal,
-			toolUseID: context.toolUseID,
-			requestId: context.toolUseID,
-			title: `${context.isRemoteEndpoint ? 'Remote' : 'Local'} model wants to use ${toolName}`,
-			description: context.isRemoteEndpoint
-				? `This sends data to ${context.endpoint} — a remote endpoint outside this machine.`
-				: `This runs locally against ${context.endpoint} and stays on this machine.`,
-		});
-		if (result && result.behavior === 'allow') {
-			return {allow: true};
-		}
-		return {allow: false, message: (result && result.behavior === 'deny') ? result.message : 'Denied by user'};
-	};
-}
-
-/**
  * Auto-approving `CanUseTool` for `inlineChat()` call sites that request only the read-only
- * vault-tool set — `['Read']` or `['Read', 'Glob', 'Grep']` on the SDK path, which
- * `vaultTools` (`read_note`/`list_notes`/`search_notes`, `src/vaultTools.ts`) mirror on the
- * local-model branch. Introduced by #167 to make `inlineChat()`'s local-model branch reachable
- * for `searchPanel.ts` (`maxTurns: 40`) without opening one approval modal per tool call.
+ * tool set — `['Read']` or `['Read', 'Glob', 'Grep']`. Introduced by #167 for `searchPanel.ts`
+ * (`maxTurns: 40`) so a search never opens one approval modal per tool call.
  *
  * This is deliberately **not** a new permission concept, and is narrower than #151's
  * `resolveToolApprovalPolicy()` (`src/runExecutor.ts`), which governs unattended runs that may
@@ -1571,11 +1482,9 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
  * ask). The read-only case is different: a verified spike against the live CLI showed the Agent
  * SDK path *never invokes* `canUseTool` for `Read`/`Glob`/`Grep` at all — it auto-approves them
  * before the callback would even fire — while a write tool (`Write`) still goes through
- * `canUseTool` and is denied with no attended handler present. `vaultTools` are genuinely
- * read-only (`app.vault.read()` / `getFiles()` / `getMarkdownFiles()` only — no
- * `modify`/`create`/`delete`/`rename`), so this handler reproduces the Claude path's own
- * shipped behavior for the local-model path rather than inventing a laxer one. See
- * "Tool approval for inlineChat()'s read-only callers" in `specs/agent-service.md`.
+ * `canUseTool` and is denied with no attended handler present. This handler therefore
+ * reproduces the CLI's own shipped behavior for these tools rather than inventing a laxer
+ * one. See "Tool approval for inlineChat()'s read-only callers" in `specs/agent-service.md`.
  *
  * The read-only set is **enforced here**, not merely assumed of the caller: any tool outside
  * `READ_ONLY_TOOL_NAMES` is denied. `inlineChat()` forwards the same `canUseTool` to the raw
@@ -1585,11 +1494,8 @@ function adaptCanUseToolToLocalApproval(canUseTool: CanUseTool, signal: AbortSig
  * legitimately need write-capable tools stay on #151's `resolveToolApprovalPolicy()` path.
  */
 const READ_ONLY_TOOL_NAMES = new Set([
-	// SDK path — searchPanel's SEARCH_TOOLS and editorMenu's ['Read'].
+	// searchPanel's SEARCH_TOOLS and editorMenu's ['Read'].
 	'Read', 'Glob', 'Grep',
-	// Local-model path — the `vaultTools` analogues (`src/vaultTools.ts`), verified read-only:
-	// they call only `vault.read()` / `getFiles()` / `getMarkdownFiles()`.
-	'read_note', 'list_notes', 'search_notes',
 ]);
 
 export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
@@ -1597,8 +1503,8 @@ export const autoApproveReadOnlyTools: CanUseTool = async (toolName, input) => {
 		return {behavior: 'allow', updatedInput: input};
 	}
 	// AskUserQuestion needs an attended UI to answer it (issue #182's AskUserQuestionModal, wired
-	// only in synapseView.ts's chat-panel permissionHandler) — this call site (search/local-model)
-	// runs unattended, so say so explicitly rather than the generic "not read-only" wording.
+	// only in synapseView.ts's chat-panel permissionHandler) — this call site (search) runs
+	// unattended, so say so explicitly rather than the generic "not read-only" wording.
 	if (toolName === 'AskUserQuestion') {
 		return {
 			behavior: 'deny',
@@ -1762,28 +1668,14 @@ export class Session {
 	 * `cwd` — e.g. absolute out-of-vault paths or clipboard-blob temp files — for this
 	 * specific send() call, on top of whatever the session was already configured with.
 	 *
-	 * `images` (base64-encoded image attachments) is only used in the local-model branch,
-	 * where it's threaded through to `executeLocalProviderQuery()` to build a multimodal
-	 * message — local models have no agentic `Read` tool, so they need the actual image
-	 * bytes rather than a path inlined into the prompt text.
-	 *
-	 * `history` (#135) is likewise only used in the local-model branch — the real Agent SDK
-	 * carries continuity itself via `resume`/the persisted session id, so passing it there would
-	 * be redundant at best. The caller (`SynapseView`) maps its own `ChatMessage[]` transcript
-	 * into the neutral `LocalHistoryMessage[]` shape (`sessionConfig.ts#buildLocalHistory`)
-	 * before calling `send()`; this method just threads it through unchanged.
-	 *
-	 * `app` (#138) was originally local-model-branch-only, where it's forwarded to
-	 * `executeLocalProviderQuery()` as the `App` instance vault tools (`read_note`, `list_notes`,
-	 * `search_notes`) execute against. It's now also read on the real Agent SDK path
-	 * (`createQuery()` -> `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path
-	 * for the vault settings layer (issue #194) — the CLI itself doesn't need an `App`, since its
-	 * own tools run inside the CLI process, but locating the vault-scoped settings file does.
+	 * `app` (#138/#194) is read on the real Agent SDK path (`createQuery()` ->
+	 * `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path for the vault
+	 * settings layer — the CLI itself doesn't need an `App`, since its own tools run inside
+	 * the CLI process, but locating the vault-scoped settings file does.
 	 * `Session`/`AgentService` hold no `App` reference of their own (architecture rule:
-	 * SDK/session plumbing stays UI-agnostic), so `SynapseView` passes it per call, the same
-	 * shape as `images`/`history`.
+	 * SDK/session plumbing stays UI-agnostic), so `SynapseView` passes it per call.
 	 */
-	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; images?: Array<{mimeType: string; base64: string}>; history?: LocalHistoryMessage[]; app?: App}): Promise<void> {
+	async send(options: {prompt: string; additionalDirectories?: string[]; timeoutMs?: number; app?: App}): Promise<void> {
 		this.abortController = new AbortController();
 		const controller = this.abortController;
 		this.userInterruptRequested = false;
@@ -1801,67 +1693,6 @@ export class Session {
 					...(resumeSessionId ? {resume: resumeSessionId} : {}),
 					...(mergedAdditionalDirectories.length > 0 ? {additionalDirectories: mergedAdditionalDirectories} : {}),
 				};
-
-				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig() && !this.service.isLocalAgentEndpointConfigured()) {
-					this.dispatch('assistant.turn_start', {});
-					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
-
-					// Vault tools for the chat panel's local-model branch (#138) — mirrors
-					// runExecutor.ts's `supportsTools = modelInfo?.supportsTools !== false`
-					// gate: a catalogue that explicitly says "no tools" is honored, but a model
-					// with no capability info (most OpenAI-compatible catalogues) defaults to
-					// allowed.
-					//
-					// MCP tools are deliberately NOT offered here, unlike runExecutor.ts.
-					// Batch loops run once per note, so starting/stopping an McpBridgeSession
-					// (spawn a stdio server, negotiate JSON-RPC, tear down) once per run is
-					// cheap relative to the run itself. Chat's local branch runs once per
-					// user message in a potentially long back-and-forth conversation — paying
-					// that spawn/teardown cost on every single turn would make chat noticeably
-					// slower, and there is no session-scoped owner in `Session` to keep an MCP
-					// bridge alive across turns without a larger lifecycle change than this
-					// issue's gap (no vault-tool access in chat) calls for. MCP tools are also
-					// arbitrary and not necessarily read-only, unlike the three built-ins, so the
-					// smaller surface is also the more conservative default for an unreviewed
-					// increment. Revisit if interactive chat needs MCP tools (separate issue).
-					const modelInfo = this.service.getModels().find(m => m.id === queryOpts.model);
-					const supportsTools = modelInfo?.supportsTools !== false;
-					// No App instance to execute tools against (shouldn't happen from the chat
-					// panel, which always supplies one) — fail safe by not offering tools rather
-					// than crashing on a missing `app` inside providerModels.ts.
-					const localTools = (supportsTools && options.app) ? vaultTools : undefined;
-
-					// Approval gate (#138): reuse the same `canUseTool` this session was built
-					// with (`SynapseView.buildSessionConfig()`'s `permissionHandler`, which opens
-					// `ToolApprovalModal`) rather than a second approval UI, per the issue's
-					// decision comment. The `CanUseTool` -> `LocalToolApprovalHandler` translation
-					// lives in `adaptCanUseToolToLocalApproval()` (shared with
-					// `AgentService.inlineChat()`, #150) rather than being duplicated here.
-					const canUseTool = queryOpts.canUseTool;
-					const onApproveTool: LocalToolApprovalHandler | undefined = (localTools && canUseTool)
-						? adaptCanUseToolToLocalApproval(canUseTool, ctrl.signal)
-						: undefined;
-
-					const res = await executeLocalProviderQuery(this.service.getProviderConfig()!, {
-						prompt: options.prompt,
-						systemPrompt: sysPrompt,
-						model: queryOpts.model,
-						images: options.images,
-						history: options.history,
-						...(localTools ? {tools: localTools, app: options.app} : {}),
-						...(onApproveTool ? {onApproveTool} : {}),
-					});
-					if (ctrl.signal.aborted) return;
-					if (res.ok) {
-						this.dispatch('assistant.message_delta', {content: res.content, deltaContent: res.content});
-						this.dispatch('assistant.message', {content: res.content});
-						this.dispatch('session.idle', {});
-					} else {
-						this.dispatch('session.error', {error: res.error});
-						throw new Error(res.error);
-					}
-					return;
-				}
 
 				const stream = this.service.createQuery({
 					prompt: options.prompt,

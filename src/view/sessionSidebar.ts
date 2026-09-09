@@ -525,7 +525,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			sessionId: this.currentSessionId,
 			session: this.currentSession,
 			messages: [...this.messages],
-			sdkSeenIndex: this.sdkSeenIndex,
 			sessionToolGrants: new Set(this.sessionToolGrants),
 			isStreaming: this.isStreaming,
 			streamingContent: this.streamingContent,
@@ -583,7 +582,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.currentSession = bg.session;
 		this.currentSessionId = bg.sessionId;
 		this.messages = bg.messages;
-		this.sdkSeenIndex = bg.sdkSeenIndex;
 		this.sessionToolGrants = bg.sessionToolGrants;
 		this.isStreaming = bg.isStreaming;
 		this.streamingContent = bg.streamingContent;
@@ -834,7 +832,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		// Clear UI for the new session
 		this.messages = [];
-		this.sdkSeenIndex = 0;
 		// Reset in-memory tool-approval grants (#193 round 2) — a different session is a
 		// different conversation with no known grants of its own, unless it's still alive in
 		// the background, in which case restoreFromBackground() (below) overwrites this with
@@ -952,12 +949,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				// (includeSystemMessages defaults to false) and are skipped if seen.
 			}
 			await Promise.all(renderPromises);
-
-			// The replayed messages above came straight from the CLI's own persisted transcript
-			// (`getSessionMessages()`), so the CLI already has all of them — mark the whole thing
-			// seen (#137) rather than leaving the mark at 0, which would otherwise re-inject this
-			// entire history as a redundant bridging block into the very next SDK turn.
-			this.sdkSeenIndex = this.messages.length;
 
 			if (this.messages.length === 0) {
 				this.renderWelcome();

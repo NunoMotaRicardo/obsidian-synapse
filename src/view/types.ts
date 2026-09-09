@@ -7,8 +7,6 @@ export interface BackgroundSession {
 	sessionId: string;
 	session: Session;
 	messages: ChatMessage[];
-	/** High-water mark (#137) carried alongside `messages` — see `SynapseView.sdkSeenIndex`. */
-	sdkSeenIndex: number;
 	/** In-memory tool-approval grants (#193 round 2) carried alongside `session` — see `SynapseView.sessionToolGrants`. */
 	sessionToolGrants: Set<string>;
 	isStreaming: boolean;

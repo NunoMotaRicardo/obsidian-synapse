@@ -113,5 +113,5 @@ class LockManager {
 	}
 }
 
-/** Module-level singleton, imported directly (mirrors `vaultTools`). */
+/** Module-level singleton, imported directly. */
 export const lockManager = new LockManager();

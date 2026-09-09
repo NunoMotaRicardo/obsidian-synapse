@@ -173,8 +173,8 @@ keeps everything on the object-merge branch.
   used elsewhere in this file for `node:fs/promises` — that gate exists for a one-time async
   fallback off the hot path (`ensureConnected()`); this method runs on every query build and must
   stay synchronous, and a static import also works in the test environment where
-  `window.require` is unavailable. Mirrors `mcpBridge.ts`'s `_synapse/.mcp.json` read, the closest
-  existing precedent for a small vault-local JSON config.
+  `window.require` is unavailable. (Mirrors the now-removed `mcpBridge.ts`'s `_synapse/.mcp.json`
+  read — issue #220 deleted that module, but the SDK still reads `.mcp.json` natively.)
   - **Absent file → `undefined`, silently** (AC-2): a missing `_synapse/settings.json` behaves
     exactly as before this issue. The plugin never creates the file itself.
   - **Malformed JSON → `undefined`, with exactly one `[synapse]`-prefixed `Notice` + `debugTrace`**
@@ -205,18 +205,19 @@ plumbing stays UI-agnostic), so every caller passes its own handle:
 
 - `chat()` gained an `app?: App` option (it had none before this issue) — unused for anything
   else (no vault tools offered by this one-shot helper).
-- `inlineChat()`/`Session.send()` already had `app?: App` from #150/#138's local-model vault-tool
-  gate; it's now *also* read on the real Agent SDK path (previously ignored there). `SynapseView`
-  already passed `app: this.app` unconditionally on every `Session.send()` call, and
-  `searchPanel.ts`'s two `inlineChat()` calls already passed `app: this.app` (#167) — no change
-  needed for the chat panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`,
-  `telegramBot.ts`, and `runExecutor.ts`'s `executeWithClaude()` (batch loops/runs) did not
-  previously pass `app` to `inlineChat()` and were updated to pass it, purely to make the vault
-  path derivable — none of their own settings-building logic changed.
-- Passing `app` alone does not newly enable the local-model branch's `vaultTools` gate
-  (`supportsTools && options.app && options.canUseTool` — see #150/#138 above): every site updated
-  here still omits `canUseTool`, so that gate remains closed exactly as before, per #167's
-  `editorMenu.ts` tests.
+- `inlineChat()`/`Session.send()` already had `app?: App` (originally added for #150/#138's
+  since-removed local-model vault-tool gate — see "Local models" below); it's now *also* read on
+  the real Agent SDK path (previously ignored there). `SynapseView` already passed
+  `app: this.app` unconditionally on every `Session.send()` call, and `searchPanel.ts`'s two
+  `inlineChat()` calls already passed `app: this.app` (#167) — no change needed for the chat
+  panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`, `telegramBot.ts`, and
+  `runExecutor.ts`'s `executeWithClaude()` (batch loops/runs) did not previously pass `app` to
+  `inlineChat()` and were updated to pass it, purely to make the vault path derivable — none of
+  their own settings-building logic changed.
+- Passing `app` alone does not by itself grant tool access — a caller must also supply
+  `canUseTool` (see "Wiring `inlineChat()`'s callers" under "Local models" below); every site
+  updated here still omits `canUseTool`, so no new tool access opened up as a side effect of this
+  change, per #167's `editorMenu.ts` tests.
 
 **`settingSources` default (issue #196).** `routeQueryOptions()` also defaults
 `Options.settingSources` to `['user', 'project']` when a caller hasn't set one, dropping the Agent
@@ -259,23 +260,21 @@ Callers resolve the model this way *before* building `Options` — `configToolba
 Tier-1 Claude sessions can dynamically delegate sub-work to a cheap/local-backed agent using
 an in-process MCP server (`delegation`), implemented with `createSdkMcpServer()` + `tool()`.
 
-- **Gating:** Gated on local-backend availability (`isLocalBackendConfigured()`). If not
-  configured or unavailable, the delegation server is omitted from query options.
+- **Gating:** Gated on `isLocalAgentEndpointConfigured()`. If no local agent endpoint (issue
+  #122, see "Local models" below) is configured, the delegation server is omitted from query
+  options.
 - **Tools exposed:** `cheap_generate` (single prompts/sub-tasks) and `bulk_summarize`
   (multi-item summaries processed in parallel via `Promise.allSettled`).
-- **Routing:** When a local agent endpoint (issue #122, see "Local agent endpoint" above) is
-  configured, the tool handler resolves the provider's default model
-  (`resolveDefaultModel()`, exported from `providerModels.ts`) and delegates via `chat()` — the
-  same real-Agent-SDK path a direct local-model chat query takes — instead of
-  `executeLocalProviderQuery()`. Without the endpoint configured, it still executes sub-tasks via
-  `executeLocalProviderQuery()` unchanged, keeping routing, formatting, and cost under plugin
-  control.
-- **Caching:** The resolved default model ID is cached per base URL. The delegation server
-  instance is cached but invalidated when `isLocalBackendConfigured()` returns false.
-  Call `clearDelegationCache()` when provider config changes.
+- **Routing:** the tool handler resolves the endpoint's default model
+  (`resolveEndpointDefaultModel()`, the first entry of `fetchEndpointModels()`'s catalogue) and
+  delegates via `chat()` — the same real-Agent-SDK path a direct local-model chat query takes.
+  Post-#220 there is no other execution path to fall back to.
+- **Caching:** the resolved default model ID is cached per base URL. The delegation server
+  instance is cached but invalidated when `isLocalAgentEndpointConfigured()` returns false.
+  Call `clearDelegationCache()` when the endpoint config changes.
 
 `routeQueryOptions()` automatically merges the delegation MCP server into `mcpServers` whenever
-the local backend is available.
+the local agent endpoint is configured.
 
 ## Cancellation and timeouts
 
@@ -339,19 +338,17 @@ prompt string — see `chat-view.md`'s "Attachment delivery" section for the cha
 (`buildPrompt()`, `materializeBlobAttachments()`, `computeAdditionalDirectories()` in
 `sessionConfig.ts`).
 
-`Session.send({prompt, additionalDirectories?, timeoutMs?, images?})` accepts an optional
+`Session.send({prompt, additionalDirectories?, timeoutMs?})` accepts an optional
 `additionalDirectories` list for a single send() call, merged (deduped) with the session's own
 `config.additionalDirectories` from `Options` before being passed to `query()` — this grants the
 SDK read access to attachment paths that fall outside the session's `cwd` (out-of-vault absolute
 paths, OneDrive-synced folders, or clipboard-blob temp files under `os.tmpdir()`) without
 widening what's readable when no such attachment is present in a given turn.
 
-`images` (`Array<{mimeType, base64}>`, issue #79) is only consulted in the local-model branch
-(`this.service.isLocalModel(queryOpts.model)`) and passed straight through to
-`executeLocalProviderQuery()` — see `chat-view.md`'s "BYOK local provider multimodal delivery"
-section for how chat-view populates it and why. `chat()`/`inlineChat()` do not accept or forward
-`images` — no caller threads structured attachments through those paths today, so there's no
-plumbing to add yet.
+There is no `images` parameter anymore (issue #79's `Array<{mimeType, base64}>` payload, and the
+local-model branch that consulted it, were removed by #220 — see "Local models" below): every
+model, Claude or local, reads image attachments via the agentic `Read` tool on an inlined path,
+same as the rest of `chat-view.md`'s "Attachment delivery" mechanism above.
 
 ### Adaptive indexing/search timeouts
 
@@ -644,423 +641,111 @@ turn:
   dependency graph. The view only applies an update if `taskId` already exists in `TaskPlan`
   (ignores updates to unknown/untracked ids rather than fabricating a placeholder entry).
 
-## BYOK local provider routing
+## Local models (issue #220 — provider matrix and local ReAct loop removed)
 
-Local/BYOK models (Ollama, or another OpenAI-compatible endpoint) do not flow through the Claude
-CLI subprocess **by default** — `buildEnv(modelId?)` only ever sets `ANTHROPIC_API_KEY` for
-`authType: 'apiKey'` auth and otherwise inherits the process env; without a configured local agent
-endpoint (below) it does not repoint `ANTHROPIC_BASE_URL` at a local backend, because the CLI
-speaks the Anthropic Messages API and historically could not talk to an OpenAI-shaped `/v1`
-endpoint. (An earlier `buildEnv(forLocalModel = true)` branch attempted this — issue #118 removed
-it as dead code; no caller passed `true`. Issue #122, below, reintroduces the same mechanism —
-`ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at a local endpoint — but as an explicit,
-user-configured, per-model routing decision rather than a global default.)
-
-Instead, `isLocalModel(modelId)` decides per-model whether a query is routed to
-`executeLocalProviderQuery()` (`providerModels.ts`) — a separate, hand-rolled ReAct loop that talks
-directly to the configured provider's OpenAI-compatible `/v1/chat/completions` endpoint — or to the
-real Agent SDK via the CLI. `isLocalModel` deliberately checks `sdkModels` and the `/^claude-/i`
-prefix guard **before** `customModels` membership: `customModels` is whatever the provider's last
-`/v1/models` response contained (`setCustomModels()`), and a provider/aggregator catalogue can
-return ids that collide with, or resemble, genuine Claude ids (e.g. an OpenRouter-style
-`anthropic/claude-*` id, or — historically — the removed `anthropic` BYOK preset echoing real
-`claude-*` ids back). Checking the SDK-known/Claude-shaped guards first ensures such an id can
-never be misrouted into the degraded local loop (no skills, subagents, sessions, permission modes
-or streaming), regardless of what a local catalogue happens to contain.
-
-### Local agent endpoint: routing local models through the real Agent SDK (issue #122)
-
-**What changed and why it's possible now.** Ollama v0.14.0+ implements the Anthropic Messages API
-natively at its own address (`http://localhost:11434`) — `ANTHROPIC_API_KEY` is required by the
-protocol but its value is ignored. Pointing `ANTHROPIC_BASE_URL` at it (or at any other
-Messages-API-speaking endpoint) lets a local model run through the *same* Claude CLI/Agent SDK as
-Claude sessions — skills, subagents, sessions, permission modes, and streaming — instead of the
-degraded ReAct loop below. This closes the gap the previous paragraph's `buildEnv(forLocalModel)`
-removal (issue #118) left open: at the time, no Messages-API-speaking local endpoint existed
-without a fragile third-party translating proxy (e.g. LiteLLM) in front of Ollama's older
-OpenAI-shaped `/v1` surface; Ollama's own native support removes that dependency.
-
-**Additive, not a replacement — this issue does not touch the local-loop branches themselves.**
-Retiring `executeLocalProviderQuery()` (fully or partly) once every caller can reach the SDK path
-is tracked separately as issue #220, sequenced strictly after this lands and is verified. Until
-then, the two mechanisms coexist, selected per query by whether the endpoint is configured:
+Local models — Ollama or another Anthropic Messages-API-speaking endpoint — run through the
+**same real Agent SDK/CLI as Claude models**, not a separate execution path. There is no
+provider preset, no OpenAI-compatible `/v1/chat/completions` loop, and no local-model-only
+branch left in `chat()`/`inlineChat()`/`Session.send()`. See
+`.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md` for the removal
+decision and history; the historical design of the removed matrix/loop (issues #79, #117–#120,
+#129, #135, #137, #138, #150) lives in git history and that decision doc, not here.
 
 - **`AgentService.isLocalAgentEndpointConfigured(): boolean`** — true when a non-empty
-  `LocalAgentEndpointConfig.baseUrl` was supplied to the constructor (settings: `Advanced → Local
-  agent endpoint (advanced)`, independent of both `AuthConfig`/`authType` — used only for Claude
-  models — and the BYOK provider preset — used only for local-model *discovery/catalogue*, not
-  execution).
-- **Per-turn routing decision, not global.** Every local-model branch that used to check only
-  `isLocalModel(modelId) && providerConfig` (`chat()`, `inlineChat()`, `Session.send()`) now also
-  requires `!isLocalAgentEndpointConfigured()` to take the `executeLocalProviderQuery()` branch.
-  When the endpoint *is* configured, those branches fall through to the same real-SDK `query()`
-  call a Claude model would use — a Claude-model query in the same session/conversation is
-  unaffected either way, since the check is keyed off that call's own `modelId`, not a global mode
-  switch.
-- **`buildEnv(modelId?)`** gained the `modelId` parameter: when `modelId` is classified local
-  (`isLocalModel()`) *and* the endpoint is configured, it sets `ANTHROPIC_BASE_URL` to the
-  endpoint's base URL and `ANTHROPIC_API_KEY` to its configured key (falling back to the literal
-  `'ollama'` when blank, per Ollama's own docs) **instead of** the auth-branch values below it —
-  additive to, not a replacement of, the existing subscription/API-key branches, which still run
-  unchanged for every Claude-model call and for local-model calls when the endpoint isn't
-  configured. Every call site that builds `env` now threads its own `model`/`queryOptions.model`
-  through to `buildEnv()` for this reason (`chat()`, `inlineChat()`, `createQuery()`).
-- **`routeQueryOptions()`'s model handling** used to unconditionally clear `opts.model` for any
-  `isLocalModel()` id (there was no Claude model such an id could resolve to, since local queries
-  never reached this far). It now preserves the id instead when the endpoint is configured, so the
-  requested local model id (e.g. `llama3.1`) actually reaches the endpoint as the CLI's `model`
-  request field, rather than being dropped in favor of the CLI's own default.
-- **Model discovery is unchanged.** This issue only changes how an already-selected local model's
-  *query* executes; the BYOK provider preset's catalogue fetch (`fetchProviderModels()`,
-  `setCustomModels()`) still backs the model picker exactly as before.
-- **Settings-side verification (issue #223).** The settings section includes a **Test** button
-  that probes `<baseUrl>/v1/messages` directly with `testLocalAgentEndpoint()`
-  (`providerModels.ts`) — no CLI spawn — so an endpoint that doesn't speak the Messages API is
-  caught at configuration time; see [settings.md](settings.md) "Local agent endpoint Test
-  button (issue #223)".
-- **Security note (settings UI copy, per the repo's network-access convention).** A user-supplied
-  endpoint URL redirects the *entire* agent loop for that query, including tool calls, to whatever
-  is listening there — the settings UI explicitly says so and recommends only pointing it at a
-  trusted endpoint (loopback Ollama by default). This is the same posture #138's local-loop tool
-  approval already takes for a remote BYOK endpoint (`isRemoteEndpoint` in the approval prompt),
-  just stated once up front for this setting instead of per tool call, since a real Agent SDK
-  session's own tools run inside the CLI process rather than through the plugin's per-call
-  approval adapter.
-- **Open questions, deliberately left for empirical verification rather than blocking the
-  design:** whether cost accounting, permission-prompt behavior, and session `resume` work
-  end-to-end against Ollama's Messages API implementation specifically (it may not cover every CLI
-  expectation) — see the issue for what deploy-test against a live Ollama instance found.
-
-### BYOK local provider conversation history (issue #135)
-
-Unlike the real Agent SDK path, `executeLocalProviderQuery()`'s ReAct loop has no CLI process and
-no persisted session to `resume` — every call previously rebuilt its `messages` array from
-scratch (system message + exactly one current-turn user message), so two consecutive turns on the
-same local model had no memory of each other, model switch or not. `executeLocalProviderQuery()`
-now accepts an optional `history` param (`LocalHistoryMessage[]`, exported from
-`providerModels.ts`) threaded into the request between the system message and the current turn.
-
-- **What's carried:** only `role: 'user' | 'assistant'` text turns. `ChatMessage` (`types.ts`) has
-  no tool-call fields, so prior tool calls/results cannot be reconstructed even in principle, and
-  replaying partial tool state would also break OpenAI-compatible APIs (a `tool` message needs a
-  `tool_call_id` matching an immediately preceding assistant `tool_calls` entry this history can't
-  supply). `role: 'info'` messages (UI notices, not conversation) and the separate `reasoning`
-  field are both excluded.
-- **Where the mapping lives:** `providerModels.ts` must not import view types, so the
-  `ChatMessage[]` -> `LocalHistoryMessage[]` mapping lives in `sessionConfig.ts`
-  (`buildLocalHistory()`), not there. `SynapseView.handleSend()` calls it (only when
-  `isLocalModel()` is true) and passes the result as `Session.send({history})`
-  (`agentService.ts`), which threads it straight through to `executeLocalProviderQuery()`
-  unchanged. Image attachments on historical messages get the same base64 resolution as the
-  current turn (`resolveImageAttachments()`), since local models have no agentic `Read` tool
-  regardless of which turn an image was attached to.
-- **Budget:** a character budget, not a turn cap — `ChatMessage.content` can carry inlined
-  attachment text tens of thousands of characters long, so a turn count doesn't bound the
-  payload the way a character count does. `buildBudgetedHistory()` drops whole messages from the
-  oldest end until the transcript fits; it never truncates mid-message and the system message
-  (pushed separately, unconditionally) is never part of the budget or at risk of being dropped.
-  Character count is a deliberately conservative proxy for token count
-  (`HISTORY_CHARS_PER_TOKEN = 3`; real text runs closer to ~4 chars/token for English prose, lower
-  for code/CJK — picking a low divisor avoids under-budgeting either).
-- **Sizing the budget:** for `preset: 'ollama'`, `getOllamaContextLength()` reads the model's
-  advertised maximum context length from the same `/api/show` call `fetchProviderModels()` already
-  makes for capability discovery (`model_info["*.context_length"]`; the exact key varies by model
-  architecture, so any key ending in `.context_length` is accepted), cached alongside the existing
-  vision/tools cache. That figure is only ever used as a ceiling to stay well under
-  (`OLLAMA_CONTEXT_SAFETY_FRACTION = 0.25`), never as available headroom: Ollama's own effective
-  `num_ctx` for a request defaults to a few thousand tokens regardless of what the model can
-  technically support, and **silently truncates the oldest tokens off an over-long request with no
-  error** — unlike OpenAI-compatible backends, which return HTTP 400 on overflow (a visible
-  failure). Any backend that publishes nothing (every non-Ollama preset; a failed/erroring
-  `/api/show` call) falls back to a fixed conservative default (`DEFAULT_HISTORY_CHAR_BUDGET`).
-- **Scope:** `Session.send({history})` is only read in the local-model branch — the Agent SDK
-  branch carries its own continuity via `resume` and the CLI's persisted session id (see "BYOK
-  local provider routing" above). That continuity is necessarily one-sided, though: it only
-  covers turns that themselves went through the CLI. See "Bridging local-provider turns into the
-  SDK session (issue #137)" below for the gap this leaves and how it's closed.
-
-Full feature parity for a local model — running it through the actual Agent SDK — requires a
-Messages-API-speaking endpoint in front of it (Ollama v0.14.0+ itself, or a translating gateway
-such as LiteLLM for backends that don't speak it natively) and `ANTHROPIC_BASE_URL` pointed at
-that endpoint; see "Local agent endpoint: routing local models through the real Agent SDK (issue
-#122)" above for how `buildEnv()`/`routeQueryOptions()` now support this when the endpoint is
-configured. This history-bridging mechanism (`Session.send({history})` and #135/#137 generally)
-still only applies to the `executeLocalProviderQuery()` branch — when the local agent endpoint is
-configured, the real Agent SDK's own `resume`/persisted-session continuity applies instead, the
-same as for a Claude model.
-
-### Bridging local-provider turns into the SDK session (issue #137)
-
-**The two-store problem.** Continuity for the two provider paths comes from two independent
-stores that don't know about each other:
-
-- **Agent SDK path:** the transcript lives in the CLI's own session store; continuity comes from
-  `resume` + the persisted session id (`Session._sessionId`, only ever set inside the SDK stream
-  loop above, from a `session_id` the CLI itself assigns). The plugin sends no history explicitly.
-- **Local-provider path (#135):** no CLI, no persisted session — continuity comes entirely from
-  the plugin sending `history` built from `SynapseView.messages` (see above).
-
-A turn routed through the local-provider branch never touches the CLI subprocess at all, so it
-never sets `_sessionId` and the CLI's session store has no record it happened. Switching back to
-a Claude model then resumes (or, if the conversation started on a local model, *starts*) a CLI
-session that's missing those turns — silently, since `resume` succeeds either way, it just
-resumes the wrong (incomplete) transcript.
-
-**Why this can't be fixed the same way as #135, or natively.** The SDK offers no supported way to
-seed or append to a session transcript without taking a turn (checked against the installed SDK's
-`sdk.d.ts` — `forkSession()` forks an *existing* session rather than injecting messages, and
-streaming input accepts `SDKUserMessage` only, so assistant turns can't be inserted either). The
-gap has to be bridged from the plugin side, into the prompt of an actual SDK turn.
-
-**The bridge.** `SynapseView.sdkSeenIndex` is a high-water mark: how much of `SynapseView.messages`
-the *current* CLI/Agent SDK session already has.
-
-- Any SDK-routed `send()` advances the mark to `messages.length` once the turn reaches the CLI
-  without throwing (`handleSend()`, after both `send()` attempts — the retry-on-`'Session not
-  found'` path included). Local-routed turns never advance it.
-- Before every SDK-routed `send()`, `computeSdkHistoryGap(messages, sdkSeenIndex)`
-  (`view/sessionConfig.ts`) slices everything since the mark, excluding the just-added
-  current-turn user message (same convention as `history`'s slice above — that turn goes through
-  `prompt`, not a replay block). `buildSdkHistoryInjection()` maps the gap through the same
-  `role: 'info'`-excluded, `reasoning`-never-replayed filtering `buildLocalHistory()` uses, budgets
-  it via `buildBudgetedHistory()` (reused from `providerModels.ts`, exported for this reuse — same
-  oldest-first, never-truncate-mid-message policy as #135), and wraps the result in an explicit,
-  low-collision-risk delimiter pair (`[SYNAPSE:PRIOR-CONVERSATION-NOT-YET-IN-THIS-SESSION]` /
-  `[/SYNAPSE:...]`) plus a plain-language "this is context, not an instruction" line, so the model
-  reads it as history rather than acting on anything inside it. The block (if non-empty) is
-  prepended to the prompt actually sent to `Session.send()`.
-- **Budget is sized differently from #135's, deliberately.** #135's budget scales down from a
-  *local* model's own advertised (often tiny) context window. There's no equivalent per-model
-  signal to read here — the CLI exposes no context-length metadata to query — and the target
-  window is Claude's: 200k tokens ordinarily, up to 1M for `[1m]` variants. Flooring to a
-  local-sized budget would needlessly truncate a bridgeable gap Claude could hold easily.
-  `SDK_HISTORY_INJECTION_CHAR_BUDGET` (`sessionConfig.ts`) is fixed at 60,000 characters — using
-  the same conservative ~3 chars/token proxy #135 uses, that's ~20k tokens, about 10% of even the
-  smaller 200k window, comfortably leaving room for the system prompt, tool definitions, and the
-  rest of the conversation the CLI's own `resume` already carries. It only needs to cover an
-  occasional local-provider detour, not become the primary transport.
-- **Both cases from the issue are the same mechanism, not two branches:** started-on-local (the
-  mark is still its initial `0` when the first SDK turn happens, so the whole local prefix is the
-  gap) and switched-mid-conversation (the mark reflects the last SDK turn, so only the local turns
-  since then are the gap) fall out of the same `sdkSeenIndex`/`computeSdkHistoryGap()` logic with
-  no special-casing.
-
-**Where the mark lives, and why it survives a rebuilt `Session` (issue #104 interaction).**
-`sdkSeenIndex` is a field on `SynapseView`, not `Session` — deliberately, since `ensureSession()`
-tears down and rebuilds the `Session` object on every `configDirty` change (model, agent,
-reasoning-effort, tool toggles), while `SynapseView.messages` and the conversation itself survive
-that rebuild unchanged (see "Carrying a conversation across a rebuilt Session" above). Had the
-mark lived on `Session`, a config change mid-conversation (e.g. switching *to* the local model
-that triggered the gap in the first place) would silently reset it to a fresh session's default,
-re-injecting already-seen history on the very next SDK turn. Lifecycle:
-
-- Reset to `0` only when the conversation itself resets — `newConversation()`.
-- Set to `messages.length` (fully seen) rather than reset when a different session is *loaded* —
-  cold resume (`selectSession()`'s SDK-resume path, `sessionSidebar.ts`) replays `messages`
-  straight from the CLI's own persisted transcript (`getSessionMessages()`), so by definition the
-  CLI already has every one of them.
-- Carried through unchanged on background-session save/restore
-  (`saveCurrentToBackground()`/`restoreFromBackground()`) — added to `BackgroundSession`
-  (`view/types.ts`) alongside `messages`, since a backgrounded session is a distinct in-flight
-  conversation with its own mark, not the foreground one being reset.
-- Left untouched by `ensureSession()`'s `configDirty` rebuild — it isn't part of `SessionConfig`
-  and nothing in the rebuild path writes to it, so it naturally carries forward with `messages`.
-
-**Known limitation, not a bug:** the injected block becomes part of the actual prompt text sent to
-(and persisted by) the CLI, so a later cold-resume replay of that session
-(`AgentService.getSessionMessages()`) will show the delimited block verbatim as part of that
-turn's raw user-message content, rather than it being invisible plumbing. This is the same
-"inject into the prompt" mechanism the issue itself specifies (no native alternative exists — see
-above), and cosmetic only; it doesn't affect the model's behavior or which content participates in
-the visible chat UI (`SynapseView.messages`, which never includes the injected block — only the
-outgoing wire prompt does).
-
-### Vault tools and approval gate in the chat panel (issue #138)
-
-> **Triggers were removed entirely in issue #188** (`src/triggers.ts`, `src/triggerExecutor.ts`
-> both deleted; see `run-executor.md`'s "Current status"). The trigger references below describe
-> the design rationale as it stood when #138/#150/#167 were written, when triggers were still the
-> only unattended caller of `vaultTools`/`executeLocalProviderQuery()`'s ReAct loop; that
-> unattended-caller role is now filled by `batchLoopExecutor.ts` alone, via `runExecutor.ts`.
-
-Before #138, `vaultTools` (`vaultTools.ts` — `read_note`, `list_notes`, `search_notes`) was wired
-into exactly one call site, the now-removed `triggerExecutor.ts`. `Session.send()`'s local-model branch called
-`executeLocalProviderQuery()` with `prompt`/`systemPrompt`/`model`/`images`/`history` but no
-`tools`, so a local/BYOK model's ReAct loop degenerated to a single completion in chat — it could
-not read, list or search notes, even though the same model could do exactly that when driving a
-trigger.
-
-**Why this needed an approval gate, not just wiring the array through.** The local
-tool-execution loop (`executeLocalProviderQuery()`) calls `tool.execute(args, params.app)`
-directly, with no permission check anywhere in `providerModels.ts` — tolerable for triggers (the
-user configured a specific trigger deliberately; it runs unattended by design) but not for
-interactive chat, where the real Agent SDK path already gates tool use through `canUseTool`
-(`CanUseTool`, built as `permissionHandler` in `SynapseView.buildSessionConfig()`, opening
-`ToolApprovalModal`). Wiring the same tools into chat without a gate would put ungated tool
-execution right next to a path that asks permission.
-
-**Decision (issue comment, authoritative): reuse the existing approval flow**, not a second one.
-Approving `read_note` looks identical whether the model is Claude or a local/BYOK model.
-
-- **The gate lives in `providerModels.ts`, but stays neutral.** `executeLocalProviderQuery()`
-  accepts an optional `onApproveTool?: LocalToolApprovalHandler` — `(toolName, input, {toolUseID,
-  endpoint, isRemoteEndpoint}) => Promise<{allow: boolean; message?: string}>`. No SDK or view
-  types are imported into `providerModels.ts` for this (architecture rule): the shape is
-  deliberately plain, the same way `history` was threaded in as a value for #135 rather than
-  `providerModels.ts` importing `ChatMessage`. When `onApproveTool` is omitted (the trigger path,
-  unchanged), a tool call executes immediately exactly as before #138 — the gate is opt-in per
-  call, not a hard requirement of the loop.
-- **The adapter lives in `agentService.ts#Session.send()`**, the one file that already imports
-  both the SDK's `CanUseTool` type and `providerModels.ts`. The local-model branch wraps the
-  session's own `queryOpts.canUseTool` (already present on `SessionConfig` — built once in
-  `SynapseView.buildSessionConfig()` for the Agent SDK path) into a `LocalToolApprovalHandler`
-  that calls it with a synthesized `title`/`description` and forwards its `PermissionResult` back
-  as `{allow, message}`. Fail-closed both ways: a handler that throws, or a `canUseTool` call that
-  resolves to anything but `{behavior: 'allow'}`, denies the call.
-- **Endpoint visibility.** `executeLocalProviderQuery()` computes `endpoint` (the configured
-  `baseUrl`) and `isRemoteEndpoint` (`!isLoopbackEndpoint(baseUrl)` — true unless the host is
-  `localhost`/`127.0.0.1`/`::1`) itself, since it already has `baseUrl` in scope, and passes both
-  in the context handed to `onApproveTool`. The `Session.send()` adapter puts `endpoint` into the
-  approval prompt's `description` (`ToolApprovalModal` already renders that field as a row) so
-  `read_note` against `http://localhost:11434` reads visibly differently from `read_note` against
-  `https://openrouter.ai` or an Azure endpoint — the first stays on the machine, the second sends
-  note content to a third party. No settings-only opt-in and no silent-trust-loopback shortcut:
-  both were explicitly rejected in the issue's decision comment in favor of per-call visibility.
-- **A denied call never runs `tool.execute()`.** The loop returns a `tool`-role message to the
-  model (`Tool "<name>" was not approved[: <message>]`) instead of throwing — the model sees a
-  normal (if unsuccessful) tool result and can adapt its next turn, rather than the whole query
-  erroring out.
-- **Capability gate**, same test triggers already use: `Session.send()` only offers `vaultTools`
-  when `modelInfo?.supportsTools !== false` (looked up via `AgentService.getModels()`) — a
-  catalogue that explicitly says "no tools" is honored, a model with no capability info (most
-  OpenAI-compatible catalogues) defaults to allowed, per #129's `deriveCatalogueCapabilities()`.
-- **MCP tools are deliberately NOT offered in chat**, unlike triggers (which merge
-  `McpBridgeSession`'s tools alongside `vaultTools`). Triggers run once per file event, so
-  spawning/tearing down an MCP bridge once per trigger is cheap relative to the trigger itself;
-  chat's local branch runs once per user message in a potentially long back-and-forth
-  conversation, and `Session` has no session-scoped owner to keep an MCP bridge alive across turns
-  without a larger lifecycle change than this issue's gap called for. MCP tools are also arbitrary
-  and not necessarily read-only, unlike the three built-ins, so the smaller surface is also the
-  more conservative default for this increment. Revisit as a separate issue if interactive chat
-  needs MCP tools.
-- **`App` plumbing.** Neither `Session` nor `AgentService` holds an `App` reference (SDK/session
-  plumbing stays UI-agnostic). `Session.send()` gained an `app?: App` option, threaded in the same
-  per-call shape as `images`/`history` — `SynapseView` passes `this.app` on every send; it's only
-  read in the local-model branch (forwarded to `executeLocalProviderQuery()` as the `App` instance
-  vault tools execute against) and ignored on the Agent SDK path, whose own tools run inside the
-  CLI process.
-
-### Vault tools and approval gate in `inlineChat()` (issue #150)
-
-#138 (above) closed this gap for the chat panel's `Session.send()`. `inlineChat()`'s local-model
-branch — the second call site running local/BYOK models, used by editor actions
-(`editorMenu.ts`), the edit modal (`editModal.ts`) and search (`searchPanel.ts`) — had the exact
-same shape of gap: `prompt`/`systemPrompt`/`model` only, no `tools`, no `app`. `triggerExecutor.ts`
-gave the same models the full ReAct kit; `inlineChat()`'s local branch gave them a bare one-shot.
-
-**Same capability gate, same adapter, one deliberate difference in reachability.**
-
-- `inlineChat()` gained an `app?: App` option, the same per-call shape as `Session.send()`'s.
-  Ignored on the Agent SDK path (that path's own tools run inside the CLI process); read only in
-  the local-model branch.
-- **Capability gate is identical**: `modelInfo?.supportsTools !== false` via `getModels()`.
-- **The `CanUseTool -> LocalToolApprovalHandler` translation is not duplicated.** It was factored
-  out of `Session.send()` into a module-level `adaptCanUseToolToLocalApproval(canUseTool, signal)`
-  in `agentService.ts`, and both `Session.send()` and `AgentService.inlineChat()` call it — per the
-  issue's requirement that this translation exist in exactly one place.
-- **Reachability differs from `Session.send()` on purpose.** `Session.send()` offers `vaultTools`
-  whenever `supportsTools && app` — if the session has no `canUseTool` (shouldn't happen from the
-  chat panel, which always builds one), the local tool loop falls back to running ungated, the same
-  "unattended by design" behavior the trigger path already has. `inlineChat()` does **not** fall
-  back that way: it only offers `vaultTools` when `supportsTools && app && canUseTool` are *all*
-  present. Editor actions are one-shot rather than an ongoing attended conversation, so there is no
-  trigger-like "the user configured this to run unattended" precedent to lean on — every tool call
-  `inlineChat()`'s local branch makes must go through the same approval path as the chat panel's,
-  never a silent auto-approve next to it. A caller that supplies `app` but not `canUseTool` gets no
-  tools at all (the model degrades to the pre-#150 bare one-shot) rather than an ungated one.
-- MCP tools are deliberately **not** offered here either, for the same spawn/teardown-cost
-  reasoning `Session.send()`'s comment gives — that reasoning is specifically about paying the cost
-  once per conversational turn, which doesn't automatically carry over to `inlineChat()`'s one-shot
-  calls, but extending to MCP is left as a separate question.
-
-**Caller reachability as of #150 — file-boundary note.** #150 was scoped to `agentService.ts`
-only; it did not touch `editorMenu.ts`, `editModal.ts` or `searchPanel.ts`. As of that change,
-*none* of `inlineChat()`'s callers passed `app` or `canUseTool`, so the new capability existed but
-was not yet reachable from any UI call site — every existing call still got the pre-#150 bare
-one-shot on a local model. #167 (below) wires the two call sites that actually request tools on
-the SDK path.
+  `LocalAgentEndpointConfig.baseUrl` was supplied to the constructor (settings:
+  `Claude → Local agent endpoint`). Independent of `AuthConfig`/`authType` (used only for Claude
+  models).
+- **`isLocalModel(modelId?: string): boolean`** decides per-model whether a query routes through
+  the endpoint. Checked in order: an id `sdkModels` reports as SDK-known → `false`; a
+  `/^claude-/i`-shaped id → `false` (protects a genuine Claude id even before a `fetchModels()`
+  call has populated `sdkModels`, since real SDK ids are always `claude-*`); `customModels`
+  membership (populated from `fetchEndpointModels()`'s `/v1/models` catalogue,
+  `setCustomModels()`) → `true`; otherwise, when the endpoint is configured, an unknown id also
+  → `true` (the CLI surfaces a bad id as a query error) — `false` when no endpoint is configured
+  (nothing local exists to serve it). The SDK-known/Claude-shaped checks run first so an
+  endpoint's catalogue can never misroute a genuine Claude id away from its real auth, regardless
+  of what that catalogue happens to contain (e.g. an aggregator echoing `claude-*`-shaped ids).
+- **`buildEnv(modelId?)`**: when `modelId` is classified local (`isLocalModel()`) *and* the
+  endpoint is configured, sets `ANTHROPIC_BASE_URL` to the endpoint's base URL and
+  `ANTHROPIC_API_KEY` to its configured key (falling back to the literal `'ollama'` when blank,
+  per Ollama's own docs) for that call only — additive to, not a replacement of, the
+  subscription/API-key auth branches, which run unchanged for every Claude-model call and for
+  local-model calls when no endpoint is configured. Every call site that builds `env` threads its
+  own `model`/`queryOptions.model` through to `buildEnv()` for this reason (`chat()`,
+  `inlineChat()`, `createQuery()`).
+- **`routeQueryOptions()`** preserves a local model's requested id (rather than clearing it, the
+  way an unresolvable Claude id would be) so it reaches the endpoint as the CLI's `model` request
+  field.
+- **Model discovery**: `fetchEndpointModels({baseUrl, apiKey})` (`providerModels.ts`) — ONE
+  `requestUrl` GET to `<baseUrl>/v1/models`, mapping the OpenAI-shaped `{data: [{id, ...}]}`
+  catalogue to `ModelInfo[]`. `main.ts#initAgentService()` calls it whenever
+  `localAgentEndpointUrl` is set, backing `setCustomModels()`/the model picker. There is no
+  per-model capability catalogue anymore — an unknown model defaults tool-capable per issue
+  #129's unknown≠unsupported rule (the SDK path never gated on it).
+- **Delegation tools** (`cheap_generate`/`bulk_summarize`, "Dynamic Delegation via MCP Tool"
+  above): resolve their default model from `fetchEndpointModels()`'s first catalogue entry
+  (`resolveEndpointDefaultModel()`, cached per `baseUrl` and invalidated by
+  `clearDelegationCache()`) and run through `AgentService.chat()`, same as everything else —
+  there is no separate local-provider execution path for them to fall back to.
+- **Settings-side verification (issue #223)**: the settings section has a **Test** button that
+  probes `<baseUrl>/v1/messages` directly with `testLocalAgentEndpoint()` (`providerModels.ts`)
+  — no CLI spawn — so an endpoint that doesn't speak the Messages API is caught at configuration
+  time; see [settings.md](settings.md)'s "Local agent endpoint Test button (issue #223)".
+- **Continuity and images**: since every model runs through the CLI with `resume` and the
+  agentic `Read` tool, the Agent SDK path alone owns conversation continuity and image delivery
+  for all models — there is no separate history-bridging or image-bytes mechanism left
+  (`buildLocalHistory()`, `computeSdkHistoryGap()`/`buildSdkHistoryInjection()`, and
+  `SynapseView.handleSend()`'s local-model image resolution were all removed by #220).
+- **Tool approval**: a local-model query is gated by the exact same `canUseTool`/
+  `resolveToolApprovalPolicy()` machinery as a Claude-model query (see "Session-scoped
+  permission updates" above and `run-executor.md`'s "Tool approval policy") — there is no
+  separate local-path approval adapter anymore (`adaptCanUseToolToLocalApproval()` and
+  `LocalToolApprovalHandler` were removed along with `executeLocalProviderQuery()`).
+  `autoApproveReadOnlyTools`'s `READ_ONLY_TOOL_NAMES` is now `Read`/`Glob`/`Grep` only — the
+  local-path analogues (`read_note`/`list_notes`/`search_notes`, `vaultTools.ts`) no longer
+  exist; see "Wiring `inlineChat()`'s callers" below, which otherwise still applies unchanged.
+- **Security note (settings UI copy, per the repo's network-access convention)**: a
+  user-supplied endpoint URL redirects the *entire* agent loop for that query, including tool
+  calls, to whatever is listening there — the settings UI explicitly says so and recommends only
+  pointing it at a trusted endpoint (loopback Ollama by default).
 
 ### Wiring `inlineChat()`'s callers (issue #167)
 
-#150 left every `inlineChat()` caller unreachable — see the file-boundary note above. Of the ~22
-call sites, only two genuinely request tools on the SDK path and should offer the local-model
-analogue: `searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`,
-`maxTurns: 40`). The rest pass `tools: []` deliberately — one-shot generation actions (create
-note, create canvas, edit selection) that have no tools on the Claude path either — and are
-untouched.
+Of `inlineChat()`'s call sites, only two genuinely request tools on the SDK path:
+`searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`, `maxTurns: 40`).
+The rest pass `tools: []` deliberately — one-shot generation actions (create note, create canvas,
+edit selection) that have no tools — and are untouched.
 
-**The blocking question this issue had to resolve: what approves a local tool call for a caller
-whose UI is attended but whose turn budget (`maxTurns: 40`) makes per-call approval unusable.**
-#150's `inlineChat()` gate is deliberately fail-closed — `supportsTools && app && canUseTool` all
-required, with no "unattended by design" fallback the way `Session.send()` (and, at the time,
-`triggerExecutor.ts`) have — so wiring search naively (reusing the chat panel's `ToolApprovalModal`-backed
-`canUseTool`) would mean up to 40 approval modals for a single search. Approving each call
-individually was rejected as unusable UX; running fully ungated (no `canUseTool` at all) would
-have meant reintroducing exactly the silent-fail-open pattern #150's method comment explicitly
-rules out.
-
-**Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool` — not a new
-"attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()`
-either.** This is deliberately narrower than both:
+**Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool`** — not a new
+"attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()` either:
 
 - It is **not** #151's policy (`src/runExecutor.ts`, "Tool approval policy" — governs
   `batchLoopExecutor.ts`'s unattended runs via `runExecutor.ts`, where `'ask'` means "no human to
-  ask, so deny" because those runs may request write-capable tools; at the time #151 was written
-  this also governed the since-removed trigger executor — see the note above). `autoApproveReadOnlyTools`
+  ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
   is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
-  the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only vs.
-  write-capable) and are kept as two separate mechanisms rather than unified, so neither
-  accidentally inherits the other's assumptions.
-- It is **not** a new "attended-but-automated" policy tier either, despite the issue framing it
-  that way initially. A verified spike against the live CLI (run for #151, reused here since it
-  answers the same question) showed the Agent SDK path *never invokes* `canUseTool` for
-  `Read`/`Glob`/`Grep` at all — the CLI auto-approves them before the callback would even fire —
-  while a write tool (`Write`) still goes through `canUseTool` and is denied when there's no
-  attended handler. `vaultTools` (`read_note`/`list_notes`/`search_notes`) are the local-path
-  analogue of `Read`/`Glob`/`Grep` and are genuinely read-only (`app.vault.read()` / `getFiles()`
-  / `getMarkdownFiles()` only — never `modify`/`create`/`delete`/`rename`). So auto-approving them
-  on the local path reproduces the Claude path's own shipped behavior for the same caller, rather
-  than inventing a laxer policy next to it. `searchPanel.ts` already runs `bypassPermissions` +
-  `allowDangerouslySkipPermissions` on its advanced-search SDK path when `settings.toolApproval
-  === 'allow'` — the local path granting exactly the read-only three is strictly less permissive
-  than what search already does on Claude in that mode.
+  the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only
+  vs. write-capable) and are kept as two separate mechanisms rather than unified.
+- A verified spike against the live CLI showed the Agent SDK path *never invokes* `canUseTool`
+  for `Read`/`Glob`/`Grep` at all — the CLI auto-approves them before the callback would even
+  fire — while a write tool (`Write`) still goes through `canUseTool` and is denied when there's
+  no attended handler. `autoApproveReadOnlyTools` reproduces the CLI's own shipped behavior for
+  these tools rather than inventing a laxer policy next to it.
 - `autoApproveReadOnlyTools` (`agentService.ts`, exported) is a `CanUseTool` that allows a tool
-  only if its name is in `READ_ONLY_TOOL_NAMES` (`Read`/`Glob`/`Grep` on the SDK path,
-  `read_note`/`list_notes`/`search_notes` on the local path) and **denies anything else**. The
-  check is in the handler rather than left to the caller on purpose: `inlineChat()` forwards the
-  same `canUseTool` to the raw Claude-path `query()` call too (it is a single option, not two),
+  only if its name is in `READ_ONLY_TOOL_NAMES` (`Read`/`Glob`/`Grep`) and **denies anything
+  else**. The check is in the handler rather than left to the caller on purpose: `inlineChat()`
+  forwards the same `canUseTool` to the raw `query()` call too (it is a single option, not two),
   so an unconditional always-allow handler would silently grant writes at any future call site
-  that wired it in alongside a write-capable tool. Restricting `tools` at the call site is still
-  the primary control; failing closed on the tool name keeps the guarantee in code rather than in
-  a doc comment. Call sites that legitimately need write-capable tools use #151's
-  `resolveToolApprovalPolicy()` instead.
-- Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both now pass
-  `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing `tools:
-  SEARCH_TOOLS`. No second `CanUseTool -> LocalToolApprovalHandler` adapter was added —
-  `adaptCanUseToolToLocalApproval()` (shared since #150) still does that translation in exactly
-  one place; `autoApproveReadOnlyTools` only supplies what `canUseTool` resolves to.
+  that wired it in alongside a write-capable tool. Call sites that legitimately need
+  write-capable tools use #151's `resolveToolApprovalPolicy()` instead.
+- Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both pass
+  `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing
+  `tools: SEARCH_TOOLS`.
 
 **`editorMenu.ts`'s two `tools: ['Read']` sites (`askAboutImage()`, `extractImageContent()`) are
-deliberately left unwired — not an oversight.** Both send an absolute OS path to an *image* file
-and rely on Claude's native multimodal `Read` tool to view it. `vaultTools`'s `read_note` is not
-an analogue for that: it resolves only vault-relative paths (`app.vault.getAbstractFileByPath()`)
-and returns `app.vault.read()` as UTF-8 text — an absolute OS path would resolve to "File not
-found", and even a resolvable path would return raw bytes/garbled text, not a vision read. More
-fundamentally, `inlineChat()` has no `images` parameter at all (unlike `Session.send()`, which
-does — see "Attachment delivery" above) — no image data reaches the local-model branch from these
-two call sites by any means today, so wiring vault tools in would add spurious failed tool calls
-without fixing the actual gap (giving `inlineChat()` an `images` parameter is a separate,
-larger feature, out of scope here).
+deliberately left unwired.** Both send an absolute OS path to an *image* file and rely on
+Claude's native multimodal `Read` tool to view it — `inlineChat()` has no `images` parameter at
+all (unlike `Session.send()`, which does — see "Attachment delivery" above), so no image data
+reaches any non-Claude model from these two call sites by any means today.
 
 ## Query metadata cache (issue #130)
 
@@ -1106,11 +791,11 @@ the last response's usage and local estimates, without the per-category token-co
   above rather than trusting the event payload as authoritative, since `Session` is the single
   owner of the cache.
 
-Never populated on the BYOK local-model branch (`executeLocalProviderQuery()`) — that path
-never touches a `Query` handle at all, so `cachedContextUsage` stays `undefined` for the entire
-conversation on a local model, by construction rather than by an explicit gate. See
-`chat-view.md`'s "Context-window gauge and live command/agent lists" for how the view consumes
-this cache (including the directory-scan fallback for a session that hasn't sent a turn yet).
+Populated the same way for a local-agent-endpoint model as for Claude, post-#220 — every model's
+query goes through a real `Query` handle now, so there is no branch that skips this cache
+anymore. See `chat-view.md`'s "Context-window gauge and live command/agent lists" for how the
+view consumes this cache (including the directory-scan fallback for a session that hasn't sent a
+turn yet).
 
 ## Connection error handling
 
@@ -1126,8 +811,9 @@ free of `obsidian` imports.
 
 ## Public API surface
 
-The `providerConfig` fields are private — consumed only internally by `buildEnv()`. Callers
-that need provider config (e.g. `buildSessionConfig`) receive it directly from `main.ts`.
+The `localAgentEndpoint` field is private — consumed only internally by `buildEnv()`. Callers
+that need the local agent endpoint config (e.g. `buildSessionConfig`) receive it directly from
+`main.ts`.
 
 ## Invariants
 

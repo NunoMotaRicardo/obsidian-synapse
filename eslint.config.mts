@@ -9,7 +9,8 @@ const ALLOWED_UPPERCASE = new Set([
 	'MCP', 'CLI', 'JSON', 'YAML', 'HTML', 'CSS', 'UI', 'ID',
 	'Settings', 'Community', 'Enter', 'Ollama', 'OpenAI', 'BYOK',
 	// OpenAI-compatible provider description (#117) — proper nouns naming other
-	// providers/tools compatible with the generic `/v1/chat/completions` preset.
+	// providers/tools compatible with the generic `/v1/chat/completions` preset that
+	// #220 later removed; harmless to leave allow-listed (may still appear in prose).
 	// `isSentenceCase` below tokenizes on whitespace/hyphen and checks each `clean`
 	// single word independently (see the `words[i].split('-')` / per-`part` loop) — it
 	// has no concept of a multi-word phrase, so "LM Studio" / "Foundry Local" can't be
@@ -222,7 +223,9 @@ export default tseslint.config(
 					'WebDAV', 'WebStorm',
 					// Synapse-specific additions:
 					'Synapse', 'Ollama', 'Sonnet',
-					// OpenAI-compatible provider description (#117):
+					// OpenAI-compatible provider description (#117) — the UI copy that motivated
+					// these no longer exists (the provider matrix was removed by #220), but they're
+					// harmless to leave allow-listed and may still appear in doc-comment prose:
 					'OpenRouter', 'LM Studio', 'llama.cpp', 'vLLM', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry Local',
 					// Local agent endpoint (#122): 'Anthropic' alone is already listed above, but
 					// "Messages API"/"Claude Agent SDK" need their own multi-word entries — this

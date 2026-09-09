@@ -1,7 +1,7 @@
-import {App, Notice, PluginSettingTab, Setting, TFile, debounce, normalizePath} from "obsidian";
+import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
-import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, testLocalAgentEndpoint, ProviderPreset} from "./providerModels";
+import {testLocalAgentEndpoint} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
@@ -29,22 +29,13 @@ export interface SynapseSettings {
 	anthropicApiKey: string;
 	/** Custom path to the claude CLI binary. Empty = auto-detect. */
 	claudeLocation: string;
-	/** BYOK / Local provider preset. */
-	providerPreset: ProviderPreset;
-	/** Base URL for custom provider endpoint. */
-	providerBaseUrl: string;
-	/** Provider API key (stored securely via local storage). */
-	providerApiKey: string;
-	/** Provider bearer token (stored securely via local storage). */
-	providerBearerToken: string;
 	/**
 	 * Local agent endpoint base URL (issue #122) — a Messages-API-speaking backend (Ollama
 	 * v0.14.0+ natively, or another compatible endpoint). When set, local-model chat/inline/search
 	 * queries route through the real Agent SDK/CLI (`ANTHROPIC_BASE_URL` repointed at this URL)
-	 * instead of the separate `executeLocalProviderQuery()` ReAct loop, gaining skills, subagents,
-	 * sessions, permission modes, and streaming. Empty (default) = existing local-loop behavior,
-	 * unchanged. Independent of the BYOK provider preset above (used for model discovery/catalogue
-	 * only) and of `authType` (used for Claude models only).
+	 * — the only way local models run since the OpenAI-compatible provider matrix and its
+	 * hand-rolled ReAct loop were removed (#220) — gaining skills, subagents, sessions,
+	 * permission modes, and streaming. Independent of `authType` (used for Claude models only).
 	 */
 	localAgentEndpointUrl: string;
 	/**
@@ -152,10 +143,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	authType: 'subscription',
 	anthropicApiKey: '',
 	claudeLocation: '',
-	providerPreset: 'ollama',
-	providerBaseUrl: 'http://localhost:11434',
-	providerApiKey: '',
-	providerBearerToken: '',
 	localAgentEndpointUrl: '',
 	localAgentEndpointApiKey: '',
 	toolApproval: 'ask',
@@ -186,7 +173,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken', 'providerApiKey', 'providerBearerToken', 'localAgentEndpointApiKey'];
+export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken', 'localAgentEndpointApiKey'];
 
 const SECURE_PREFIX = 'synapse-secure-';
 
@@ -308,25 +295,9 @@ export async function updateAgentModelFile(app: App, filePath: string, newModel:
 export class SynapseSettingTab extends PluginSettingTab {
 	plugin: SynapsePlugin;
 
-	/**
-	 * Debounces `initAgentService()` calls triggered by the provider Base URL / API key text
-	 * fields (issue #148) so a full teardown-and-rebuild of `AgentService` — plus the
-	 * `fetchProviderModels()` discovery request it fires — happens once after the user stops
-	 * typing, not once per keystroke. `resetTimer: true` means it fires 500ms after the *last*
-	 * call, not the first. `hide()` below cancels any pending call so it can't fire against a
-	 * torn-down settings tab / stale `this.plugin` state after the tab closes.
-	 */
-	private readonly debouncedInitAgentService = debounce(() => {
-		void this.plugin.initAgentService();
-	}, 500, true);
-
 	constructor(app: App, plugin: SynapsePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
-	}
-
-	hide(): void {
-		this.debouncedInitAgentService.cancel();
 	}
 
 	display(): void {
@@ -512,193 +483,31 @@ export class SynapseSettingTab extends PluginSettingTab {
 		};
 		void renderCliStatus();
 
-		// ── Local Model / BYOK Provider ─────────────────────────────
+		// ── Local models (#220 — provider matrix removed; endpoint is the only local route) ──
 		new Setting(panel)
-			.setName('Local & custom providers')
-			.setHeading();
-
-		const providerDescEl = panel.createDiv({cls: 'setting-item-description synapse-settings-provider-desc'});
-
-		const updateProviderDesc = () => {
-			if (this.plugin.settings.providerPreset === 'ollama') {
-				providerDescEl.setText('Ollama integration: make sure Ollama is running locally ("ollama serve"). Pull models via "ollama pull <model>". Default URL is http://localhost:11434.');
-			} else if (this.plugin.settings.providerPreset === 'openai') {
-				providerDescEl.setText('Works with OpenAI, OpenRouter, LM Studio, llama.cpp, vLLM, Groq, Together, DeepSeek, Mistral, Foundry Local, and anything else exposing /v1/chat/completions.');
-			} else if (this.plugin.settings.providerPreset === 'azure') {
-				providerDescEl.setText('Azure OpenAI: base URL must be the v1 API endpoint, https://<resource>.openai.azure.com/openai — not the bare resource endpoint, and not a classic deployment-scoped URL (…/deployments/<deployment>/…?api-version=…).');
-			} else {
-				providerDescEl.setText('Configure an OpenAI-compatible endpoint or BYOK provider for local or custom models.');
-			}
-		};
-		updateProviderDesc();
-
-		const providerFieldsEl = panel.createDiv();
-
-		const renderProviderFields = () => {
-			providerFieldsEl.empty();
-
-			const datalistId = 'synapse-provider-models-datalist';
-			let datalist = providerFieldsEl.querySelector(`#${datalistId}`) as HTMLDataListElement;
-			if (!datalist) {
-				datalist = providerFieldsEl.createEl('datalist', {attr: {id: datalistId}});
-			}
-
-			const updateModelDatalist = (models: import('./agentService').ModelInfo[]) => {
-				datalist.empty();
-				for (const m of models) {
-					const opt = datalist.createEl('option', {attr: {value: m.id}});
-					if (m.name && m.name !== m.id) {
-						opt.text = m.name;
-					}
-				}
-			};
-
-			new Setting(providerFieldsEl)
-				.setName('Provider')
-				.setDesc('Select the backend model provider preset.')
-				.addDropdown(dropdown => dropdown
-					.addOptions({
-						ollama: 'Ollama',
-						openai: 'OpenAI-compatible',
-						azure: 'Azure OpenAI',
-					})
-					.setValue(this.plugin.settings.providerPreset)
-					.onChange(async (value) => {
-						this.plugin.settings.providerPreset = value as ProviderPreset;
-						if (value === 'ollama' && !this.plugin.settings.providerBaseUrl) {
-							this.plugin.settings.providerBaseUrl = 'http://localhost:11434';
-						}
-						await this.plugin.saveSettings();
-						await this.plugin.initAgentService();
-						updateProviderDesc();
-						renderProviderFields();
-					}))
-				.addButton(button => button
-					.setButtonText('Test')
-					.onClick(async () => {
-						button.setDisabled(true);
-						button.setButtonText('Testing…');
-						clearOllamaShowCache();
-						try {
-							const res = await fetchProviderModels({
-								preset: this.plugin.settings.providerPreset,
-								baseUrl: this.plugin.settings.providerBaseUrl,
-								apiKey: this.plugin.settings.providerApiKey,
-								bearerToken: this.plugin.settings.providerBearerToken,
-							});
-
-							if (res.ok) {
-								const models = res.models;
-								if (models.length > 0) {
-									let msg = `Connected — found ${models.length} model(s).`;
-									if (this.plugin.settings.providerPreset === 'ollama' && !this.plugin.settings.inlineModel) {
-										msg += ' Select a model in the Model name field below.';
-									}
-									new Notice(msg);
-									this.plugin.setProviderModels(models);
-									updateModelDatalist(models);
-								} else {
-									if (this.plugin.settings.providerPreset === 'ollama') {
-										new Notice("Connected to Ollama, but no models are installed. Pull one with 'ollama pull llama3.1'.");
-									} else {
-										new Notice('Connected, but the provider reported no available models.');
-									}
-									this.plugin.setProviderModels([]);
-									updateModelDatalist([]);
-								}
-							} else {
-								const azureUrlIssue = this.plugin.settings.providerPreset === 'azure'
-									? describeAzureBaseUrlIssue(this.plugin.settings.providerBaseUrl)
-									: null;
-								if (this.plugin.settings.providerPreset === 'ollama' && res.isOllamaConnectionError) {
-									new Notice('Could not connect to Ollama. Make sure Ollama is running ("ollama serve") and the base URL is correct.');
-								} else if (azureUrlIssue) {
-									new Notice(azureUrlIssue);
-								} else {
-									new Notice(`Test failed: ${res.error}`);
-								}
-								this.plugin.setProviderModels([]);
-								updateModelDatalist([]);
-							}
-						} finally {
-							button.setDisabled(false);
-							button.setButtonText('Test');
-						}
-					}));
-
-			new Setting(providerFieldsEl)
-				.setName('Base URL')
-				.setDesc('Base URL for the provider endpoint.')
-				.addText(text => text
-					.setPlaceholder(
-						this.plugin.settings.providerPreset === 'ollama' ? 'http://localhost:11434' :
-						this.plugin.settings.providerPreset === 'azure' ? 'https://<resource>.openai.azure.com/openai' :
-						'https://api.openai.com')
-					.setValue(this.plugin.settings.providerBaseUrl)
+			.setName('Model name')
+			.setDesc('Model ID for inline editor operations and other non-chat features. Leave blank to use the CLI default.')
+			.addText(text => {
+				text.setValue(this.plugin.settings.inlineModel)
 					.onChange(async (val) => {
-						this.plugin.settings.providerBaseUrl = val.trim();
+						this.plugin.settings.inlineModel = val.trim();
 						await this.plugin.saveSettings();
-						this.debouncedInitAgentService();
-					}));
-
-			if (this.plugin.settings.providerPreset !== 'ollama') {
-				new Setting(providerFieldsEl)
-					.setName('API key')
-					.setDesc('Provider API key (stored securely)')
-					.addText(text => {
-						text.inputEl.type = 'password';
-						text.inputEl.autocomplete = 'off';
-						text.setValue(this.plugin.settings.providerApiKey)
-							.onChange((val) => {
-								updateSecureField(this.app, this.plugin, 'providerApiKey', val.trim());
-								this.debouncedInitAgentService();
-							});
 					});
-			}
+			});
 
-			if (this.plugin.settings.providerPreset === 'ollama') {
-				new Setting(providerFieldsEl)
-					.setName('Bearer token')
-					.setDesc('Optional — only needed for a remote or proxied Ollama, such as one behind a reverse proxy. A local Ollama needs no token, including for the cloud models it brokers. Stored securely.')
-					.addText(text => {
-						text.inputEl.type = 'password';
-						text.inputEl.autocomplete = 'off';
-						text.setValue(this.plugin.settings.providerBearerToken)
-							.onChange(async (val) => {
-								updateSecureField(this.app, this.plugin, 'providerBearerToken', val.trim());
-								await this.plugin.initAgentService();
-							});
-					});
-			}
-
-			new Setting(providerFieldsEl)
-				.setName('Model name')
-				.setDesc('Model name/ID for operations. Select from test results or enter custom ID.')
-				.addText(text => {
-					text.inputEl.setAttribute('list', datalistId);
-					text.setValue(this.plugin.settings.inlineModel)
-						.onChange(async (val) => {
-							this.plugin.settings.inlineModel = val.trim();
-							await this.plugin.saveSettings();
-						});
-				});
-		};
-
-		renderProviderFields();
-
-		// ── Local agent endpoint (advanced, issue #122) ─────────────
+		// ── Local agent endpoint (issue #122) ─────────────
 		const localAgentEndpointPlaceholder = 'http://localhost:11434';
 		new Setting(panel)
-			.setName('Local agent endpoint (advanced)')
+			.setName('Local agent endpoint')
 			.setHeading();
 		panel.createEl('p', {
-			text: 'Point this at Ollama (default localhost:11434, v0.14.0+) or another endpoint that speaks the Anthropic Messages API. When set, chat, inline, and search queries against a local model run through the same Claude Agent SDK as Claude sessions — full streaming, tool use, skills, and permission modes — instead of the simplified local loop above. A user-supplied URL redirects the entire agent loop, including tool calls, to that endpoint: only point this at an endpoint you trust with your conversation and tool-call data. Leave blank to keep using the simplified local loop.',
+			text: 'Point this at Ollama (default localhost:11434, v0.14.0+) or another endpoint that speaks the Anthropic Messages API. When set, chat, inline, and search queries against a local model run through the same Claude Agent SDK as Claude sessions — full streaming, tool use, skills, and permission modes. The endpoint\'s model catalogue is fetched automatically and the models appear in the chat panel\'s model picker. A user-supplied URL redirects the entire agent loop, including tool calls, to that endpoint: only point this at an endpoint you trust with your conversation and tool-call data.',
 			cls: 'setting-item-description',
 		});
 
 		new Setting(panel)
 			.setName('Endpoint URL')
-			.setDesc('Base URL of an endpoint that speaks the Anthropic Messages API. Blank = local models use the simplified local loop (local & custom providers above).')
+			.setDesc('Base URL of an endpoint that speaks the Anthropic Messages API. Blank = only Claude models are available.')
 			.addText(text => text
 				.setPlaceholder(localAgentEndpointPlaceholder)
 				.setValue(this.plugin.settings.localAgentEndpointUrl)

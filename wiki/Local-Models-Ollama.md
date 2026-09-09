@@ -1,4 +1,26 @@
-# Using Ollama Cloud Models with Synapse
+# Using Ollama with Synapse
+
+Ollama v0.14.0+ speaks the same **Anthropic Messages API** the Claude CLI itself uses. Synapse
+points the CLI directly at your local Ollama daemon for local-model queries — the same real
+Claude Agent SDK a Claude session uses, with full skills, subagents, sessions, permission modes,
+and streaming (there is no separate, degraded local-model loop). See [Customization](Customization.md)
+for how agents/skills/`.mcp.json` apply the same way regardless of which model is selected.
+
+## Configuring the local agent endpoint
+
+1. Install and run Ollama locally (`ollama serve`), or point at a remote/proxied instance you trust.
+2. Open Obsidian **Settings → Synapse → Claude → Local agent endpoint** and set:
+   - **Endpoint URL** — `http://localhost:11434` (the default).
+   - **Endpoint API key** — leave blank; Ollama ignores the value but requires the header, so
+     Synapse sends the literal `ollama` automatically.
+3. Click **Test** to verify the endpoint answers the Messages API. Once configured, Ollama's
+   installed models appear automatically in the chat panel's model picker.
+4. Pull models with `ollama pull <model>` as usual — no restart needed, the model list refreshes
+   next time the endpoint is queried.
+
+---
+
+## Ollama Cloud Models with Synapse
 
 Ollama offers **Cloud models**, which allow you to run large, high-performance models (such as `deepseek-v3.1:671b-cloud` or `gpt-oss:120b-cloud`) hosted on Ollama's datacenter-grade hardware. 
 
@@ -45,20 +67,16 @@ ollama list
 You should see your cloud model (e.g., `deepseek-v3.1:671b-cloud`) in the list.
 
 ### 4. Configure Synapse
-1. Open Obsidian and go to **Settings** → **Synapse**.
-2. Go to the **Claude** tab and find **Local & custom providers**.
-3. Select **Ollama** as your **Provider**.
-4. Keep the default **Base URL** (`http://localhost:11434`).
-5. Click **Test** to fetch your model list. Synapse will automatically detect the cloud model from your local daemon.
-6. In the **Model name** input field, select or type the cloud model name exactly as it appeared in `ollama list` (e.g., `deepseek-v3.1:671b-cloud`).
-7. Save settings.
+1. Open Obsidian and go to **Settings** → **Synapse** → **Claude** → **Local agent endpoint**.
+2. Keep the default **Endpoint URL** (`http://localhost:11434`) and leave **Endpoint API key** blank.
+3. Click **Test** to verify the endpoint, then select the cloud model (e.g. `deepseek-v3.1:671b-cloud`) from the chat panel's model picker — it's fetched automatically from your local daemon's catalogue, the same as any other installed model.
 
 ---
 
 ## Benefits of the Gateway Approach
 
 * **Zero Memory Overhead**: Although the cloud model is registered with your local Ollama daemon, the heavy GPU computations run in the cloud. Your local machine does not need a high-end GPU or large amounts of VRAM to use these large models.
-* **Unified Provider Preset**: You can switch between local models (like `llama3.2`) and cloud models (like `deepseek-v3.1:671b-cloud`) instantly under a single provider preset.
+* **One endpoint, both kinds of model**: You can switch between local models (like `llama3.2`) and cloud models (like `deepseek-v3.1:671b-cloud`) instantly — both are served through the same local agent endpoint.
 * **Secure Credential Management**: The plugin does not need to store your Ollama API key. Authentication is handled entirely by your local Ollama installation.
 
 ---

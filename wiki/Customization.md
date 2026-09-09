@@ -139,8 +139,9 @@ You can also invoke skills directly in chat with `/name`.
 
 ## 4. MCP servers (`_synapse/.mcp.json`)
 
-Configures MCP servers that the Claude Agent SDK discovers natively for Claude sessions,
-and that the MCP bridge spawns for local-model batch-loop sessions.
+Configures MCP servers that the Claude Agent SDK discovers and spawns natively for every
+session — Claude or local (a local agent endpoint model, below, runs through the same CLI, so
+it sees the same `.mcp.json` servers).
 
 ### Format
 
@@ -339,7 +340,7 @@ configurations between machines.
 
 ## 10. Suggested reading
 
-- [`Local-Models-ReAct.md`](Local-Models-ReAct.md) — guide to configuring and using local models (qwen3, gemma4, nemotron) in a tool-calling ReAct loop with stdio MCP servers.
+- [`Local-Models-Ollama.md`](Local-Models-Ollama.md) — guide to configuring a local Ollama endpoint (including Ollama Cloud models and context-window tuning).
 - [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md) —
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.
 - [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md) —

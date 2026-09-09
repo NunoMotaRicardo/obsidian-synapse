@@ -1,32 +1,20 @@
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {requestUrl} from 'obsidian';
-import {AgentService, autoApproveReadOnlyTools} from '../src/agentService';
+import {autoApproveReadOnlyTools} from '../src/agentService';
 
 // ---------------------------------------------------------------------------
-// Issue #167 — #150 gave inlineChat() a local-model tool branch, but no
-// caller could reach it: none of the 22 inlineChat() call sites passed `app`
-// or `canUseTool`, so every one still fell back to the pre-#150 bare
-// one-shot on a local model. This issue wires the two call sites that
-// genuinely request tools on the SDK path and would visibly benefit
-// (searchPanel.ts's basic + advanced search, `tools: ['Read', 'Glob',
-// 'Grep']`, maxTurns: 40) with a new auto-approving `canUseTool` —
-// `autoApproveReadOnlyTools` (agentService.ts) — rather than the chat
-// panel's interactive `ToolApprovalModal` handler, because that would mean
-// up to 40 approval modals for one search.
+// Issue #167 — wiring `autoApproveReadOnlyTools` (agentService.ts) into the
+// two searchPanel.ts inlineChat() call sites that genuinely request tools
+// (`tools: ['Read', 'Glob', 'Grep']`, maxTurns: 40), so their tool calls
+// never hit an approval modal in an unattended one-shot search.
 //
-// `editorMenu.ts`'s two `tools: ['Read']` sites (askAboutImage,
-// extractImageContent) are deliberately left unwired: they use Claude's
-// native multimodal Read tool to view an *image* at an absolute OS path.
-// `vaultTools`'s `read_note` only resolves vault-relative paths and returns
-// `app.vault.read()` as UTF-8 text — it cannot serve as an analogue for
-// reading image bytes, and `inlineChat()` has no `images` parameter to give
-// the local branch the image data another way (unlike `Session.send()`,
-// which does — `src/agentService.ts:1373`). Wiring vaultTools there would
-// only add spurious "File not found" tool calls, not fix anything; that gap
-// is a separate, larger feature (an `images` parameter on `inlineChat()`),
-// out of scope for this issue.
+// Post-#220 the local-model branch this test file's third describe block used
+// to exercise (the OpenAI-compatible `/v1/chat/completions` loop with vault
+// tools) is gone: local models run through the real Agent SDK/CLI via the
+// local agent endpoint (issue #122), so the auto-approve handler is now only
+// ever exercised on the SDK path — these tests keep verifying the handler's
+// own allow/deny semantics and the wiring of its callers.
 // ---------------------------------------------------------------------------
 
 const repoRoot = resolve(__dirname, '..');
@@ -43,7 +31,7 @@ describe('autoApproveReadOnlyTools', () => {
 			requestId: 'test-tool-use-id',
 		});
 
-	it.each(['read_note', 'list_notes', 'search_notes', 'Read', 'Glob', 'Grep'])(
+	it.each(['Read', 'Glob', 'Grep'])(
 		'allows the read-only tool %s',
 		async toolName => {
 			const result = await call(toolName, {path: 'foo.md'});
@@ -105,98 +93,10 @@ describe('editorMenu.ts — tools: [\'Read\'] sites left unwired, deliberately (
 		expect((source.match(/tools: \[\]/g) ?? []).length).toBeGreaterThanOrEqual(6);
 		// `app: plugin.app` IS now present on these call sites (issue #194 — every inlineChat()
 		// caller passes `app` so AgentService can derive `_synapse/settings.json`'s vault path
-		// for the vault settings layer), but that alone does not reach the local-model branch's
-		// `localTools` gate (agentService.ts: `supportsTools && options.app && options.canUseTool`)
-		// without `canUseTool`, which none of these sites set — so the #167 guarantee (no vault
-		// tools offered here) still holds.
+		// for the vault settings layer). Post-#220 there is no local-model branch left to gate:
+		// local models run through the Agent SDK via the local agent endpoint (issue #122),
+		// and none of these sites set `canUseTool`, so no auto-approval is wired here either —
+		// the #167 guarantee (no vault tools offered here) still holds.
 		expect(source).not.toContain('canUseTool: autoApproveReadOnlyTools');
-	});
-});
-
-describe('AgentService#inlineChat — autoApproveReadOnlyTools end to end on the local-model branch', () => {
-	const mockedRequestUrl = vi.mocked(requestUrl);
-
-	function jsonResponse(status: number, body: unknown) {
-		return {status, json: body, text: JSON.stringify(body), arrayBuffer: new ArrayBuffer(0), headers: {}};
-	}
-
-	function makeService(): AgentService {
-		return new AgentService({
-			providerConfig: {preset: 'openai', baseUrl: 'http://localhost:9999'},
-			claudeLocation: process.execPath,
-		});
-	}
-
-	beforeEach(() => {
-		mockedRequestUrl.mockReset();
-	});
-
-	it('reaches and executes a vault tool with no per-call gating (a single canUseTool wired once, not per tool call)', async () => {
-		const service = makeService();
-		service.setCustomModels([{id: 'tool-model', name: 'Tool Model'}]);
-
-		let call = 0;
-		mockedRequestUrl.mockImplementation(((request: unknown) => {
-			const req = request as {url: string};
-			if (req.url.endsWith('/v1/chat/completions')) {
-				call++;
-				if (call === 1) {
-					return Promise.resolve(jsonResponse(200, {
-						choices: [{
-							message: {
-								role: 'assistant',
-								content: '',
-								tool_calls: [{id: 'call_1', type: 'function', function: {name: 'list_notes', arguments: '{}'}}],
-							},
-						}],
-					}));
-				}
-				return Promise.resolve(jsonResponse(200, {choices: [{message: {role: 'assistant', content: '[]'}}]}));
-			}
-			return Promise.resolve(jsonResponse(404, {}));
-		}) as typeof requestUrl);
-
-		const getFiles = vi.fn().mockReturnValue([]);
-		const result = await service.inlineChat({
-			prompt: 'search the vault',
-			model: 'tool-model',
-			tools: ['Read', 'Glob', 'Grep'],
-			maxTurns: 40,
-			app: {vault: {getFiles}} as never,
-			canUseTool: autoApproveReadOnlyTools,
-		});
-
-		expect(result.content).toBe('[]');
-		// The vault tool actually ran — proving the local branch was reached and the
-		// auto-approve handler let it through without a modal/gate blocking it.
-		expect(getFiles).toHaveBeenCalledTimes(1);
-	});
-
-	it('still fails closed (no tools) when supportsTools: false, even with app + autoApproveReadOnlyTools supplied', async () => {
-		const service = makeService();
-		service.setCustomModels([{id: 'no-tools-model', name: 'No Tools Model', supportsTools: false}]);
-		mockedRequestUrl.mockImplementation(((request: unknown) => {
-			const req = request as {url: string};
-			if (req.url.endsWith('/v1/chat/completions')) {
-				return Promise.resolve(jsonResponse(200, {choices: [{message: {role: 'assistant', content: 'no tools used'}}]}));
-			}
-			return Promise.resolve(jsonResponse(404, {}));
-		}) as typeof requestUrl);
-
-		const getFiles = vi.fn().mockReturnValue([]);
-		const result = await service.inlineChat({
-			prompt: 'search the vault',
-			model: 'no-tools-model',
-			tools: ['Read', 'Glob', 'Grep'],
-			maxTurns: 40,
-			app: {vault: {getFiles}} as never,
-			canUseTool: autoApproveReadOnlyTools,
-		});
-
-		expect(result.content).toBe('no tools used');
-		expect(getFiles).not.toHaveBeenCalled();
-		const call = mockedRequestUrl.mock.calls.find(([opts]) => (opts as {url: string}).url.endsWith('/v1/chat/completions'));
-		const body = JSON.parse((call?.[0] as {body?: string})?.body || '{}') as {tools?: unknown};
-		expect(body.tools).toBeUndefined();
 	});
 });

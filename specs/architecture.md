@@ -29,14 +29,13 @@ CLI process per query.
 | agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
-| provider-models | [settings.md](settings.md) | `src/providerModels.ts` | Shared BYOK model-list fetch (`/v1/models`, `/api/tags`), used by Settings Test button and `onListModels` |
+| provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint (#122) discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button); the OpenAI-compatible provider matrix and its `executeLocalProviderQuery()` ReAct loop were removed (#220) |
 | config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
 | chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots.md](bots.md) | `src/bots/*` | Telegram bot front-end |
-| mcp-bridge | [mcp-bridge.md](mcp-bridge.md) | `src/mcpBridge.ts` | Spawn stdio MCP servers, negotiate JSON-RPC, expose tools for local-model ReAct loops |
-| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Shared per-item run pipeline (substitute → route Claude/local → run → apply write mode → append report), used by batch loops |
+| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Shared per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report), used by batch loops |
 | batch-loops | [batch-loops.md](batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file orchestration (budget, cancellation, progress) over `run-executor` |
 | lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (batch loops, config writes) |
 | vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, reports folder, today's-date helper |

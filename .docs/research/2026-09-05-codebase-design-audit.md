@@ -1,5 +1,12 @@
 # Codebase design audit — module depth, interfaces, seams
 
+> **Flag (2026-09-09):** this is a point-in-time snapshot at commit `e6acb71`. Issue #220 removed
+> `vaultTools.ts` and `mcpBridge.ts` entirely and shrank `providerModels.ts` from 983 lines to a
+> small local-agent-endpoint discovery module (see
+> `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`), so the module
+> table below (and any line-count/fan-in figures it cites) is stale for those modules. Treat this
+> report as historical measurement, not a description of the current codebase shape.
+
 **Date:** 2026-09-05
 **Commit audited:** `e6acb71` (`main`, immediately after epic #144 closed)
 **Method:** static measurement of every module in `src/` — lines, exported symbols, externally

@@ -1,7 +1,7 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
-import {AgentService} from "./agentService";
-import {fetchProviderModels, migrateProviderPreset} from "./providerModels";
+import {AgentService, type ModelInfo} from "./agentService";
+import {fetchEndpointModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
@@ -202,12 +202,6 @@ export default class SynapsePlugin extends Plugin {
 				type: s.authType,
 				apiKey: s.authType === 'apiKey' ? s.anthropicApiKey : undefined,
 			},
-			providerConfig: {
-				preset: s.providerPreset,
-				baseUrl: s.providerBaseUrl,
-				apiKey: s.providerApiKey,
-				bearerToken: s.providerBearerToken,
-			},
 			...(s.localAgentEndpointUrl.trim() ? {
 				localAgentEndpoint: {
 					baseUrl: s.localAgentEndpointUrl.trim(),
@@ -219,12 +213,14 @@ export default class SynapsePlugin extends Plugin {
 				debugTrace(`Synapse: Claude CLI v${info.version} at ${info.path}`);
 			},
 		});
-		if (s.providerBaseUrl) {
-			void fetchProviderModels({
-				preset: s.providerPreset,
-				baseUrl: s.providerBaseUrl,
-				apiKey: s.providerApiKey,
-				bearerToken: s.providerBearerToken,
+		// Model discovery (#220): when a local agent endpoint is configured, fetch its
+		// `/v1/models` catalogue (issue #122) and offer the models it lists alongside the
+		// Claude ones. Fire-and-forget — a catalogue failure must not block service init;
+		// the endpoint's Test button (issue #223) is where a broken endpoint is diagnosed.
+		if (s.localAgentEndpointUrl.trim()) {
+			void fetchEndpointModels({
+				baseUrl: s.localAgentEndpointUrl,
+				apiKey: s.localAgentEndpointApiKey,
 			}).then(res => {
 				if (res.ok && res.models.length > 0) {
 					this.setProviderModels(res.models);
@@ -301,14 +297,14 @@ export default class SynapsePlugin extends Plugin {
 		}
 	}
 
-	setProviderModels(models: import('./agentService').ModelInfo[]): void {
+	setProviderModels(models: ModelInfo[]): void {
 		if (this.agentService) {
 			this.agentService.setCustomModels(models);
 			this.notifySidebarModelsChanged(this.agentService.getModels());
 		}
 	}
 
-	notifySidebarModelsChanged(models: import('./agentService').ModelInfo[]): void {
+	notifySidebarModelsChanged(models: ModelInfo[]): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE)) {
 			const view = leaf.view;
 			if (view instanceof SynapseView) {
@@ -337,22 +333,34 @@ export default class SynapsePlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		this.settings.featureAgents = Object.assign({}, DEFAULT_SETTINGS.featureAgents, raw?.featureAgents);
 
-		// Migrate legacy providerPreset values (#117): `other-openai` and `foundry-local` were
-		// byte-identical to `openai` and collapse silently. `anthropic` also collapses to
-		// `openai`, but that changes which key drives chat, so it gets a one-time Notice. Once
-		// migrated + saved below, the stored value is `openai` and this branch won't fire again.
-		const presetMigration = migrateProviderPreset(raw?.providerPreset);
-		if (presetMigration.migrated) {
-			this.settings.providerPreset = presetMigration.preset;
-			needsSave = true;
-			if (presetMigration.wasAnthropic) {
-				new Notice(
-					'Synapse: the "Anthropic (BYOK)" provider preset was removed and this vault has been ' +
-					'switched to "OpenAI-compatible". Anthropic/Claude models belong in Settings → Claude → ' +
-					'API key, not the local provider section — please reconfigure there if needed.',
-					0
-				);
+		// The OpenAI-compatible provider matrix and its local ReAct loop were removed (#220),
+		// taking `providerPreset`/`providerBaseUrl`/`providerApiKey`/`providerBearerToken`
+		// with them. No migration shim — per planner decision 6 the four stale keys are
+		// stripped from the merged settings here (otherwise `Object.assign`'s spread keeps
+		// them as untyped extras and `saveSettings()` would re-persist them forever) — and a
+		// vault whose raw data.json carried a non-empty `providerBaseUrl` gets a one-time
+		// courtesy Notice pointing at the replacement, same convention as #117's
+		// removed-preset notice. The Notice is one-time *because* of the strip: once saved
+		// below (`needsSave`), data.json no longer carries the keys, so `raw` never sees
+		// them again on a later load. Stale localStorage values for the two removed secrets
+		// are harmless (nothing reads that prefix anymore) and are left alone.
+		const legacyProviderKeys = ['providerPreset', 'providerBaseUrl', 'providerApiKey', 'providerBearerToken'] as const;
+		let carriedProviderBaseUrl = false;
+		for (const key of legacyProviderKeys) {
+			if (typeof raw?.[key] === 'string' && raw[key].trim() && key === 'providerBaseUrl') {
+				carriedProviderBaseUrl = true;
 			}
+			if (key in this.settings) {
+				delete (this.settings as unknown as Record<string, unknown>)[key];
+				needsSave = true;
+			}
+		}
+		if (carriedProviderBaseUrl) {
+			new Notice(
+				'Synapse: the local & custom provider presets were removed. Local models now run through the ' +
+				'local agent endpoint — configure it under Settings → Synapse → Claude → Local agent endpoint.',
+				0
+			);
 		}
 
 		// Migrate any plaintext secrets from data.json to local storage, then strip
