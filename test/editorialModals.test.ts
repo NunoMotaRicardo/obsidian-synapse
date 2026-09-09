@@ -9,7 +9,6 @@ describe('editorial restyle: modals (#211)', () => {
 	const stylesContent = readFileSync(stylesPath, 'utf8');
 
 	const toolApprovalSource = readFileSync(resolve(repoRoot, 'src/modals/toolApprovalModal.ts'), 'utf8');
-	const userInputSource = readFileSync(resolve(repoRoot, 'src/modals/userInputModal.ts'), 'utf8');
 	const askUserQuestionSource = readFileSync(resolve(repoRoot, 'src/modals/askUserQuestionModal.ts'), 'utf8');
 	const elicitationSource = readFileSync(resolve(repoRoot, 'src/modals/elicitationModal.ts'), 'utf8');
 	const vaultScopeSource = readFileSync(resolve(repoRoot, 'src/modals/vaultScopeModal.ts'), 'utf8');
@@ -43,7 +42,6 @@ describe('editorial restyle: modals (#211)', () => {
 
 		it('all modal TypeScript sources add synapse-modal-title or render titles', () => {
 			expect(toolApprovalSource).toContain('synapse-modal-title');
-			expect(userInputSource).toContain('synapse-modal-title');
 			expect(askUserQuestionSource).toContain('synapse-modal-title');
 			expect(elicitationSource).toContain('synapse-modal-title');
 			expect(vaultScopeSource).toContain('synapse-modal-title');

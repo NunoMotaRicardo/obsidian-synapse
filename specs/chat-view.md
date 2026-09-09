@@ -565,10 +565,11 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
   plain number field fits better than parsing `$5`/`5 tokens` strings. Parsed with `Number()` +
   `Number.isInteger()` (not `parseInt()`, which would truncate scientific notation like `1e2` at
   the `e` and silently floor fractional input) — non-integer or out-of-range input is rejected
-  outright rather than saving a value that doesn't match what the user typed. `src/budget.ts`
-  (originally extracted alongside the now-removed batch loop launch flow's free-text budget
-  parsing, issue #74; that flow was removed in #221, leaving this chat view as `budget.ts`'s sole
-  consumer) backs these settings-backed thresholds' parse/describe/exceeded logic.
+  outright rather than saving a value that doesn't match what the user typed. This module
+  implements its own inline `Number()`/`Number.isInteger()`-based parse/threshold checks
+  directly in `synapseView.ts`; it never depended on the now-deleted `src/budget.ts` (that module
+  backed the now-removed batch loop launch flow's free-text budget prompt, issue #74, and was
+  deleted as dead code in #221 once that flow was removed).
 - **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
   distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
   `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`

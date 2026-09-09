@@ -8,9 +8,10 @@ mode, append a report entry. It has **no in-tree caller** as of issue #221's rem
 loops (`batchLoopExecutor.ts` was its one caller) — kept as reusable, self-contained run-pipeline
 infrastructure per that issue's scope, not deleted outright.
 
-Model for this extraction: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small, focused
-modules that extract exactly the logic that was duplicated, not a new abstraction layer on top of
-it.
+Model for this extraction: the now-removed `src/budget.ts` (#74, deleted as dead code in #221
+once its only consumer, `batchLoopExecutor.ts`, was removed) and `src/vaultPaths.ts` (#153) —
+small, focused modules that extract exactly the logic that was duplicated, not a new abstraction
+layer on top of it.
 
 Only `runItem()`, `appendReportBlock()`, and the `ReportTarget`/`RunItemOptions` types are exported —
 everything else in this module (template substitution, tool-approval policy resolution, write-mode

@@ -9,8 +9,10 @@
  * `todayString()` were each independently copy-pasted across several call
  * sites (`bots/telegramBot.ts`, `editor/editorMenu.ts`,
  * `modals/editModal.ts`, `synapseView.ts`, `runExecutor.ts`,
- * `view/searchPanel.ts`) — see issue #153. Model: `src/budget.ts` (#74's
- * extraction for the same reason, one level down).
+ * `view/searchPanel.ts`) — see issue #153. Model: the now-removed
+ * `src/budget.ts` (#74's extraction for the same reason, one level down;
+ * deleted as dead code in #221 once its only consumer, `batchLoopExecutor.ts`,
+ * was removed).
  */
 
 import type {App} from 'obsidian';

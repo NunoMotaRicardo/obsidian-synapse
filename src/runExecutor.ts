@@ -27,9 +27,10 @@
  * per-item failure from a mid-flight cancellation, so the error is left to
  * propagate and the caller decides.
  *
- * Model: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small,
- * focused extractions of exactly the logic that was duplicated, not a new
- * abstraction layer on top of it.
+ * Model: the now-removed `src/budget.ts` (#74, deleted as dead code in #221
+ * once its only consumer, `batchLoopExecutor.ts`, was removed) and
+ * `src/vaultPaths.ts` (#153) — small, focused extractions of exactly the
+ * logic that was duplicated, not a new abstraction layer on top of it.
  *
  * Unattended tool-approval policy (issue #151): this is also the place that maps
  * `settings.toolApproval` to what the run hands the SDK. See

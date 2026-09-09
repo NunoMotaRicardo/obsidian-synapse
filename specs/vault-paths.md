@@ -10,8 +10,10 @@ Extracted (issue #153) because each of these was independently duplicated: the
 `(app.vault.adapter as unknown as {basePath: string}).basePath` cast across 7 files, the
 `plugins: [{type: 'local', path: '<basePath>/_synapse/'}]` object rebuilt inline at 6 call sites,
 and `todayString()` copy-pasted verbatim into `triggerExecutor.ts` and the (now-removed)
-`batchLoopExecutor.ts`. Model: `src/budget.ts` (#74's extraction for the same reason, one level
-down — chat-view budget primitives rather than vault paths).
+`batchLoopExecutor.ts`. Model: the now-removed `src/budget.ts` (#74's extraction for the same
+reason, one level down — batch-loop budget-prompt primitives rather than vault paths; it was
+`batchLoopExecutor.ts`'s only consumer and was deleted as dead code in #221 once that flow was
+removed).
 
 Source: `src/vaultPaths.ts`.
 
