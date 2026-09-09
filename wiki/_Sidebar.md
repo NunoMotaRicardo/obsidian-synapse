@@ -9,5 +9,3 @@
 
 **Local models**
 - [Ollama](Local-Models-Ollama.md)
-- [Foundry Local](Local-Models-Foundry.md)
-- [ReAct](Local-Models-ReAct.md)

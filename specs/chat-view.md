@@ -465,59 +465,17 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   Attachment tag icons correctly distinguish image types: `type: 'blob'`
   (clipboard paste) and `type: 'file'` with an image extension both display the image icon,
   matching the existing `type: 'image'` path.
-  **BYOK local provider multimodal delivery (issue #79):** local/BYOK models have no agentic
-  `Read` tool, so a path inlined into the prompt text only gives them text describing a path —
-  chat-view sends actual image bytes instead when the selected model is local
-  (`AgentService.isLocalModel()`). Before calling `Session.send()`, `SynapseView` calls
-  `resolveImageAttachments()` (`sessionConfig.ts`) — skipped entirely for cloud/SDK models to
-  avoid unnecessary file I/O — which base64-encodes `type: 'image'` attachments, `type: 'file'`
-  attachments with an image extension (`png/jpg/jpeg/gif/webp/bmp`; `svg` is excluded even
-  though it's in `IMAGE_EXTS` since `image_url` data URIs for SVG aren't reliably supported by
-  vision models), and `type: 'blob'` attachments (reusing their existing base64 `data` directly,
-  no re-read). Unreadable/missing files are logged and skipped, not thrown. The result is
-  threaded through `Session.send({images})` (`agentService.ts`) to
-  `executeLocalProviderQuery()` (`providerModels.ts`), which — only when `images` is
-  non-empty — builds the first user message as an OpenAI-compatible multimodal `content` array
-  (`[{type: 'text', ...}, {type: 'image_url', image_url: {url: 'data:<mime>;base64,...'}}, ...]`)
-  for OpenAI-compatible presets, or (for `preset: 'ollama'`, which calls Ollama's native
-  `/api/chat` rather than `/v1/chat/completions`) `content: <prompt text>` plus a sibling
-  `images: string[]` of raw base64 (no `data:` prefix) per Ollama's own chat message schema —
-  that endpoint rejects the OpenAI array shape outright. Calls with no images keep the existing
-  plain-string `content` unchanged for either preset. This is scoped to the chat-view send path
-  only — the Telegram bot's
-  `inlineChat()` doesn't thread structured attachments today and is unaffected (no regression).
-  Non-image file attachments still have no delivery path for local providers (no filesystem
-  tool) and stay text-path-inlined — unreadable to the model, but no worse than before.
-  **BYOK local provider conversation history (issue #135):** same local-model check
-  (`isLocalModel()`) additionally builds a `history` payload before `Session.send()` — before this
-  fix, the local ReAct loop was fully stateless turn-to-turn (no `resume`, no persisted session,
-  every call rebuilt its `messages` array from just the current prompt). `handleSend()` calls
-  `buildLocalHistory(this.messages.slice(0, -1), vaultBasePath)` (`sessionConfig.ts`) — the slice
-  excludes the current-turn user message `addUserMessage()` already pushed onto `this.messages`
-  earlier in the same call, since that turn is sent via `prompt`, not replayed as history — and
-  passes the result as `Session.send({history})`. See agent-service.md's "BYOK local provider
-  conversation history" section for the full mapping/budget/sizing details (this stays scoped to
-  what's specific to the view: where in `handleSend()` history is built and why the slice excludes
-  the current turn).
-  **Bridging local turns into the SDK session (issue #135's asymmetry, fixed by #137):** #135
-  alone only fixed continuity in the direction the plugin controls the payload (local-model
-  turns). Switching *back* to a Claude model — or starting a conversation on a local model at all
-  — resumed a CLI session with no record of the local turns, since they never reached the CLI.
-  `handleSend()`'s non-local branch now computes `computeSdkHistoryGap(this.messages,
-  this.sdkSeenIndex)` and, when non-empty, prepends `buildSdkHistoryInjection()`'s delimited
-  transcript block to the prompt actually sent to `Session.send()` (`promptForSend`, distinct from
-  the clean `fullPrompt` used for local models and for what's stored in `this.messages`).
-  `SynapseView.sdkSeenIndex` — the high-water mark of how much of `this.messages` the CLI's
-  session already has — advances to `this.messages.length` after every SDK-routed `send()` that
-  reaches the CLI without throwing, and is otherwise left alone (including by local-routed turns,
-  by `ensureSession()`'s `configDirty` rebuilds, and by a live conversation's ordinary turns). See
-  agent-service.md's "Bridging local-provider turns into the SDK session" for the full mechanism,
-  the budget rationale (deliberately different from #135's — Claude's context window is far larger
-  than a local model's), and why the mark lives on `SynapseView` rather than `Session` (it must
-  survive a `configDirty` `Session` rebuild, #104). The mark is reset on `newConversation()`, set
-  to "fully seen" on cold session resume (`selectSession()`'s SDK-resume path) since a resumed
-  session's replayed messages come straight from the CLI's own transcript, and carried through
-  `BackgroundSession` on background-session save/restore.
+  **Local models removed the need for a separate image/history bridge (issue #220).** Issues
+  #79 (image-bytes multimodal delivery to the BYOK ReAct loop), #135 (`buildLocalHistory()`
+  stateless-turn history payload) and #137 (`computeSdkHistoryGap()`/`buildSdkHistoryInjection()`
+  bridging local turns back into the SDK session) all existed because local/BYOK models ran
+  through a separate hand-rolled ReAct loop with no agentic `Read` tool, no `resume`, and no
+  persisted session. That loop, and the OpenAI-compatible provider matrix that fed it, were
+  removed by #220 (see `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`):
+  every model — Claude or local (issue #122's local agent endpoint, `AgentService.isLocalModel()`)
+  — now runs through the same real Agent SDK/CLI, with `resume` and the agentic `Read` tool, so
+  the SDK path alone owns image delivery and conversation continuity for all models. There is no
+  separate local-model send path in `handleSend()` anymore.
 - Sessions are auto-named `<Agent>: <first message>`; search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched
@@ -682,9 +640,10 @@ would make search unusable — and does not change the Claude-path behavior sear
 `formatErrorForChat()` (`synapseView.ts`), which currently just strips a leading `Error: `
 prefix. (The pre-engine-swap Ollama-specific `friendlyOllamaError()` pattern-matcher in
 `src/ollamaErrors.ts` — connection refused, model not found, OOM, etc. — was removed when the
-plugin moved to the Agent SDK and has not been reinstated; `providerPreset`
-still exists for BYOK local-provider routing in `providerModels.ts`, but chat error display is
-no longer preset-gated.)
+plugin moved to the Agent SDK and has not been reinstated. Post-#220 there is no local-provider
+preset routing left in `providerModels.ts` either — local models run through the same Agent SDK
+query as Claude, via the local agent endpoint (#122), so chat error display was never
+preset-gated to begin with.)
 
 ### Write/edit tool error guidance (issue #78)
 

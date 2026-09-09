@@ -1,5 +1,16 @@
 # Beyond "triggers" — an automation model for Claude *and* Ollama
 
+> **Flag (2026-09-09):** finding 5 ("one engine with two backends... a local Anthropic-Messages-shaped
+> proxy collapses them") is exactly what issues #122 and #220 shipped — local models now run
+> through the same Agent SDK/CLI as Claude via a user-configured local agent endpoint, and the
+> hand-rolled ReAct path this report describes (`executeLocalProviderQuery()`, `vaultTools.ts`,
+> `mcpBridge.ts`) was removed. Treat every mention of "the ReAct path"/"the local backend"/two
+> execution engines below as historical context, not the current architecture — see
+> `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md` and
+> `specs/agent-service.md`'s "Local models" section for the current state. The rest of this
+> report's automation-vocabulary proposal (Watches/Schedules/Batches) is unaffected by this and
+> remains as originally researched.
+
 > Date: 2026-09-03 · Research report, no code changes.
 > Question asked: the `_synapse/triggers/` folder is inherited Copilot vocabulary. What should the
 > concept become, and which primitives — dispatch, hooks, loops — are actually usable on Claude and

@@ -162,50 +162,38 @@ The Markdown body is the agent's **system prompt**, sent as context with every m
 
 ## Models
 
-Synapse is built natively for Claude models (via the Anthropic API or OAuth). It also supports local models (e.g. Ollama, Microsoft Foundry Local, and other OpenAI-compatible local endpoints) as a free, offline alternative.
+Synapse is built natively for Claude models (via the Anthropic API or OAuth). It also supports
+local models — Ollama, or any other endpoint that speaks the **Anthropic Messages API** — as a
+free, offline alternative. Every model, Claude or local, runs through the same Claude Agent SDK/CLI:
+full skills, subagents, sessions, permission modes, and streaming. There is no separate,
+degraded local-model loop and no OpenAI-compatible provider matrix.
 
-### Supported providers
+### Local agent endpoint
 
-Configure local providers under **Settings → Synapse → Claude → Local & custom providers**. The dropdown has three presets
-(Ollama, OpenAI-compatible, Azure OpenAI), but the OpenAI-compatible preset works unchanged with
-any endpoint exposing `/v1/chat/completions` — which covers most of the table below:
-
-| Provider | Preset | Base URL | Notes |
-|---|---|---|---|
-| Ollama (local) | Ollama | `http://localhost:11434` | Default. Capabilities auto-detected |
-| Ollama Cloud | Ollama | `http://localhost:11434` | `ollama signin`, pull a `:cloud` model |
-| OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` | 400+ models, one key |
-| OpenAI | OpenAI-compatible | `https://api.openai.com` | |
-| LM Studio | OpenAI-compatible | `http://localhost:1234/v1` | |
-| llama.cpp server | OpenAI-compatible | `http://localhost:8080/v1` | |
-| vLLM | OpenAI-compatible | `http://localhost:8000/v1` | |
-| Groq / Together / DeepSeek / Mistral | OpenAI-compatible | provider's `/v1` | |
-| Foundry Local | OpenAI-compatible | `http://localhost:<port>/v1` | Port from `foundry service status`. **Model list unavailable** — enter the id manually |
-| Azure OpenAI | Azure OpenAI | `https://<res>.openai.azure.com/openai` | v1 API only; classic deployment URLs unsupported |
-| Anthropic | — | — | Use **Settings → Claude → API key**, not this section |
-
-### Running local models through the full Claude Agent SDK
-
-By default, local models run through a simplified loop with no skills, subagents, sessions,
-permission modes, or streaming. Ollama v0.14.0+ speaks the same Anthropic Messages API the Claude
-CLI itself uses, so pointing Synapse at it gets a local model the *full* agent experience instead.
-
-Under **Settings → Synapse → Claude → Local agent endpoint (advanced)**, set:
+Ollama v0.14.0+ speaks the same Anthropic Messages API the Claude CLI itself uses. Under
+**Settings → Synapse → Claude → Local agent endpoint**, set:
 
 - **Endpoint URL** — `http://localhost:11434` for a local Ollama v0.14.0+, or any other endpoint
-  that speaks the Anthropic Messages API. Leave blank (default) to keep the simplified local loop.
+  that speaks the Anthropic Messages API. Leave blank (default) to use only Claude models.
 - **Endpoint API key** — optional; Ollama requires the header but ignores its value, so leave this
   blank to send `ollama` automatically.
 
 The section's **Test** button verifies the endpoint end to end: it sends one minimal
 `/v1/messages` request with the same credentials the agent path uses and reports whether the
 endpoint answered in Messages API shape — so a typo'd URL or a non-Messages-API server is caught
-at configuration time, not mid-conversation.
+at configuration time, not mid-conversation. Once an endpoint is configured, its model catalogue
+(`GET <baseUrl>/v1/models`) is fetched automatically and the models appear in the chat panel's
+model picker alongside Claude's.
 
 A configured endpoint redirects the *entire* agent loop for a local-model query — including tool
 calls — to that address, so only point it at an endpoint you trust with your conversation and tool
 data (loopback Ollama by default; treat a remote/proxied endpoint the same as any other network
 destination you'd send vault content to).
+
+An OpenAI-shaped-only endpoint (one that does **not** speak the Anthropic Messages API — e.g. LM
+Studio, llama.cpp, vLLM, or a bare OpenAI-compatible `/v1/chat/completions` server) is not
+supported directly; put a Messages-API-speaking gateway in front of it, or use Ollama, which
+speaks the Messages API natively.
 
 ---
 
@@ -362,14 +350,13 @@ Right-click a file or folder in the vault explorer → **Synapse**.
 
 ## Settings reference
 
-### Settings → Synapse → Claude → Local & custom providers
+### Settings → Synapse → Claude → Local agent endpoint
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Provider** | Ollama | `Ollama`, `OpenAI-compatible`, or `Azure OpenAI` — see [Supported providers](#supported-providers) |
-| **Base URL** | `http://localhost:11434` | Endpoint for the selected preset |
-| **Model name** | *(empty)* | Model ID for local-provider operations (e.g. `llama3`) — select from Test results or type a custom ID |
-| **API key** | *(empty)* | Credentials for the chosen provider (hidden when **Provider** is Ollama) |
+| **Endpoint URL** | *(empty)* | Base URL of a Messages-API-speaking endpoint, e.g. `http://localhost:11434` for Ollama v0.14.0+. Blank = only Claude models are available — see [Local agent endpoint](#local-agent-endpoint) |
+| **Endpoint API key** | *(empty)* | API key sent to the endpoint. Ollama ignores the value but requires the header — leave blank to send `ollama` automatically |
+| **Model name** | *(empty)* | Model ID used for inline editor operations. Leave blank to use the CLI default |
 
 ### Settings → Synapse → Tools
 

@@ -1,5 +1,12 @@
 # Open-source readiness — code quality report
 
+> **Flag (2026-09-09):** issue #220 deleted `src/mcpBridge.ts` and `src/vaultTools.ts` and shrank
+> `src/providerModels.ts` to a small local-agent-endpoint discovery module — see
+> `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`. Recommendations
+> below that name those files/line numbers, or the removed `ProviderPreset` matrix (e.g. "add
+> `providerModels.test.ts` — table-driven... per preset"), no longer apply; treat this report as
+> historical. Recommendations about other modules are unaffected.
+
 > Date: 2026-09-03 · Scope: full sweep of `src/` (15,528 LOC, 38 files), `test/`, build config,
 > CI, repo metadata and docs, against the goal of publishing `obsidian-synapse` publicly.
 > Verification run for this report: `tsc -noEmit` clean, `vitest run` 108/108 passing,

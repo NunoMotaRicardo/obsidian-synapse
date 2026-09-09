@@ -157,7 +157,7 @@ import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
 import {getSynapseSettingsPath} from './vaultPaths';
-// Static import (matching mcpBridge.ts's `_synapse/.mcp.json` read, the closest existing
+// Static import (matching the now-removed mcpBridge.ts's `_synapse/.mcp.json` read, the closest
 // precedent for reading a small vault-local JSON config synchronously) rather than the lazy
 // `window.require`-gated pattern used elsewhere in this file for fs/promises — that gate exists
 // because those call sites' `await import()` fallback only fires once, off the hot path

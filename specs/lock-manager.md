@@ -18,8 +18,8 @@ Source: `src/lockManager.ts`.
 
 ## Interface
 
-A single module-level singleton (`lockManager`), mirroring how `vaultTools` and other shared
-helpers are exported — this avoids threading a `LockManager` instance through every free function
+A single module-level singleton (`lockManager`), mirroring how other shared helpers are
+exported — this avoids threading a `LockManager` instance through every free function
 in `configWriter.ts` and their many callers (self-improve tool handlers, seeding, etc.).
 
 ```ts

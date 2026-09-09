@@ -15,9 +15,7 @@ This wiki covers **installing, configuring, and customizing** the plugin. For an
 
 ## Local models
 
-- [Local-Models-Ollama](Local-Models-Ollama.md) — Ollama Cloud models and context-window tuning
-- [Local-Models-Foundry](Local-Models-Foundry.md) — Microsoft Foundry Local setup
-- [Local-Models-ReAct](Local-Models-ReAct.md) — using local models with ReAct-style tool calling
+- [Local-Models-Ollama](Local-Models-Ollama.md) — configuring the local agent endpoint, Ollama Cloud models, and context-window tuning
 
 ## About this wiki
 

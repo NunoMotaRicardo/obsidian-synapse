@@ -3,7 +3,7 @@
 ## Overview
 
 `src/runExecutor.ts` is the per-item run pipeline behind "run a prompt against a file, then persist
-the result": substitute template variables, route Claude vs. a local model, run, apply a write
+the result": substitute template variables, run via `AgentService.inlineChat()`, apply a write
 mode, append a report entry. `batchLoopExecutor.ts` ([batch-loops.md](batch-loops.md)) is its one
 caller and is a thin one — it supplies what's actually caller-specific: which file(s) to run over,
 where the prompt body comes from, how a report block is formatted, and budget/cancellation/progress
@@ -26,23 +26,22 @@ runItem(options: RunItemOptions): Promise<void>
 
 1. **Substitute** — replaces `{{file}}` with the vault-relative file path in the prompt/instruction
    body.
-2. **Route** — if `options.model` names a model the running `AgentService` reports as local
-   (`plugin.agentService.isLocalModel(model)`), routes to `executeLocalProviderQuery()` (with the
-   target file's content prepended as context, and vault/MCP tools attached if the model supports
-   tool calling); otherwise routes to `AgentService.inlineChat()`. No current caller passes
-   `model` — `batchLoopExecutor.ts` never sets it, so this branch is unreachable today (unchanged
-   from #73's original scope decision to keep local-model routing for batch loops out of scope).
-3. **Run** — executes the routed call. `agent` has no current caller; `abortController`/`onEvent`
+2. **Run** — routes through `AgentService.inlineChat()`. Post-#220 (removal of the OpenAI-compatible
+   provider matrix and its hand-rolled local ReAct loop) there is no separate local-model branch:
+   a `model` the running `AgentService` classifies local (`isLocalModel()`) runs through the same
+   CLI call as Claude, with `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at the configured
+   local agent endpoint (issue #122) via `inlineChat()`'s own env handling — `runItem()` needs no
+   routing logic of its own. `agent` has no current caller; `abortController`/`onEvent`
    are used by `batchLoopExecutor.ts` for cancellation and usage accumulation. Unused options are
    harmless no-ops, so this stays one call site.
-4. **Apply write mode** — `applyWriteMode()`: `false`/`undefined` appends the result via the
+3. **Apply write mode** — `applyWriteMode()`: `false`/`undefined` appends the result via the
    caller's `appendReport` callback; `true` replaces the target file's entire content (with an
    empty-response guard, and falling back to `appendReport` on a missing file or a write-back lock
    timeout); `'frontmatter'` merges the response (parsed as YAML) into the target file's
    frontmatter (falling back to `appendReport` the same way). No current caller sets anything but
    the default — `batchLoopExecutor.ts` always passes `undefined`, so it always takes the
    "append to report" branch.
-5. **Append report** — not part of `runItem()` itself; `appendReport` is a callback the caller
+4. **Append report** — not part of `runItem()` itself; `appendReport` is a callback the caller
    supplies, built on the shared `appendReportBlock()` primitive (below). This is deliberate:
    report *identity* (path, first-write heading) and *block formatting* are caller-specific.
 
@@ -106,11 +105,12 @@ goes to the target file/frontmatter, not the report, so without this the refusal
 again even though the main pipeline "worked". The report block is always appended in *addition* to
 whatever `applyWriteMode()` already did, not instead of it.
 
-**Local-model routing is out of scope, deliberately.** `executeWithLocalModel()` /
-`executeLocalProviderQuery()` are unchanged by this issue — offering vault tools to a local model
-with no approval handler at all (unattended-by-default) is issue #142's follow-up, referenced but
-explicitly deferred by #151's issue body. `routeAndRun()`'s `policy` parameter therefore only
-affects the Claude branch.
+**Post-#220, this policy applies uniformly.** There is no separate local-model branch left to carve
+out an exception for: `resolveToolApprovalPolicy()`'s policy is handed to the single
+`AgentService.inlineChat()` call regardless of whether `options.model` resolves to Claude or a
+local agent endpoint (issue #122) model. (Historically, issue #142's "offer vault tools to a local
+model with no approval handler" follow-up was deferred here because the pre-#220 local ReAct loop
+had its own separate, unattended-by-default tool wiring; that loop is gone.)
 
 **Telegram bot is a deliberate, separate exception**, not driven by this policy at all — see
 "Tool approval policy — deliberately not `settings.toolApproval`" under

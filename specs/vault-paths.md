@@ -72,14 +72,15 @@ export function todayString(): string
   imports (only `type {App} from 'obsidian'`), so `settings.ts → vaultPaths.ts` cannot cycle back —
   even though `settings.ts ↔ configWriter.ts` already had a pre-existing mutual import (unrelated
   to this change, and unaffected by it). All other consumers (`batchLoopExecutor.ts`,
-  `bots/telegramBot.ts`, `mcpBridge.ts`, `synapseView.ts`) were switched to import
+  `bots/telegramBot.ts`, `synapseView.ts`) were switched to import
   `SYNAPSE_FOLDER` directly from `./vaultPaths`. (The former `triggerExecutor.ts`/`triggers.ts`
   consumers no longer exist — issue #188 folded the trigger executor into `runExecutor.ts`, which
-  does not itself need `SYNAPSE_FOLDER`.)
+  does not itself need `SYNAPSE_FOLDER`. The former `mcpBridge.ts` consumer no longer exists
+  either — issue #220 removed it along with the local ReAct loop it served; the SDK reads
+  `_synapse/.mcp.json` natively.)
 - **`LocalPluginConfig` is a locally-defined structural type, not an import of `SdkPluginConfig`
   from `agentService.ts`.** Importing it would pull `vaultPaths.ts` into `agentService.ts`'s
-  dependency graph (`agentService.ts → vaultTools.ts → triggers.ts → settings.ts →
-  vaultPaths.ts`), i.e. a real cycle back to `vaultPaths.ts` if `settings.ts` also imports from it
+  dependency graph, i.e. a real cycle back to `vaultPaths.ts` if `settings.ts` also imports from it
   (which it does, per the point above). Since `LocalPluginConfig` only needs `{type: 'local'; path:
   string}` — a strict subset of `SdkPluginConfig` (which adds an optional `skipMcpDiscovery`) —
   every caller's `plugins: SdkPluginConfig[]` field accepts `getSynapsePluginConfig()`'s return
@@ -97,16 +98,15 @@ export function todayString(): string
   (inline-chat plugin discovery) both delegate to `getVaultBasePath`/`getSynapsePluginConfig`.
 - **`modals/editModal.ts`** — `plugins` field of its `inlineChat()` call uses
   `getSynapsePluginConfig`.
-- **`mcpBridge.ts`** — `SYNAPSE_FOLDER` replaces the inline `'_synapse'` literal in the
-  `.mcp.json` config-path join.
 - **`synapseView.ts`** — `SynapseView.getVaultBasePath()` (public method, called throughout
   `view/*` prototype-extension modules) delegates to `getVaultBasePath(this.app)`;
   `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill
   scan paths.
 - **`runExecutor.ts`** (from #154's extraction of the trigger and batch-loop executors, and the
   sole surviving caller since #188 removed the trigger executor) — `executeWithClaude` uses
-  `getVaultBasePath`/`getSynapsePluginConfig`; `executeWithLocalModel` (MCP bridge start) uses
-  `getVaultBasePath`; `REPORTS_FOLDER`/`todayString` in the report-append path.
+  `getVaultBasePath`/`getSynapsePluginConfig`; `REPORTS_FOLDER`/`todayString` in the report-append
+  path. (The former `executeWithLocalModel` MCP-bridge-start caller was removed by #220 along with
+  `mcpBridge.ts` itself.)
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 - **`agentService.ts`** (#194) — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
   to locate `_synapse/settings.json`, the sole caller of that function.
