@@ -82,6 +82,48 @@ For the `ollama` preset specifically:
 - The **Provider** setting description dynamically updates to show Ollama setup instructions
   when the `ollama` preset is selected.
 
+### Local agent endpoint Test button (issue #223)
+
+The **Local agent endpoint (advanced)** section (issue #122, same Claude tab, below the BYOK
+fields) has its own **Test** button on the **Endpoint URL** setting. It verifies the endpoint
+actually speaks the Anthropic Messages API — the thing that otherwise only surfaces when a
+query fails mid-conversation. The button reuses the BYOK Test interaction pattern
+(`setButtonText('Test')` → disable + `'Testing…'` → Notice → re-enable), with one deliberate
+difference: a **blank endpoint URL** shows the guiding Notice "Endpoint URL is empty — enter one
+above (default for Ollama: localhost:11434)." **before** the disable dance, performing no
+network request at all (AC-3's "check the URL first" reading of AC-3, so a blank field never
+flashes a disabled button).
+
+The probe itself is `testLocalAgentEndpoint({baseUrl, apiKey})` (`src/providerModels.ts`,
+next to `fetchProviderModels()`) — ONE Obsidian `requestUrl` POST to `<baseUrl>/v1/messages`
+with the same Anthropic-protocol headers the CLI's Messages API client sends (`x-api-key`,
+`anthropic-version: 2023-06-01`) and a minimal 1-turn user message with `max_tokens: 16`. It
+does not spawn the CLI and does not call `fetchModels()` (the SDK warm-start would validate
+Claude-auth env, not the endpoint); it is read-only aside from the single probe request — no
+`saveSettings()`, no `initAgentService()` (AC-6). Locked by
+`test/localAgentEndpoint.test.ts`.
+
+- **Base URL normalization** matches `fetchProviderModels()`'s ollama branch: trailing slashes
+  and a trailing `/v1` are stripped before appending `/v1/messages`, so a pasted
+  `http://localhost:11434/v1` probes the same path the agent path hits.
+- **Credentials (AC-5)** use `buildEnv()`'s exact rule — a blank API key falls back to the
+  literal `'ollama'` — so the probe validates the exact credentials the agent path will send.
+- **Model independence:** the probe sends a fixed well-known model id and must **not** depend
+  on it being installed. An endpoint that answers with an Anthropic error envelope
+  (`{type: 'error', error: {...}}` — e.g. a 404 "model not found") has still proven the
+  Messages API itself answered: that's `{ok: true, note}` — "Endpoint reachable — Messages API
+  answered: …" carrying the endpoint's own error type/message — not a failure.
+- **Outcome classification** (AC-4's connection-vs-shape distinction, mirroring the BYOK Test's
+  `isOllamaConnectionError`): `requestUrl` rejecting (refused connection, DNS, TLS) →
+  `{ok: false, isConnectionError: true}` with a "Could not connect to the endpoint …" message;
+  an HTTP error or 200 in a non-Anthropic shape → `{ok: false}` naming the wrong-shape
+  response; 200 + `{type: 'message'}` → `{ok: true, messageId}` → "Endpoint reachable —
+  Messages API responded."
+- **Timeout:** `requestUrl()` has no AbortSignal, so the probe is raced against a 10s
+  `window.setTimeout` (the codebase's `Promise.race` pattern) — a dead-but-accepting host
+  can't hang the button. Empirically (live Ollama v0.33.3), 200 OK arrives in well under a
+  second; the request completes with `stop_reason: 'max_tokens'` long before full generation.
+
 The `github` BYOK preset was removed as part of the Claude Agent SDK migration (see
 `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`). Only local/OpenAI-compatible
 presets remain; all use the `fetchProviderModels()` path described above.

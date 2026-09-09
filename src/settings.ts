@@ -1,7 +1,7 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, debounce, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
-import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, ProviderPreset} from "./providerModels";
+import {fetchProviderModels, clearOllamaShowCache, describeAzureBaseUrlIssue, testLocalAgentEndpoint, ProviderPreset} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
@@ -706,6 +706,42 @@ export class SynapseSettingTab extends PluginSettingTab {
 					this.plugin.settings.localAgentEndpointUrl = val.trim();
 					await this.plugin.saveSettings();
 					await this.plugin.initAgentService();
+				}))
+			.addButton(button => button
+				.setButtonText('Test')
+				.onClick(async () => {
+					// Blank-URL guard runs before the disable/'Testing…' dance (AC-3): no
+					// network request and no visual churn when there is nothing to probe.
+					if (!this.plugin.settings.localAgentEndpointUrl.trim()) {
+						new Notice('Endpoint URL is empty — enter one above (default for Ollama: localhost:11434).');
+						return;
+					}
+					button.setDisabled(true);
+					button.setButtonText('Testing…');
+					try {
+						const res = await testLocalAgentEndpoint({
+							baseUrl: this.plugin.settings.localAgentEndpointUrl,
+							apiKey: this.plugin.settings.localAgentEndpointApiKey,
+						});
+						if (res.ok) {
+							if (res.messageId !== undefined) {
+								new Notice('Endpoint reachable — Messages API responded.');
+							} else {
+								// The Messages API answered with an Anthropic-shaped error
+								// (e.g. probe model not installed on that endpoint) — the
+								// endpoint itself is proven reachable and API-shaped.
+								new Notice(`Endpoint reachable — Messages API answered${res.note ? `: ${res.note}` : '.'}`);
+							}
+						} else {
+							// Connection-vs-shape distinction is baked into `error` itself
+							// (`isConnectionError`'s message names the unreachable-endpoint
+							// fix; the wrong-shape messages name the response shape).
+							new Notice(`Test failed: ${res.error}`);
+						}
+					} finally {
+						button.setDisabled(false);
+						button.setButtonText('Test');
+					}
 				}));
 
 		new Setting(panel)

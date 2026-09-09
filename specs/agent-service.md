@@ -713,6 +713,11 @@ then, the two mechanisms coexist, selected per query by whether the endpoint is 
 - **Model discovery is unchanged.** This issue only changes how an already-selected local model's
   *query* executes; the BYOK provider preset's catalogue fetch (`fetchProviderModels()`,
   `setCustomModels()`) still backs the model picker exactly as before.
+- **Settings-side verification (issue #223).** The settings section includes a **Test** button
+  that probes `<baseUrl>/v1/messages` directly with `testLocalAgentEndpoint()`
+  (`providerModels.ts`) — no CLI spawn — so an endpoint that doesn't speak the Messages API is
+  caught at configuration time; see [settings.md](settings.md) "Local agent endpoint Test
+  button (issue #223)".
 - **Security note (settings UI copy, per the repo's network-access convention).** A user-supplied
   endpoint URL redirects the *entire* agent loop for that query, including tool calls, to whatever
   is listening there — the settings UI explicitly says so and recommends only pointing it at a
