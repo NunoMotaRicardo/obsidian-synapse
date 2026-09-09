@@ -106,12 +106,6 @@ endpoint**. The two removed secrets (`providerApiKey`/`providerBearerToken`) are
 `SECURE_FIELDS`; stale localStorage values for them are harmless (nothing reads that prefix
 anymore).
 
-### Model name field
-
-**Model name** (`inlineModel`) remains a free-text `<input>` — it must keep working before the
-user has ever configured a local agent endpoint. There is no datalist tied to it; the toolbar's
-model `<select>` (populated by `fetchEndpointModels()`, above) is the primary model-picking UI.
-
 ## Invariants
 
 - Secrets (tokens, password inputs) never land in `data.json`.
@@ -147,6 +141,12 @@ model `<select>` (populated by `fetchEndpointModels()`, above) is the primary mo
   disappears from `data.json` on the vault's next save rather than needing an explicit strip
   step). No `_synapse/triggers/*.md` files are touched by this removal — see
   [config-writer.md](config-writer.md) for that vault-content invariant.
+- `inlineModel` was removed from `SynapseSettings` and `DEFAULT_SETTINGS` (and its UI Setting box
+  "Model name" removed from the Claude settings tab) — it was never consulted by any agent loop,
+  inline operation, or chat session (the chat toolbar model picker and endpoint catalogue handle
+  model selection). Old `data.json` files carrying `inlineModel` still load without error via the
+  same `Object.assign` merge as the other legacy keys. Locked by `test/settings.test.ts`'s
+  `legacy settings key tolerance` suite.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
 - All local agent endpoint HTTP calls (the Test button, `main.ts#initAgentService()`'s discovery

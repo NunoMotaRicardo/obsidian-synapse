@@ -31,6 +31,8 @@ describe('legacy settings key tolerance', () => {
 		synapseFolder: '_some_custom_folder',
 		// Removed with the trigger system (#188), still present in old data.json files:
 		triggerLastFired: {'daily-lint': 1735689600000},
+		// Removed dead setting (Model name box / inlineModel):
+		inlineModel: 'qwen3:8b',
 	};
 
 	it('merging legacy raw data over DEFAULT_SETTINGS does not throw', () => {
@@ -54,6 +56,7 @@ describe('legacy settings key tolerance', () => {
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'reasoningSummary')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'synapseFolder')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'triggerLastFired')).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'inlineModel')).toBe(false);
 	});
 
 	it('stale legacy keys survive the merge as harmless untyped properties (not stripped, not erroring)', () => {
@@ -62,5 +65,6 @@ describe('legacy settings key tolerance', () => {
 		expect(merged.reasoningSummary).toBe('detailed');
 		expect(merged.synapseFolder).toBe('_some_custom_folder');
 		expect(merged.triggerLastFired).toEqual({'daily-lint': 1735689600000});
+		expect(merged.inlineModel).toBe('qwen3:8b');
 	});
 });

@@ -45,8 +45,6 @@ export interface SynapseSettings {
 	 */
 	localAgentEndpointApiKey: string;
 	toolApproval: 'ask' | 'allow';
-	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
-	inlineModel: string;
 	/** Feature to Agent mapping for plugin features. */
 	featureAgents: FeatureAgentMap;
 
@@ -146,7 +144,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	localAgentEndpointUrl: '',
 	localAgentEndpointApiKey: '',
 	toolApproval: 'ask',
-	inlineModel: '',
 	featureAgents: {
 		chat: '',
 		inline: '',
@@ -482,18 +479,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 			}
 		};
 		void renderCliStatus();
-
-		// ── Local models (#220 — provider matrix removed; endpoint is the only local route) ──
-		new Setting(panel)
-			.setName('Model name')
-			.setDesc('Model ID for inline editor operations and other non-chat features. Leave blank to use the CLI default.')
-			.addText(text => {
-				text.setValue(this.plugin.settings.inlineModel)
-					.onChange(async (val) => {
-						this.plugin.settings.inlineModel = val.trim();
-						await this.plugin.saveSettings();
-					});
-			});
 
 		// ── Local agent endpoint (issue #122) ─────────────
 		const localAgentEndpointPlaceholder = 'http://localhost:11434';

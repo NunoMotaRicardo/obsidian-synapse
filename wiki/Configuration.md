@@ -8,7 +8,6 @@
 |---------|---------|-------------|
 | **Endpoint URL** | *(empty)* | Base URL of a Messages-API-speaking endpoint, e.g. `http://localhost:11434` for Ollama v0.14.0+. Blank = only Claude models are available |
 | **Endpoint API key** | *(empty)* | API key sent to the endpoint. Ollama ignores the value but requires the header — leave blank to send `ollama` automatically |
-| **Model name** | *(empty)* | Model ID used for inline editor operations (e.g. `claude-sonnet-5`, `llama3`) — leave blank for the CLI default |
 
 ### Local agent endpoint
 
