@@ -179,54 +179,79 @@ describe('parseTaskUpdateInput', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AgentService#isLocalModel — issue #118. A local provider's `/v1/models`
-// catalogue (setCustomModels()) can contain ids that collide with, or merely
-// resemble, genuine Claude model ids (an SDK-known id, or any `claude-*`-shaped
-// id — real SDK ids are always `claude-*`, so that prefix guard is what actually
-// protects a Claude id even before a `fetchModels()` call has populated the
-// SDK model list). Those must never be classified "local" regardless of what a
-// provider catalogue happens to contain, or the plugin silently drops Claude
-// models into the degraded local one-shot loop (no skills, subagents,
-// sessions, permissions or streaming).
+// AgentService#isLocalModel — issue #118, post-#220 semantics. A local agent
+// endpoint's `/v1/models` catalogue (setCustomModels()) can contain ids that
+// collide with, or merely resemble, genuine Claude model ids (an SDK-known id,
+// or any `claude-*`-shaped id — real SDK ids are always `claude-*`, so that
+// prefix guard is what actually protects a Claude id even before a
+// `fetchModels()` call has populated the SDK model list). Those must never be
+// classified "local" regardless of what an endpoint catalogue happens to
+// contain, or the plugin silently repoints Claude-model queries at the local
+// endpoint's credentials. Post-#220 there is no local ReAct loop: true means
+// "route through the Agent SDK with ANTHROPIC_BASE_URL repointed at the
+// endpoint" (issue #122).
 // ---------------------------------------------------------------------------
 
 describe('AgentService#isLocalModel', () => {
-	function makeLocalBackedService(): AgentService {
+	function makeEndpointBackedService(): AgentService {
 		return new AgentService({
-			providerConfig: {preset: 'openai', baseUrl: 'http://localhost:1234/v1'},
+			localAgentEndpoint: {baseUrl: 'http://localhost:11434'},
 		});
 	}
 
-	it('returns undefined/false for an undefined model id', () => {
-		const service = makeLocalBackedService();
+	it('returns false for an undefined model id', () => {
+		const service = makeEndpointBackedService();
 		expect(service.isLocalModel(undefined)).toBe(false);
 	});
 
 	it('never classifies a claude-* (SDK-shaped) model id as local, even if it also appears in customModels', () => {
-		const service = makeLocalBackedService();
-		// Simulates a provider catalogue that happens to echo a real Claude id
-		// (e.g. the removed `anthropic` preset's /v1/models response).
+		const service = makeEndpointBackedService();
+		// Simulates an endpoint catalogue that happens to echo a real Claude id.
 		service.setCustomModels([{id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5'}]);
 		expect(service.isLocalModel('claude-sonnet-4-5-20250929')).toBe(false);
 	});
 
+	it('never classifies an SDK-known model id as local, even if it also appears in customModels', () => {
+		const service = makeEndpointBackedService();
+		// Simulate a populated `sdkModels` list (as `fetchModels()` would after connecting) so
+		// the SDK-known check has something to match against — 'sonnet' is only SDK-known once
+		// the CLI has actually reported it; it's not a hardcoded alias (SDK model ids/aliases
+		// are dynamic and CLI-reported, see mapSdkModel's doc comment).
+		(service as unknown as {sdkModels: {id: string; name: string}[]}).sdkModels = [{id: 'sonnet', name: 'Claude Sonnet'}];
+		// The SDK-known check runs before customModels membership, so a catalogue echoing an
+		// SDK alias id ('sonnet') can't steal it away from Claude auth.
+		service.setCustomModels([{id: 'sonnet', name: 'Some endpoint model'}]);
+		expect(service.isLocalModel('sonnet')).toBe(false);
+	});
+
 	it('classifies a genuine custom/local model id as local', () => {
-		const service = makeLocalBackedService();
+		const service = makeEndpointBackedService();
 		service.setCustomModels([{id: 'llama3.1:8b', name: 'Llama 3.1 8B'}]);
 		expect(service.isLocalModel('llama3.1:8b')).toBe(true);
 	});
 
 	it('classifies an aggregator-style id (e.g. anthropic/claude-sonnet-4) as local', () => {
-		const service = makeLocalBackedService();
+		const service = makeEndpointBackedService();
 		// OpenRouter-style ids are namespaced (`anthropic/claude-sonnet-4`), so they don't
 		// match the /^claude-/i guard and are treated as a distinct local/custom model.
 		service.setCustomModels([{id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4 (via OpenRouter)'}]);
 		expect(service.isLocalModel('anthropic/claude-sonnet-4')).toBe(true);
 	});
 
-	it('does not classify a claude-* id as local when no local backend is configured', () => {
+	it('falls back to true for an unknown id when the endpoint is configured (the CLI surfaces a bad id as a query error)', () => {
+		const service = makeEndpointBackedService();
+		expect(service.isLocalModel('qwen3:8b')).toBe(true);
+	});
+
+	it('falls back to false for an unknown id when no endpoint is configured (nothing local exists to serve it)', () => {
 		const service = new AgentService();
+		expect(service.isLocalModel('qwen3:8b')).toBe(false);
 		expect(service.isLocalModel('claude-sonnet-4-5-20250929')).toBe(false);
+	});
+
+	it('falls back to false for an unknown id when the endpoint is configured with a blank base URL', () => {
+		const service = new AgentService({localAgentEndpoint: {baseUrl: '  '}});
+		expect(service.isLocalModel('qwen3:8b')).toBe(false);
 	});
 });
 

@@ -1,11 +1,11 @@
 /**
  * Run pipeline for "run a prompt against a file, then persist the result":
- * substitute template variables, route Claude vs. a local model, run, apply
- * a write mode, append a report entry. `batchLoopExecutor.ts` is its one
- * caller and is a thin one — it supplies what's caller-specific: which
- * file(s) to run over, where the prompt body comes from, how a report block
- * is formatted, and budget/cancellation/progress orchestration across many
- * items. Everything else lives here.
+ * substitute template variables, run via the Agent SDK, apply a write mode,
+ * append a report entry. `batchLoopExecutor.ts` is its one caller and is a
+ * thin one — it supplies what's caller-specific: which file(s) to run over,
+ * where the prompt body comes from, how a report block is formatted, and
+ * budget/cancellation/progress orchestration across many items. Everything
+ * else lives here.
  *
  * This module originally also served the trigger executor
  * (`triggerExecutor.ts`, extracted alongside the batch loop executor in
@@ -14,6 +14,13 @@
  * two callers (a `surface` union, a per-item tool-approval override, a
  * `{{files}}` template alias — see `specs/run-executor.md`'s "Current
  * status" for the full history).
+ *
+ * Local models run through the same `AgentService.inlineChat()` branch as
+ * Claude since the OpenAI-compatible provider matrix and its hand-rolled
+ * local ReAct loop were removed (#220): the service repoints the CLI's
+ * Messages API client at the configured local agent endpoint (issue #122)
+ * and preserves the local model id, so there is no separate execution
+ * branch here anymore.
  *
  * `runItem()` deliberately does not catch execution errors: `batchLoopExecutor.ts`
  * must distinguish a genuine per-file failure from a mid-flight cancellation
@@ -25,7 +32,7 @@
  * abstraction layer on top of it.
  *
  * Unattended tool-approval policy (issue #151): this is also the place that maps
- * `settings.toolApproval` to what the Claude branch (`executeWithClaude()`) hands the SDK. See
+ * `settings.toolApproval` to what the run hands the SDK. See
  * `resolveToolApprovalPolicy()` and the "Tool approval policy" section of
  * `specs/run-executor.md`.
  */
@@ -35,9 +42,6 @@ import type SynapsePlugin from './main';
 import type {SDKMessage, PermissionHandler, PermissionResult} from './agentService';
 import {getVaultBasePath, getSynapsePluginConfig, REPORTS_FOLDER} from './vaultPaths';
 import {parseFrontmatter, modifyArtifact, ensureFolder} from './configWriter';
-import {executeLocalProviderQuery} from './providerModels';
-import {vaultTools} from './vaultTools';
-import {McpBridgeSession} from './mcpBridge';
 import {lockManager, LockAcquisitionError} from './lockManager';
 
 // ---------------------------------------------------------------------------
@@ -166,83 +170,10 @@ function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
 }
 
 // ---------------------------------------------------------------------------
-// Model execution — route Claude vs. local model
+// Model execution
 // ---------------------------------------------------------------------------
 
-/**
- * Execute the prompt via the configured local provider backend.
- * Reads the target file's content and prepends it to the prompt
- * so the model has context about the file.
- *
- * No current caller passes a `model`, so `runItem()` never selects this
- * branch today (local-model routing for batch loops was out of scope for
- * #73 and remains so; see `specs/run-executor.md`).
- */
-async function executeWithLocalModel(
-	plugin: SynapsePlugin,
-	prompt: string,
-	filePath: string,
-	modelId?: string,
-): Promise<string> {
-	const providerConfig = plugin.agentService?.getProviderConfig();
-	if (!providerConfig) {
-		throw new Error('Local provider config is not available.');
-	}
-
-	// Only equip the model with vault tools if it's known to support tool calling.
-	// Models with no capability info (not found / undetermined) default to allowed,
-	// since most OpenAI-compatible backends don't expose a capability list at all.
-	const modelInfo = modelId ? plugin.agentService?.getModels().find(m => m.id === modelId) : undefined;
-	const supportsTools = modelInfo?.supportsTools !== false;
-
-	// Read file content (best-effort: skip if file doesn't exist, e.g. delete events)
-	let fileContent = '';
-	try {
-		const file = plugin.app.vault.getAbstractFileByPath(filePath);
-		if (file instanceof TFile) {
-			fileContent = await plugin.app.vault.read(file);
-		}
-	} catch {
-		// File may not exist (e.g. delete events) — proceed without content
-	}
-
-	const fullPrompt = fileContent
-		? `File: ${filePath}\n\n${fileContent}\n\n---\n\n${prompt}`
-		: prompt;
-
-	// Start MCP bridge session — spawn servers from _synapse/.mcp.json and collect
-	// their tools to merge alongside built-in vault tools.
-	const vaultBasePath = getVaultBasePath(plugin.app);
-	const mcpSession = new McpBridgeSession();
-	let mcpTools: import('./providerModels').LocalTool[] = [];
-	if (supportsTools) {
-		try {
-			mcpTools = await mcpSession.start(vaultBasePath);
-		} catch (e) {
-			console.warn('[synapse] MCP bridge start failed (continuing without MCP tools):', e);
-		}
-	}
-
-	try {
-		const allTools = supportsTools ? [...vaultTools, ...mcpTools] : [];
-		const res = await executeLocalProviderQuery(providerConfig, {
-			prompt: fullPrompt,
-			...(allTools.length > 0 ? {tools: allTools, app: plugin.app} : {}),
-		});
-		if (!res.ok) {
-			throw new Error(res.error);
-		}
-		const content = res.content ?? '';
-		return res.truncated
-			? `${content}\n\n_(Synapse: tool-calling loop reached the turn limit before the model finished.)_`
-			: content;
-	} finally {
-		// Always shut down MCP servers after the query completes (success or error)
-		await mcpSession.stop();
-	}
-}
-
-/** Result of routing+running one item's prompt: the model's text plus any tool denials to report. */
+/** Result of running one item's prompt: the model's text plus any tool denials to report. */
 interface RunResult {
 	content: string;
 	refusals: ToolRefusal[];
@@ -254,6 +185,11 @@ interface RunResult {
  * `agent` has no current caller; `abortController`/`onEvent` are used by
  * `batchLoopExecutor.ts` for cancellation and usage accumulation. Unused
  * options are harmless no-ops here.
+ *
+ * A `model` classified local by `AgentService.isLocalModel()` needs no
+ * special handling here: `inlineChat()` routes it through the same CLI with
+ * the local agent endpoint repointed (issue #122), so this one branch serves
+ * every model since the local ReAct loop's removal (#220).
  *
  * `policy` (issue #151) decides what the run is handed: `'allow'` maps to
  * `bypassPermissions` (+ `allowDangerouslySkipPermissions`, matching the
@@ -299,31 +235,19 @@ async function executeWithClaude(
 }
 
 /**
- * Route to a local model if `model` names one known to the running
- * `AgentService`, otherwise route to Claude. Mirrors the routing decision
- * `AgentService.inlineChat()` itself makes for chat-view queries.
- *
- * `policy` only affects the Claude branch — local-model routing's tool-
- * approval gap (issue #142's follow-up, referenced by #151) is deliberately
- * out of scope here; see the module doc comment.
+ * Run one item's prompt through `executeWithClaude()` — the single execution
+ * branch left since the OpenAI-compatible provider matrix and its local ReAct
+ * loop were removed (#220). A local-model id is handled inside
+ * `AgentService.inlineChat()` (the local agent endpoint repoint, issue #122),
+ * not by a separate branch here.
  */
 async function routeAndRun(
 	plugin: SynapsePlugin,
 	prompt: string,
-	filePath: string,
-	policy: ToolApprovalPolicy,
+	_policy: ToolApprovalPolicy,
 	options: {model?: string; agent?: string; abortController?: AbortController; onEvent?: (msg: SDKMessage) => void} = {},
 ): Promise<RunResult> {
-	const useLocalModel =
-		options.model !== undefined &&
-		options.model !== '' &&
-		plugin.agentService?.isLocalModel(options.model) === true;
-
-	if (useLocalModel) {
-		const content = await executeWithLocalModel(plugin, prompt, filePath, options.model);
-		return {content, refusals: []};
-	}
-	return executeWithClaude(plugin, prompt, policy, options);
+	return executeWithClaude(plugin, prompt, _policy, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +402,7 @@ export async function runItem(options: RunItemOptions): Promise<void> {
 	const prompt = substituteTemplates(options.body, options.filePath);
 	const policy = resolveToolApprovalPolicy(options.plugin);
 
-	const {content: result, refusals} = await routeAndRun(options.plugin, prompt, options.filePath, policy, {
+	const {content: result, refusals} = await routeAndRun(options.plugin, prompt, policy, {
 		model: options.model,
 		agent: options.agent,
 		abortController: options.abortController,
