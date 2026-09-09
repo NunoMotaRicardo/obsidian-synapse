@@ -197,6 +197,11 @@ Under **Settings → Synapse → Claude → Local agent endpoint (advanced)**, s
 - **Endpoint API key** — optional; Ollama requires the header but ignores its value, so leave this
   blank to send `ollama` automatically.
 
+The section's **Test** button verifies the endpoint end to end: it sends one minimal
+`/v1/messages` request with the same credentials the agent path uses and reports whether the
+endpoint answered in Messages API shape — so a typo'd URL or a non-Messages-API server is caught
+at configuration time, not mid-conversation.
+
 A configured endpoint redirects the *entire* agent loop for a local-model query — including tool
 calls — to that address, so only point it at an endpoint you trust with your conversation and tool
 data (loopback Ollama by default; treat a remote/proxied endpoint the same as any other network
