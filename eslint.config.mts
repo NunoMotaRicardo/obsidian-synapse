@@ -19,6 +19,10 @@ const ALLOWED_UPPERCASE = new Set([
 	// phrases that motivated them (they'd now pass capitalized anywhere in any UI
 	// string), but that's this checker's only mechanism — not an oversight.
 	'OpenRouter', 'Studio', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry', 'Local',
+	// "Anthropic Messages API" (issue #122) — same per-word allow-listing convention as the
+	// "LM Studio" / "Foundry Local" comment above; 'Anthropic' and 'Messages' are proper-noun
+	// components of that product term, not generic words.
+	'Anthropic', 'Messages',
 ]);
 
 /**

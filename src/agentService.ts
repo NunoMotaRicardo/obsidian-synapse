@@ -330,6 +330,24 @@ export interface AuthConfig {
 	apiKey?: string;
 }
 
+/**
+ * A user-configured local agent endpoint (issue #122) — a Messages-API-speaking backend
+ * (Ollama v0.14.0+ natively, or another compatible endpoint) that the CLI is repointed at via
+ * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` for local-model queries, instead of routing them
+ * through the separate `executeLocalProviderQuery()` ReAct loop. Independent of `AuthConfig` —
+ * this only ever overrides the env for queries `isLocalModel()` already classifies as local; it
+ * never affects Claude-model queries.
+ */
+export interface LocalAgentEndpointConfig {
+	/** Base URL of the Messages-API-speaking endpoint, e.g. `http://localhost:11434`. */
+	baseUrl: string;
+	/**
+	 * API key sent as `ANTHROPIC_API_KEY`. Ollama requires the header to be present but ignores
+	 * its value, so an empty/unset key falls back to the literal `'ollama'` per Ollama's own docs.
+	 */
+	apiKey?: string;
+}
+
 export type VersionInfoCallback = (info: {version: string; path: string}) => void;
 
 /**
@@ -504,6 +522,7 @@ export class AgentService {
 	private state: ConnectionState = 'disconnected';
 	private readonly auth: AuthConfig;
 	private readonly providerConfig?: import('./providerModels').ProviderConfigOptions;
+	private readonly localAgentEndpoint?: LocalAgentEndpointConfig;
 	private readonly claudeLocation?: string;
 	private readonly onConnectionError: ((error: Error) => void) | undefined;
 	private readonly onVersionInfo?: VersionInfoCallback;
@@ -531,35 +550,56 @@ export class AgentService {
 	constructor(opts?: {
 		auth?: AuthConfig;
 		providerConfig?: import('./providerModels').ProviderConfigOptions;
+		localAgentEndpoint?: LocalAgentEndpointConfig;
 		claudeLocation?: string;
 		onConnectionError?: (error: Error) => void;
 		onVersionInfo?: VersionInfoCallback;
 	}) {
 		this.auth = opts?.auth ?? {type: 'subscription'};
 		this.providerConfig = opts?.providerConfig;
+		this.localAgentEndpoint = opts?.localAgentEndpoint;
 		this.claudeLocation = opts?.claudeLocation;
 		this.onConnectionError = opts?.onConnectionError;
 		this.onVersionInfo = opts?.onVersionInfo;
 	}
 
 	/**
-	 * Build the env block for query() calls.
-	 * For API key auth, sets ANTHROPIC_API_KEY in the environment.
-	 * For subscription auth, inherits process env (CLI handles OAuth).
-	 *
-	 * Does NOT point ANTHROPIC_BASE_URL at a local/OpenAI-compatible provider — the Claude
-	 * CLI only speaks the Anthropic Messages API, not the OpenAI-shaped `/v1` surface that
-	 * Ollama and other local backends expose. Local models run through the separate
-	 * `executeLocalProviderQuery` ReAct loop in providerModels.ts instead. Routing a local
-	 * model through the real Agent SDK requires a Messages-API-speaking gateway in front of
-	 * it (see .docs/research/2026-09-03-provider-matrix.md §6) — a distinct, not-yet-built
-	 * feature, not something this method should approximate.
+	 * Whether a local agent endpoint (issue #122) is configured, i.e. a non-empty base URL was
+	 * supplied. When true, `isLocalModel()` queries route through the real Agent SDK/CLI with
+	 * `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at it, instead of
+	 * `executeLocalProviderQuery()`'s ReAct loop — see `buildEnv()` and each local-model branch
+	 * (`chat()`, `inlineChat()`, `Session.send()`).
 	 */
-	private buildEnv(): Record<string, string | undefined> | undefined {
+	isLocalAgentEndpointConfigured(): boolean {
+		return !!this.localAgentEndpoint?.baseUrl?.trim();
+	}
+
+	/**
+	 * Build the env block for query() calls.
+	 *
+	 * - When `modelId` is classified local (`isLocalModel()`) AND a local agent endpoint (issue
+	 *   #122) is configured, `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` are repointed at that
+	 *   endpoint for this call only — additive to, not a replacement of, the branches below. This
+	 *   is a per-call decision, not a global one: a Claude-model query in the same session is
+	 *   unaffected.
+	 * - Otherwise, for API key auth, sets ANTHROPIC_API_KEY from `auth.apiKey`.
+	 * - For subscription auth (and no local override), inherits process env (CLI handles OAuth).
+	 *
+	 * Without a configured local agent endpoint, local models still never flow through the CLI
+	 * subprocess — they run through the separate `executeLocalProviderQuery` ReAct loop in
+	 * providerModels.ts (see each local-model branch's own routing condition, which checks
+	 * `isLocalAgentEndpointConfigured()` before falling back to that loop).
+	 */
+	private buildEnv(modelId?: string): Record<string, string | undefined> | undefined {
 		const env: Record<string, string | undefined> = {
 			...cleanEnv(),
 			CLAUDE_AGENT_SDK_CLIENT_APP: 'obsidian-synapse/1.0.0',
 		};
+		if (modelId && this.isLocalModel(modelId) && this.localAgentEndpoint?.baseUrl?.trim()) {
+			env['ANTHROPIC_BASE_URL'] = this.localAgentEndpoint.baseUrl.trim();
+			env['ANTHROPIC_API_KEY'] = this.localAgentEndpoint.apiKey?.trim() || 'ollama';
+			return env;
+		}
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
 			env['ANTHROPIC_API_KEY'] = this.auth.apiKey;
 		}
@@ -874,7 +914,7 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
-				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
+				if (options.model && this.isLocalModel(options.model) && this.providerConfig && !this.isLocalAgentEndpointConfigured()) {
 					const res = await executeLocalProviderQuery(this.providerConfig, {
 						prompt: options.prompt,
 						systemPrompt: options.systemMessage,
@@ -897,7 +937,7 @@ export class AgentService {
 						maxTurns: options.maxTurns ?? 1,
 						permissionMode: options.permissionMode ?? 'plan',
 						tools: options.tools ?? [],
-						env: this.buildEnv(),
+						env: this.buildEnv(options.model),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						abortController: controller,
 					}, options.app),
@@ -960,7 +1000,7 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
-				if (options.model && this.isLocalModel(options.model) && this.providerConfig) {
+				if (options.model && this.isLocalModel(options.model) && this.providerConfig && !this.isLocalAgentEndpointConfigured()) {
 					const sysPrompt = options.systemMessage ?? (typeof options.systemPrompt === 'string' ? options.systemPrompt : undefined);
 
 					// Vault tools for inlineChat's local-model branch (#150) — same
@@ -1018,7 +1058,7 @@ export class AgentService {
 						permissionMode: options.permissionMode ?? 'default',
 						...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
 						tools: options.tools,
-						env: this.buildEnv(),
+						env: this.buildEnv(options.model),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
 						...(options.effort ? {effort: options.effort} : {}),
@@ -1092,7 +1132,7 @@ export class AgentService {
 			options: this.routeQueryOptions({
 				...options.queryOptions,
 				env: {
-					...this.buildEnv(),
+					...this.buildEnv(options.queryOptions.model),
 					...options.queryOptions.env,
 				},
 				pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
@@ -1168,7 +1208,17 @@ export class AgentService {
 			opts.settingSources = ['user', 'project'];
 		}
 		if (opts.model) {
-			opts.model = this.isLocalModel(opts.model) ? undefined : this.resolveValidModel(opts.model);
+			if (this.isLocalModel(opts.model)) {
+				// Preserve the local model id when routing it through the local agent endpoint
+				// (issue #122) so it reaches the endpoint (e.g. Ollama) via ANTHROPIC_BASE_URL as
+				// the requested model. Without the endpoint configured, this branch is only
+				// reached at all when `providerConfig` is missing (the local-loop branches above
+				// short-circuit before `routeQueryOptions()` otherwise) — there is no Claude model
+				// this id could resolve to, so the CLI is left to pick its own default.
+				opts.model = this.isLocalAgentEndpointConfigured() ? opts.model : undefined;
+			} else {
+				opts.model = this.resolveValidModel(opts.model);
+			}
 		}
 		if (this.isLocalBackendAvailable()) {
 			const delegationServer = this.getDelegationMcpServer();
@@ -1737,7 +1787,7 @@ export class Session {
 					...(mergedAdditionalDirectories.length > 0 ? {additionalDirectories: mergedAdditionalDirectories} : {}),
 				};
 
-				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig()) {
+				if (queryOpts.model && this.service.isLocalModel(queryOpts.model) && this.service.getProviderConfig() && !this.service.isLocalAgentEndpointConfigured()) {
 					this.dispatch('assistant.turn_start', {});
 					const sysPrompt = typeof queryOpts.systemPrompt === 'string' ? queryOpts.systemPrompt : undefined;
 

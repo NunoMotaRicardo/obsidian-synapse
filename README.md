@@ -184,6 +184,24 @@ any endpoint exposing `/v1/chat/completions` — which covers most of the table 
 | Azure OpenAI | Azure OpenAI | `https://<res>.openai.azure.com/openai` | v1 API only; classic deployment URLs unsupported |
 | Anthropic | — | — | Use **Settings → Claude → API key**, not this section |
 
+### Running local models through the full Claude Agent SDK
+
+By default, local models run through a simplified loop with no skills, subagents, sessions,
+permission modes, or streaming. Ollama v0.14.0+ speaks the same Anthropic Messages API the Claude
+CLI itself uses, so pointing Synapse at it gets a local model the *full* agent experience instead.
+
+Under **Settings → Synapse → Claude → Local agent endpoint (advanced)**, set:
+
+- **Endpoint URL** — `http://localhost:11434` for a local Ollama v0.14.0+, or any other endpoint
+  that speaks the Anthropic Messages API. Leave blank (default) to keep the simplified local loop.
+- **Endpoint API key** — optional; Ollama requires the header but ignores its value, so leave this
+  blank to send `ollama` automatically.
+
+A configured endpoint redirects the *entire* agent loop for a local-model query — including tool
+calls — to that address, so only point it at an endpoint you trust with your conversation and tool
+data (loopback Ollama by default; treat a remote/proxied endpoint the same as any other network
+destination you'd send vault content to).
+
 ---
 
 ## Skills
