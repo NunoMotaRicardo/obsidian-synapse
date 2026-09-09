@@ -37,6 +37,22 @@ export interface SynapseSettings {
 	providerApiKey: string;
 	/** Provider bearer token (stored securely via local storage). */
 	providerBearerToken: string;
+	/**
+	 * Local agent endpoint base URL (issue #122) — a Messages-API-speaking backend (Ollama
+	 * v0.14.0+ natively, or another compatible endpoint). When set, local-model chat/inline/search
+	 * queries route through the real Agent SDK/CLI (`ANTHROPIC_BASE_URL` repointed at this URL)
+	 * instead of the separate `executeLocalProviderQuery()` ReAct loop, gaining skills, subagents,
+	 * sessions, permission modes, and streaming. Empty (default) = existing local-loop behavior,
+	 * unchanged. Independent of the BYOK provider preset above (used for model discovery/catalogue
+	 * only) and of `authType` (used for Claude models only).
+	 */
+	localAgentEndpointUrl: string;
+	/**
+	 * API key sent as `ANTHROPIC_API_KEY` to the local agent endpoint (stored securely via local
+	 * storage). Ollama requires the header to be present but ignores its value — leave blank to
+	 * send the literal `'ollama'` automatically.
+	 */
+	localAgentEndpointApiKey: string;
 	toolApproval: 'ask' | 'allow';
 	/** Model ID used for inline editor operations (context menu). Empty = SDK default. */
 	inlineModel: string;
@@ -140,6 +156,8 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	providerBaseUrl: 'http://localhost:11434',
 	providerApiKey: '',
 	providerBearerToken: '',
+	localAgentEndpointUrl: '',
+	localAgentEndpointApiKey: '',
 	toolApproval: 'ask',
 	inlineModel: '',
 	featureAgents: {
@@ -168,7 +186,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 }
 
 /** Fields stored in vault-specific local storage instead of data.json. */
-export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken', 'providerApiKey', 'providerBearerToken'];
+export const SECURE_FIELDS: ReadonlyArray<keyof SynapseSettings> = ['anthropicApiKey', 'telegramBotToken', 'providerApiKey', 'providerBearerToken', 'localAgentEndpointApiKey'];
 
 const SECURE_PREFIX = 'synapse-secure-';
 
@@ -667,6 +685,41 @@ export class SynapseSettingTab extends PluginSettingTab {
 		};
 
 		renderProviderFields();
+
+		// ── Local agent endpoint (advanced, issue #122) ─────────────
+		const localAgentEndpointPlaceholder = 'http://localhost:11434';
+		new Setting(panel)
+			.setName('Local agent endpoint (advanced)')
+			.setHeading();
+		panel.createEl('p', {
+			text: 'Point this at Ollama (default localhost:11434, v0.14.0+) or another endpoint that speaks the Anthropic Messages API. When set, chat, inline, and search queries against a local model run through the same Claude Agent SDK as Claude sessions — full streaming, tool use, skills, and permission modes — instead of the simplified local loop above. A user-supplied URL redirects the entire agent loop, including tool calls, to that endpoint: only point this at an endpoint you trust with your conversation and tool-call data. Leave blank to keep using the simplified local loop.',
+			cls: 'setting-item-description',
+		});
+
+		new Setting(panel)
+			.setName('Endpoint URL')
+			.setDesc('Base URL of an endpoint that speaks the Anthropic Messages API. Blank = local models use the simplified local loop (local & custom providers above).')
+			.addText(text => text
+				.setPlaceholder(localAgentEndpointPlaceholder)
+				.setValue(this.plugin.settings.localAgentEndpointUrl)
+				.onChange(async (val) => {
+					this.plugin.settings.localAgentEndpointUrl = val.trim();
+					await this.plugin.saveSettings();
+					await this.plugin.initAgentService();
+				}));
+
+		new Setting(panel)
+			.setName('Endpoint API key')
+			.setDesc("API key header sent to the endpoint. Ollama requires the header but ignores its value — leave blank to send 'Ollama' automatically. Stored securely.")
+			.addText(text => {
+				text.inputEl.type = 'password';
+				text.inputEl.autocomplete = 'off';
+				text.setValue(this.plugin.settings.localAgentEndpointApiKey)
+					.onChange(async (val) => {
+						updateSecureField(this.app, this.plugin, 'localAgentEndpointApiKey', val.trim());
+						await this.plugin.initAgentService();
+					});
+			});
 	}
 
 	/** Render the Feature Map & Agents tab. */

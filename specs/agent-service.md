@@ -263,8 +263,13 @@ an in-process MCP server (`delegation`), implemented with `createSdkMcpServer()`
   configured or unavailable, the delegation server is omitted from query options.
 - **Tools exposed:** `cheap_generate` (single prompts/sub-tasks) and `bulk_summarize`
   (multi-item summaries processed in parallel via `Promise.allSettled`).
-- **Routing:** The in-process tool handler executes sub-tasks via `executeLocalProviderQuery()`
-  from `providerModels.ts`, keeping routing, formatting, and cost under plugin control.
+- **Routing:** When a local agent endpoint (issue #122, see "Local agent endpoint" above) is
+  configured, the tool handler resolves the provider's default model
+  (`resolveDefaultModel()`, exported from `providerModels.ts`) and delegates via `chat()` — the
+  same real-Agent-SDK path a direct local-model chat query takes — instead of
+  `executeLocalProviderQuery()`. Without the endpoint configured, it still executes sub-tasks via
+  `executeLocalProviderQuery()` unchanged, keeping routing, formatting, and cost under plugin
+  control.
 - **Caching:** The resolved default model ID is cached per base URL. The delegation server
   instance is cached but invalidated when `isLocalBackendConfigured()` returns false.
   Call `clearDelegationCache()` when provider config changes.
@@ -641,12 +646,15 @@ turn:
 
 ## BYOK local provider routing
 
-Local/BYOK models (Ollama, or another OpenAI-compatible endpoint) never flow through the Claude
-CLI subprocess — `buildEnv()` only ever sets `ANTHROPIC_API_KEY` for `authType: 'apiKey'` auth and
-otherwise inherits the process env; it does **not** repoint `ANTHROPIC_BASE_URL` at a local
-backend, because the CLI speaks the Anthropic Messages API and cannot talk to an OpenAI-shaped
-`/v1` endpoint. (An earlier `buildEnv(forLocalModel = true)` branch attempted this — issue #118
-removed it as dead code; no caller passed `true`.)
+Local/BYOK models (Ollama, or another OpenAI-compatible endpoint) do not flow through the Claude
+CLI subprocess **by default** — `buildEnv(modelId?)` only ever sets `ANTHROPIC_API_KEY` for
+`authType: 'apiKey'` auth and otherwise inherits the process env; without a configured local agent
+endpoint (below) it does not repoint `ANTHROPIC_BASE_URL` at a local backend, because the CLI
+speaks the Anthropic Messages API and historically could not talk to an OpenAI-shaped `/v1`
+endpoint. (An earlier `buildEnv(forLocalModel = true)` branch attempted this — issue #118 removed
+it as dead code; no caller passed `true`. Issue #122, below, reintroduces the same mechanism —
+`ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at a local endpoint — but as an explicit,
+user-configured, per-model routing decision rather than a global default.)
 
 Instead, `isLocalModel(modelId)` decides per-model whether a query is routed to
 `executeLocalProviderQuery()` (`providerModels.ts`) — a separate, hand-rolled ReAct loop that talks
@@ -659,6 +667,64 @@ return ids that collide with, or resemble, genuine Claude ids (e.g. an OpenRoute
 `claude-*` ids back). Checking the SDK-known/Claude-shaped guards first ensures such an id can
 never be misrouted into the degraded local loop (no skills, subagents, sessions, permission modes
 or streaming), regardless of what a local catalogue happens to contain.
+
+### Local agent endpoint: routing local models through the real Agent SDK (issue #122)
+
+**What changed and why it's possible now.** Ollama v0.14.0+ implements the Anthropic Messages API
+natively at its own address (`http://localhost:11434`) — `ANTHROPIC_API_KEY` is required by the
+protocol but its value is ignored. Pointing `ANTHROPIC_BASE_URL` at it (or at any other
+Messages-API-speaking endpoint) lets a local model run through the *same* Claude CLI/Agent SDK as
+Claude sessions — skills, subagents, sessions, permission modes, and streaming — instead of the
+degraded ReAct loop below. This closes the gap the previous paragraph's `buildEnv(forLocalModel)`
+removal (issue #118) left open: at the time, no Messages-API-speaking local endpoint existed
+without a fragile third-party translating proxy (e.g. LiteLLM) in front of Ollama's older
+OpenAI-shaped `/v1` surface; Ollama's own native support removes that dependency.
+
+**Additive, not a replacement — this issue does not touch the local-loop branches themselves.**
+Retiring `executeLocalProviderQuery()` (fully or partly) once every caller can reach the SDK path
+is tracked separately as issue #220, sequenced strictly after this lands and is verified. Until
+then, the two mechanisms coexist, selected per query by whether the endpoint is configured:
+
+- **`AgentService.isLocalAgentEndpointConfigured(): boolean`** — true when a non-empty
+  `LocalAgentEndpointConfig.baseUrl` was supplied to the constructor (settings: `Advanced → Local
+  agent endpoint (advanced)`, independent of both `AuthConfig`/`authType` — used only for Claude
+  models — and the BYOK provider preset — used only for local-model *discovery/catalogue*, not
+  execution).
+- **Per-turn routing decision, not global.** Every local-model branch that used to check only
+  `isLocalModel(modelId) && providerConfig` (`chat()`, `inlineChat()`, `Session.send()`) now also
+  requires `!isLocalAgentEndpointConfigured()` to take the `executeLocalProviderQuery()` branch.
+  When the endpoint *is* configured, those branches fall through to the same real-SDK `query()`
+  call a Claude model would use — a Claude-model query in the same session/conversation is
+  unaffected either way, since the check is keyed off that call's own `modelId`, not a global mode
+  switch.
+- **`buildEnv(modelId?)`** gained the `modelId` parameter: when `modelId` is classified local
+  (`isLocalModel()`) *and* the endpoint is configured, it sets `ANTHROPIC_BASE_URL` to the
+  endpoint's base URL and `ANTHROPIC_API_KEY` to its configured key (falling back to the literal
+  `'ollama'` when blank, per Ollama's own docs) **instead of** the auth-branch values below it —
+  additive to, not a replacement of, the existing subscription/API-key branches, which still run
+  unchanged for every Claude-model call and for local-model calls when the endpoint isn't
+  configured. Every call site that builds `env` now threads its own `model`/`queryOptions.model`
+  through to `buildEnv()` for this reason (`chat()`, `inlineChat()`, `createQuery()`).
+- **`routeQueryOptions()`'s model handling** used to unconditionally clear `opts.model` for any
+  `isLocalModel()` id (there was no Claude model such an id could resolve to, since local queries
+  never reached this far). It now preserves the id instead when the endpoint is configured, so the
+  requested local model id (e.g. `llama3.1`) actually reaches the endpoint as the CLI's `model`
+  request field, rather than being dropped in favor of the CLI's own default.
+- **Model discovery is unchanged.** This issue only changes how an already-selected local model's
+  *query* executes; the BYOK provider preset's catalogue fetch (`fetchProviderModels()`,
+  `setCustomModels()`) still backs the model picker exactly as before.
+- **Security note (settings UI copy, per the repo's network-access convention).** A user-supplied
+  endpoint URL redirects the *entire* agent loop for that query, including tool calls, to whatever
+  is listening there — the settings UI explicitly says so and recommends only pointing it at a
+  trusted endpoint (loopback Ollama by default). This is the same posture #138's local-loop tool
+  approval already takes for a remote BYOK endpoint (`isRemoteEndpoint` in the approval prompt),
+  just stated once up front for this setting instead of per tool call, since a real Agent SDK
+  session's own tools run inside the CLI process rather than through the plugin's per-call
+  approval adapter.
+- **Open questions, deliberately left for empirical verification rather than blocking the
+  design:** whether cost accounting, permission-prompt behavior, and session `resume` work
+  end-to-end against Ollama's Messages API implementation specifically (it may not cover every CLI
+  expectation) — see the issue for what deploy-test against a live Ollama instance found.
 
 ### BYOK local provider conversation history (issue #135)
 
@@ -709,9 +775,14 @@ now accepts an optional `history` param (`LocalHistoryMessage[]`, exported from
   SDK session (issue #137)" below for the gap this leaves and how it's closed.
 
 Full feature parity for a local model — running it through the actual Agent SDK — requires a
-Messages-API-speaking gateway (e.g. LiteLLM) in front of it and `ANTHROPIC_BASE_URL` pointed at
-that gateway; that is a distinct, not-yet-built feature (see
-`.docs/research/2026-09-03-provider-matrix.md` §6), not something `buildEnv()` should approximate.
+Messages-API-speaking endpoint in front of it (Ollama v0.14.0+ itself, or a translating gateway
+such as LiteLLM for backends that don't speak it natively) and `ANTHROPIC_BASE_URL` pointed at
+that endpoint; see "Local agent endpoint: routing local models through the real Agent SDK (issue
+#122)" above for how `buildEnv()`/`routeQueryOptions()` now support this when the endpoint is
+configured. This history-bridging mechanism (`Session.send({history})` and #135/#137 generally)
+still only applies to the `executeLocalProviderQuery()` branch — when the local agent endpoint is
+configured, the real Agent SDK's own `resume`/persisted-session continuity applies instead, the
+same as for a Claude model.
 
 ### Bridging local-provider turns into the SDK session (issue #137)
 

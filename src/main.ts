@@ -208,6 +208,12 @@ export default class SynapsePlugin extends Plugin {
 				apiKey: s.providerApiKey,
 				bearerToken: s.providerBearerToken,
 			},
+			...(s.localAgentEndpointUrl.trim() ? {
+				localAgentEndpoint: {
+					baseUrl: s.localAgentEndpointUrl.trim(),
+					apiKey: s.localAgentEndpointApiKey,
+				},
+			} : {}),
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
 				debugTrace(`Synapse: Claude CLI v${info.version} at ${info.path}`);

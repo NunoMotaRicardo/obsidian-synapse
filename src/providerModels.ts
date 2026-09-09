@@ -692,7 +692,7 @@ export function clearCachedDefaultModel(): void {
 	cachedDefaultModel = null;
 }
 
-async function resolveDefaultModel(options: ProviderConfigOptions): Promise<string> {
+export async function resolveDefaultModel(options: ProviderConfigOptions): Promise<string> {
 	const baseUrl = (options.baseUrl || '').trim();
 	if (cachedDefaultModel && cachedDefaultModel.baseUrl === baseUrl) {
 		return cachedDefaultModel.model;
