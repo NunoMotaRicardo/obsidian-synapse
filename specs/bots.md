@@ -25,16 +25,16 @@
 - **Tool approval policy — deliberately not `settings.toolApproval` (issue #151).** Every bot
   session runs `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions: true`
   unconditionally, in `buildBotSessionConfig()`. This is a standing exception to the unified policy
-  batch loops now follow (see "Tool approval policy" under
+  unattended `runExecutor.ts`-backed runs follow (see "Tool approval policy" under
   [run-executor.md](run-executor.md)): the bot's whole purpose is unattended remote control of the
-  vault from a phone, and — like a batch loop — it has no per-run override to opt back into
+  vault from a phone, and it has no per-run override to opt back into
   `'allow'` if the global setting is `'ask'` (`resolveToolApprovalPolicy()` only ever reads
   `settings.toolApproval`) — so making the bot follow `'ask'` would silently stop it from writing the
   moment someone flips the global setting for an unrelated reason (e.g. wanting search/editor actions
-  to prompt), with no way to recover write access for just the bot. Unlike a batch loop, the bot
-  doesn't go through `runExecutor.ts`'s policy machinery at all (it calls `AgentService.inlineChat()`
+  to prompt), with no way to recover write access for just the bot. Unlike a `runExecutor.ts`-backed
+  run, the bot doesn't go through that policy machinery at all (it calls `AgentService.inlineChat()`
   directly with the permission options hardcoded in `buildBotSessionConfig()`), so an `'ask'` denial
-  there wouldn't even land in a report the way a batch loop's does. The bot's actual safety control is
+  there wouldn't even land in a report the way a `runExecutor.ts` run's does. The bot's actual safety control is
   the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`) — see
   [SECURITY.md](../SECURITY.md) #1. A bot-specific approval setting is a possible follow-up, not
   something this issue does silently.

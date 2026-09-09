@@ -6,8 +6,8 @@
  *
  * Extracted here (rather than duplicated) because `getVaultBasePath()`'s
  * `basePath` cast, the `_synapse/`-plugin-config object shape, and
- * `todayString()` were each independently copy-pasted across 6-7 call
- * sites (`batchLoopExecutor.ts`, `bots/telegramBot.ts`, `editor/editorMenu.ts`,
+ * `todayString()` were each independently copy-pasted across several call
+ * sites (`bots/telegramBot.ts`, `editor/editorMenu.ts`,
  * `modals/editModal.ts`, `synapseView.ts`, `runExecutor.ts`,
  * `view/searchPanel.ts`) — see issue #153. Model: `src/budget.ts` (#74's
  * extraction for the same reason, one level down).
@@ -24,7 +24,7 @@ import type {App} from 'obsidian';
  */
 export const SYNAPSE_FOLDER = '_synapse';
 
-/** Vault-relative folder where batch loops append their run reports. */
+/** Vault-relative folder where unattended runs append their run reports. */
 export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 /**

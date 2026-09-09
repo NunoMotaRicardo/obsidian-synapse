@@ -1,6 +1,6 @@
 # Synapse wiki
 
-Synapse is a Claude-native AI assistant for Obsidian — a chat panel, editor actions, batch loops, and a Telegram bot, all configurable from inside your vault.
+Synapse is a Claude-native AI assistant for Obsidian — a chat panel, editor actions, and a Telegram bot, all configurable from inside your vault.
 
 This wiki covers **installing, configuring, and customizing** the plugin. For an overview of the panel itself (chat tab, agents, skills, MCP tools, inline edits), start with the [README](https://github.com/NunoMotaRicardo/obsidian-synapse#readme).
 

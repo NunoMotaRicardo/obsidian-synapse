@@ -5,7 +5,9 @@
 > `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`. Recommendations
 > below that name those files/line numbers, or the removed `ProviderPreset` matrix (e.g. "add
 > `providerModels.test.ts` — table-driven... per preset"), no longer apply; treat this report as
-> historical. Recommendations about other modules are unaffected.
+> historical. Recommendations about other modules are unaffected. Issue #221 additionally deleted
+> `batchLoopExecutor.ts` with no replacement — recommendations naming that file (e.g. the
+> `runItem`/`runOnFile` duplication discussion) describe a file that no longer exists.
 
 > Date: 2026-09-03 · Scope: full sweep of `src/` (15,528 LOC, 38 files), `test/`, build config,
 > CI, repo metadata and docs, against the goal of publishing `obsidian-synapse` publicly.

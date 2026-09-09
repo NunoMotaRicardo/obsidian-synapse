@@ -1,12 +1,12 @@
 /**
- * Shared budget/threshold primitives — a small, dependency-free module used by
- * both the batch loop executor (`batchLoopExecutor.ts`, issue #74) and the
- * interactive chat view's turn/cost thresholds (`synapseView.ts`, issue #88).
+ * Shared budget/threshold primitives — a small, dependency-free module
+ * powering the interactive chat view's turn/cost thresholds
+ * (`synapseView.ts`, issue #88).
  *
  * Kept intentionally tiny: a type, a free-text parser, a describer, and an
- * "exceeded" predicate. Extracted here (rather than duplicated) because both
- * call sites want identical parsing/formatting behavior — see
- * `specs/agent-service.md` / `specs/chat-view.md` for the decision note.
+ * "exceeded" predicate. Extracted here (rather than duplicated) so callers
+ * wanting identical parsing/formatting behavior don't have to reimplement it —
+ * see `specs/agent-service.md` / `specs/chat-view.md` for the decision note.
  */
 
 /**

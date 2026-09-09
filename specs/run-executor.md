@@ -4,10 +4,9 @@
 
 `src/runExecutor.ts` is the per-item run pipeline behind "run a prompt against a file, then persist
 the result": substitute template variables, run via `AgentService.inlineChat()`, apply a write
-mode, append a report entry. `batchLoopExecutor.ts` ([batch-loops.md](batch-loops.md)) is its one
-caller and is a thin one — it supplies what's actually caller-specific: which file(s) to run over,
-where the prompt body comes from, how a report block is formatted, and budget/cancellation/progress
-orchestration across many items.
+mode, append a report entry. It has **no in-tree caller** as of issue #221's removal of batch
+loops (`batchLoopExecutor.ts` was its one caller) — kept as reusable, self-contained run-pipeline
+infrastructure per that issue's scope, not deleted outright.
 
 Model for this extraction: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small, focused
 modules that extract exactly the logic that was duplicated, not a new abstraction layer on top of
@@ -31,23 +30,22 @@ runItem(options: RunItemOptions): Promise<void>
    a `model` the running `AgentService` classifies local (`isLocalModel()`) runs through the same
    CLI call as Claude, with `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at the configured
    local agent endpoint (issue #122) via `inlineChat()`'s own env handling — `runItem()` needs no
-   routing logic of its own. `agent` has no current caller; `abortController`/`onEvent`
-   are used by `batchLoopExecutor.ts` for cancellation and usage accumulation. Unused options are
-   harmless no-ops, so this stays one call site.
+   routing logic of its own. `agent` has no current caller; `abortController`/`onEvent` exist for a
+   caller running many items in an abortable loop to wire up cancellation and usage accumulation.
+   Unused options are harmless no-ops, so this stays one call site.
 3. **Apply write mode** — `applyWriteMode()`: `false`/`undefined` appends the result via the
    caller's `appendReport` callback; `true` replaces the target file's entire content (with an
    empty-response guard, and falling back to `appendReport` on a missing file or a write-back lock
    timeout); `'frontmatter'` merges the response (parsed as YAML) into the target file's
    frontmatter (falling back to `appendReport` the same way). No current caller sets anything but
-   the default — `batchLoopExecutor.ts` always passes `undefined`, so it always takes the
-   "append to report" branch.
+   the default, so this always takes the "append to report" branch.
 4. **Append report** — not part of `runItem()` itself; `appendReport` is a callback the caller
    supplies, built on the shared `appendReportBlock()` primitive (below). This is deliberate:
    report *identity* (path, first-write heading) and *block formatting* are caller-specific.
 
-`runItem()` does **not** catch execution errors: `batchLoopExecutor.ts` must distinguish a genuine
-per-file failure from a mid-flight cancellation (`handle.stop()` aborting the in-flight query), so
-the error is left to propagate and the caller decides.
+`runItem()` does **not** catch execution errors: a caller running many items over an abortable loop
+must be able to distinguish a genuine per-item failure from a mid-flight cancellation, so the error
+is left to propagate and the caller decides.
 
 ## Report append primitive
 
@@ -66,10 +64,10 @@ line). Uses `vault.read()`/`vault.modify()` (not `adapter.read`/`write`) so the 
 internal file queue stay consistent, ensures `_synapse/reports/` exists first (via
 `configWriter.ts`'s `ensureFolder()`), and wraps the whole read-modify-write in the per-path
 advisory lock from [lock-manager.md](lock-manager.md) so concurrent appends to the same report file
-(e.g. two concurrent batch loops) can't interleave and clobber each other.
+can't interleave and clobber each other.
 
-`appendReportBlock()` does **not** catch `LockAcquisitionError` — `batchLoopExecutor.ts` lets it
-propagate to the per-file loop body in `runBatchLoop()`, which already catches and reports per-file
+`appendReportBlock()` does **not** catch `LockAcquisitionError` — a caller running many items in a
+loop lets it propagate to the per-item loop body, which already has to catch and report per-item
 failures, so a lock timeout there surfaces the same way an ordinary write failure would.
 
 ## Tool approval policy (issue #151)
@@ -118,11 +116,11 @@ had its own separate, unattended-by-default tool wiring; that loop is gone.)
 
 ## Current status
 
-Extracted from the (now-removed) trigger executor and `batchLoopExecutor.ts` in issue #154, after
-#152 (executor tests) and #153 (`src/vaultPaths.ts`) landed. Issue #188 removed the trigger system
-(`src/triggers.ts`, `src/triggerExecutor.ts`) entirely, leaving `batchLoopExecutor.ts` as this
-module's only caller. Issue #189 then collapsed the trigger-shaped generality the pipeline had
-carried since #154:
+Extracted from the (now-removed) trigger executor and the (now-removed) batch loop executor
+(`batchLoopExecutor.ts`) in issue #154, after #152 (executor tests) and #153 (`src/vaultPaths.ts`)
+landed. Issue #188 removed the trigger system (`src/triggers.ts`, `src/triggerExecutor.ts`)
+entirely, leaving `batchLoopExecutor.ts` as this module's only caller. Issue #189 then collapsed
+the trigger-shaped generality the pipeline had carried since #154:
 
 - The `surface: 'trigger' | 'batch-loop'` union (on `RunItemOptions` and
   `formatToolRefusalsReportBlock()`) is gone — the tool-refusal report hint always uses the single
@@ -134,14 +132,14 @@ carried since #154:
 - `substituteTemplates()`'s `{{files}}` alias (`aliasFiles`) is gone — it only ever existed for
   scheduled triggers with a `path` glob fanning out one call per matched file; `{{file}}` is the
   only substitution now.
-- Report-collision handling is single-behavior: `batchLoopExecutor.ts` lets a
-  `LockAcquisitionError` from `appendReportBlock()` propagate to its per-file loop body. (The
-  removed trigger executor degraded differently — see git history if that's ever needed again.)
 - The module's public surface shrank from 12 exports to 4 (`ReportTarget`, `appendReportBlock`,
   `RunItemOptions`, `runItem`) — everything else (template substitution, tool-approval types and
   `resolveToolApprovalPolicy()`/`formatToolRefusalsReportBlock()`, write-mode types and
   `applyWriteMode()`) had no reader outside this file and is now module-private.
 
-`batchLoopExecutor.ts`'s public entry point (`runBatchLoop(plugin, filePaths, instruction, handle,
-onProgress?, budget?)`) is unchanged by any of the above — this was a pure internal refactor of
-`runExecutor.ts`, not a behavior change to batch loops.
+Issue #221 then removed `batchLoopExecutor.ts` itself (see
+`.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`), leaving this
+module with no in-tree caller. It was kept rather than deleted, as reusable "run a prompt against a
+file" infrastructure the module doc comment and this spec still describe accurately; nothing about
+`runItem()`/`appendReportBlock()` was batch-loop-specific — they were always generic per-item
+primitives that batch loop happened to be the sole consumer of.

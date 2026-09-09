@@ -313,7 +313,7 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 /**
  * Default turn budget for agentic one-shot helpers (inlineChat).
  * High enough for multi-step tool use (search, read, summarize), low enough
- * to stop a runaway loop in unattended contexts (batch loops, Telegram).
+ * to stop a runaway loop in unattended contexts (Telegram, other one-shot runs).
  */
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 

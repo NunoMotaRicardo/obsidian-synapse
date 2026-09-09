@@ -9,9 +9,9 @@ config that points at it, the reports folder, and today's-date string used in re
 Extracted (issue #153) because each of these was independently duplicated: the
 `(app.vault.adapter as unknown as {basePath: string}).basePath` cast across 7 files, the
 `plugins: [{type: 'local', path: '<basePath>/_synapse/'}]` object rebuilt inline at 6 call sites,
-and `todayString()` copy-pasted verbatim into `triggerExecutor.ts` and `batchLoopExecutor.ts`.
-Model: `src/budget.ts` (#74's extraction for the same reason, one level down — chat/batch-loop
-budget primitives rather than vault paths).
+and `todayString()` copy-pasted verbatim into `triggerExecutor.ts` and the (now-removed)
+`batchLoopExecutor.ts`. Model: `src/budget.ts` (#74's extraction for the same reason, one level
+down — chat-view budget primitives rather than vault paths).
 
 Source: `src/vaultPaths.ts`.
 
@@ -24,7 +24,7 @@ Source: `src/vaultPaths.ts`.
 // keeps working unmodified (see Invariants).
 export const SYNAPSE_FOLDER = '_synapse';
 
-// Vault-relative folder where batch loops append their run reports.
+// Vault-relative folder where unattended runs append their run reports.
 export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 // Structurally compatible with agentService.ts's SdkPluginConfig (a strict
@@ -71,7 +71,7 @@ export function todayString(): string
   unmodified. Checked for an import cycle before choosing this: `vaultPaths.ts` has zero internal
   imports (only `type {App} from 'obsidian'`), so `settings.ts → vaultPaths.ts` cannot cycle back —
   even though `settings.ts ↔ configWriter.ts` already had a pre-existing mutual import (unrelated
-  to this change, and unaffected by it). All other consumers (`batchLoopExecutor.ts`,
+  to this change, and unaffected by it). All other consumers (the former `batchLoopExecutor.ts`,
   `bots/telegramBot.ts`, `synapseView.ts`) were switched to import
   `SYNAPSE_FOLDER` directly from `./vaultPaths`. (The former `triggerExecutor.ts`/`triggers.ts`
   consumers no longer exist — issue #188 folded the trigger executor into `runExecutor.ts`, which
@@ -88,9 +88,6 @@ export function todayString(): string
 
 ## Integration points
 
-- **`batchLoopExecutor.ts`** — `getVaultBasePath`/`getSynapsePluginConfig` in `runOnFile` (per-file
-  `inlineChat()` call); `REPORTS_FOLDER`/`todayString` in the report-append path; `SYNAPSE_FOLDER`
-  to exclude the customization folder from batch-loop scope resolution.
 - **`bots/telegramBot.ts`** — `TelegramBot.getVaultBasePath()` (private method) delegates to
   `getVaultBasePath(this.plugin.app)`; `buildBotSessionConfig()` uses `getSynapsePluginConfig`;
   `SYNAPSE_FOLDER` for the bot-attachments temp folder and agent/skill scan paths.
@@ -102,11 +99,12 @@ export function todayString(): string
   `view/*` prototype-extension modules) delegates to `getVaultBasePath(this.app)`;
   `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill
   scan paths.
-- **`runExecutor.ts`** (from #154's extraction of the trigger and batch-loop executors, and the
-  sole surviving caller since #188 removed the trigger executor) — `executeWithClaude` uses
-  `getVaultBasePath`/`getSynapsePluginConfig`; `REPORTS_FOLDER`/`todayString` in the report-append
-  path. (The former `executeWithLocalModel` MCP-bridge-start caller was removed by #220 along with
-  `mcpBridge.ts` itself.)
+- **`runExecutor.ts`** (from #154's extraction of the trigger and batch-loop executors; the trigger
+  executor was removed in #188 and the batch loop executor, its last caller, in #221 — this module
+  currently has no in-tree caller of its own, see [run-executor.md](run-executor.md)) —
+  `executeWithClaude` uses `getVaultBasePath`/`getSynapsePluginConfig`; `REPORTS_FOLDER`/
+  `todayString` in the report-append path. (The former `executeWithLocalModel` MCP-bridge-start
+  caller was removed by #220 along with `mcpBridge.ts` itself.)
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 - **`agentService.ts`** (#194) — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
   to locate `_synapse/settings.json`, the sole caller of that function.
@@ -124,7 +122,8 @@ acceptance criteria didn't ask for.
 - `SYNAPSE_FOLDER` and `REPORTS_FOLDER` are each defined exactly once (`vaultPaths.ts`); every
   other module imports them rather than redefining.
 - `todayString()` is defined exactly once (`vaultPaths.ts`); imported by `runExecutor.ts` (the
-  trigger and batch-loop executors' shared successor, #154 — see [run-executor.md](run-executor.md)).
+  trigger and batch-loop executors' shared successor, #154, now with no in-tree caller of its own
+  since #221 — see [run-executor.md](run-executor.md)).
 - No inline `_synapse` string literal or `basePath` cast remains outside `vaultPaths.ts`,
   `configWriter.ts` (out of scope, prose only — see Integration points), and prose
   comments/user-facing copy elsewhere.

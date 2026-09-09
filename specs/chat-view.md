@@ -79,7 +79,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     `configDirty`/session-continuity motivation for keeping a toggle. Removing it here is purely a
     consistency fix with the chat tab, not a response to either of those specific gaps.
 - Streaming: `buildSessionConfig()` sets `includePartialMessages: true` (issue #103), so the chat
-  panel — and only the chat panel; search/Telegram/batch loops stay one-shot — gets
+  panel — and only the chat panel; search/Telegram stay one-shot — gets
   genuine token-level `assistant.message_delta`/`assistant.reasoning_delta` events as the model
   generates, not one lump per turn. The renderer doesn't care which mode produced a given delta:
   `appendDelta()`/`appendReasoningDelta()` just accumulate whatever arrives into
@@ -436,7 +436,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   - **Unattended paths still deny it**, with a message explaining no one is available to answer
     rather than the generic wording each site otherwise uses: `autoApproveReadOnlyTools`
     (`agentService.ts`, used by search/local-model call sites) and `makeDenyingCanUseTool`
-    (`runExecutor.ts`, used by batch/trigger runs) both special-case `toolName ===
+    (`runExecutor.ts`, used by unattended runs) both special-case `toolName ===
     'AskUserQuestion'` before their normal fallback-deny message.
 - Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
@@ -471,7 +471,9 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   bridging local turns back into the SDK session) all existed because local/BYOK models ran
   through a separate hand-rolled ReAct loop with no agentic `Read` tool, no `resume`, and no
   persisted session. That loop, and the OpenAI-compatible provider matrix that fed it, were
-  removed by #220 (see `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`):
+  removed by #220 (see
+  `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`, which also
+  covers issue #221's separate removal of batch loops):
   every model — Claude or local (issue #122's local agent endpoint, `AgentService.isLocalModel()`)
   — now runs through the same real Agent SDK/CLI, with `resume` and the agentic `Read` tool, so
   the SDK path alone owns image delivery and conversation continuity for all models. There is no
@@ -559,15 +561,14 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
 - **Settings** (`src/settings.ts`, Capabilities tab, "Chat run guardrails"): `loopTurnThreshold`
   (max agent turns), `loopTokenThreshold` (max cumulative tokens: input + output only — see
   **Token threshold** below), `loopCostThresholdUsd` (max dollar cost). Free numeric inputs, not
-  the batch-loop launch flow's free-text budget prompt (`parseBudgetInput()`) — these are
-  always-on session defaults, not a per-run prompt, so a plain number field fits better than
-  parsing `$5`/`5 tokens` strings. Parsed with `Number()` + `Number.isInteger()` (not `parseInt()`,
-  which would truncate scientific notation like `1e2` at the `e` and silently floor fractional
-  input) — non-integer or out-of-range input is rejected outright rather than saving a value that
-  doesn't match what the user typed. `src/budget.ts` (extracted from `batchLoopExecutor.ts` in
-  this same change) still backs the batch-loop launch flow's free-text budget; it wasn't reused
-  verbatim for these settings-backed thresholds since the input shape differs (persisted numeric
-  setting vs. one-off free-text prompt) — see `batch-loops.md`.
+  a free-text budget prompt — these are always-on session defaults, not a per-run prompt, so a
+  plain number field fits better than parsing `$5`/`5 tokens` strings. Parsed with `Number()` +
+  `Number.isInteger()` (not `parseInt()`, which would truncate scientific notation like `1e2` at
+  the `e` and silently floor fractional input) — non-integer or out-of-range input is rejected
+  outright rather than saving a value that doesn't match what the user typed. `src/budget.ts`
+  (originally extracted alongside the now-removed batch loop launch flow's free-text budget
+  parsing, issue #74; that flow was removed in #221, leaving this chat view as `budget.ts`'s sole
+  consumer) backs these settings-backed thresholds' parse/describe/exceeded logic.
 - **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
   distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
   `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`
@@ -824,7 +825,6 @@ All plugin modals adopt the Editorial design language (Variant B) so dialogs rea
 - **Ruled underline form inputs:** Form text fields and textareas across all modals (`.synapse-userinput-textarea`, `.synapse-elicitation-input`, `.synapse-scope-search`, `.synapse-rename-input`, `.synapse-askq-other-input`, `.synapse-edit-textarea`) adopt ruled bottom borders (`border: none; border-bottom: 1px solid var(--synapse-rule); background: transparent; border-radius: 0;`). High-contrast focus is maintained via `border-bottom: 2px solid var(--interactive-accent)`.
 - **Vault scope & Folder tree modals (`VaultScopeModal`, `FolderTreeModal`):** Tree containers render within a ruled frame (`border-top: 1px solid var(--synapse-rule-soft); border-bottom: 1px solid var(--synapse-rule-soft)`). Items render as ruled rows; selection is marked by an accent left border (`border-left: 2px solid var(--interactive-accent)`) and accent text, completely eliminating filled hover/active boxes.
 - **Edit modal (`EditModal`):** Serif title with heavy closing rule, uppercase labels, ruled textarea and prompt area, borderless selects with ruled bottom, and results cards (`.synapse-edit-card`) styled as ruled rows with serif body copy.
-- **Batch loop progress modal (`BatchLoopProgressModal`):** Serif title, tabular monospace metrics (`font-variant-numeric: tabular-nums; font-family: var(--font-monospace)`), and a hairline progress meter track (`.synapse-batch-progress-meter`, 2px, `--synapse-rule-soft`) filling with the interactive accent (`.synapse-batch-progress-fill`).
 - **Behavioral preservation & theme compliance:** Every modal's approval decisions, always-allow persistence, form validation, keyboard navigation, and escape-to-dismiss behavior are preserved exactly. All colors strictly consume Obsidian theme variables with zero raw hex codes across light and dark modes.
 
 

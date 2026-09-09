@@ -29,11 +29,9 @@ specs/                       ← repo root — architecture overview + one file 
   architecture.md            ← start here — system overview, module table
   agent-service.md
   chat-view.md
-  batch-loops.md
   config-writer.md
   editor.md
   lock-manager.md
-  mcp-bridge.md
   run-executor.md
   runtime-manager.md
   settings.md
