@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-09
+
+A unified model-execution architecture: all models (Claude and local endpoints) now route through the Claude Agent SDK via the Anthropic Messages API. The legacy hand-rolled ReAct loop, the OpenAI-compatible provider matrix, and the batch-loop feature have been removed in favor of native Agent SDK capabilities.
+
+### Added
+
+- **Local agent endpoint (#122, #222):** Route local models through the real Claude Agent SDK by pointing to Ollama v0.14.0+ (or any Anthropic Messages API-compatible endpoint) at `http://localhost:11434`. Local models now enjoy full Agent SDK support: sessions, skills, streaming, and tool execution instead of a simplified loop.
+- **Endpoint Test button in Settings (#223, #224):** Direct `/v1/messages` probe in the Local agent endpoint settings section to verify connectivity and protocol compatibility with immediate feedback.
+
+### Changed
+
+- **Unified single-engine routing:** All model interactions now pass through `AgentService` and the Claude Agent SDK.
+- **Composer styling:** Reduced chat composer input font size to 14px for better typographical hierarchy alongside transcript serif styling.
+
+### Removed
+
+- **OpenAI-compatible provider matrix and local ReAct loop (#220, #225):** Removed the generic OpenAI-compatible preset, Azure OpenAI, Foundry Local, and the hand-rolled 5-turn ReAct loop (`executeLocalProviderQuery`), standardizing on the Messages API. Includes a one-time migration Notice for users with legacy provider URLs.
+- **Batch-loop feature (#221, #226):** Removed the batch-loop executor, batch loop progress modal, budget tracking, and associated commands and styles, with no replacement.
+
 ## [1.5.0] - 2026-09-08
 
 The **Editorial** redesign (#206) transforms Synapse from a chat box into a printed page that lives naturally alongside your notes. Chat bubbles, avatars, badges, and colored pill backgrounds are replaced by intentional typography, hairline rules, and monospace margin rails.
