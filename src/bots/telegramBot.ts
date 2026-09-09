@@ -334,7 +334,7 @@ export class TelegramBotService {
 		return {
 			model,
 			// Bot sessions run bypassPermissions unconditionally — deliberately NOT
-			// driven by settings.toolApproval, unlike runExecutor.ts's trigger/batch-loop
+			// driven by settings.toolApproval, unlike runExecutor.ts's unattended-run
 			// policy (issue #151). Threading toolApproval through here would make
 			// remote-control-a-vault-from-your-phone (the bot's entire purpose) silently
 			// stop writing the moment someone sets the global setting to "ask" for an

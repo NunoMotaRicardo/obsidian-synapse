@@ -5,7 +5,10 @@
 > small local-agent-endpoint discovery module (see
 > `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`), so the module
 > table below (and any line-count/fan-in figures it cites) is stale for those modules. Treat this
-> report as historical measurement, not a description of the current codebase shape.
+> report as historical measurement, not a description of the current codebase shape. Issue #221
+> subsequently deleted `batchLoopExecutor.ts`/`modals/batchLoopProgressModal.ts` with no
+> replacement — the module table row for `batchLoopExecutor.ts` no longer describes an existing
+> file.
 
 **Date:** 2026-09-05
 **Commit audited:** `e6acb71` (`main`, immediately after epic #144 closed)

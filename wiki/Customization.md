@@ -212,7 +212,7 @@ Any field from the Claude Code settings schema is accepted — `permissions`, `e
 - Read fresh (and re-parsed) on every query — editing the file takes effect on your very next
   message, no reload needed.
 - Applies to every Synapse-initiated query: the chat panel, editor actions, the edit modal,
-  vault search, batch loops/runs, and the Telegram bot — regardless of which one started the
+  vault search, and the Telegram bot — regardless of which one started the
   query or what its working directory is scoped to.
 - **In-conversation tool approvals still work.** If you approve a tool mid-conversation, that
   approval is layered *on top of* this file rather than replacing it — a `permissions.deny` rule

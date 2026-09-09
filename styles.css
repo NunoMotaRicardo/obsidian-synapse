@@ -188,13 +188,12 @@
 }
 
 /*
- * Modal/panel field-label family — `.synapse-elicitation-label`, `.synapse-batch-progress-file
- * h4`, `.synapse-modal-label` and `.synapse-edit-label` also share one exact font-family/size/
+ * Modal/panel field-label family — `.synapse-elicitation-label`,
+ * `.synapse-modal-label` and `.synapse-edit-label` also share one exact font-family/size/
  * weight/letter-spacing/transform/color combination; declared once here, same rationale as the
  * toolbar-row family above (#217).
  */
 .synapse-elicitation-label,
-.synapse-batch-progress-file h4,
 .synapse-modal-label,
 .synapse-edit-label {
 	font-family: var(--font-interface);
@@ -794,8 +793,7 @@
 .synapse-userinput-buttons,
 .synapse-askq-buttons,
 .synapse-elicitation-buttons,
-.synapse-scope-buttons,
-.synapse-batch-progress-buttons {
+.synapse-scope-buttons {
 	display: flex;
 	justify-content: flex-end;
 	align-items: center;
@@ -810,7 +808,6 @@
 .synapse-askq-buttons button.mod-cta,
 .synapse-elicitation-buttons button.mod-cta,
 .synapse-scope-buttons button.mod-cta,
-.synapse-batch-progress-buttons button.mod-cta,
 .synapse-edit-btn-primary {
 	display: inline-flex;
 	align-items: center;
@@ -836,7 +833,6 @@
 .synapse-askq-buttons button.mod-cta:hover,
 .synapse-elicitation-buttons button.mod-cta:hover,
 .synapse-scope-buttons button.mod-cta:hover,
-.synapse-batch-progress-buttons button.mod-cta:hover,
 .synapse-edit-btn-primary:hover {
 	opacity: 0.9;
 }
@@ -850,7 +846,6 @@
 .synapse-askq-buttons button:not(.mod-cta),
 .synapse-elicitation-buttons button:not(.mod-cta),
 .synapse-scope-buttons button:not(.mod-cta),
-.synapse-batch-progress-buttons button:not(.mod-cta),
 .synapse-edit-btn-secondary,
 .synapse-userinput-choice {
 	display: inline-flex;
@@ -878,7 +873,6 @@
 .synapse-askq-buttons button:not(.mod-cta):hover,
 .synapse-elicitation-buttons button:not(.mod-cta):hover,
 .synapse-scope-buttons button:not(.mod-cta):hover,
-.synapse-batch-progress-buttons button:not(.mod-cta):hover,
 .synapse-edit-btn-secondary:hover,
 .synapse-userinput-choice:hover {
 	background: transparent;
@@ -2313,49 +2307,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-/* ── Batch loop progress modal (AC-8) ─────────────────────────── */
-
-.synapse-batch-progress-status {
-	font-family: var(--font-monospace);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
-	font-variant-numeric: tabular-nums;
-	color: var(--text-muted);
-	margin-bottom: 8px;
-}
-
-.synapse-batch-progress-meter {
-	height: 2px;
-	background: var(--synapse-rule-soft);
-	margin-bottom: 12px;
-	overflow: hidden;
-	width: 100%;
-}
-
-.synapse-batch-progress-file {
-	font-family: var(--synapse-font-serif);
-	font-size: 14px;
-	line-height: 1.5;
-	color: var(--text-muted);
-	margin-bottom: 8px;
-	word-break: break-all;
-}
-
-.synapse-batch-progress-file h4 {
-	margin: 12px 0 8px;
-}
-
-.synapse-batch-progress-budget {
-	font-family: var(--font-monospace);
-	font-size: 11px;
-	letter-spacing: 0.04em;
-	font-variant-numeric: tabular-nums;
-	color: var(--text-faint);
-	margin-bottom: 16px;
 }
 
 /* ── Settings page models list ────────────────────────────────── */

@@ -9,12 +9,10 @@ describe('editorial restyle: modals (#211)', () => {
 	const stylesContent = readFileSync(stylesPath, 'utf8');
 
 	const toolApprovalSource = readFileSync(resolve(repoRoot, 'src/modals/toolApprovalModal.ts'), 'utf8');
-	const userInputSource = readFileSync(resolve(repoRoot, 'src/modals/userInputModal.ts'), 'utf8');
 	const askUserQuestionSource = readFileSync(resolve(repoRoot, 'src/modals/askUserQuestionModal.ts'), 'utf8');
 	const elicitationSource = readFileSync(resolve(repoRoot, 'src/modals/elicitationModal.ts'), 'utf8');
 	const vaultScopeSource = readFileSync(resolve(repoRoot, 'src/modals/vaultScopeModal.ts'), 'utf8');
 	const folderTreeSource = readFileSync(resolve(repoRoot, 'src/modals/folderTreeModal.ts'), 'utf8');
-	const batchLoopProgressSource = readFileSync(resolve(repoRoot, 'src/modals/batchLoopProgressModal.ts'), 'utf8');
 	const editModalSource = readFileSync(resolve(repoRoot, 'src/modals/editModal.ts'), 'utf8');
 
 	describe('AC-1: Modal titles masthead treatment', () => {
@@ -44,12 +42,10 @@ describe('editorial restyle: modals (#211)', () => {
 
 		it('all modal TypeScript sources add synapse-modal-title or render titles', () => {
 			expect(toolApprovalSource).toContain('synapse-modal-title');
-			expect(userInputSource).toContain('synapse-modal-title');
 			expect(askUserQuestionSource).toContain('synapse-modal-title');
 			expect(elicitationSource).toContain('synapse-modal-title');
 			expect(vaultScopeSource).toContain('synapse-modal-title');
 			expect(folderTreeSource).toContain('synapse-modal-title');
-			expect(batchLoopProgressSource).toContain('synapse-modal-title');
 			expect(editModalSource).toContain('synapse-modal-title');
 		});
 	});
@@ -67,9 +63,6 @@ describe('editorial restyle: modals (#211)', () => {
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-elicitation-message\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-file\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-edit-textarea\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
@@ -146,7 +139,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toContain('.synapse-askq-buttons button.mod-cta');
 			expect(stylesContent).toContain('.synapse-elicitation-buttons button.mod-cta');
 			expect(stylesContent).toContain('.synapse-scope-buttons button.mod-cta');
-			expect(stylesContent).toContain('.synapse-batch-progress-buttons button.mod-cta');
 			expect(stylesContent).toContain('.synapse-edit-btn-primary');
 			expect(stylesContent).toContain('.synapse-edit-btn-secondary');
 		});
@@ -328,7 +320,7 @@ describe('editorial restyle: modals (#211)', () => {
 		});
 	});
 
-	describe('AC-8: Edit modal and batch loop progress modal', () => {
+	describe('AC-8: Edit modal', () => {
 		it('styles edit modal cards as ruled rows with serif body copy', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-edit-cards\s*\{[^}]*border-top:\s*1px solid var\(--synapse-rule-soft\)/
@@ -345,35 +337,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-edit-card-text\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
-		});
-
-		it('styles batch loop progress status with tabular monospace numbers', () => {
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-status\s*\{[^}]*font-family:\s*var\(--font-monospace\)/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-status\s*\{[^}]*font-variant-numeric:\s*tabular-nums/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-status\s*\{[^}]*text-transform:\s*uppercase/
-			);
-		});
-
-		it('batch loop progress modal has hairline progress meter track and accent fill', () => {
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-meter\s*\{[^}]*height:\s*2px/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-batch-progress-meter\s*\{[^}]*background:\s*var\(--synapse-rule-soft\)/
-			);
-			// The fill itself is the shared `.synapse-gauge-fill` primitive (#215) —
-			// `.synapse-batch-progress-fill` no longer carries its own duplicate rule.
-			expect(stylesContent).toMatch(
-				/\.synapse-gauge-fill\s*\{[^}]*background:\s*var\(--interactive-accent\)/
-			);
-			expect(batchLoopProgressSource).toContain('synapse-batch-progress-meter');
-			expect(batchLoopProgressSource).toContain('synapse-batch-progress-fill');
-			expect(batchLoopProgressSource).toContain('synapse-gauge-fill');
 		});
 	});
 
@@ -419,7 +382,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(specContent).toContain('Ruled underline form inputs:');
 			expect(specContent).toContain('Vault scope & Folder tree modals (`VaultScopeModal`, `FolderTreeModal`):');
 			expect(specContent).toContain('Edit modal (`EditModal`):');
-			expect(specContent).toContain('Batch loop progress modal (`BatchLoopProgressModal`):');
 		});
 	});
 });

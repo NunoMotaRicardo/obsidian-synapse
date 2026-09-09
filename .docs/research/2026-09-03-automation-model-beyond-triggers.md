@@ -9,7 +9,9 @@
 > `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md` and
 > `specs/agent-service.md`'s "Local models" section for the current state. The rest of this
 > report's automation-vocabulary proposal (Watches/Schedules/Batches) is unaffected by this and
-> remains as originally researched.
+> remains as originally researched. **Separately, issue #221 removed `batchLoopExecutor.ts`
+> entirely with no replacement** — every mention of "Batches"/`batchLoopExecutor` below describes
+> a feature that no longer exists in the codebase; the proposal remains research, not a roadmap.
 
 > Date: 2026-09-03 · Research report, no code changes.
 > Question asked: the `_synapse/triggers/` folder is inherited Copilot vocabulary. What should the

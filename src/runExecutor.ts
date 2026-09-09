@@ -1,19 +1,19 @@
 /**
  * Run pipeline for "run a prompt against a file, then persist the result":
  * substitute template variables, run via the Agent SDK, apply a write mode,
- * append a report entry. `batchLoopExecutor.ts` is its one caller and is a
- * thin one — it supplies what's caller-specific: which file(s) to run over,
- * where the prompt body comes from, how a report block is formatted, and
- * budget/cancellation/progress orchestration across many items. Everything
- * else lives here.
+ * append a report entry. Callers supply what's caller-specific: which
+ * file(s) to run over, where the prompt body comes from, and how a report
+ * block is formatted; everything else lives here.
  *
- * This module originally also served the trigger executor
- * (`triggerExecutor.ts`, extracted alongside the batch loop executor in
- * issue #154). Triggers were removed in issue #188; issue #189 then
- * collapsed the trigger-shaped generality this pipeline carried while it had
- * two callers (a `surface` union, a per-item tool-approval override, a
- * `{{files}}` template alias — see `specs/run-executor.md`'s "Current
- * status" for the full history).
+ * This module originally served the trigger executor (`triggerExecutor.ts`)
+ * and, later, the batch loop executor (`batchLoopExecutor.ts`), both
+ * extracted here in issue #154. Triggers were removed in issue #188; issue
+ * #189 then collapsed the trigger-shaped generality this pipeline carried
+ * while it had two callers (a `surface` union, a per-item tool-approval
+ * override, a `{{files}}` template alias). Batch loops were removed in
+ * issue #221 — see `specs/run-executor.md`'s "Current status" for the full
+ * history. This module has no in-tree caller as of #221's removal; it is
+ * kept as reusable run-pipeline infrastructure per that issue's scope.
  *
  * Local models run through the same `AgentService.inlineChat()` branch as
  * Claude since the OpenAI-compatible provider matrix and its hand-rolled
@@ -22,14 +22,15 @@
  * and preserves the local model id, so there is no separate execution
  * branch here anymore.
  *
- * `runItem()` deliberately does not catch execution errors: `batchLoopExecutor.ts`
- * must distinguish a genuine per-file failure from a mid-flight cancellation
- * (`handle.stop()` aborting the in-flight query), so the error is left to
+ * `runItem()` deliberately does not catch execution errors: a caller running
+ * many items over an abortable loop must be able to distinguish a genuine
+ * per-item failure from a mid-flight cancellation, so the error is left to
  * propagate and the caller decides.
  *
- * Model: `src/budget.ts` (#74) and `src/vaultPaths.ts` (#153) — small,
- * focused extractions of exactly the logic that was duplicated, not a new
- * abstraction layer on top of it.
+ * Model: the now-removed `src/budget.ts` (#74, deleted as dead code in #221
+ * once its only consumer, `batchLoopExecutor.ts`, was removed) and
+ * `src/vaultPaths.ts` (#153) — small, focused extractions of exactly the
+ * logic that was duplicated, not a new abstraction layer on top of it.
  *
  * Unattended tool-approval policy (issue #151): this is also the place that maps
  * `settings.toolApproval` to what the run hands the SDK. See
@@ -79,10 +80,10 @@ export interface ReportTarget {
  *
  * The whole read-modify-write is wrapped in `lockManager.withLock` so a
  * report append can't interleave with another plugin-initiated write to the
- * same report file (e.g. two concurrent batch loops). Does not catch
- * `LockAcquisitionError` — `batchLoopExecutor.ts` lets it propagate to the
- * per-file loop body, which already has to catch and report per-file
- * failures.
+ * same report file (e.g. two concurrent runs writing the same report). Does
+ * not catch `LockAcquisitionError` — a caller running many items in a loop
+ * lets it propagate to the per-item loop body, which already has to catch
+ * and report per-item failures.
  */
 export async function appendReportBlock(app: App, target: ReportTarget, block: string): Promise<void> {
 	await lockManager.withLock(target.path, async () => {
@@ -153,7 +154,7 @@ function makeDenyingCanUseTool(refusals: ToolRefusal[]): PermissionHandler {
 		// AskUserQuestion (issue #182) gets its own message here too — the generic "tools
 		// approval is ask" wording would be misleading since this path denies unconditionally
 		// (`resolveToolApprovalPolicy()`'s 'ask' branch), regardless of the tool-approval setting,
-		// because a batch/trigger run has no attended UI to answer it.
+		// because an unattended run has no attended UI to answer it.
 		if (toolName === 'AskUserQuestion') {
 			const result: PermissionResult = {
 				behavior: 'deny',
@@ -182,9 +183,9 @@ interface RunResult {
 /**
  * Execute the prompt via the Claude Agent SDK (`AgentService.inlineChat`).
  *
- * `agent` has no current caller; `abortController`/`onEvent` are used by
- * `batchLoopExecutor.ts` for cancellation and usage accumulation. Unused
- * options are harmless no-ops here.
+ * `agent` has no current caller; `abortController`/`onEvent` exist for a
+ * caller running many items in an abortable loop to wire up cancellation and
+ * usage accumulation. Unused options are harmless no-ops here.
  *
  * A `model` classified local by `AgentService.isLocalModel()` needs no
  * special handling here: `inlineChat()` routes it through the same CLI with
@@ -260,8 +261,8 @@ async function routeAndRun(
  * content. `'frontmatter'`: merge the response (parsed as YAML) into the
  * target file's frontmatter.
  *
- * No current caller sets anything but the default: `batchLoopExecutor.ts`
- * always passes `undefined` (it has no equivalent config field), so it
+ * No current caller sets anything but the default — `runItem()` has no
+ * in-tree caller as of issue #221's removal of batch loops — so this
  * always takes the "append to report" branch. See `specs/run-executor.md`.
  */
 type WriteMode = boolean | 'frontmatter' | undefined;
@@ -273,7 +274,7 @@ interface ApplyWriteModeOptions {
 	write: WriteMode;
 	/** The model's result to persist. */
 	result: string;
-	/** Identity used in `console.warn` messages, e.g. `Batch loop file "path"`. */
+	/** Identity used in `console.warn` messages, e.g. `Run file "path"`. */
 	logLabel: string;
 	/** Appends `result` (or a write-mode fallback message) to the caller's report. */
 	appendReport: (result: string, isError?: boolean) => Promise<void>;
@@ -375,7 +376,7 @@ export interface RunItemOptions {
 	/** Claude agent name. No current caller sets this. */
 	agent?: string;
 	write?: WriteMode;
-	/** Identity used in `console.warn` messages, e.g. `Batch loop file "path"`. */
+	/** Identity used in `console.warn` messages, e.g. `Run file "path"`. */
 	logLabel: string;
 	appendReport: (result: string, isError?: boolean) => Promise<void>;
 	/** Forwarded to `inlineChat()` for in-flight cancellation. */

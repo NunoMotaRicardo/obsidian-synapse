@@ -11,7 +11,7 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
   and invoke `query()` from the Agent SDK.
 - Manage session list/delete/rename via `listSessions()`, `deleteSession()`, `renameSession()`.
 - One-shot helpers: `chat()` (ephemeral, no session) and `inlineChat()` (persisted session)
-  used by editor actions, search, batch loops, and bots.
+  used by editor actions, search, and bots.
   - `chat()` defaults to a pure text transform (`maxTurns: 1`, `tools: []`, `permissionMode:
     'plan'`).
   - `inlineChat()` defaults to **agentic** behavior: `maxTurns` falls back to
@@ -39,7 +39,7 @@ Key query option fields used:
 | `model` | toolbar / agent frontmatter / settings |
 | `reasoningEffort` | settings + toolbar reasoning menu (brain icon), only when the model supports it |
 | `infiniteSessions` | settings `infiniteSessionsEnabled`; omitted when `true` (SDK default) |
-| `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots, batch loops); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
+| `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
 | `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: ...}`) |
 | `skills` | enabled skill names array from toolbar |
 | `canUseTool` | tool-approval modal or `approveAll` |
@@ -211,7 +211,7 @@ plumbing stays UI-agnostic), so every caller passes its own handle:
   `app: this.app` unconditionally on every `Session.send()` call, and `searchPanel.ts`'s two
   `inlineChat()` calls already passed `app: this.app` (#167) — no change needed for the chat
   panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`, `telegramBot.ts`, and
-  `runExecutor.ts`'s `executeWithClaude()` (batch loops/runs) did not previously pass `app` to
+  `runExecutor.ts`'s `executeWithClaude()` did not previously pass `app` to
   `inlineChat()` and were updated to pass it, purely to make the vault path derivable — none of
   their own settings-building logic changed.
 - Passing `app` alone does not by itself grant tool access — a caller must also supply
@@ -502,7 +502,7 @@ surface a friendlier chat message — see `chat-view.md`.
 The interactive chat panel's `SessionConfig` (`SynapseView.buildSessionConfig()`) sets
 `includePartialMessages: true`. Only the chat panel does this — `chat()`, `inlineChat()`, and
 every unattended caller that goes through them (search, editor text actions, the
-Telegram bot, batch loops) collect full text via `collectText()`/their own accumulation loop and
+Telegram bot) collect full text via `collectText()`/their own accumulation loop and
 never read `includePartialMessages`, so they get no extra `stream_event` volume.
 
 When enabled, the CLI additionally emits `SDKPartialAssistantMessage` (`type: 'stream_event'`)
@@ -648,8 +648,9 @@ Local models — Ollama or another Anthropic Messages-API-speaking endpoint — 
 provider preset, no OpenAI-compatible `/v1/chat/completions` loop, and no local-model-only
 branch left in `chat()`/`inlineChat()`/`Session.send()`. See
 `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md` for the removal
-decision and history; the historical design of the removed matrix/loop (issues #79, #117–#120,
-#129, #135, #137, #138, #150) lives in git history and that decision doc, not here.
+decision and history (this same decision also covers issue #221's separate removal of batch
+loops, `src/batchLoopExecutor.ts`); the historical design of the removed matrix/loop (issues #79,
+#117–#120, #129, #135, #137, #138, #150) lives in git history and that decision doc, not here.
 
 - **`AgentService.isLocalAgentEndpointConfigured(): boolean`** — true when a non-empty
   `LocalAgentEndpointConfig.baseUrl` was supplied to the constructor (settings:
@@ -720,7 +721,7 @@ edit selection) that have no tools — and are untouched.
 "attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()` either:
 
 - It is **not** #151's policy (`src/runExecutor.ts`, "Tool approval policy" — governs
-  `batchLoopExecutor.ts`'s unattended runs via `runExecutor.ts`, where `'ask'` means "no human to
+  `runExecutor.ts`'s unattended runs, where `'ask'` means "no human to
   ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
   is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
   the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only

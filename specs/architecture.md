@@ -35,9 +35,8 @@ CLI process per query.
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots.md](bots.md) | `src/bots/*` | Telegram bot front-end |
-| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Shared per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report), used by batch loops |
-| batch-loops | [batch-loops.md](batch-loops.md) | `src/batchLoopExecutor.ts` | User-initiated batch loop: scope/prompt launch command, sequential per-file orchestration (budget, cancellation, progress) over `run-executor` |
-| lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (batch loops, config writes) |
+| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report); no in-tree caller since batch loops were removed (#221), kept as reusable infrastructure |
+| lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (config writes, report appends) |
 | vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, reports folder, today's-date helper |
 
 ## Vault customization (`_synapse/`)
