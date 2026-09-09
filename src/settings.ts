@@ -692,13 +692,13 @@ export class SynapseSettingTab extends PluginSettingTab {
 			.setName('Local agent endpoint (advanced)')
 			.setHeading();
 		panel.createEl('p', {
-			text: 'Point this at Ollama (default http://localhost:11434, v0.14.0+) or another endpoint that speaks the Anthropic Messages API. When set, chat/inline/search queries against a local model run through the same Claude Agent SDK/CLI as Claude sessions — full streaming, tool use, skills, and permission modes — instead of the simplified local loop above. A user-supplied URL redirects the entire agent loop, including tool calls, to that endpoint: only point this at an endpoint you trust with your conversation and tool-call data. Leave blank to keep using the simplified local loop.',
+			text: 'Point this at Ollama (default localhost:11434, v0.14.0+) or another endpoint that speaks the Anthropic Messages API. When set, chat, inline, and search queries against a local model run through the same Claude Agent SDK as Claude sessions — full streaming, tool use, skills, and permission modes — instead of the simplified local loop above. A user-supplied URL redirects the entire agent loop, including tool calls, to that endpoint: only point this at an endpoint you trust with your conversation and tool-call data. Leave blank to keep using the simplified local loop.',
 			cls: 'setting-item-description',
 		});
 
 		new Setting(panel)
 			.setName('Endpoint URL')
-			.setDesc('Base URL of a Messages-API-speaking endpoint. Blank = local models use the simplified local loop (local & custom providers above).')
+			.setDesc('Base URL of an endpoint that speaks the Anthropic Messages API. Blank = local models use the simplified local loop (local & custom providers above).')
 			.addText(text => text
 				.setPlaceholder(localAgentEndpointPlaceholder)
 				.setValue(this.plugin.settings.localAgentEndpointUrl)
@@ -710,7 +710,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(panel)
 			.setName('Endpoint API key')
-			.setDesc("API key header sent to the endpoint. Ollama requires the header but ignores its value — leave blank to send 'ollama' automatically. Stored securely.")
+			.setDesc("API key header sent to the endpoint. Ollama requires the header but ignores its value — leave blank to send 'Ollama' automatically. Stored securely.")
 			.addText(text => {
 				text.inputEl.type = 'password';
 				text.inputEl.autocomplete = 'off';

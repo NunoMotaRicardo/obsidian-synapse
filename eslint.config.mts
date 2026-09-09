@@ -224,6 +224,14 @@ export default tseslint.config(
 					'Synapse', 'Ollama', 'Sonnet',
 					// OpenAI-compatible provider description (#117):
 					'OpenRouter', 'LM Studio', 'llama.cpp', 'vLLM', 'Groq', 'Together', 'DeepSeek', 'Mistral', 'Foundry Local',
+					// Local agent endpoint (#122): 'Anthropic' alone is already listed above, but
+					// "Messages API"/"Claude Agent SDK" need their own multi-word entries — this
+					// rule's brand matching is phrase-based (unlike synapse-custom/ui-sentence-case's
+					// single-word ALLOWED_UPPERCASE), so a bare 'Messages'/'Agent' addition there
+					// doesn't affect this rule at all, and adding 'Agent' alone here would (per the
+					// `^Feature -> Agent map$` ignoreRegex entry above) over-permit that generic word
+					// mid-sentence anywhere else.
+					'Messages API', 'Claude Agent SDK',
 				],
 				acronyms: [
 					'API', 'HTTP', 'HTTPS', 'URL', 'DNS', 'TCP', 'IP', 'SSH', 'TLS', 'SSL', 'FTP', 'SFTP', 'SMTP',

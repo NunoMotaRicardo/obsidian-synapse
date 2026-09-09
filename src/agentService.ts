@@ -154,7 +154,7 @@ import type {
 import {z} from 'zod';
 import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
-import {isLocalBackendConfigured, executeLocalProviderQuery, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
+import {isLocalBackendConfigured, executeLocalProviderQuery, resolveDefaultModel, clearCachedDefaultModel, type LocalHistoryMessage, type LocalToolApprovalHandler} from './providerModels';
 import {vaultTools} from './vaultTools';
 import {debugTrace} from './debug';
 import {getSynapseSettingsPath} from './vaultPaths';
@@ -814,6 +814,15 @@ export class AgentService {
 				systemPrompt: z.string().optional().describe('Optional instructions for the sub-task'),
 			}).shape,
 			async (args) => {
+				if (this.isLocalAgentEndpointConfigured()) {
+					try {
+						const model = await resolveDefaultModel(this.providerConfig!);
+						const text = await this.chat({prompt: args.prompt, systemMessage: args.systemPrompt, model});
+						return {content: [{type: 'text', text: text || ''}]};
+					} catch (e) {
+						return {content: [{type: 'text', text: `Local agent execution failed: ${e instanceof Error ? e.message : String(e)}`}], isError: true};
+					}
+				}
 				const res = await executeLocalProviderQuery(this.providerConfig!, {
 					prompt: args.prompt,
 					systemPrompt: args.systemPrompt,
@@ -835,8 +844,14 @@ export class AgentService {
 			}).shape,
 			async (args) => {
 				const sysPrompt = args.instruction ? `Summarize concisely according to instruction: ${args.instruction}` : 'Summarize the following text concisely.';
+				const useEndpoint = this.isLocalAgentEndpointConfigured();
+				const endpointModel = useEndpoint ? await resolveDefaultModel(this.providerConfig!) : undefined;
 				const settled = await Promise.allSettled(
 					args.items.map(async (item, i) => {
+						if (useEndpoint) {
+							const text = await this.chat({prompt: item, systemMessage: sysPrompt, model: endpointModel});
+							return `Item ${i + 1}:\n${text || ''}`;
+						}
 						const res = await executeLocalProviderQuery(this.providerConfig!, {
 							prompt: item,
 							systemPrompt: sysPrompt,

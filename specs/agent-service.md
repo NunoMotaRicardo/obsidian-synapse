@@ -263,8 +263,13 @@ an in-process MCP server (`delegation`), implemented with `createSdkMcpServer()`
   configured or unavailable, the delegation server is omitted from query options.
 - **Tools exposed:** `cheap_generate` (single prompts/sub-tasks) and `bulk_summarize`
   (multi-item summaries processed in parallel via `Promise.allSettled`).
-- **Routing:** The in-process tool handler executes sub-tasks via `executeLocalProviderQuery()`
-  from `providerModels.ts`, keeping routing, formatting, and cost under plugin control.
+- **Routing:** When a local agent endpoint (issue #122, see "Local agent endpoint" above) is
+  configured, the tool handler resolves the provider's default model
+  (`resolveDefaultModel()`, exported from `providerModels.ts`) and delegates via `chat()` — the
+  same real-Agent-SDK path a direct local-model chat query takes — instead of
+  `executeLocalProviderQuery()`. Without the endpoint configured, it still executes sub-tasks via
+  `executeLocalProviderQuery()` unchanged, keeping routing, formatting, and cost under plugin
+  control.
 - **Caching:** The resolved default model ID is cached per base URL. The delegation server
   instance is cached but invalidated when `isLocalBackendConfigured()` returns false.
   Call `clearDelegationCache()` when provider config changes.
