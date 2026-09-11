@@ -1,4 +1,4 @@
-import {Menu, Notice, TFile, setIcon} from 'obsidian';
+import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
 import {autoApproveReadOnlyTools, type SessionConfig} from '../agentService';
 import type {Session} from '../agentService';
 import type {AgentConfig} from '../types';
@@ -100,7 +100,7 @@ export class SearchPanelController {
 	getSearchWorkingDirectory(): string {
 		const base = this.view.getVaultBasePath();
 		if (!this.searchWorkingDir) return base;
-		return base + '/' + this.searchWorkingDir;
+		return base + '/' + normalizePath(this.searchWorkingDir);
 	}
 
 	/** Build the whole search panel into `parent`. */

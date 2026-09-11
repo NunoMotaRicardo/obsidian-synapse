@@ -30,7 +30,7 @@ and built in `buildUI()` via `controller.build(parent)`.
   `declare module` method with no `proto.<name> =` assignment; an `installX()` export never
   called from `synapseView.ts`) are structurally impossible now. The source-parsing
   `test/viewInjectionWiring.test.ts` that used to guard those gaps was deleted with the
-  pattern (see `.docs/research/2026-09-11-view-composition-refactor.md`, which also records
+  pattern (see `.docs/decisions/2026-09-11-view-composition-refactor.md`, which also records
   the per-module conversion notes).
 - **`ViewContext`** (`src/view/types.ts`) is the narrow bridge each controller receives
   instead of the whole `SynapseView`: `app`, `plugin`, `chatContainer`, `view` (the owning
