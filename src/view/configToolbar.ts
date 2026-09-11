@@ -1,10 +1,10 @@
 import {Menu, setIcon} from 'obsidian';
-import type {SynapseView} from '../synapseView';
 import type {ModelInfo} from '../agentService';
 import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
 import {setDebugEnabled} from '../debug';
 import {resolveModelForAgent, mergeLiveAgents, mergeLiveSkills} from './sessionConfig';
+import type {ViewContext} from './types';
 
 /** Human label for a reasoning-effort level. 'none' reads as "Off". */
 function effortLabel(level: string): string {
@@ -15,32 +15,58 @@ function effortLabel(level: string): string {
 /** Max characters shown for the working-directory folder name before truncating with an ellipsis (#215). */
 const CWD_LABEL_MAX_CHARS = 14;
 
-declare module '../synapseView' {
-	interface SynapseView {
-		buildConfigToolbar(parent: HTMLElement): void;
-		populateModelSelect(): void;
-		getSelectedModelInfo(): ModelInfo | undefined;
-		setModel(modelId: string): void;
-		openReasoningMenu(e: MouseEvent): void;
-		updateReasoningBadge(): void;
-		applyReasoningToSession(): void;
-		openToolsMenu(e: MouseEvent): void;
-		selectAgent(agentName: string): void;
-		applyAgentToolsAndSkills(agent?: AgentConfig): void;
-		updateToolsBadge(): void;
-		openCwdPicker(): void;
-		updateCwdButton(): void;
-		resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined;
-		getEffectiveAgents(): AgentConfig[];
-		getEffectiveSkills(): SkillInfo[];
-		updateContextIndicator(): void;
+/**
+ * Config-toolbar controller (composition refactor — formerly prototype injection into
+ * `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns the
+ * toolbar DOM it builds (reasoning/tools buttons, the send button wiring, the debug
+ * toggle, the context gauge) and reaches the shared view state — agents/models/skills,
+ * `selectedAgent`/`selectedModel`, `enabledSkills`, `workingDir`, `configDirty`, and the
+ * current session's query-metadata caches — through its `ViewContext`.
+ *
+ * The agent/model `<select>`s and the cwd button stay view-owned elements for now:
+ * `SynapseView.updateConfigUI()` rebuilds the selects after every config reload and
+ * inputArea.ts creates the cwd button in the state line, so they are reached through
+ * the `agentSelect`/`modelSelect`/`cwdBtnEl` accessors below.
+ */
+export class ConfigToolbarController {
+	// ── Toolbar DOM refs (moved from SynapseView) ────────────────
+	private reasoningBtnEl!: HTMLButtonElement;
+	private toolsBtnEl!: HTMLButtonElement;
+	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
+	private contextIndicatorEl!: HTMLElement;
+	private contextSepEl?: HTMLElement;
+	/** Gauge track/fill/value nodes, built once and reused in place so the CSS width transition can animate (#215). */
+	private gaugeFillEl?: HTMLElement;
+	private gaugeValueEl?: HTMLElement;
+	private debugBtnEl!: HTMLElement;
+
+	constructor(private view: ViewContext) {}
+
+	// ── View-owned element/state accessors ───────────────────────
+	// Accessors (not copied fields) so the historical `this.<name>` spellings in the
+	// methods below keep compiling against state that still lives on `SynapseView`.
+	private get agentSelect(): HTMLSelectElement {
+		return this.view.view.agentSelect;
 	}
-}
 
-export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
-	const proto = ViewClass.prototype as SynapseView;
+	private get modelSelect(): HTMLSelectElement {
+		return this.view.view.modelSelect;
+	}
 
-	proto.buildConfigToolbar = function(parent: HTMLElement): void {
+	private get cwdBtnEl(): HTMLButtonElement {
+		return this.view.view.cwdBtnEl;
+	}
+
+	private get selectedAgent(): string {
+		return this.view.view.selectedAgent;
+	}
+
+	private get selectedModel(): string {
+		return this.view.view.selectedModel;
+	}
+
+	/** Build the toolbar into `parent` (upper controls row + lower gauge/debug row). */
+	build(parent: HTMLElement): void {
 		// `synapse-config-toolbar` scopes the editorial (#210) look to this toolbar only — the
 		// search tab's toolbar (searchPanel.ts) reuses the bare `.synapse-toolbar`/`.synapse-select`
 		// classes for its own pre-existing appearance and must not inherit this restyle (#215).
@@ -56,17 +82,17 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			});
 
 		// Agent dropdown
-		this.agentSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-agent-select'});
+		this.view.view.agentSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-agent-select'});
 		this.agentSelect.toggleClass('is-active', this.selectedAgent !== '');
 		this.agentSelect.addEventListener('change', () => {
 			this.selectAgent(this.agentSelect.value);
-			this.updateStateLine?.();
+			this.view.view.updateStateLine();
 		});
 
 		addSep();
 
 		// Model dropdown
-		this.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
+		this.view.view.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
 		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 		this.modelSelect.addEventListener('change', () => this.setModel(this.modelSelect.value));
 
@@ -88,17 +114,18 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// Spacer to push send button to the right
 		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
 
-		// Send button (#215) — aligned on the upper toolbar row
-		this.sendBtn = toolbar.createEl('button', {
+		// Send button (#215) — aligned on the upper toolbar row. `sendBtn` stays a view
+		// field: chatRenderer.ts's updateSendButton() swaps its icon/title with stream state.
+		this.view.view.sendBtn = toolbar.createEl('button', {
 			cls: 'clickable-icon synapse-send-btn',
 			attr: {title: 'Send message', type: 'button'},
 		});
-		setIcon(this.sendBtn, 'arrow-up');
-		this.sendBtn.addEventListener('click', () => {
-			if (this.isStreaming) {
-				void this.handleAbort();
+		setIcon(this.view.view.sendBtn, 'arrow-up');
+		this.view.view.sendBtn.addEventListener('click', () => {
+			if (this.view.isStreaming) {
+				void this.view.view.handleAbort();
 			} else {
-				void this.handleSend();
+				void this.view.view.handleSend();
 			}
 		});
 
@@ -115,13 +142,13 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.debugBtnEl = lowerToolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
 		this.debugBtnEl.createSpan({cls: 'synapse-debug-label', text: 'Debug'});
 		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'synapse-debug-checkbox'});
-		debugCheck.checked = this.showDebugInfo;
-		this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
+		debugCheck.checked = this.view.view.showDebugInfo;
+		this.debugBtnEl.toggleClass('is-active', this.view.view.showDebugInfo);
 		debugCheck.addEventListener('change', () => {
-			this.showDebugInfo = debugCheck.checked;
-			this.debugBtnEl.toggleClass('is-active', this.showDebugInfo);
-			setDebugEnabled(this.showDebugInfo);
-			this.chatContainer.toggleClass('synapse-hide-debug', !this.showDebugInfo);
+			this.view.view.showDebugInfo = debugCheck.checked;
+			this.debugBtnEl.toggleClass('is-active', this.view.view.showDebugInfo);
+			setDebugEnabled(this.view.view.showDebugInfo);
+			this.view.chatContainer.toggleClass('synapse-hide-debug', !this.view.view.showDebugInfo);
 		});
 		this.debugBtnEl.addEventListener('click', (e) => {
 			if (e.target !== debugCheck) {
@@ -129,24 +156,24 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 				debugCheck.dispatchEvent(new Event('change'));
 			}
 		});
-	};
+	}
 
-	proto.populateModelSelect = function(): void {
+	populateModelSelect(): void {
 		this.modelSelect.empty();
 		const defaultOpt = this.modelSelect.createEl('option', {text: 'Default model'});
 		defaultOpt.value = '';
-		for (const model of this.models) {
+		for (const model of this.view.view.models) {
 			const opt = this.modelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
 		this.modelSelect.value = this.selectedModel;
 		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
-		this.updateStateLine?.();
-	};
+		this.view.view.updateStateLine();
+	}
 
-	proto.getSelectedModelInfo = function(): ModelInfo | undefined {
-		return this.models.find(m => m.id === this.selectedModel);
-	};
+	private getSelectedModelInfo(): ModelInfo | undefined {
+		return this.view.view.models.find(m => m.id === this.selectedModel);
+	}
 
 	/**
 	 * Single source of truth for a model change — the toolbar's `modelSelect` is the sole
@@ -155,18 +182,18 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 * Resets any reasoning effort the new model doesn't support first, then carries the
 	 * (now-valid) effort + summary into the mid-session switch.
 	 */
-	proto.setModel = function(modelId: string): void {
-		this.selectedModel = modelId;
+	setModel(modelId: string): void {
+		this.view.view.selectedModel = modelId;
 		if (this.modelSelect) {
 			this.modelSelect.value = modelId;
 			this.modelSelect.toggleClass('is-active', modelId !== '');
 		}
 		this.updateReasoningBadge();
 		this.applyReasoningToSession();
-		this.updateStateLine?.();
-	};
+		this.view.view.updateStateLine();
+	}
 
-	proto.openReasoningMenu = function(e: MouseEvent): void {
+	private openReasoningMenu(e: MouseEvent): void {
 		const model = this.getSelectedModelInfo();
 		// The SDK narrows supportedReasoningEfforts to its ReasoningEffort union, but
 		// models report values beyond it (e.g. 'max', 'none'); treat them as strings.
@@ -177,15 +204,15 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		if (this.selectedModel === '') {
 			menu.addItem(item => item.setTitle('Default model (capabilities unknown)').setDisabled(true));
 		} else if (supportsReasoning) {
-			const current = this.plugin.settings.reasoningEffort;
+			const current = this.view.plugin.settings.reasoningEffort;
 			for (const level of supported) {
 				menu.addItem(item => {
 					item.setTitle(effortLabel(level))
 						.setChecked(level === current)
 						.onClick(() => {
 							// Toggle back to model default if the active level is re-selected.
-							this.plugin.settings.reasoningEffort = level === current ? '' : level;
-							void this.plugin.saveSettings();
+							this.view.plugin.settings.reasoningEffort = level === current ? '' : level;
+							void this.view.plugin.saveSettings();
 							this.applyReasoningToSession();
 							this.updateReasoningBadge();
 						});
@@ -199,32 +226,32 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		menu.addSeparator();
 		menu.addItem(item => {
 			item.setTitle('Infinite sessions')
-				.setChecked(this.plugin.settings.infiniteSessionsEnabled)
+				.setChecked(this.view.plugin.settings.infiniteSessionsEnabled)
 				.onClick(() => {
-					this.plugin.settings.infiniteSessionsEnabled = !this.plugin.settings.infiniteSessionsEnabled;
-					void this.plugin.saveSettings();
-					this.configDirty = true;
+					this.view.plugin.settings.infiniteSessionsEnabled = !this.view.plugin.settings.infiniteSessionsEnabled;
+					void this.view.plugin.saveSettings();
+					this.view.configDirty = true;
 					this.updateReasoningBadge();
 				});
 		});
 
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.applyReasoningToSession = function(): void {
+	applyReasoningToSession(): void {
 		// This plugin creates a fresh query() per turn (resuming via `resume`) rather than
 		// holding a live Query between turns, so there's no live handle to mutate mid-turn —
 		// config changes like this one apply on the next turn simply by living in
 		// `this.config`. Mark config dirty so `ensureSession()` rebuilds the Session (its
 		// `resume` carries the conversation across the rebuild — see `ensureSession()`).
-		if (!this.configDirty) {
-			this.configDirty = true;
+		if (!this.view.configDirty) {
+			this.view.configDirty = true;
 		}
-	};
+	}
 
-	proto.updateReasoningBadge = function(): void {
-		const level = this.plugin.settings.reasoningEffort;
-		const infiniteSessions = this.plugin.settings.infiniteSessionsEnabled;
+	updateReasoningBadge(): void {
+		const level = this.view.plugin.settings.reasoningEffort;
+		const infiniteSessions = this.view.plugin.settings.infiniteSessionsEnabled;
 		// Text stays sentence case; `.synapse-toolbar-btn`'s CSS `text-transform: uppercase`
 		// handles the visual presentation (#215) — see the same reasoning on `updateCwdButton()`.
 		const setLabel = (effort?: string): void => {
@@ -248,10 +275,10 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const supportsReasoning = !!model?.capabilities?.supports?.reasoningEffort && (supported?.length ?? 0) > 0;
 		// Reset if current level isn't supported by the new model
 		if (level !== '' && supportsReasoning && supported && !supported.includes(level)) {
-			this.plugin.settings.reasoningEffort = '';
-			void this.plugin.saveSettings();
+			this.view.plugin.settings.reasoningEffort = '';
+			void this.view.plugin.saveSettings();
 		}
-		const current = this.plugin.settings.reasoningEffort;
+		const current = this.view.plugin.settings.reasoningEffort;
 		// The button stays interactive even without reasoning support, because the menu
 		// always offers the infinite-sessions toggle.
 		const active = current !== '' && supportsReasoning;
@@ -266,13 +293,13 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		} else {
 			this.reasoningBtnEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
 		}
-	};
+	}
 
-	proto.openToolsMenu = function(e: MouseEvent): void {
+	private openToolsMenu(e: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
 		menu.addSeparator();
-		const currentApproval = this.plugin.settings.toolApproval;
+		const currentApproval = this.view.plugin.settings.toolApproval;
 		menu.addItem(item => {
 			item.setTitle('Approval mode');
 			const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -280,8 +307,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 				si.setTitle('Allow (auto-approve)')
 					.setChecked(currentApproval === 'allow')
 					.onClick(async () => {
-						this.plugin.settings.toolApproval = 'allow';
-						await this.plugin.saveSettings();
+						this.view.plugin.settings.toolApproval = 'allow';
+						await this.view.plugin.saveSettings();
 						this.updateToolsBadge();
 					});
 			});
@@ -289,28 +316,28 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 				si.setTitle('Ask (require approval)')
 					.setChecked(currentApproval === 'ask')
 					.onClick(async () => {
-						this.plugin.settings.toolApproval = 'ask';
-						await this.plugin.saveSettings();
+						this.view.plugin.settings.toolApproval = 'ask';
+						await this.view.plugin.saveSettings();
 						this.updateToolsBadge();
 					});
 			});
 		});
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.selectAgent = function(agentName: string): void {
+	selectAgent(agentName: string): void {
 		// Handle deselecting (empty = "Auto" / no agent)
 		if (!agentName) {
-			this.selectedAgent = '';
+			this.view.view.selectedAgent = '';
 			this.agentSelect.value = '';
 			this.agentSelect.selectedIndex = 0;
 			this.agentSelect.title = '';
 			this.agentSelect.toggleClass('is-active', false);
 			this.applyAgentToolsAndSkills(undefined);
-			this.configDirty = true;
+			this.view.configDirty = true;
 			// Deselecting was previously the one branch that didn't refresh the state line
 			// (#217) — it displays the active agent, so it needs to reflect "Auto" too.
-			this.updateStateLine?.();
+			this.view.view.updateStateLine();
 			return;
 		}
 		const effectiveAgents = this.getEffectiveAgents();
@@ -318,7 +345,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			// Fallback: case-insensitive match
 			?? effectiveAgents.find(a => a.name.toLowerCase() === agentName.toLowerCase());
 		if (!agent) return; // No matching agent found — leave dropdown unchanged
-		this.selectedAgent = agent.name;
+		this.view.view.selectedAgent = agent.name;
 		// Update the dropdown — set both .value and .selectedIndex for reliability
 		this.agentSelect.value = agent.name;
 		this.agentSelect.toggleClass('is-active', true);
@@ -333,16 +360,16 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		// Auto-select agent's preferred model
 		const resolvedModel = this.resolveModelForAgent(agent, this.selectedModel || undefined);
 		if (resolvedModel && resolvedModel !== this.selectedModel) {
-			this.selectedModel = resolvedModel;
+			this.view.view.selectedModel = resolvedModel;
 			this.modelSelect.value = resolvedModel;
 			this.modelSelect.toggleClass('is-active', resolvedModel !== '');
 		}
 		this.applyAgentToolsAndSkills(agent);
-		this.configDirty = true;
-		this.updateStateLine?.();
-	};
+		this.view.configDirty = true;
+		this.view.view.updateStateLine();
+	}
 
-	proto.applyAgentToolsAndSkills = function(agent?: AgentConfig): void {
+	applyAgentToolsAndSkills(agent?: AgentConfig): void {
 		// Skills: undefined = enable all, [] = disable all, [...] = enable listed.
 		// This is the agent-declared restriction (AgentConfig.skills), independent
 		// from the removed manual toolbar toggle — all discovered skills are always
@@ -350,44 +377,44 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		const effectiveSkills = this.getEffectiveSkills();
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
-			this.enabledSkills = new Set(
+			this.view.view.enabledSkills = new Set(
 				effectiveSkills.filter(s => allowed.has(s.name)).map(s => s.name)
 			);
 		} else {
-			this.enabledSkills = new Set(effectiveSkills.map(s => s.name));
+			this.view.view.enabledSkills = new Set(effectiveSkills.map(s => s.name));
 		}
 
 		this.updateToolsBadge();
-	};
+	}
 
-	proto.updateToolsBadge = function(): void {
-		const approval = this.plugin.settings.toolApproval;
+	updateToolsBadge(): void {
+		const approval = this.view.plugin.settings.toolApproval;
 		const label = approval === 'allow' ? 'Allow' : 'Ask';
 		this.toolsBtnEl.toggleClass('is-active', approval === 'allow');
 		this.toolsBtnEl.setAttribute('title', `Tools approval: ${approval === 'allow' ? 'Allow (auto-approve)' : 'Ask (require approval)'}`);
 		if (this.toolsBtnEl.textContent !== label) {
 			this.toolsBtnEl.setText(label);
 		}
-	};
+	}
 
-	proto.openCwdPicker = function(): void {
-		new FolderTreeModal(this.app, this.workingDir, (folder) => {
-			this.workingDir = folder.path;
+	openCwdPicker(): void {
+		new FolderTreeModal(this.view.app, this.view.view.workingDir, (folder) => {
+			this.view.view.workingDir = folder.path;
 			this.updateCwdButton();
-			this.configDirty = true;
+			this.view.configDirty = true;
 		}).open();
-	};
+	}
 
-	proto.updateCwdButton = function(): void {
+	updateCwdButton(): void {
 		if (!this.cwdBtnEl) return;
-		const vaultName = this.app.vault.getName();
-		const label = this.workingDir
-			? `Working directory: ${vaultName}/${this.workingDir}`
+		const vaultName = this.view.app.vault.getName();
+		const label = this.view.view.workingDir
+			? `Working directory: ${vaultName}/${this.view.view.workingDir}`
 			: `Working directory: ${vaultName} (vault root)`;
 		this.cwdBtnEl.setAttribute('title', label);
-		const hasFolder = Boolean(this.workingDir && this.workingDir !== '' && this.workingDir !== '/');
+		const hasFolder = Boolean(this.view.view.workingDir && this.view.view.workingDir !== '' && this.view.view.workingDir !== '/');
 		this.cwdBtnEl.toggleClass('is-active', hasFolder);
-		const folderName = this.workingDir ? (this.workingDir.split('/').pop() || this.workingDir) : '';
+		const folderName = this.view.view.workingDir ? (this.view.view.workingDir.split('/').pop() || this.view.view.workingDir) : '';
 		// Truncate only the folder-name portion so a long name doesn't squeeze the state line row
 		// (#215); the full name is always available via the `title` set above. Written in
 		// sentence case — `.synapse-toolbar-btn`'s CSS `text-transform: uppercase` handles the
@@ -397,7 +424,7 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			? `${folderName.slice(0, CWD_LABEL_MAX_CHARS - 1)}…`
 			: folderName;
 		this.cwdBtnEl.setText(truncated ? truncated : 'Dir');
-	};
+	}
 
 	/**
 	 * The agent list to render/select from (issue #130): the live session's
@@ -405,33 +432,33 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 * scan (`this.agents`). A session that has never sent a turn has no capture yet, so this
 	 * transparently returns the scan result — the pre-#130 fallback behavior is unchanged.
 	 */
-	proto.getEffectiveAgents = function(): AgentConfig[] {
+	getEffectiveAgents(): AgentConfig[] {
 		// Current session's capture first, then the view's last-known one (#163) — a config
 		// change rebuilds the Session and empties its cache, and dropping to the directory scan
 		// there made CLI-provided agents vanish mid-conversation.
-		const live = this.currentSession?.cachedSupportedAgents ?? this.lastSupportedAgents;
-		if (!live) return this.agents;
+		const live = this.view.view.currentSession?.cachedSupportedAgents ?? this.view.view.lastSupportedAgents;
+		if (!live) return this.view.view.agents;
 		// The CLI decides membership; the vault scan supplies the richer config for any
 		// agent present in both. Replacing a scanned `AgentConfig` wholesale would drop its
 		// declared `tools`/`skills`, and `applyAgentToolsAndSkills()` reads `skills:
 		// undefined` as "enable all" — silently widening a deliberately narrowed agent.
-		return mergeLiveAgents(live, this.agents);
-	};
+		return mergeLiveAgents(live, this.view.view.agents);
+	}
 
 	/**
 	 * The skill/slash-command list to render/select from (issue #130): the live session's
 	 * `supportedCommands()` capture when one exists, else the `_synapse/skills/` directory
 	 * scan (`this.skills`). Same fallback guarantee as `getEffectiveAgents()`.
 	 */
-	proto.getEffectiveSkills = function(): SkillInfo[] {
+	getEffectiveSkills(): SkillInfo[] {
 		// Same fallback chain as `getEffectiveAgents()` — see `lastSupportedCommands` (#163).
-		const live = this.currentSession?.cachedSupportedCommands ?? this.lastSupportedCommands;
-		if (!live) return this.skills;
+		const live = this.view.view.currentSession?.cachedSupportedCommands ?? this.view.view.lastSupportedCommands;
+		if (!live) return this.view.view.skills;
 		// Merged by name for the same reason as `getEffectiveAgents()`, so a vault skill
 		// keeps its `folderPath` instead of being flattened to `''`. Nothing reads
 		// `SkillInfo.folderPath` today, so this is defensive rather than load-bearing.
-		return mergeLiveSkills(live, this.skills);
-	};
+		return mergeLiveSkills(live, this.view.view.skills);
+	}
 
 	/**
 	 * Reflect the session's cached `getContextUsage()` snapshot (issue #130, #210) in the toolbar
@@ -443,8 +470,8 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 	 * populates `cachedContextUsage`, so the indicator stays absent for the entire
 	 * conversation rather than showing a number that was never actually measured.
 	 */
-	proto.updateContextIndicator = function(): void {
-		const usage = this.currentSession?.cachedContextUsage;
+	updateContextIndicator(): void {
+		const usage = this.view.view.currentSession?.cachedContextUsage;
 		if (!usage) {
 			this.contextIndicatorEl.addClass('is-hidden');
 			if (this.contextSepEl) this.contextSepEl.addClass('is-hidden');
@@ -479,9 +506,9 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		);
 		this.contextIndicatorEl.toggleClass('is-context-warning', pct >= 75 && pct < 90);
 		this.contextIndicatorEl.toggleClass('is-context-critical', pct >= 90);
-	};
+	}
 
-	proto.resolveModelForAgent = function(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {
-		return resolveModelForAgent(agent, this.models, fallback);
-	};
+	resolveModelForAgent(agent: AgentConfig | undefined, fallback: string | undefined): string | undefined {
+		return resolveModelForAgent(agent, this.view.view.models, fallback);
+	}
 }

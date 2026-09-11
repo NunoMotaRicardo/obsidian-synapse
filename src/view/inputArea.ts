@@ -57,8 +57,8 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			cls: 'synapse-toolbar-btn synapse-cwd-btn',
 			attr: {type: 'button'},
 		});
-		this.cwdBtnEl.addEventListener('click', () => this.openCwdPicker());
-		this.updateCwdButton();
+		this.cwdBtnEl.addEventListener('click', () => this.configToolbar.openCwdPicker());
+		this.configToolbar.updateCwdButton();
 
 		// Scope button (icon only)
 		this.scopeBtn = this.stateLineEl.createEl('button', {
@@ -421,7 +421,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			});
 			if (decision.applyNow) {
 				this.workingDir = newDir;
-				this.updateCwdButton();
+				this.configToolbar.updateCwdButton();
 				this.configDirty = true;
 			}
 			if (decision.pendingDir !== null) {
@@ -590,7 +590,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	/** Set the working directory programmatically. */
 	proto.setWorkingDir = function (folderPath: string): void {
 		this.workingDir = folderPath;
-		this.updateCwdButton();
+		this.configToolbar.updateCwdButton();
 		this.configDirty = true;
 	};
 
@@ -708,7 +708,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Match on the skill's own name first — that is what the user typed when creating it
 		// — but also accept the CLI's namespaced id, so the text the popup itself inserts still
 		// re-filters to the same entry (issue #163).
-		const matches = this.getEffectiveSkills().filter(s =>
+		const matches = this.configToolbar.getEffectiveSkills().filter(s =>
 			this.enabledSkills.has(s.name)
 			&& (s.name.toLowerCase().startsWith(query) || (s.qualifiedName?.toLowerCase().startsWith(query) ?? false))
 		);

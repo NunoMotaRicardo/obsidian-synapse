@@ -657,7 +657,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// Restored session carries whatever query-metadata cache (#130) it last captured
 		// while backgrounded — reflect it (or its absence) immediately rather than waiting
 		// for this session's next turn.
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 
 		// Lock toolbar since session is active
 		this.updateToolbarLock();
@@ -817,7 +817,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		if (colonIdx > 0) {
 			const agentName = sessionName.substring(0, colonIdx).trim();
 			if (this.agents.some(a => a.name === agentName)) {
-				this.selectAgent(agentName);
+				this.configToolbar.selectAgent(agentName);
 			}
 		}
 	};
@@ -962,7 +962,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			// A cold-resumed session is a brand-new Session object with an empty
 			// query-metadata cache (#130) even though the CLI conversation itself is old —
 			// hide the gauge until this session's own first turn captures a fresh value.
-			this.updateContextIndicator();
+			this.configToolbar.updateContextIndicator();
 			this.updateToolbarLock();
 
 			// Restore the agent that was used in this session

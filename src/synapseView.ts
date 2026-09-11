@@ -21,6 +21,7 @@ import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateRes
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
 import type {ViewContext} from './view/types';
 import {SearchPanelController} from './view/searchPanel';
+import {ConfigToolbarController} from './view/configToolbar';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -190,6 +191,14 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	readonly search: SearchPanelController = new SearchPanelController(this);
 
+	// ── Config toolbar state ─────────────────────────────────────
+	/**
+	 * Config-toolbar controller (composition refactor — same pattern as `search`;
+	 * owns the chat toolbar DOM refs it builds and the agent/model/reasoning/tools/cwd
+	 * UI logic). The view reaches it as `this.configToolbar.…`.
+	 */
+	readonly configToolbar: ConfigToolbarController = new ConfigToolbarController(this);
+
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
@@ -210,18 +219,13 @@ export class SynapseView extends ItemView implements ViewContext {
 	scopeBtn?: HTMLButtonElement;
 	attachBtn?: HTMLButtonElement;
 	sendBtn!: HTMLButtonElement;
+	// The agent/model selects and the cwd button stay view-owned DOM refs:
+	// updateConfigUI() rebuilds the selects after every config reload and inputArea.ts
+	// creates the cwd button in the state line; configToolbar reaches them through
+	// ViewContext (see its accessors in view/configToolbar.ts).
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;
-	reasoningBtnEl!: HTMLButtonElement;
-	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
-	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
-	contextIndicatorEl!: HTMLElement;
-	contextSepEl?: HTMLElement;
-	/** Gauge track/fill/value nodes, built once and reused in place so the CSS width transition can animate (#215). */
-	gaugeFillEl?: HTMLElement;
-	gaugeValueEl?: HTMLElement;
-	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;
 
@@ -356,7 +360,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.buildInputArea(bottom);
 
 		// Config toolbar (agents, models, skills, tools, action buttons)
-		this.buildConfigToolbar(bottom);
+		this.configToolbar.build(bottom);
 
 		// Splitter + session sidebar inside chat panel
 		this.splitterEl = this.chatPanelEl.createDiv({cls: 'synapse-splitter'});
@@ -500,7 +504,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			this.selectedModel = '';
 		}
 
-		this.populateModelSelect();
+		this.configToolbar.populateModelSelect();
 		if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
 			this.modelSelect.value = this.selectedModel;
 		} else {
@@ -543,7 +547,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	updateConfigUI(): void {
 		// Agents — sourced from the live CLI's supportedAgents() (issue #130) when a session
 		// has captured one, else the directory scan; see `getEffectiveAgents()`.
-		const agents = this.getEffectiveAgents();
+		const agents = this.configToolbar.getEffectiveAgents();
 		this.agentSelect.empty();
 		const noAgent = this.agentSelect.createEl('option', {text: 'Auto', attr: {value: ''}});
 		noAgent.value = '';
@@ -568,13 +572,13 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		// Auto-select agent's preferred model
 		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
-		const resolvedModel = this.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
+		const resolvedModel = this.configToolbar.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
 		if (resolvedModel) {
 			this.selectedModel = resolvedModel;
 		}
 
 		// Models
-		this.populateModelSelect();
+		this.configToolbar.populateModelSelect();
 		if (this.selectedModel === '') {
 			this.modelSelect.value = '';
 		} else if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
@@ -589,9 +593,9 @@ export class SynapseView extends ItemView implements ViewContext {
 		// updateToolsBadge() internally, and populateModelSelect() above already calls
 		// updateStateLine(), so neither is repeated here (#217).
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
-		this.applyAgentToolsAndSkills(selectedAgentForFilter);
-		this.updateReasoningBadge();
-		this.updateCwdButton();
+		this.configToolbar.applyAgentToolsAndSkills(selectedAgentForFilter);
+		this.configToolbar.updateReasoningBadge();
+		this.configToolbar.updateCwdButton();
 
 		// Update search panel dropdowns
 		this.search.updateSearchConfigUI();
@@ -901,7 +905,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		// A rebuilt Session starts with an empty query-metadata cache (issue #130) — hide
 		// the gauge and fall back to the directory scan for agents/skills until this
 		// session's own first turn captures fresh values.
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 		this.updateToolbarLock();
 
 		// Add resumed sessions to the list immediately; brand-new sessions are added
@@ -1116,7 +1120,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				if (this.currentSession?.cachedSupportedAgents) {
 					this.lastSupportedAgents = this.currentSession.cachedSupportedAgents;
 				}
-				this.updateContextIndicator();
+				this.configToolbar.updateContextIndicator();
 				break;
 		}
 	}
@@ -1179,7 +1183,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			} catch { /* ignore */ }
 			this.currentSession = null;
 		}
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 	}
 
 	async disconnectAllSessions(): Promise<void> {
@@ -1231,10 +1235,10 @@ export class SynapseView extends ItemView implements ViewContext {
 		if (this.pendingWorkingDir !== null) {
 			this.workingDir = this.pendingWorkingDir;
 			this.pendingWorkingDir = null;
-			this.updateCwdButton();
+			this.configToolbar.updateCwdButton();
 		}
 		this.updateConfigUI();
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];
@@ -1426,15 +1430,14 @@ export class SynapseView extends ItemView implements ViewContext {
 
 // ── Install feature modules ─────────────────────────────────────
 // These extend SynapseView.prototype with methods organized by feature area.
-// (The search panel moved to real composition — `readonly search` — in the
-// composition refactor; the remaining four modules follow the same path, after
-// which this whole section disappears.)
+// (The search panel and the config toolbar moved to real composition —
+// `readonly search` / `readonly configToolbar` — in the composition refactor; the
+// remaining three modules follow the same path, after which this whole section
+// disappears.)
 import {installChatRenderer} from './view/chatRenderer';
 import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
-import {installConfigToolbar} from './view/configToolbar';
 
 installChatRenderer(SynapseView);
 installSessionSidebar(SynapseView);
 installInputArea(SynapseView);
-installConfigToolbar(SynapseView);

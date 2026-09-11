@@ -173,7 +173,7 @@ export class SearchPanelController {
 			const agent = this.view.view.agents.find(a => a.name === this.searchAgent);
 			this.searchAgentSelect.title = agent ? agent.instructions : '';
 			// Auto-select agent's preferred model
-			const resolvedModel = this.view.view.resolveModelForAgent(agent, this.searchModel || undefined);
+			const resolvedModel = this.view.view.configToolbar.resolveModelForAgent(agent, this.searchModel || undefined);
 			if (resolvedModel && resolvedModel !== this.searchModel) {
 				this.searchModel = resolvedModel;
 				this.searchModelSelect.value = resolvedModel;
@@ -302,7 +302,7 @@ export class SearchPanelController {
 
 		// Auto-select agent's preferred model
 		const agentConfig = this.view.view.agents.find(a => a.name === this.searchAgent);
-		const resolvedModel = this.view.view.resolveModelForAgent(agentConfig, this.searchModel || undefined);
+		const resolvedModel = this.view.view.configToolbar.resolveModelForAgent(agentConfig, this.searchModel || undefined);
 		if (resolvedModel) {
 			this.searchModel = resolvedModel;
 		}
@@ -362,7 +362,7 @@ export class SearchPanelController {
 						this.view.plugin.settings.toolApproval = 'allow';
 						await this.view.plugin.saveSettings();
 						this.updateSearchToolsBadge();
-					this.view.view.updateToolsBadge();
+						this.view.view.configToolbar.updateToolsBadge();
 					});
 			});
 			sub.addItem(si => {
@@ -372,7 +372,7 @@ export class SearchPanelController {
 						this.view.plugin.settings.toolApproval = 'ask';
 						await this.view.plugin.saveSettings();
 						this.updateSearchToolsBadge();
-					this.view.view.updateToolsBadge();
+						this.view.view.configToolbar.updateToolsBadge();
 					});
 			});
 		});
