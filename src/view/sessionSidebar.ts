@@ -668,9 +668,6 @@ export class SessionSidebarController {
 		// for this session's next turn.
 		this.view.view.configToolbar.updateContextIndicator();
 
-		// Lock toolbar since session is active
-		this.view.view.updateToolbarLock();
-
 		// Remove from background map
 		this.view.view.activeSessions.delete(bg.sessionId);
 
@@ -890,15 +887,6 @@ export class SessionSidebarController {
 				resume: sessionId,
 			});
 
-			// Explicitly select the agent via RPC after resume
-			if (sessionConfig.agent) {
-				try {
-					await session.rpc.agent.select({name: sessionConfig.agent});
-				} catch (e) {
-					console.warn('[synapse] agent.select on resume failed:', e);
-				}
-			}
-
 			// Load message history from the persisted transcript (cold load).
 			const sessionMeta = this.view.view.sessionList.find(s => s.sessionId === sessionId);
 			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
@@ -972,7 +960,6 @@ export class SessionSidebarController {
 			// query-metadata cache (#130) even though the CLI conversation itself is old —
 			// hide the gauge until this session's own first turn captures a fresh value.
 			this.view.view.configToolbar.updateContextIndicator();
-			this.view.view.updateToolbarLock();
 
 			// Restore the agent that was used in this session
 			this.restoreAgentFromSessionName(sessionId);

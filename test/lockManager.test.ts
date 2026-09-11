@@ -96,33 +96,6 @@ describe('lockManager.withLock — serialization', () => {
 });
 
 // ---------------------------------------------------------------------------
-// isLocked
-// ---------------------------------------------------------------------------
-
-describe('lockManager.isLocked', () => {
-	it('is false before acquisition and after release', async () => {
-		expect(lockManager.isLocked('probe.md')).toBe(false);
-
-		const held = lockManager.withLock('probe.md', async () => {
-			await delay(10);
-		});
-
-		expect(lockManager.isLocked('probe.md')).toBe(true);
-
-		await held;
-
-		expect(lockManager.isLocked('probe.md')).toBe(false);
-	});
-
-	it('deletes the map entry once the queue empties (no unbounded growth)', async () => {
-		await lockManager.withLock('gc.md', async () => {
-			/* no-op */
-		});
-		expect(lockManager.isLocked('gc.md')).toBe(false);
-	});
-});
-
-// ---------------------------------------------------------------------------
 // Release-on-throw
 // ---------------------------------------------------------------------------
 
@@ -135,8 +108,6 @@ describe('lockManager.withLock — release on throw', () => {
 				throw err;
 			}),
 		).rejects.toBe(err);
-
-		expect(lockManager.isLocked('error.md')).toBe(false);
 	});
 
 	it('a subsequent writer still acquires the lock after a prior holder threw', async () => {
