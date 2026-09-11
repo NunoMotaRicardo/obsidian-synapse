@@ -81,7 +81,7 @@ open question:
 - **Not deciding** the exact mechanics of how `AgentService.buildEnv()` should accept a
   user-configured Messages-API base URL/key pair for local endpoints — that is the technical
   planner's job, informed by `2026-09-09-ollama-native-anthropic-messages-api.md`'s hand-off notes
-  and `.docs/research/2026-09-03-provider-matrix.md` §6.
+  and `.docs/audits/2026-09-03-provider-matrix.md` §6.
 - **Not deciding** whether any batch-loop settings/UI remnants (progress modal, Telegram bot
   hooks, budget accounting tie-ins) need a deprecation path for existing users' vault configs, or
   a clean removal — planner's call, but note it explicitly so it isn't missed.
@@ -120,15 +120,15 @@ open question:
    `src/lockManager.ts`, `src/budget.ts`, `src/bots/telegramBot.ts`, `src/main.ts`; remove
    `test/batchLoopExecutor.test.ts` and any other batch-loop-specific tests. Check whether
    `lockManager.ts`/`budget.ts` have non-batch-loop callers that must be preserved.
-4. Update `specs/architecture.md`, `specs/run-executor.md`, `specs/agent-service.md`, and any spec
+4. Update `specs/ARCHITECTURE.md`, `specs/run-executor.md`, `specs/agent-service.md`, and any spec
    referencing the OpenAI-compatible matrix or batch-loop, per `CLAUDE.md`'s "update the matching
    spec in the same change" rule. Delete `specs/batch-loops.md` if the feature has no remnant.
 5. Update or delete `wiki/Local-Models-ReAct.md` and `wiki/Customization.md` references to the
    OpenAI-compatible preset and batch-loop, and add the new Ollama-via-Messages-API setup guide
    (this may be the same wiki work flagged in the sibling record).
-6. Re-check `.docs/research/2026-09-03-automation-model-beyond-triggers.md`,
-   `.docs/research/2026-09-05-codebase-design-audit.md`, and
-   `.docs/research/2026-09-03-open-source-readiness-code-quality.md` for batch-loop-dependent
+6. Re-check `.docs/audits/2026-09-03-automation-model-beyond-triggers.md`,
+   `.docs/audits/2026-09-05-codebase-design-audit.md`, and
+   `.docs/audits/2026-09-03-open-source-readiness-code-quality.md` for batch-loop-dependent
    recommendations that need to be dropped or revised as stale once the feature is gone.
 7. Size as its own issue(s), not folded into unrelated work, per the same reasoning as the sibling
    record.

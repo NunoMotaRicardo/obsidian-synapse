@@ -15,7 +15,7 @@ triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed
 
 ## Architecture
 
-Read [`specs/architecture.md`](specs/architecture.md) first; one spec per module in
+Read [`specs/ARCHITECTURE.md`](specs/ARCHITECTURE.md) first; one spec per module in
 [`specs/`](specs/) — these are checked into the repo root (not `.docs/`) so external AI agents
 and contributors can find them without digging. Rules:
 

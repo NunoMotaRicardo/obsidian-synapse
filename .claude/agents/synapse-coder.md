@@ -27,7 +27,7 @@ in the main thread (the `synapse-technical-planner` and `synapse-reviewer` skill
 ## Before writing anything
 1. (Round 1 only) Create/checkout the branch: `git checkout -b claude/<slug>` from `main`.
    Later rounds reuse the existing branch.
-2. Read the relevant `specs/<module>.md` files (start from `specs/architecture.md`'s module
+2. Read the relevant `specs/<module>.md` files (start from `specs/ARCHITECTURE.md`'s module
    table) and any contracts called out in the issue's "Technical Notes" — match them exactly.
 3. Read existing code in the affected area of `src/` and follow its patterns (Conventions below;
    `.claude/skills/claude-agent-sdk-reference/` for SDK shapes).

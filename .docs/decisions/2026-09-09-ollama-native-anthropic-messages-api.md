@@ -15,7 +15,7 @@ because [`AgentService`](../../src/agentService.ts) only talks to the `claude` C
 only speaks the **Anthropic Messages API**, not the OpenAI-shaped `/v1` surface Ollama has
 historically exposed. `AgentService.buildEnv()` has a standing comment (`agentService.ts:550-556`)
 stating exactly this constraint and pointing at
-[`.docs/research/2026-09-03-provider-matrix.md`](../research/2026-09-03-provider-matrix.md) §6,
+[`.docs/audits/2026-09-03-provider-matrix.md`](../audits/2026-09-03-provider-matrix.md) §6,
 which already recommended closing the gap with an **"Advanced → Local agent gateway"** setting: a
 user-supplied URL for a third-party Messages-API-translating proxy (e.g. LiteLLM) sitting in front
 of Ollama, so local models could run through the full Agent SDK. That recommendation was never
@@ -104,7 +104,7 @@ just one config option. Handing to `synapse-technical-planner` to:
 
 ## Hand-off Notes for the Technical Planner
 
-1. Read [`.docs/research/2026-09-03-provider-matrix.md`](../research/2026-09-03-provider-matrix.md)
+1. Read [`.docs/audits/2026-09-03-provider-matrix.md`](../audits/2026-09-03-provider-matrix.md)
    §6 in full before scoping — this record extends it, doesn't replace it.
 2. Audit `AgentService.buildEnv()` (`src/agentService.ts:545-567`) and its dead
    `forLocalModel` history noted in the research doc.
@@ -128,7 +128,7 @@ just one config option. Handing to `synapse-technical-planner` to:
   "route everything through the local Ollama daemon" pattern this reuses.
 - [`2026-06-25-ollama-support-and-multimodal.md`](2026-06-25-ollama-support-and-multimodal.md) —
   original local-model + multimodal phase plan.
-- [`.docs/research/2026-09-03-provider-matrix.md`](../research/2026-09-03-provider-matrix.md) §6 —
+- [`.docs/audits/2026-09-03-provider-matrix.md`](../audits/2026-09-03-provider-matrix.md) §6 —
   the gateway design this record's finding simplifies.
 - [`wiki/Local-Models-ReAct.md`](../../wiki/Local-Models-ReAct.md) — current local-model loop
   documentation, to be revisited depending on the planner's scope decision.

@@ -26,7 +26,7 @@ design canvases) stays in `.docs/`, private to this repo's maintainers.
   design/                    ← design canvases and mockups
 
 specs/                       ← repo root — architecture overview + one file per module
-  architecture.md            ← start here — system overview, module table
+  ARCHITECTURE.md            ← start here — system overview, module table
   agent-service.md
   chat-view.md
   config-writer.md
@@ -41,7 +41,7 @@ specs/                       ← repo root — architecture overview + one file 
 
 ## What goes where — and how to keep it that way
 
-- **[`specs/architecture.md`](../specs/architecture.md)** — the single entry point for
+- **[`specs/ARCHITECTURE.md`](../specs/ARCHITECTURE.md)** — the single entry point for
   understanding the system. Read this first.
 - **`specs/<module>.md`** — one spec per module in `src/`, kept current. `CLAUDE.md` requires the
   matching spec to be updated in the same change that alters a module's behavior. These are

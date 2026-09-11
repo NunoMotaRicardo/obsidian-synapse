@@ -408,5 +408,5 @@ UI-adjacent; expanding it is the unlock for `configWriter` and both executors.
 
 - [`2026-09-03-automation-model-beyond-triggers.md`](2026-09-03-automation-model-beyond-triggers.md)
 - [`2026-09-03-provider-matrix.md`](2026-09-03-provider-matrix.md)
-- [`../audits/code-audit-2026-06-30.md`](../audits/code-audit-2026-06-30.md) — prior audit; most of
+- [`code-audit-2026-06-30.md`](code-audit-2026-06-30.md) — prior audit; most of
   its findings have since landed.

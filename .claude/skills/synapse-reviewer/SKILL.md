@@ -16,7 +16,7 @@ git diff main
 Cross-reference against:
 - the GitHub issue (`gh issue view <N>`) — were all ACs met, and does the coder's summary describe
   a real deploy-test (reload + behavior check), not just "build passes"?
-- `specs/architecture.md` + relevant `specs/<module>.md` — does the code match documented
+- `specs/ARCHITECTURE.md` + relevant `specs/<module>.md` — does the code match documented
   module boundaries and contracts?
 - existing `src/` patterns and CLAUDE.md conventions.
 

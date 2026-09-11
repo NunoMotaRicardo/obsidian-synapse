@@ -27,16 +27,15 @@ Never write application code (`synapse-coder`'s job) and never write to `wiki/` 
 ## specs/ structure (flat — no layers/modules/interfaces subfolders)
 
 ```
-.docs/
-  architecture.md      # overview + module table (one row per spec file)
-  specs/
-    <module>.md        # one file per module
+specs/
+  ARCHITECTURE.md      # overview + module table (one row per spec file)
+  <module>.md          # one file per module
 ```
 
 Each module spec is freeform prose matching the existing style: a short "Source: `src/...`"
 pointer, then responsibilities/groups, invariants, data passed through, gotchas. Reference open
 issues inline ("Planned: X (issue #N)"). If a module has no spec yet, add a row to
-`specs/architecture.md`'s module table and create `specs/<module>.md` in the same style.
+`specs/ARCHITECTURE.md`'s module table and create `specs/<module>.md` in the same style.
 
 ## Architecture method
 - A **module** = interface + implementation; an **interface** = everything a caller must know.
@@ -51,7 +50,7 @@ issues inline ("Planned: X (issue #N)"). If a module has no spec yet, add a row 
 
 Given an existing issue number or a free-text description:
 
-1. **Audit** — read `specs/architecture.md` + relevant `specs/<module>.md`, skim affected
+1. **Audit** — read `specs/ARCHITECTURE.md` + relevant `specs/<module>.md`, skim affected
    `src/`. For an existing issue, `gh issue view <N>` and re-check its ACs against reality.
 2. **Decide fit** — roughly one coder pass + a normal review round (≤3)? Think "one demonstrable,
    deploy-testable behavior change."
