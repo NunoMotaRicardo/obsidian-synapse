@@ -85,17 +85,34 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 		this.toolsBtnEl.addEventListener('click', (e) => this.openToolsMenu(e));
 		this.updateToolsBadge();
 
-		// Separator for context indicator (hidden until indicator is visible)
-		this.contextSepEl = addSep('synapse-context-sep is-hidden');
-
-		// Context-window gauge (issue #130, #210) — hairline meter
-		this.contextIndicatorEl = toolbar.createDiv({cls: 'synapse-context-indicator synapse-context-gauge is-hidden'});
-
-		// Spacer to push debug toggle to the right
+		// Spacer to push send button to the right
 		toolbar.createDiv({cls: 'synapse-toolbar-spacer'});
 
-		// Debug toggle
-		this.debugBtnEl = toolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
+		// Send button (#215) — aligned on the upper toolbar row
+		this.sendBtn = toolbar.createEl('button', {
+			cls: 'clickable-icon synapse-send-btn',
+			attr: {title: 'Send message', type: 'button'},
+		});
+		setIcon(this.sendBtn, 'arrow-up');
+		this.sendBtn.addEventListener('click', () => {
+			if (this.isStreaming) {
+				void this.handleAbort();
+			} else {
+				void this.handleSend();
+			}
+		});
+
+		// Lower toolbar: Context gauge and Debug toggle
+		const lowerToolbar = parent.createDiv({cls: 'synapse-toolbar synapse-config-toolbar-lower'});
+
+		// Context-window gauge (issue #130, #210) — hairline meter on the left
+		this.contextIndicatorEl = lowerToolbar.createDiv({cls: 'synapse-context-indicator synapse-context-gauge is-hidden'});
+
+		// Spacer to push debug toggle to the right
+		lowerToolbar.createDiv({cls: 'synapse-toolbar-spacer'});
+
+		// Debug toggle on the right
+		this.debugBtnEl = lowerToolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
 		this.debugBtnEl.createSpan({cls: 'synapse-debug-label', text: 'Debug'});
 		const debugCheck = this.debugBtnEl.createEl('input', {type: 'checkbox', cls: 'synapse-debug-checkbox'});
 		debugCheck.checked = this.showDebugInfo;
@@ -110,20 +127,6 @@ export function installConfigToolbar(ViewClass: { prototype: unknown }): void {
 			if (e.target !== debugCheck) {
 				debugCheck.checked = !debugCheck.checked;
 				debugCheck.dispatchEvent(new Event('change'));
-			}
-		});
-
-		// Send button (#215) — aligned on the unified single-row footer
-		this.sendBtn = toolbar.createEl('button', {
-			cls: 'clickable-icon synapse-send-btn',
-			attr: {title: 'Send message', type: 'button'},
-		});
-		setIcon(this.sendBtn, 'arrow-up');
-		this.sendBtn.addEventListener('click', () => {
-			if (this.isStreaming) {
-				void this.handleAbort();
-			} else {
-				void this.handleSend();
 			}
 		});
 	};

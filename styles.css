@@ -1648,6 +1648,7 @@
  * cascade — matching the pre-existing (pre-#217) source order (#217).
  */
 .synapse-config-toolbar,
+.synapse-config-toolbar-lower,
 .synapse-config-toolbar .synapse-select,
 .synapse-toolbar-btn,
 .synapse-debug-toggle,
@@ -1785,6 +1786,20 @@
 	border-top: 1px solid var(--synapse-rule);
 	border-radius: 0;
 	box-shadow: none;
+}
+
+.synapse-config-toolbar-lower {
+	gap: 8px;
+	padding: 0;
+	margin-top: 0;
+	user-select: none;
+	-webkit-user-select: none;
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	min-height: 18px;
+	flex-wrap: nowrap;
 }
 
 .synapse-toolbar-sep {

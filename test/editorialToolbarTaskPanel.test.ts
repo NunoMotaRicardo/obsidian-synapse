@@ -42,6 +42,22 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			expect(configToolbarSource).toContain('synapse-config-toolbar');
 		});
 
+		it('styles .synapse-config-toolbar-lower without borders or card background for the lower toolbar row', () => {
+			expect(stylesContent).toMatch(
+				/\.synapse-config-toolbar-lower\s*\{[^}]*border:\s*none/
+			);
+			expect(stylesContent).toMatch(
+				/\.synapse-config-toolbar-lower\s*\{[^}]*background:\s*transparent/
+			);
+			expect(configToolbarSource).toContain('synapse-config-toolbar-lower');
+		});
+
+		it('splits bottom bar into upper config toolbar and lower toolbar with only context gauge and debug toggle', () => {
+			expect(configToolbarSource).toContain('synapse-config-toolbar-lower');
+			expect(configToolbarSource).toMatch(/lowerToolbar\.createDiv\(\{[^}]*synapse-context-indicator/);
+			expect(configToolbarSource).toMatch(/lowerToolbar\.createDiv\(\{[^}]*synapse-debug-toggle/);
+		});
+
 		it('styles .synapse-toolbar-sep as thin slash dividers', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-toolbar-sep\s*\{[^}]*color:\s*var\(--synapse-rule\)/
