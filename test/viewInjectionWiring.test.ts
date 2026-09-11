@@ -107,8 +107,11 @@ describe('view-injection wiring', () => {
 			totalAssigned += protoAssignments(source).size;
 		}
 		expect(filesWithDeclareBlock).toBeGreaterThan(0);
-		expect(totalDeclared).toBeGreaterThan(30);
-		expect(totalAssigned).toBeGreaterThan(30);
+		// Only sessionSidebar.ts still uses the prototype-injection pattern (the other
+		// view modules are real controllers since the composition refactor); this test
+		// dies with that last conversion.
+		expect(totalDeclared).toBeGreaterThan(15);
+		expect(totalAssigned).toBeGreaterThan(15);
 	});
 
 	it('AC-1: every method declared in a declare-module block has a matching proto.<name> = assignment in the same file', () => {

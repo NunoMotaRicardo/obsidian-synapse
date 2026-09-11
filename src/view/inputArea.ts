@@ -1,38 +1,8 @@
 import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
-import type {SynapseView} from '../synapseView';
-import {IMAGE_EXTS, isImageAttachment, type SelectionInfo} from '../types';
+import {IMAGE_EXTS, isImageAttachment, type ChatAttachment, type SelectionInfo, type SkillInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
 import {decideWorkingDirAutoUpdate} from './sessionConfig';
-
-declare module '../synapseView' {
-	interface SynapseView {
-		buildInputArea(parent: HTMLElement): void;
-		handleAttachFile(): void;
-		handleImagePaste(blob: File): Promise<void>;
-		handleFileDrop(e: DragEvent): void;
-
-		renderAttachments(): void;
-		renderScopeBar(): void;
-		renderActiveNoteBar(): void;
-		updateActiveNote(): void;
-		startSelectionPolling(): void;
-		pollSelection(): void;
-		openScopeModal(): void;
-		setScope(paths: string[]): void;
-		openSearchWithScope(folderPath: string): void;
-		setWorkingDir(folderPath: string): void;
-		setPromptText(text: string): void;
-		addSelectionAttachment(text: string, info: SelectionInfo): void;
-		updateStateLine(): void;
-
-		// Slash-command skill popup
-		handleInputKeydownForSkillPopup(e: KeyboardEvent): boolean;
-		updateSkillPopup(): void;
-		renderSkillPopup(): void;
-		closeSkillPopup(): void;
-		selectSkillPopupMatch(index: number): void;
-	}
-}
+import type {ViewContext} from './types';
 
 /**
  * Skill-name characters accepted while typing a `/name` filter (no spaces).
@@ -45,20 +15,95 @@ declare module '../synapseView' {
  */
 const SKILL_NAME_CHAR = /[A-Za-z0-9_:-]/;
 
-export function installInputArea(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as SynapseView;
+/**
+ * Input-area controller (composition refactor — formerly prototype injection into
+ * `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns the
+ * composer DOM it builds (state line, chips bars, textarea, slash-command skill popup)
+ * and the editor selection-polling loop, and reaches the shared view state —
+ * `attachments`, `activeNotePath`, `activeSelection`, `cursorPosition`, `scopePaths`,
+ * `workingDir`/`pendingWorkingDir`, `enabledSkills`, `selectedAgent`/`selectedModel` —
+ * through its `ViewContext`.
+ *
+ * `inputEl` and `cwdBtnEl` stay view-owned DOM fields that this controller assigns in
+ * `build()`: `SynapseView.handleSend()` reads and clears the textarea directly, and
+ * configToolbar reaches the cwd button through its own `cwdBtnEl` accessor.
+ */
+export class InputAreaController {
+	// ── Composer DOM refs (moved from SynapseView) ───────────────
+	private stateLineEl!: HTMLElement;
+	private stateNoteEl!: HTMLElement;
+	private stateAgentEl!: HTMLElement;
+	private stateModelEl!: HTMLElement;
+	private attachmentsBar!: HTMLElement;
+	private activeNoteBar!: HTMLElement;
+	private scopeBar!: HTMLElement;
+	private scopeBtn?: HTMLButtonElement;
+	private attachBtn?: HTMLButtonElement;
 
-	proto.buildInputArea = function (parent: HTMLElement): void {
+	// ── Slash-command skill popup state (moved from SynapseView) ─
+	private skillPopupEl: HTMLElement | null = null;
+	/** Filtered skill list currently shown in the popup, in display order. */
+	private skillPopupMatches: SkillInfo[] = [];
+	/** Index into `skillPopupMatches` of the highlighted row. */
+	private skillPopupSelectedIndex = 0;
+	/** Start offset (in `inputEl.value`) of the `/` that triggered the popup. */
+	private skillPopupSlashIndex = -1;
+
+	// ── Selection-polling state (moved from SynapseView) ─────────
+	private selectionPollTimer: ReturnType<typeof setInterval> | null = null;
+	private editorHadFocus = false;
+
+	constructor(private view: ViewContext) {}
+
+	// ── View-owned element/state accessors ───────────────────────
+	// Accessors (not copied fields) so the historical `this.<name>` spellings in the
+	// methods below keep compiling against state that still lives on `SynapseView`;
+	// assignments to these go through as `this.view.view.<name> = ...`.
+	private get inputEl(): HTMLTextAreaElement {
+		return this.view.view.inputEl;
+	}
+
+	private get attachments(): ChatAttachment[] {
+		return this.view.view.attachments;
+	}
+
+	private get activeNotePath(): string | null {
+		return this.view.view.activeNotePath;
+	}
+
+	private get activeSelection(): {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null {
+		return this.view.view.activeSelection;
+	}
+
+	private get scopePaths(): string[] {
+		return this.view.view.scopePaths;
+	}
+
+	private get selectedAgent(): string {
+		return this.view.view.selectedAgent;
+	}
+
+	private get selectedModel(): string {
+		return this.view.view.selectedModel;
+	}
+
+	private get enabledSkills(): Set<string> {
+		return this.view.view.enabledSkills;
+	}
+
+	/** Build the composer (state line, chips bars, textarea) into `parent`. */
+	build(parent: HTMLElement): void {
 		// State line above input (DIR / SCOPE / ATTACH / NOTE / AGENT / MODEL)
 		this.stateLineEl = parent.createDiv({cls: 'synapse-state-line'});
 
-		// Working directory button (moved to top row)
-		this.cwdBtnEl = this.stateLineEl.createEl('button', {
+		// Working directory button (moved to top row) — `cwdBtnEl` stays a view-owned DOM
+		// ref: configToolbar reaches it through ViewContext (see its `cwdBtnEl` accessor).
+		this.view.view.cwdBtnEl = this.stateLineEl.createEl('button', {
 			cls: 'synapse-toolbar-btn synapse-cwd-btn',
 			attr: {type: 'button'},
 		});
-		this.cwdBtnEl.addEventListener('click', () => this.configToolbar.openCwdPicker());
-		this.configToolbar.updateCwdButton();
+		this.view.view.cwdBtnEl.addEventListener('click', () => this.view.view.configToolbar.openCwdPicker());
+		this.view.view.configToolbar.updateCwdButton();
 
 		// Scope button (icon only)
 		this.scopeBtn = this.stateLineEl.createEl('button', {
@@ -94,9 +139,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.activeNoteBar = chipsContainer.createDiv({cls: 'synapse-active-note-bar is-hidden'});
 		this.scopeBar = chipsContainer.createDiv({cls: 'synapse-scope-bar is-hidden'});
 
-		// Textarea
+		// Textarea — `inputEl` stays a view-owned field (synapseView.ts's handleSend()
+		// reads and clears it), so build() assigns it onto the view.
 		const inputRow = inputArea.createDiv({cls: 'synapse-input-row'});
-		this.inputEl = inputRow.createEl('textarea', {
+		this.view.view.inputEl = inputRow.createEl('textarea', {
 			cls: 'synapse-input',
 			attr: {placeholder: 'Ask or paste something to work on...', rows: '1'},
 		});
@@ -135,11 +181,11 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				e.preventDefault();
 				e.stopPropagation();
 				e.stopImmediatePropagation();
-				void this.handleSend();
+				void this.view.view.handleSend();
 			}
 		};
 		window.addEventListener('keydown', keyHandler, true);
-		this.register(() => window.removeEventListener('keydown', keyHandler, true));
+		this.view.view.register(() => window.removeEventListener('keydown', keyHandler, true));
 
 		// Paste handler for images
 		this.inputEl.addEventListener('paste', (e: ClipboardEvent) => {
@@ -181,9 +227,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.handleFileDrop(e);
 		});
 		this.updateStateLine();
-	};
+	}
 
-	proto.handleAttachFile = function (): void {
+	private handleAttachFile(): void {
 		const input = createEl('input');
 		input.type = 'file';
 		input.multiple = true;
@@ -221,9 +267,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 		input.addEventListener('cancel', () => input.remove());
 		input.click();
-	};
+	}
 
-	proto.handleImagePaste = async function (blob: File): Promise<void> {
+	private async handleImagePaste(blob: File): Promise<void> {
 		try {
 			const buffer = await blob.arrayBuffer();
 			const bytes = new Uint8Array(buffer);
@@ -242,10 +288,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		} catch (e) {
 			new Notice(`Failed to attach image: ${String(e)}`);
 		}
-	};
+	}
 
 	/** Handle files dropped onto the input area from the OS or vault tree. */
-	proto.handleFileDrop = function (e: DragEvent): void {
+	private handleFileDrop(e: DragEvent): void {
 		const dt = e.dataTransfer;
 		if (!dt) return;
 
@@ -253,7 +299,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Obsidian's file tree uses its internal dragManager rather than
 		// standard HTML5 dataTransfer text.  The draggable object has
 		// { type: 'file'|'folder'|'files', file?: TAbstractFile, files?: TAbstractFile[] }.
-		const dragManager = (this.app as unknown as {dragManager?: {draggable?: {type: string; file?: unknown; files?: unknown[]}}}).dragManager;
+		const dragManager = (this.view.app as unknown as {dragManager?: {draggable?: {type: string; file?: unknown; files?: unknown[]}}}).dragManager;
 		const draggable = dragManager?.draggable as {type: string; file?: TFile | TFolder; files?: (TFile | TFolder)[]} | undefined;
 
 		if (draggable) {
@@ -327,9 +373,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.renderAttachments();
 			new Notice(`${attached} file${attached > 1 ? 's' : ''} attached.`);
 		}
-	};
+	}
 
-	proto.renderAttachments = function (): void {
+	renderAttachments(): void {
 		this.attachBtn?.toggleClass('is-active', this.attachments.length > 0);
 		this.attachmentsBar.empty();
 		if (this.attachments.length === 0) {
@@ -355,9 +401,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				this.renderActiveNoteBar();
 			});
 		}
-	};
+	}
 
-	proto.renderScopeBar = function (): void {
+	renderScopeBar(): void {
 		this.scopeBtn?.toggleClass('is-active', this.scopePaths.length > 0);
 		this.scopeBar.empty();
 		if (this.scopePaths.length === 0) {
@@ -379,12 +425,12 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			: `${this.scopePaths.length} item(s) in scope`;
 		label.createSpan({text: scopeText, cls: 'synapse-scope-name'});
 
-		const tooltipItems = this.scopePaths.map(p => p === '/' ? this.app.vault.getName() : p).join('\n');
+		const tooltipItems = this.scopePaths.map(p => p === '/' ? this.view.app.vault.getName() : p).join('\n');
 		label.setAttribute('title', tooltipItems);
 		label.addEventListener('click', (e) => {
 			const menu = new Menu();
 			for (const p of this.scopePaths) {
-				const display = p === '/' ? this.app.vault.getName() : p;
+				const display = p === '/' ? this.view.app.vault.getName() : p;
 				menu.addItem(item => item.setTitle(display).setDisabled(true));
 			}
 			menu.showAtMouseEvent(e);
@@ -393,16 +439,16 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		const removeBtn = this.scopeBar.createSpan({cls: 'synapse-attachment-remove synapse-scope-remove'});
 		setIcon(removeBtn, 'x');
 		removeBtn.addEventListener('click', () => {
-			this.scopePaths = [];
+			this.view.view.scopePaths = [];
 			this.renderScopeBar();
 		});
-	};
+	}
 
-	proto.updateActiveNote = function (): void {
-		const file = this.app.workspace.getActiveFile();
-		this.activeNotePath = file ? file.path : null;
+	updateActiveNote(): void {
+		const file = this.view.app.workspace.getActiveFile();
+		this.view.view.activeNotePath = file ? file.path : null;
 		// Clear selection when switching files — pollSelection will pick up the new one
-		this.activeSelection = null;
+		this.view.view.activeSelection = null;
 		this.renderActiveNoteBar();
 		this.updateStateLine();
 
@@ -410,49 +456,49 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// while a conversation is in progress so switching notes mid-conversation doesn't
 		// force a session rebuild (and its full-transcript cache replay) on every follow-up
 		// message (issue #108 / #202).
-		if (file && this.plugin.settings.autoUpdateWorkingDirectory) {
+		if (file && this.view.plugin.settings.autoUpdateWorkingDirectory) {
 			const lastSlash = file.path.lastIndexOf('/');
 			const newDir = lastSlash > 0 ? file.path.substring(0, lastSlash) : '';
-			const conversationInProgress = this.currentSession !== null && this.messages.length > 0;
+			const conversationInProgress = this.view.view.currentSession !== null && this.view.view.messages.length > 0;
 			const decision = decideWorkingDirAutoUpdate({
 				newDir,
-				currentWorkingDir: this.workingDir,
+				currentWorkingDir: this.view.view.workingDir,
 				conversationInProgress,
 			});
 			if (decision.applyNow) {
-				this.workingDir = newDir;
-				this.configToolbar.updateCwdButton();
-				this.configDirty = true;
+				this.view.view.workingDir = newDir;
+				this.view.view.configToolbar.updateCwdButton();
+				this.view.configDirty = true;
 			}
 			if (decision.pendingDir !== null) {
-				this.pendingWorkingDir = decision.pendingDir;
+				this.view.view.pendingWorkingDir = decision.pendingDir;
 			} else if (decision.clearPending) {
-				this.pendingWorkingDir = null;
+				this.view.view.pendingWorkingDir = null;
 			}
 		}
-	};
+	}
 
 	/**
 	 * Poll the active editor for selection changes and update the active note bar.
 	 * Uses a lightweight interval instead of a CM6 extension to avoid coupling.
 	 */
-	proto.startSelectionPolling = function (): void {
+	startSelectionPolling(): void {
 		const POLL_MS = 300;
 		const timerId = window.setInterval(() => this.pollSelection(), POLL_MS);
 		this.selectionPollTimer = timerId as unknown as ReturnType<typeof setInterval>;
-		this.registerInterval(timerId);
-	};
+		this.view.view.registerInterval(timerId);
+	}
 
-	proto.pollSelection = function (): void {
+	private pollSelection(): void {
 		// Try to get the active MarkdownView. If focus is in our chat view,
 		// fall back to iterating workspace leaves to find the most recent editor.
-		let mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		let mdView = this.view.app.workspace.getActiveViewOfType(MarkdownView);
 		let editorIsActive = !!mdView;
 
-		if (!mdView && this.containerEl.contains(document.activeElement)) {
+		if (!mdView && this.view.view.containerEl.contains(document.activeElement)) {
 			// Focus is in our chat — find the last MarkdownView leaf to read cursor from
 			this.editorHadFocus = false;
-			this.app.workspace.iterateAllLeaves(leaf => {
+			this.view.app.workspace.iterateAllLeaves(leaf => {
 				if (!mdView && leaf.view instanceof MarkdownView) {
 					mdView = leaf.view;
 				}
@@ -463,11 +509,11 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		if (!mdView) {
 			this.editorHadFocus = false;
 			if (this.activeSelection) {
-				this.activeSelection = null;
+				this.view.view.activeSelection = null;
 				this.renderActiveNoteBar();
 				this.updateStateLine();
 			}
-			this.cursorPosition = null;
+			this.view.view.cursorPosition = null;
 			return;
 		}
 
@@ -480,7 +526,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Always update cursor position from the editor
 		const cursorFile = mdView.file;
 		if (cursorFile) {
-			this.cursorPosition = {
+			this.view.view.cursorPosition = {
 				filePath: cursorFile.path,
 				fileName: cursorFile.name,
 				line: from.line + 1,
@@ -504,7 +550,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			}
 			this.editorHadFocus = editorFocused;
 			if (this.activeSelection) {
-				this.activeSelection = null;
+				this.view.view.activeSelection = null;
 				this.renderActiveNoteBar();
 				this.updateStateLine();
 			}
@@ -523,7 +569,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			return;
 		}
 
-		this.activeSelection = {
+		this.view.view.activeSelection = {
 			filePath: file.path,
 			fileName: file.name,
 			text,
@@ -534,9 +580,9 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		};
 		this.renderActiveNoteBar();
 		this.updateStateLine();
-	};
+	}
 
-	proto.renderActiveNoteBar = function (): void {
+	private renderActiveNoteBar(): void {
 		this.activeNoteBar.empty();
 
 		// If there's a live editor selection, show it instead of the active note
@@ -554,7 +600,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			setIcon(removeBtn, 'x');
 			removeBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				this.activeSelection = null;
+				this.view.view.activeSelection = null;
 				this.renderActiveNoteBar();
 				this.updateStateLine();
 			});
@@ -565,47 +611,47 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// The active note is already displayed in the top state line (this.stateNoteEl),
 		// so it does not need to appear repeated in the second row.
 		this.activeNoteBar.addClass('is-hidden');
-	};
+	}
 
-	proto.openScopeModal = function (): void {
-		new VaultScopeModal(this.app, this.scopePaths, (paths) => {
-			this.scopePaths = paths;
+	private openScopeModal(): void {
+		new VaultScopeModal(this.view.app, this.scopePaths, (paths) => {
+			this.view.view.scopePaths = paths;
 			this.renderScopeBar();
 		}).open();
-	};
+	}
 
 	// ── Public API ───────────────────────────────────────────────
 
 	/** Set the vault scope programmatically and refresh the scope bar. */
-	proto.setScope = function (paths: string[]): void {
-		this.scopePaths = paths;
+	setScope(paths: string[]): void {
+		this.view.view.scopePaths = paths;
 		this.renderScopeBar();
-	};
+	}
 
 	/** Open the search tab with scope set to the given folder. */
-	proto.openSearchWithScope = function (folderPath: string): void {
-		this.search.openSearchWithScope(folderPath);
-	};
+	openSearchWithScope(folderPath: string): void {
+		this.view.view.search.openSearchWithScope(folderPath);
+	}
 
 	/** Set the working directory programmatically. */
-	proto.setWorkingDir = function (folderPath: string): void {
-		this.workingDir = folderPath;
-		this.configToolbar.updateCwdButton();
-		this.configDirty = true;
-	};
+	setWorkingDir(folderPath: string): void {
+		this.view.view.workingDir = folderPath;
+		this.view.view.configToolbar.updateCwdButton();
+		this.view.configDirty = true;
+	}
 
 	/** Set the prompt text programmatically and focus the input. */
-	proto.setPromptText = function (text: string): void {
+	setPromptText(text: string): void {
 		this.inputEl.value = text;
 		this.inputEl.setCssProps({'--input-height': 'auto'});
 		this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
 		this.inputEl.focus();
-	};
+	}
 
 	/** Add a selection attachment from the editor context menu / synapse button. */
-	proto.addSelectionAttachment = function (text: string, info: SelectionInfo): void {
+	addSelectionAttachment(text: string, info: SelectionInfo): void {
 		// Resolve filePath: prefer info.filePath, fall back to current active file
-		const filePath = info.filePath ?? this.app.workspace.getActiveFile()?.path;
+		const filePath = info.filePath ?? this.view.app.workspace.getActiveFile()?.path;
 		if (!filePath) return; // can't create selection attachment without a file
 		const displayName = info.startLine === info.endLine
 			? `${info.fileName}:${info.startLine}`
@@ -625,11 +671,11 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.renderAttachments();
 		this.renderActiveNoteBar();
 		this.updateStateLine();
-	};
+	}
 
 	// ── State line (Editorial restyle #208) ───────────────────────
 
-	proto.updateStateLine = function (): void {
+	updateStateLine(): void {
 		if (!this.stateLineEl) return;
 
 		// Note
@@ -650,7 +696,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Agent
 		let agentText = 'General';
 		if (this.selectedAgent) {
-			const found = this.agents.find(a => a.name === this.selectedAgent);
+			const found = this.view.view.agents.find(a => a.name === this.selectedAgent);
 			agentText = found?.name || this.selectedAgent;
 		}
 		if (this.stateAgentEl) {
@@ -661,14 +707,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Model
 		let modelText = 'Default model';
 		if (this.selectedModel) {
-			const found = this.models.find(m => m.id === this.selectedModel);
+			const found = this.view.view.models.find(m => m.id === this.selectedModel);
 			modelText = found?.name || this.selectedModel;
 		}
 		if (this.stateModelEl) {
 			this.stateModelEl.setText(modelText);
 			this.stateModelEl.setAttribute('title', `Model: ${modelText}`);
 		}
-	};
+	}
 
 	// ── Slash-command skill popup ───────────────────────────────
 
@@ -681,7 +727,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 	 * stays open while the caret is inside a contiguous run of skill-name characters
 	 * immediately after that `/`; a space or any other boundary closes it.
 	 */
-	proto.updateSkillPopup = function (): void {
+	private updateSkillPopup(): void {
 		const value = this.inputEl.value;
 		const caret = this.inputEl.selectionStart ?? value.length;
 
@@ -708,7 +754,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		// Match on the skill's own name first — that is what the user typed when creating it
 		// — but also accept the CLI's namespaced id, so the text the popup itself inserts still
 		// re-filters to the same entry (issue #163).
-		const matches = this.configToolbar.getEffectiveSkills().filter(s =>
+		const matches = this.view.view.configToolbar.getEffectiveSkills().filter(s =>
 			this.enabledSkills.has(s.name)
 			&& (s.name.toLowerCase().startsWith(query) || (s.qualifiedName?.toLowerCase().startsWith(query) ?? false))
 		);
@@ -722,10 +768,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.skillPopupSelectedIndex = Math.min(this.skillPopupSelectedIndex, matches.length - 1);
 		if (this.skillPopupSelectedIndex < 0) this.skillPopupSelectedIndex = 0;
 		this.renderSkillPopup();
-	};
+	}
 
 	/** (Re)render the popup dropdown from `skillPopupMatches`, creating it lazily. */
-	proto.renderSkillPopup = function (): void {
+	private renderSkillPopup(): void {
 		if (!this.skillPopupEl) {
 			const inputArea = this.inputEl.closest('.synapse-input-area');
 			if (!inputArea) return;
@@ -749,10 +795,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 				this.selectSkillPopupMatch(idx);
 			});
 		}
-	};
+	}
 
 	/** Close and remove the popup, resetting its filter state. */
-	proto.closeSkillPopup = function (): void {
+	private closeSkillPopup(): void {
 		this.skillPopupMatches = [];
 		this.skillPopupSelectedIndex = 0;
 		this.skillPopupSlashIndex = -1;
@@ -760,10 +806,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			this.skillPopupEl.remove();
 			this.skillPopupEl = null;
 		}
-	};
+	}
 
 	/** Complete the textarea's `/`-token with the chosen skill's name (no send, no stripping). */
-	proto.selectSkillPopupMatch = function (index: number): void {
+	private selectSkillPopupMatch(index: number): void {
 		const skill = this.skillPopupMatches[index];
 		if (!skill || this.skillPopupSlashIndex < 0) return;
 		const value = this.inputEl.value;
@@ -785,14 +831,14 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 		this.inputEl.setCssProps({'--input-height': 'auto'});
 		this.inputEl.setCssProps({'--input-height': Math.min(this.inputEl.scrollHeight, 200) + 'px'});
 		this.closeSkillPopup();
-	};
+	}
 
 	/**
 	 * Intercept navigation/selection keys while the popup is open, ahead of the
 	 * normal Enter-to-send handling. Returns true when the key was consumed by the
 	 * popup (caller should not process it further).
 	 */
-	proto.handleInputKeydownForSkillPopup = function (e: KeyboardEvent): boolean {
+	private handleInputKeydownForSkillPopup(e: KeyboardEvent): boolean {
 		if (this.skillPopupMatches.length === 0) return false;
 
 		if (e.key === 'ArrowDown') {
@@ -820,5 +866,10 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 			return e.key === 'Escape';
 		}
 		return false;
-	};
+	}
+
+	/** Clear the selection-polling interval (view onClose) — see `startSelectionPolling()`. */
+	destroy(): void {
+		if (this.selectionPollTimer) { window.clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
+	}
 }

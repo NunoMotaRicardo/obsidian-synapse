@@ -18,11 +18,12 @@ import type {
 	AgentInfo,
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
-import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
+import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
 import {SearchPanelController} from './view/searchPanel';
 import {ConfigToolbarController} from './view/configToolbar';
 import {ChatRendererController} from './view/chatRenderer';
+import {InputAreaController} from './view/inputArea';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -99,8 +100,6 @@ export class SynapseView extends ItemView implements ViewContext {
 	attachments: ChatAttachment[] = [];
 	activeNotePath: string | null = null;
 	activeSelection: {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null = null;
-	selectionPollTimer: ReturnType<typeof setInterval> | null = null;
-	editorHadFocus = false;
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
 	workingDir = '';
@@ -114,15 +113,6 @@ export class SynapseView extends ItemView implements ViewContext {
 	pendingWorkingDir: string | null = null;
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
-
-	// ── Slash-command skill popup state ──────────────────────────
-	skillPopupEl: HTMLElement | null = null;
-	/** Filtered skill list currently shown in the popup, in display order. */
-	skillPopupMatches: SkillInfo[] = [];
-	/** Index into `skillPopupMatches` of the highlighted row. */
-	skillPopupSelectedIndex = 0;
-	/** Start offset (in `inputEl.value`) of the `/` that triggered the popup. */
-	skillPopupSlashIndex = -1;
 
 	isStreaming = false;
 	configDirty = true;
@@ -210,25 +200,25 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	readonly renderer: ChatRendererController = new ChatRendererController(this);
 
+	// ── Input area state ─────────────────────────────────────────
+	/**
+	 * Input-area controller (composition refactor — same pattern as `search`;
+	 * owns the composer DOM it builds, the slash-command skill popup, and the
+	 * editor selection-polling loop). The view reaches it as `this.inputArea.…`.
+	 */
+	readonly inputArea: InputAreaController = new InputAreaController(this);
+
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
 	kickerEl!: HTMLElement;
-	stateLineEl!: HTMLElement;
-	stateNoteEl!: HTMLElement;
-	stateAgentEl!: HTMLElement;
-	stateModelEl!: HTMLElement;
 	chatPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
 	chatContainer!: HTMLElement;
 	streamingBodyEl: HTMLElement | null = null;
 	toolCallsContainer: HTMLElement | null = null;
+	/** The composer textarea — built and assigned by `inputArea.build()`; read/cleared by `handleSend()`. */
 	inputEl!: HTMLTextAreaElement;
-	attachmentsBar!: HTMLElement;
-	activeNoteBar!: HTMLElement;
-	scopeBar!: HTMLElement;
-	scopeBtn?: HTMLButtonElement;
-	attachBtn?: HTMLButtonElement;
 	sendBtn!: HTMLButtonElement;
 	// The agent/model selects and the cwd button stay view-owned DOM refs:
 	// updateConfigUI() rebuilds the selects after every config reload and inputArea.ts
@@ -301,6 +291,38 @@ export class SynapseView extends ItemView implements ViewContext {
 
 	// ── Lifecycle ────────────────────────────────────────────────
 
+	// ── External entry points (editorMenu.ts / modals call these on the view) ──
+	// Thin delegates to the owning controller so those call sites stay untouched.
+
+	/** @see InputAreaController.setPromptText */
+	setPromptText(text: string): void { this.inputArea.setPromptText(text); }
+
+	/** @see InputAreaController.addSelectionAttachment */
+	addSelectionAttachment(text: string, info: SelectionInfo): void { this.inputArea.addSelectionAttachment(text, info); }
+
+	/** @see InputAreaController.setScope */
+	setScope(paths: string[]): void { this.inputArea.setScope(paths); }
+
+	/** @see InputAreaController.setWorkingDir */
+	setWorkingDir(folderPath: string): void { this.inputArea.setWorkingDir(folderPath); }
+
+	/** @see InputAreaController.openSearchWithScope */
+	openSearchWithScope(folderPath: string): void { this.inputArea.openSearchWithScope(folderPath); }
+
+	/** @see InputAreaController.updateStateLine */
+	updateStateLine(): void { this.inputArea.updateStateLine(); }
+
+	/** @see InputAreaController.renderAttachments */
+	renderAttachments(): void { this.inputArea.renderAttachments(); }
+
+	/** @see InputAreaController.renderScopeBar */
+	renderScopeBar(): void { this.inputArea.renderScopeBar(); }
+
+	/** @see InputAreaController.updateActiveNote */
+	updateActiveNote(): void { this.inputArea.updateActiveNote(); }
+
+	// ── Lifecycle ────────────────────────────────────────────────
+
 	async onOpen(): Promise<void> {
 		// Header actions
 		this.addAction('plus', 'New conversation', () => void this.newConversation());
@@ -327,11 +349,11 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.registerEvent(
 			this.app.workspace.on('file-open', () => this.updateActiveNote())
 		);
-		this.startSelectionPolling();
+		this.inputArea.startSelectionPolling();
 	}
 
 	async onClose(): Promise<void> {
-		if (this.selectionPollTimer) { window.clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
+		this.inputArea.destroy();
 		if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
 		await this.search.disconnect();
 		await this.disconnectAllSessions();
@@ -368,7 +390,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		const bottom = chatContent.createDiv({cls: 'synapse-bottom'});
 
 		// Input area
-		this.buildInputArea(bottom);
+		this.inputArea.build(bottom);
 
 		// Config toolbar (agents, models, skills, tools, action buttons)
 		this.configToolbar.build(bottom);
@@ -464,7 +486,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	 * calling `updateStateLine()` directly rather than pulling in this wider refresh.
 	 */
 	refreshComposerState(): void {
-		this.updateStateLine?.();
+		this.updateStateLine();
 		this.updateMastheadKicker();
 	}
 
@@ -700,7 +722,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.inputEl.value = '';
 		this.inputEl.setCssProps({'--input-height': 'auto'});
 		this.attachments = [];
-		this.renderAttachments();
+		this.inputArea.renderAttachments();
 
 		// Begin streaming
 		this.isStreaming = true;
@@ -1255,8 +1277,8 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.scopePaths = [];
 		this.chatContainer.empty();
 		this.renderer.renderWelcome();
-		this.renderAttachments();
-		this.renderScopeBar();
+		this.inputArea.renderAttachments();
+		this.inputArea.renderScopeBar();
 		this.renderer.updateSendButton();
 		this.updateToolbarLock();
 		this.renderSessionList();
@@ -1440,13 +1462,12 @@ export class SynapseView extends ItemView implements ViewContext {
 }
 
 // ── Install feature modules ─────────────────────────────────────
-// These extend SynapseView.prototype with methods organized by feature area.
-// (The search panel, the config toolbar, and the chat renderer moved to real
-// composition — `readonly search` / `readonly configToolbar` / `readonly renderer`
-// — in the composition refactor; the remaining two modules follow the same path,
-// after which this whole section disappears.)
+// The session sidebar is the last module still extending SynapseView.prototype with
+// methods organized by feature area.
+// (The search panel, the config toolbar, the chat renderer, and the input area moved
+// to real composition — `readonly search` / `readonly configToolbar` / `readonly
+// renderer` / `readonly inputArea` — in the composition refactor; the sidebar follows
+// the same path, after which this whole section disappears.)
 import {installSessionSidebar} from './view/sessionSidebar';
-import {installInputArea} from './view/inputArea';
 
 installSessionSidebar(SynapseView);
-installInputArea(SynapseView);

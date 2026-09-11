@@ -143,7 +143,7 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 			expect(inputAreaSource).toContain('synapse-state-sep');
 			expect(inputAreaSource).toContain('synapse-state-agent');
 			expect(inputAreaSource).toContain('synapse-state-model');
-			expect(inputAreaSource).toContain('proto.updateStateLine = function (): void');
+			expect(inputAreaSource).toMatch(/updateStateLine\(\): void \{/);
 		});
 	});
 
@@ -229,7 +229,7 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 		it('selection chips feature a remove button and active note is not repeated in chips', () => {
 			expect(inputAreaSource).toContain('synapse-active-note-tag');
 			expect(inputAreaSource).toContain('synapse-attachment-remove');
-			expect(inputAreaSource).toContain('this.activeSelection = null;');
+			expect(inputAreaSource).toContain('activeSelection = null;');
 			expect(inputAreaSource).toContain('The active note is already displayed in the top state line');
 		});
 	});
