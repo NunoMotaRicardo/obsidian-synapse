@@ -4,19 +4,13 @@
 
 `src/runExecutor.ts` is the per-item run pipeline behind "run a prompt against a file, then persist
 the result": substitute template variables, run via `AgentService.inlineChat()`, apply a write
-mode, append a report entry. It has **no in-tree caller** as of issue #221's removal of batch
-loops (`batchLoopExecutor.ts` was its one caller) — kept as reusable, self-contained run-pipeline
-infrastructure per that issue's scope, not deleted outright.
-
-Model for this extraction: the now-removed `src/budget.ts` (#74, deleted as dead code in #221
-once its only consumer, `batchLoopExecutor.ts`, was removed) and `src/vaultPaths.ts` (#153) —
-small, focused modules that extract exactly the logic that was duplicated, not a new abstraction
-layer on top of it.
+mode, append a report entry. It has **no in-tree caller** currently — kept as reusable,
+self-contained run-pipeline infrastructure.
 
 Only `runItem()`, `appendReportBlock()`, and the `ReportTarget`/`RunItemOptions` types are exported —
 everything else in this module (template substitution, tool-approval policy resolution, write-mode
-application, and their supporting types) has no reader outside the file and is module-private (issue
-#189).
+application, and their supporting types) has no reader outside the file and is module-private.
+
 
 ## The pipeline
 
@@ -26,14 +20,13 @@ runItem(options: RunItemOptions): Promise<void>
 
 1. **Substitute** — replaces `{{file}}` with the vault-relative file path in the prompt/instruction
    body.
-2. **Run** — routes through `AgentService.inlineChat()`. Post-#220 (removal of the OpenAI-compatible
-   provider matrix and its hand-rolled local ReAct loop) there is no separate local-model branch:
-   a `model` the running `AgentService` classifies local (`isLocalModel()`) runs through the same
-   CLI call as Claude, with `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at the configured
-   local agent endpoint (issue #122) via `inlineChat()`'s own env handling — `runItem()` needs no
-   routing logic of its own. `agent` has no current caller; `abortController`/`onEvent` exist for a
-   caller running many items in an abortable loop to wire up cancellation and usage accumulation.
-   Unused options are harmless no-ops, so this stays one call site.
+2. **Run** — routes through `AgentService.inlineChat()`. A `model` the running `AgentService`
+   classifies local (`isLocalModel()`) runs through the same CLI call as Claude, with
+   `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` repointed at the configured local agent endpoint via
+   `inlineChat()`'s own env handling — `runItem()` needs no routing logic of its own. `agent` has
+   no current caller; `abortController`/`onEvent` exist for a caller running many items in an
+   abortable loop to wire up cancellation and usage accumulation. Unused options are harmless
+   no-ops, so this stays one call site.
 3. **Apply write mode** — `applyWriteMode()`: `false`/`undefined` appends the result via the
    caller's `appendReport` callback; `true` replaces the target file's entire content (with an
    empty-response guard, and falling back to `appendReport` on a missing file or a write-back lock
@@ -71,17 +64,9 @@ can't interleave and clobber each other.
 loop lets it propagate to the per-item loop body, which already has to catch and report per-item
 failures, so a lock timeout there surfaces the same way an ordinary write failure would.
 
-## Tool approval policy (issue #151)
+## Tool approval policy
 
-Before this issue, the Claude branch (`executeWithClaude()`) always ran with `permissionMode:
-'default'` and no `canUseTool` — in the Agent SDK, `'default'` means "ask", and with no callback
-and no UI there is nobody to ask, so any approval-requiring tool call (`Write`, `Edit`, ...) was
-silently refused. Read-only tools generally passed; the model's own text response is what
-`applyWriteMode()` persists, so the common case (a run whose only job is to *report* on a file)
-worked by coincidence — but a run whose prompt also asked the model to use a write tool would have
-that call refused with nothing recorded anywhere.
-
-The fix makes the mapping from `settings.toolApproval` to what the SDK is handed explicit:
+The mapping from `settings.toolApproval` to what the SDK is handed is explicit:
 
 ```ts
 type ToolApprovalPolicy = 'allow' | 'ask'; // module-private
@@ -89,58 +74,25 @@ resolveToolApprovalPolicy(plugin: SynapsePlugin): ToolApprovalPolicy // module-p
 ```
 
 - **`'allow'`** (`settings.toolApproval === 'allow'`) → `permissionMode: 'bypassPermissions'` +
-  `allowDangerouslySkipPermissions: true`. Matches the pattern already used by
+  `allowDangerouslySkipPermissions: true`. Matches the pattern used by
   `editorMenu.ts`/`editModal.ts`/`searchPanel.ts` for the same setting's interactive surfaces.
 - **`'ask'`** (the default) → `permissionMode: 'default'` plus a `canUseTool` that **denies every
   call it's invoked for** and records the tool name into an in-memory `refusals` list for that run.
-  This is the asymmetry the issue calls out: in an interactive surface `'ask'` means "a human
-  decides"; in an unattended run there is no human, so `'ask'` can only mean "deny" — but
-  unlike before, the denial is no longer silent.
+  In an interactive surface `'ask'` means "a human decides"; in an unattended run there is no
+  human, so `'ask'` can only mean "deny" — but the denial is explicit and recorded, not silent.
 
 If `refusals` is non-empty after the run, `runItem()` appends a report block
 (`formatToolRefusalsReportBlock()`) via the caller's `appendReport` — **unconditionally**,
 regardless of `write` mode. This is deliberate: a `write: true`/`'frontmatter'` run's main result
 goes to the target file/frontmatter, not the report, so without this the refusal would be invisible
-again even though the main pipeline "worked". The report block is always appended in *addition* to
+even though the main pipeline "worked". The report block is always appended in *addition* to
 whatever `applyWriteMode()` already did, not instead of it.
 
-**Post-#220, this policy applies uniformly.** There is no separate local-model branch left to carve
-out an exception for: `resolveToolApprovalPolicy()`'s policy is handed to the single
-`AgentService.inlineChat()` call regardless of whether `options.model` resolves to Claude or a
-local agent endpoint (issue #122) model. (Historically, issue #142's "offer vault tools to a local
-model with no approval handler" follow-up was deferred here because the pre-#220 local ReAct loop
-had its own separate, unattended-by-default tool wiring; that loop is gone.)
+This policy applies uniformly to all model types: `resolveToolApprovalPolicy()`'s policy is handed
+to the single `AgentService.inlineChat()` call regardless of whether `options.model` resolves to
+Claude or a local agent endpoint model.
 
 **Telegram bot is a deliberate, separate exception**, not driven by this policy at all — see
 "Tool approval policy — deliberately not `settings.toolApproval`" under
 [bots.md](bots.md) and [SECURITY.md](../SECURITY.md) #1.
 
-## Current status
-
-Extracted from the (now-removed) trigger executor and the (now-removed) batch loop executor
-(`batchLoopExecutor.ts`) in issue #154, after #152 (executor tests) and #153 (`src/vaultPaths.ts`)
-landed. Issue #188 removed the trigger system (`src/triggers.ts`, `src/triggerExecutor.ts`)
-entirely, leaving `batchLoopExecutor.ts` as this module's only caller. Issue #189 then collapsed
-the trigger-shaped generality the pipeline had carried since #154:
-
-- The `surface: 'trigger' | 'batch-loop'` union (on `RunItemOptions` and
-  `formatToolRefusalsReportBlock()`) is gone — the tool-refusal report hint always uses the single
-  remaining wording ("Set Settings → Synapse → ..."), since there is no per-item frontmatter opt-in
-  left to mention.
-- `resolveToolApprovalPolicy()`'s `overrideAllow` parameter (a trigger's `toolApproval: allow`
-  frontmatter opt-in, issue #151) is gone — it now only reads `settings.toolApproval`. This changes
-  *wording*, never *whether* a refusal happens: the deny-and-log behavior for `'ask'` is unchanged.
-- `substituteTemplates()`'s `{{files}}` alias (`aliasFiles`) is gone — it only ever existed for
-  scheduled triggers with a `path` glob fanning out one call per matched file; `{{file}}` is the
-  only substitution now.
-- The module's public surface shrank from 12 exports to 4 (`ReportTarget`, `appendReportBlock`,
-  `RunItemOptions`, `runItem`) — everything else (template substitution, tool-approval types and
-  `resolveToolApprovalPolicy()`/`formatToolRefusalsReportBlock()`, write-mode types and
-  `applyWriteMode()`) had no reader outside this file and is now module-private.
-
-Issue #221 then removed `batchLoopExecutor.ts` itself (see
-`.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`), leaving this
-module with no in-tree caller. It was kept rather than deleted, as reusable "run a prompt against a
-file" infrastructure the module doc comment and this spec still describe accurately; nothing about
-`runItem()`/`appendReportBlock()` was batch-loop-specific — they were always generic per-item
-primitives that batch loop happened to be the sole consumer of.

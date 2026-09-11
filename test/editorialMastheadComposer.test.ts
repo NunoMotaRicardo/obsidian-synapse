@@ -267,8 +267,8 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 
 	describe('AC-10: Spec documentation', () => {
 		it('chat-view.md contains Masthead and Composer & State line specifications', () => {
-			expect(specContent).toContain('### Masthead (issue #208)');
-			expect(specContent).toContain('### Composer & State line (issue #208)');
+			expect(specContent).toContain('### Masthead');
+			expect(specContent).toContain('### Composer & State line');
 			expect(specContent).toContain('NOTE / AGENT / MODEL');
 			expect(specContent).toContain('Toolbar coexistence decision');
 		});

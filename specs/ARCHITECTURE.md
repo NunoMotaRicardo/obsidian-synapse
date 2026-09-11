@@ -29,13 +29,13 @@ CLI process per query.
 | agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
-| provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint (#122) discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button); the OpenAI-compatible provider matrix and its `executeLocalProviderQuery()` ReAct loop were removed (#220) |
+| provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button) |
 | config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts` | Write/modify/delete vault artifacts (self-improve), vault structure scan, first-run seeding |
 | chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots.md](bots.md) | `src/bots/*` | Telegram bot front-end |
-| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report); no in-tree caller since batch loops were removed (#221), kept as reusable infrastructure |
+| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report); no in-tree caller currently, kept as reusable infrastructure |
 | lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (config writes, report appends) |
 | vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, reports folder, today's-date helper |
 
@@ -52,7 +52,7 @@ No custom config loader. The plugin provides write-side utilities (`configWriter
 self-improve feature and first-run seeding. A lightweight directory scan populates toolbar
 dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
 
-## Key dependency facts (June 2026)
+## Key dependency facts
 
 - `@anthropic-ai/claude-agent-sdk` — the plugin's sole SDK dependency. Spawns the `claude` CLI
   per query; no persistent connection.

@@ -55,8 +55,7 @@ isLocked(path: string): boolean
   `ensureFolder` are not locked.
 - **`runExecutor.ts`** — `appendReportBlock(app, target, block)` wraps its read-modify-write in
   `withLock(target.path, …)`, so two concurrent runs writing the same day's report do
-  not interleave (triggers were removed in issue #188; batch loops, this pipeline's only caller,
-  were removed in issue #221 — `runExecutor.ts` currently has no in-tree caller, see
+  not interleave (`runExecutor.ts` currently has no in-tree caller — see
   [run-executor.md](run-executor.md)). A caller running many items through this pipeline is
   expected to let a `LockAcquisitionError` from a report append propagate like any other write
   failure into its own per-item error handling. `runExecutor.ts` also wraps the `write: true`
@@ -74,13 +73,10 @@ isLocked(path: string): boolean
 - No persistence — the map is rebuilt empty on plugin load; a plugin reload cannot leave a stale
   lock held.
 
-## Current status
+`src/lockManager.ts` exports the `lockManager` singleton (`withLock`/`isLocked`) and
+`LockAcquisitionError`; integrated into `configWriter.ts` (`writeAgent`, `writeSkill`,
+`modifyArtifact`, `deleteArtifact`) and `runExecutor.ts` (`appendReportBlock`, and the
+`write: true` write-back path). Unit tests in `test/lockManager.test.ts` cover FIFO
+serialization, independent-path concurrency, release-on-throw, and the
+timeout/`LockAcquisitionError` path.
 
-Implemented (issue #68). `src/lockManager.ts` exports the `lockManager` singleton
-(`withLock`/`isLocked`) and `LockAcquisitionError`; integrated into `configWriter.ts`
-(`writeAgent`, `writeSkill`, `modifyArtifact`, `deleteArtifact`) and `runExecutor.ts`
-(`appendReportBlock`, and the `write: true` write-back path). Unit tests in
-`test/lockManager.test.ts` cover FIFO serialization,
-independent-path concurrency, release-on-throw, and the timeout/`LockAcquisitionError` path.
-Foundation for the multi-writer safety of `configWriter.ts`/`runExecutor.ts` and any future
-multi-writer feature reusing them.

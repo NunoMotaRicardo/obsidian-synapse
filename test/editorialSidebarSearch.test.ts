@@ -252,9 +252,9 @@ describe('editorial restyle: session sidebar & search tab (#209)', () => {
 
 	describe('AC-9: Documentation in specs/chat-view.md', () => {
 		it('documents Session sidebar and Search tab Editorial specifications in chat-view.md', () => {
-			expect(specContent).toContain('### Session sidebar (issue #209)');
+			expect(specContent).toContain('### Session sidebar');
 			expect(specContent).toContain('starter list pattern');
-			expect(specContent).toContain('### Search tab (issue #209)');
+			expect(specContent).toContain('### Search tab');
 			expect(specContent).toContain('synapse-search-highlight');
 			expect(specContent).toContain('synapse-search-loading-bar');
 		});

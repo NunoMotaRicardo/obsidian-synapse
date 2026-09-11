@@ -353,7 +353,7 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 
 	describe('AC-9: Spec documentation', () => {
 		it('chat-view.md documents config toolbar, gauge, and task panel editorial specifications', () => {
-			expect(specContent).toContain('### Config toolbar, gauge & task panel (issue #210)');
+			expect(specContent).toContain('### Config toolbar, gauge & task panel');
 			expect(specContent).toContain('Config toolbar controls:');
 			expect(specContent).toContain('Normalized control color states:');
 			expect(specContent).toContain('Context-window gauge hairline meter:');

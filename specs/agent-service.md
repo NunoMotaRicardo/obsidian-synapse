@@ -17,9 +17,7 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
   - `inlineChat()` defaults to **agentic** behavior: `maxTurns` falls back to
     `DEFAULT_AGENTIC_MAX_TURNS` (50) so multi-step tool use (Read/Glob/Grep loops) can finish.
     Callers doing pure text transforms (editor text actions, note edit/structure, new
-    note/canvas/summary) must pass `tools: []` + `maxTurns: 1` explicitly. A `maxTurns: 1`
-    default here was the root cause of every tool-using one-shot failing with "Reached maximum
-    number of turns (1)".
+    note/canvas/summary) must pass `tools: []` + `maxTurns: 1` explicitly.
 - Re-export all SDK types consumed elsewhere so the SDK import surface stays in one file.
 - Track own `ConnectionState` (`'disconnected' | 'connecting' | 'connected' | 'error'`) around
   resolution and first query attempt.
@@ -70,7 +68,7 @@ Dual auth via `buildEnv()`:
   is set; the CLI picks up the stored credential automatically.
 - **API key:** `ANTHROPIC_API_KEY` is injected into the subprocess env from `auth.apiKey`.
 
-## Session-scoped permission updates (issue #193)
+## Session-scoped permission updates
 
 `sessionScopePermissions(suggestions: PermissionUpdate[]): PermissionUpdate[]` maps each CLI-
 suggested `PermissionUpdate` to `{...u, destination: 'session'}`. Every variant of the SDK's
@@ -89,13 +87,13 @@ are the sole callers — both reach `sessionScopePermissions()` and the `Permiss
 re-exports rather than importing the SDK directly. See `chat-view.md`'s "Tool approval never
 persists to disk" section for how `SynapseView.buildSessionConfig()`'s `permissionHandler` uses
 this (and why its auto-allow branch sends no `updatedPermissions` at all instead). A deliberate
-*persistent* grant is a separate mechanism, added later (issue #197): the modal's **Always allow**
+*persistent* grant is a separate mechanism: the modal's **Always allow**
 button calls `persistToolApprovalRules()` (`src/configWriter.ts`), which writes the same rule
 string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive directly into
 `_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
-#194 (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
+The vault settings layer (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
-### In-memory tool-approval grants across the per-`send()` respawn (issue #193 round 2)
+### In-memory tool-approval grants across the per-`send()` respawn
 
 `destination: 'session'` above only covers the **current CLI process**. The Agent SDK spawns a
 fresh `claude` process on every `Session.send()` call (resuming by session id, not by keeping a
@@ -130,16 +128,14 @@ them into every query rather than relying on the CLI's own process-local state:
 The accumulator itself (`SynapseView.sessionToolGrants`) and the call sites that populate/consume
 it live in the view layer — see `chat-view.md`'s "In-memory tool-approval grants" for where the
 set lives, how it survives a `configDirty` `Session` rebuild, and when it's cleared. Nothing here
-is ever written to disk; the grants die with the conversation. #194's vault settings layer (below)
-merges *underneath* whatever this produces — see "Vault settings layer (issue #194)" — rather than
+is ever written to disk; the grants die with the conversation. The vault settings layer (below)
+merges *underneath* whatever this produces — rather than
 adding a second, separate merge point.
 
-## Vault settings layer (issue #194)
+## Vault settings layer
 
 `_synapse/settings.json` is the vault's own settings layer — vault-scoped configuration that
-follows the vault regardless of a session's `cwd` (unlike the pre-#193 behavior of whatever the
-CLI persisted into `<cwd>/.claude/settings.local.json`, which changed meaning when `cwd` was
-scoped to a subfolder, and #193 stopped persisting to entirely). It sits alongside `agents/*.md`,
+follows the vault regardless of a session's `cwd`. It sits alongside `agents/*.md`,
 `skills/*/SKILL.md`, and `.mcp.json` as vault-local customization (`wiki/Customization.md`), but
 is applied inside `AgentService`, not written by the plugin.
 
@@ -154,7 +150,7 @@ settings-building logic — they only needed to pass the `App` handle they alrea
 
 **Read as a parsed object, never the path-string form.** `Options.settings` accepts `string |
 Settings`; `AgentService` always resolves to the object form. This is deliberate, not incidental:
-`buildInMemoryPermissionSettings(grants, existing)` (#193 round 2, above) treats a *string*
+`buildInMemoryPermissionSettings(grants, existing)` (above) treats a *string*
 `existing` as an untouched passthrough — folding an in-memory grant list into an arbitrary file
 path would mean writing to it, which that feature must never do. Passing the vault layer as a
 path string would silently defeat that merge (session grants would vanish into the ignored-string
@@ -173,10 +169,9 @@ keeps everything on the object-merge branch.
   used elsewhere in this file for `node:fs/promises` — that gate exists for a one-time async
   fallback off the hot path (`ensureConnected()`); this method runs on every query build and must
   stay synchronous, and a static import also works in the test environment where
-  `window.require` is unavailable. (Mirrors the now-removed `mcpBridge.ts`'s `_synapse/.mcp.json`
-  read — issue #220 deleted that module, but the SDK still reads `.mcp.json` natively.)
-  - **Absent file → `undefined`, silently** (AC-2): a missing `_synapse/settings.json` behaves
-    exactly as before this issue. The plugin never creates the file itself.
+  `window.require` is unavailable.
+  - **Absent file → `undefined`, silently** (AC-2): a missing `_synapse/settings.json` is
+    silently ignored. The plugin never creates the file itself.
   - **Malformed JSON → `undefined`, with exactly one `[synapse]`-prefixed `Notice` + `debugTrace`**
     (AC-4): the query proceeds without the layer rather than crashing. A second `Map` keyed by
     path (`malformedSettingsWarnedAt: Map<string, number>`) tracks the mtime of the last warning,
@@ -203,29 +198,26 @@ keeps everything on the object-merge branch.
 present — `AgentService` holds no `App` reference of its own (architecture rule: SDK/session
 plumbing stays UI-agnostic), so every caller passes its own handle:
 
-- `chat()` gained an `app?: App` option (it had none before this issue) — unused for anything
-  else (no vault tools offered by this one-shot helper).
-- `inlineChat()`/`Session.send()` already had `app?: App` (originally added for #150/#138's
-  since-removed local-model vault-tool gate — see "Local models" below); it's now *also* read on
-  the real Agent SDK path (previously ignored there). `SynapseView` already passed
+- `chat()` has an `app?: App` option — unused for anything else (no vault tools offered by this one-shot helper).
+- `inlineChat()`/`Session.send()` have `app?: App`. `SynapseView` passes
   `app: this.app` unconditionally on every `Session.send()` call, and `searchPanel.ts`'s two
-  `inlineChat()` calls already passed `app: this.app` (#167) — no change needed for the chat
+  `inlineChat()` calls pass `app: this.app` — no change needed for the chat
   panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`, `telegramBot.ts`, and
-  `runExecutor.ts`'s `executeWithClaude()` did not previously pass `app` to
-  `inlineChat()` and were updated to pass it, purely to make the vault path derivable — none of
+  `runExecutor.ts`'s `executeWithClaude()` pass `app` to
+  `inlineChat()` purely to make the vault path derivable — none of
   their own settings-building logic changed.
 - Passing `app` alone does not by itself grant tool access — a caller must also supply
   `canUseTool` (see "Wiring `inlineChat()`'s callers" under "Local models" below); every site
-  updated here still omits `canUseTool`, so no new tool access opened up as a side effect of this
-  change, per #167's `editorMenu.ts` tests.
+  that passes `app` for vault-path derivation still omits `canUseTool`, so no new tool access
+  opens up as a side effect.
 
-**`settingSources` default (issue #196).** `routeQueryOptions()` also defaults
+**`settingSources` default.** `routeQueryOptions()` also defaults
 `Options.settingSources` to `['user', 'project']` when a caller hasn't set one, dropping the Agent
 SDK's own default of `['user', 'project', 'local']`:
 
-- **`'local'` is dropped.** It maps to `<cwd>/.claude/settings.local.json` — a file this plugin no
-  longer writes (#193) but that can still exist and silently apply if `cwd` happens to contain one
-  (including stale drive-wide grants #193 used to write there before that fix). Dropping it closes
+- **`'local'` is dropped.** It maps to `<cwd>/.claude/settings.local.json` — a file the plugin no
+  longer writes but that can still exist and silently apply if `cwd` happens to contain one
+  (including stale drive-wide grants). Dropping it closes
   that leak without adding a settings toggle: the plugin never reads or writes
   `.claude/settings.local.json` itself, so there is nothing for a user to configure.
 - **`'project'` is kept** so a vault-root `.claude/settings.json` and any vault `CLAUDE.md` still
@@ -260,15 +252,13 @@ Callers resolve the model this way *before* building `Options` — `configToolba
 Tier-1 Claude sessions can dynamically delegate sub-work to a cheap/local-backed agent using
 an in-process MCP server (`delegation`), implemented with `createSdkMcpServer()` + `tool()`.
 
-- **Gating:** Gated on `isLocalAgentEndpointConfigured()`. If no local agent endpoint (issue
-  #122, see "Local models" below) is configured, the delegation server is omitted from query
-  options.
+- **Gating:** Gated on `isLocalAgentEndpointConfigured()`. If no local agent endpoint
+  is configured, the delegation server is omitted from query options.
 - **Tools exposed:** `cheap_generate` (single prompts/sub-tasks) and `bulk_summarize`
   (multi-item summaries processed in parallel via `Promise.allSettled`).
 - **Routing:** the tool handler resolves the endpoint's default model
   (`resolveEndpointDefaultModel()`, the first entry of `fetchEndpointModels()`'s catalogue) and
   delegates via `chat()` — the same real-Agent-SDK path a direct local-model chat query takes.
-  Post-#220 there is no other execution path to fall back to.
 - **Caching:** the resolved default model ID is cached per base URL. The delegation server
   instance is cached but invalidated when `isLocalAgentEndpointConfigured()` returns false.
   Call `clearDelegationCache()` when the endpoint config changes.
@@ -290,9 +280,9 @@ Both `chat()` and `inlineChat()` use `sendAndWaitWithAbort(fn, options)`:
 event is received, and also by the interactive loop turn/token guardrails (see below). It prefers
 a graceful `Query.interrupt()` control request over hard-aborting the `AbortController`, falling
 back to the latter only when there's no in-flight query or `interrupt()` fails — see "Electron
-`.unref()` compatibility (issue #116)" below for why.
+`.unref()` compatibility" below for why.
 
-## Run cost reporting (issue #88)
+## Run cost reporting
 
 `Session.convertToSessionEvent()` dispatches a new `assistant.run_result` event
 (`{totalCostUsd, numTurns}`) whenever an SDK `result` message carries a numeric
@@ -311,7 +301,7 @@ threshold as informational-only, checked once `assistant.run_result` arrives. Fa
 per-turn cost estimate to enable "real-time" dollar cancellation was deliberately avoided —
 see the invariant below.
 
-## Compaction event mapping (issue #177)
+## Compaction event mapping
 
 `Session.convertToSessionEvent()` converts SDK `compact_boundary` system messages
 (`SDKCompactBoundaryMessage`) into `session.compaction_complete` events carrying:
@@ -326,13 +316,11 @@ dispatched. There is also no failure payload: the SDK only ever emits this messa
 so the event carries no success/failure flag. If a failure signal is ever added to the SDK, the
 event should gain a field for it then rather than carrying a permanently-true one now.
 
-## Attachment delivery (issue #77)
+## Attachment delivery
 
 `query()`'s `Options` has no top-level `attachments` field (`prompt` is
 `string | AsyncIterable<SDKUserMessage>`), so `AgentService`/`Session` do not accept or forward
-any `attachments` parameter — there used to be a dead, silently-dropped `attachments?: unknown[]`
-param on `Session.send()`/`inlineChat()` and a `MessageOptions`/`buildSdkAttachments()` pair in
-`sessionConfig.ts` that targeted a nonexistent SDK shape; both were removed. Callers (the chat
+any `attachments` parameter. Callers (the chat
 view, editor image actions, the Telegram bot) instead inline attachment paths directly into the
 prompt string — see `chat-view.md`'s "Attachment delivery" section for the chat-view mechanism
 (`buildPrompt()`, `materializeBlobAttachments()`, `computeAdditionalDirectories()` in
@@ -345,8 +333,7 @@ SDK read access to attachment paths that fall outside the session's `cwd` (out-o
 paths, OneDrive-synced folders, or clipboard-blob temp files under `os.tmpdir()`) without
 widening what's readable when no such attachment is present in a given turn.
 
-There is no `images` parameter anymore (issue #79's `Array<{mimeType, base64}>` payload, and the
-local-model branch that consulted it, were removed by #220 — see "Local models" below): every
+There is no `images` parameter: every
 model, Claude or local, reads image attachments via the agentic `Read` tool on an inlined path,
 same as the rest of `chat-view.md`'s "Attachment delivery" mechanism above.
 
@@ -360,7 +347,7 @@ scope:
 - The result is compared against `providerRequestTimeout` (settings, seconds → ms) and the
   larger value is used.
 
-## Session event map (issue #179)
+## Session event map
 
 `Session.dispatch()`/`Session.on()`, and `AgentService.createSession()`'s `onEvent` callback, are
 generic over `SessionEvents` — a `Record`-like interface mapping each dispatched event name (the
@@ -373,24 +360,14 @@ on<K extends keyof SessionEvents>(type: K, handler: (data: SessionEvents[K]) => 
 ```
 
 An event name not in `SessionEvents`, or a payload that doesn't match the declared shape for that
-name, is a **compile error** at both the dispatch site and every `on()` call site — the compiler
-now owns the contract `test/sessionEventWiring.test.ts` used to guard by reading source text.
-That test is deleted as of this change (superseded, not just redundant — a source-text regex
-can't see a type error). Each payload type was derived from what the producer actually sends and
+name, is a **compile error** at both the dispatch site and every `on()` call site. Each payload
+type was derived from what the producer actually sends and
 what the consumer(s) actually read, not from what might be useful later; see `SessionEvents`'
 doc comment in `agentService.ts` for the full list.
 
-Two things fell out of writing the map against the real producers/consumers:
-
-- **`assistant.reasoning` was a dead event type.** Both registration sites (`synapseView.ts`'s
-  `registerSessionEvents()` and `sessionSidebar.ts`'s `registerBackgroundEvents()`) subscribed to
-  it, but nothing ever dispatched it — `assistant.reasoning_delta` (a different, live event) was
-  the only reasoning-related dispatch. It predates this change and was harmless (the equivalent
-  reconciliation happens via `assistant.message`), but a typed map has no "unreachable key" to
-  register for, so it's removed from `SessionEvents` and both registration sites.
-- **`assistant.message`'s payload never carried `reasoningText`.** Both view-side handlers read
-  `data.reasoningText` defensively, but no producer in `agentService.ts` ever sets it — the
-  dispatch is always `{content}`. Removed from both handlers along with the field.
+`SessionEvents` does not include `assistant.reasoning` (nothing dispatches it —
+`assistant.reasoning_delta` is the live reasoning event) or a `reasoningText` field on
+`assistant.message` (no producer in `agentService.ts` sets it; the dispatch is always `{content}`).
 
 **Partial registration is intentional, not a gap to close.** `SessionEvents` describes every
 event a `Session` can dispatch; a given `session.on(...)` call site is free to subscribe to a
@@ -426,7 +403,7 @@ first captures a `session_id` (also when it changes on resume), it dispatches a
 the real id, name the session, and add it to the sidebar. Do not read `Session.sessionId`
 right after `createSession()` for a new session — it is `''` at that point.
 
-### Carrying a conversation across a rebuilt Session (issue #104)
+### Carrying a conversation across a rebuilt Session
 
 The SDK has no long-lived `Query` to mutate mid-conversation — `Session.send()` creates a fresh
 `query()` per turn (with `resume: <sessionId>` when known) and clears its `Query` handle in a
@@ -461,18 +438,16 @@ valid model identifiers.
 `description`, `supportsAdaptiveThinking`, `supportsFastMode`, `supportsAutoMode`, plus
 `capabilities.supports.reasoningEffort`/`capabilities.supportedReasoningEfforts` derived from
 `supportsEffort`/`supportedEffortLevels`.
-It used to also stamp every model with a hardcoded `limits: {max_context_window_tokens: 200000}`
-(wrong for 1M-context variants, and unread by any consumer) and a blanket `vision: true`/
-`tools: true` (invented — the SDK's `ModelInfo` has no vision or tool-support field at all). Both
-are gone (#105); absent beats wrong. Consumers that read `supportsTools` already treat absence as
+`mapSdkModel()` does not stamp hardcoded `limits` or blanket `vision`/`tools` flags — absent beats
+wrong. Consumers that read `supportsTools` treat absence as
 "assume supported" (`runExecutor.ts`: `modelInfo?.supportsTools !== false`), so Claude models
-keep working exactly as before. `ModelInfo.capabilities.limits` stays typed as an open
+keep working. `ModelInfo.capabilities.limits` stays typed as an open
 `Record<string, unknown>` bag (not currently populated for Claude models) rather than removed
 outright, because `synapseView.ts` reads a `limits['vision'].max_prompt_images` shape that some
-future provider mapping may populate — only the dead `max_context_window_tokens` key is gone.
+future provider mapping may populate.
 `isVision`/`supportsTools`/`capabilities.supports.vision`/`capabilities.supports.tools` remain part
 of the `ModelInfo` shape (local providers in `providerModels.ts` still populate them from real
-heuristics/`/api/show` capability lists) — `mapSdkModel()` just no longer sets them.
+heuristics/`/api/show` capability lists) — `mapSdkModel()` does not set them.
 
 `resolvedModel` (the canonical wire id an alias row resolves to, e.g. `'sonnet'` ->
 `'claude-sonnet-5'`) is used as an additional exact-match tier in `AgentService#resolveValidModel`
@@ -484,7 +459,7 @@ unchanged, because `resolvedModel` is only ever set on SDK-sourced (Claude) rows
 rows from `customModels` never have it, and the keyword tier still does useful work for
 non-Claude/partial-name matches.
 
-## Tool execution events (issue #78)
+## Tool execution events
 
 `Session.convertToSessionEvent()` dispatches `tool.execution_start` from `tool_use` content
 blocks on `assistant` messages, and `tool.execution_complete` from `tool_result` content blocks
@@ -497,7 +472,7 @@ data: `{toolCallId, toolName, success, result: {content}, error?: {message}}` �
 consumes this to render tool-call outcome details and (for Write/Edit/NotebookEdit failures)
 surface a friendlier chat message — see `chat-view.md`.
 
-## Partial message streaming (issue #103)
+## Partial message streaming
 
 The interactive chat panel's `SessionConfig` (`SynapseView.buildSessionConfig()`) sets
 `includePartialMessages: true`. Only the chat panel does this — `chat()`, `inlineChat()`, and
@@ -533,22 +508,18 @@ copy of a turn that streamed correctly.
 
 **Without** `includePartialMessages` (every non-chat-panel caller), the `'assistant'` case's
 per-block loop is the *only* source of `assistant.message_delta`/`assistant.reasoning_delta` —
-each dispatched once, with the whole finished block's text, exactly as before this issue. This is
+each dispatched once, with the whole finished block's text. This is
 still called `_delta` even though it isn't incremental in that mode; `chat-view.md`'s renderer
 handles both cases identically (`appendDelta`/`appendReasoningDelta` just accumulate whatever
 arrives), so this asymmetry is invisible to consumers.
 
-**Electron `.unref()` compatibility (issue #116):** the Agent SDK's `ProcessTransport.close()`
+**Electron `.unref()` compatibility:** the Agent SDK's `ProcessTransport.close()`
 (`sdk.mjs`) schedules a SIGTERM→SIGKILL escalation timer whenever `close()` runs while the CLI
 subprocess is still alive, and calls `.unref()` on it unconditionally. Electron's renderer keeps
 the browser/Chromium `setTimeout`, which returns a plain number with no `.unref()` — this throws
 `TypeError: setTimeout(...).unref is not a function`.
 
-An earlier version of this fix (landed alongside `includePartialMessages` above, before #116)
-patched `globalThis.setTimeout` unconditionally at module load for the plugin's entire lifetime.
-That blast radius was rejected: #116 established, by reading the SDK's teardown code and by
-empirical testing (several partial-message sends produced zero console errors with no shim
-installed at all), that **ordinary query completion never reaches the broken branch** —
+**Ordinary query completion never reaches the broken branch** —
 `ProcessTransport.readMessages()` always `await`s `waitForExit()` before its generator finishes,
 so by the time the SDK's own cleanup calls `transport.close()` the subprocess has already exited
 and the escalation branch is skipped. This holds regardless of `includePartialMessages`.
@@ -569,9 +540,8 @@ callback).
 2. Falls back to hard-aborting `AbortController` only if there is no in-flight query to interrupt,
    or `interrupt()` itself throws (older CLI, unresponsive process). This path forces the kill
    while the subprocess may still be alive, so `agentService.ts` installs a temporary, refcounted
-   `setTimeout` shim (`installSetTimeoutShim()`/`uninstallSetTimeoutShim()`) — identical wrapper
-   technique as the old module-load version (wraps the numeric id in a `Number` object with no-op
-   `unref`/`ref`, still coercing to the same id for `clearTimeout()` via `valueOf()`) — only around
+   `setTimeout` shim (`installSetTimeoutShim()`/`uninstallSetTimeoutShim()`) — wraps the numeric id in a `Number` object with no-op
+   `unref`/`ref`, still coercing to the same id for `clearTimeout()` via `valueOf()` — only around
    this call, for `ABORT_SHIM_GRACE_MS` (8s, comfortably past the SDK's own ~7s worst case of
    escalation timers), then restores the original. Refcounted so overlapping aborts across
    sessions don't restore early. `AgentService.stop()` (plugin unload) force-restores immediately
@@ -591,17 +561,15 @@ of each `send()`) so that case is treated the same as `AbortError` in `send()`'s
 expected, user-initiated stop, not a `session.error` to dispatch or rethrow. Verified: interrupting
 mid-stream no longer surfaces a `[synapse] Send error` console message or an in-chat error bubble.
 
-## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate` (issue #87)
+## Plan/task tracking — `TodoWrite` and `TaskCreate`/`TaskUpdate`
 
 Claude Code surfaces its running plan through a tool call rather than a dedicated SDK event —
 but the *tool name and payload shape used depend on the CLI version/session*: the SDK's own
 `sdk-tools.d.ts` declares both a legacy `TodoWriteInput` (one call carries the entire plan) and a
 newer `TaskCreateInput`/`TaskUpdateInput`/`TaskGetInput`/`TaskListInput` family (a task graph
 built incrementally, one call per task/patch, with dependency tracking via
-`addBlocks`/`addBlockedBy`). **Verified against the installed CLI (2.1.195) during issue #87's
-deploy-test: the model used `TaskCreate`/`TaskUpdate` exclusively and never emitted `TodoWrite`**
-— so both are supported; `TodoWrite` support is kept for forward/backward CLI compatibility per
-the SDK's declared type even though it wasn't observed live. Rather than adding a new
+`addBlocks`/`addBlockedBy`). Both are supported; `TodoWrite` support is kept for forward/backward
+CLI compatibility per the SDK's declared type. Rather than adding a new
 `SessionEvent` variant for either, the view branches on `toolName` in the existing
 `tool.execution_start`/`tool.execution_complete` handlers; `AgentService` stays the sole
 SDK-access point by owning the *parsing*, not a new event type.
@@ -641,16 +609,12 @@ turn:
   dependency graph. The view only applies an update if `taskId` already exists in `TaskPlan`
   (ignores updates to unknown/untracked ids rather than fabricating a placeholder entry).
 
-## Local models (issue #220 — provider matrix and local ReAct loop removed)
+## Local models
 
 Local models — Ollama or another Anthropic Messages-API-speaking endpoint — run through the
 **same real Agent SDK/CLI as Claude models**, not a separate execution path. There is no
 provider preset, no OpenAI-compatible `/v1/chat/completions` loop, and no local-model-only
-branch left in `chat()`/`inlineChat()`/`Session.send()`. See
-`.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md` for the removal
-decision and history (this same decision also covers issue #221's separate removal of batch
-loops, `src/batchLoopExecutor.ts`); the historical design of the removed matrix/loop (issues #79,
-#117–#120, #129, #135, #137, #138, #150) lives in git history and that decision doc, not here.
+branch in `chat()`/`inlineChat()`/`Session.send()`.
 
 - **`AgentService.isLocalAgentEndpointConfigured(): boolean`** — true when a non-empty
   `LocalAgentEndpointConfig.baseUrl` was supplied to the constructor (settings:
@@ -681,36 +645,31 @@ loops, `src/batchLoopExecutor.ts`); the historical design of the removed matrix/
   `requestUrl` GET to `<baseUrl>/v1/models`, mapping the OpenAI-shaped `{data: [{id, ...}]}`
   catalogue to `ModelInfo[]`. `main.ts#initAgentService()` calls it whenever
   `localAgentEndpointUrl` is set, backing `setCustomModels()`/the model picker. There is no
-  per-model capability catalogue anymore — an unknown model defaults tool-capable per issue
-  #129's unknown≠unsupported rule (the SDK path never gated on it).
+  per-model capability catalogue — an unknown model defaults tool-capable (unknown≠unsupported;
+  the SDK path never gated on it).
 - **Delegation tools** (`cheap_generate`/`bulk_summarize`, "Dynamic Delegation via MCP Tool"
   above): resolve their default model from `fetchEndpointModels()`'s first catalogue entry
   (`resolveEndpointDefaultModel()`, cached per `baseUrl` and invalidated by
   `clearDelegationCache()`) and run through `AgentService.chat()`, same as everything else —
   there is no separate local-provider execution path for them to fall back to.
-- **Settings-side verification (issue #223)**: the settings section has a **Test** button that
+- **Settings-side verification**: the settings section has a **Test** button that
   probes `<baseUrl>/v1/messages` directly with `testLocalAgentEndpoint()` (`providerModels.ts`)
   — no CLI spawn — so an endpoint that doesn't speak the Messages API is caught at configuration
-  time; see [settings.md](settings.md)'s "Local agent endpoint Test button (issue #223)".
+  time; see [settings.md](settings.md)'s "Local agent endpoint Test button".
 - **Continuity and images**: since every model runs through the CLI with `resume` and the
   agentic `Read` tool, the Agent SDK path alone owns conversation continuity and image delivery
-  for all models — there is no separate history-bridging or image-bytes mechanism left
-  (`buildLocalHistory()`, `computeSdkHistoryGap()`/`buildSdkHistoryInjection()`, and
-  `SynapseView.handleSend()`'s local-model image resolution were all removed by #220).
+  for all models.
 - **Tool approval**: a local-model query is gated by the exact same `canUseTool`/
   `resolveToolApprovalPolicy()` machinery as a Claude-model query (see "Session-scoped
-  permission updates" above and `run-executor.md`'s "Tool approval policy") — there is no
-  separate local-path approval adapter anymore (`adaptCanUseToolToLocalApproval()` and
-  `LocalToolApprovalHandler` were removed along with `executeLocalProviderQuery()`).
-  `autoApproveReadOnlyTools`'s `READ_ONLY_TOOL_NAMES` is now `Read`/`Glob`/`Grep` only — the
-  local-path analogues (`read_note`/`list_notes`/`search_notes`, `vaultTools.ts`) no longer
-  exist; see "Wiring `inlineChat()`'s callers" below, which otherwise still applies unchanged.
+  permission updates" above and `run-executor.md`'s "Tool approval policy").
+  `autoApproveReadOnlyTools`'s `READ_ONLY_TOOL_NAMES` is `Read`/`Glob`/`Grep` only;
+  see "Wiring `inlineChat()`'s callers" below.
 - **Security note (settings UI copy, per the repo's network-access convention)**: a
   user-supplied endpoint URL redirects the *entire* agent loop for that query, including tool
   calls, to whatever is listening there — the settings UI explicitly says so and recommends only
   pointing it at a trusted endpoint (loopback Ollama by default).
 
-### Wiring `inlineChat()`'s callers (issue #167)
+### Wiring `inlineChat()`'s callers
 
 Of `inlineChat()`'s call sites, only two genuinely request tools on the SDK path:
 `searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`, `maxTurns: 40`).
@@ -718,9 +677,9 @@ The rest pass `tools: []` deliberately — one-shot generation actions (create n
 edit selection) that have no tools — and are untouched.
 
 **Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool`** — not a new
-"attended-but-automated" permission concept, and not #151's `resolveToolApprovalPolicy()` either:
+"attended-but-automated" permission concept, and not `resolveToolApprovalPolicy()` either:
 
-- It is **not** #151's policy (`src/runExecutor.ts`, "Tool approval policy" — governs
+- It is **not** `resolveToolApprovalPolicy()` (`src/runExecutor.ts`, "Tool approval policy" — governs
   `runExecutor.ts`'s unattended runs, where `'ask'` means "no human to
   ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
   is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
@@ -737,7 +696,7 @@ edit selection) that have no tools — and are untouched.
   forwards the same `canUseTool` to the raw `query()` call too (it is a single option, not two),
   so an unconditional always-allow handler would silently grant writes at any future call site
   that wired it in alongside a write-capable tool. Call sites that legitimately need
-  write-capable tools use #151's `resolveToolApprovalPolicy()` instead.
+  write-capable tools use `resolveToolApprovalPolicy()` instead.
 - Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both pass
   `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing
   `tools: SEARCH_TOOLS`.
@@ -748,11 +707,9 @@ Claude's native multimodal `Read` tool to view it — `inlineChat()` has no `ima
 all (unlike `Session.send()`, which does — see "Attachment delivery" above), so no image data
 reaches any non-Claude model from these two call sites by any means today.
 
-## Query metadata cache (issue #130)
+## Query metadata cache
 
-Capture-and-cache, not a persistent query — see
-`.docs/decisions/2026-09-04-persistent-query-cache.md` for the full decision, including an
-empirical correction to when during a turn the capture is actually safe.
+Capture-and-cache, not a persistent query.
 
 `Session` holds a `QueryMetadataCache` (`{contextUsage?, commands?, agents?}`) refreshed by
 `refreshQueryMetadataCache(query, prev, onDebug?)` — an exported, independently-testable
@@ -792,9 +749,8 @@ the last response's usage and local estimates, without the per-category token-co
   above rather than trusting the event payload as authoritative, since `Session` is the single
   owner of the cache.
 
-Populated the same way for a local-agent-endpoint model as for Claude, post-#220 — every model's
-query goes through a real `Query` handle now, so there is no branch that skips this cache
-anymore. See `chat-view.md`'s "Context-window gauge and live command/agent lists" for how the
+Populated the same way for a local-agent-endpoint model as for Claude — every model's
+query goes through a real `Query` handle. See `chat-view.md`'s "Context-window gauge and live command/agent lists" for how the
 view consumes this cache (including the directory-scan fallback for a session that hasn't sent a
 turn yet).
 

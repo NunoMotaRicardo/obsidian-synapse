@@ -17,17 +17,15 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
 
 ## Behavior contracts
 
-- **Session event wiring is compiler-checked (issue #179):** `registerSessionEvents()`
+- **Session event wiring is compiler-checked:** `registerSessionEvents()`
   (`synapseView.ts`) and `registerBackgroundEvents()` (`sessionSidebar.ts`) both register against
   `AgentService`'s `SessionEvents` map — an unknown event name or a handler expecting the wrong
   payload shape is a build error, not a runtime silent-drop. `registerSessionEvents()`'s handlers
   wrap `Session.on()`'s bare, per-event-typed `data` back into the `{type, data}` shape
   `handleSessionEvent()` switches on (shared with the early-event-buffer replay); this is the only
   place `SessionEvent` (the wrapped union) still appears on the view side.
-  `test/sessionEventWiring.test.ts`, the former source-text guard for this, was deleted in the
-  same change — the compiler now owns the contract it checked. See "Session event map" in
-  `agent-service.md`.
-- **View-injection wiring is source-guarded, not compiler-checked (issue #180):** each
+  See "Session event map" in `agent-service.md`.
+- **View-injection wiring is source-guarded, not compiler-checked:** each
   `src/view/*.ts` file injects its methods into `SynapseView` via declaration merging
   (`declare module '../synapseView' { interface SynapseView { ... } }`) plus a prototype
   assignment inside an exported `installX(ViewClass)` function called from the bottom of
@@ -37,11 +35,11 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   runtime — or (b) a view file whose `installX(SynapseView)` call is missing from
   `synapseView.ts`, so none of its methods ever attach. Unlike the session-event seam above, this
   gap has no compiler-checked replacement (that would require converting the injection pattern to
-  real composition — tracked separately, #176 — not done here). `test/viewInjectionWiring.test.ts`
+  real composition — not done). `test/viewInjectionWiring.test.ts`
   reads `src/view/*.ts` and `src/synapseView.ts` as text and asserts both invariants: every
   declared method has a same-file `proto.` assignment, and every exported `install*` has a call in
   `synapseView.ts`. Files are discovered from disk, so a sixth view file is covered automatically.
-- **Slash-command skill invocation (issue #91):** the Claude Agent SDK natively recognizes and
+- **Slash-command skill invocation:** the Claude Agent SDK natively recognizes and
   invokes registered skills whenever a literal `/skillname` appears anywhere in the prompt text
   (mid-sentence or not), for every skill loaded into the session — no plugin-side parsing,
   stripping, or invocation routing is involved; the prompt text is sent to the SDK unmodified. All
@@ -52,10 +50,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   `skills:` restriction in the selected agent's frontmatter (`AgentConfig.skills` — `undefined` =
   all, `[]` = none, `[...]` = only those listed; applied by `applyAgentToolsAndSkills()` in
   `configToolbar.ts`, whenever the agent selection changes). There is no manual per-session
-  toggle — the old toolbar "Skills" checkbox menu was removed, since it's redundant with (and
-  overridden by) whatever a `/name` mention in the prompt actually invokes; removing it also means
-  invoking a skill via `/name` never needs to mark `configDirty` or force a new session, since the
-  effective skill list no longer changes turn-to-turn from user action.
+  toggle — invoking a skill via `/name` never marks `configDirty` or forces a new session.
   - **Discovery popup** (`inputArea.ts`): typing `/` in the chat textarea, when preceded by
     start-of-message or whitespace (so `and/or`, `3/4`, `path/to/x` never trigger it), opens a
     small inline dropdown anchored above the textarea (`.synapse-skill-popup`, a plain absolutely
@@ -68,17 +63,15 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     `/name` mention. Selecting a match only ever inserts text — it never sends the message and
     never strips the `/name` token afterward, since the SDK needs to see the literal text to
     invoke the skill.
-  - **Search tab (issue #96):** `searchPanel.ts` mirrors the same always-loaded model —
+  - **Search tab:** `searchPanel.ts` mirrors the same always-loaded model —
     `buildSearchSessionConfig()` passes `skills: Array.from(this.searchEnabledSkills)`, and
     `searchEnabledSkills` defaults to every discovered skill name, narrowed only by the selected
     search agent's `skills:` frontmatter restriction via `applySearchAgentToolsAndSkills()` (same
     `undefined`/`[]`/`[...]` semantics as `applyAgentToolsAndSkills()`). There is no manual
-    per-skill toggle in the search toolbar either. Unlike chat, search never had a slash-command
-    popup, so there was no discoverability gap the toggle was compensating for; search is also a
-    one-shot `inlineChat()` per query rather than a persistent multi-turn session, so there's no
-    `configDirty`/session-continuity motivation for keeping a toggle. Removing it here is purely a
-    consistency fix with the chat tab, not a response to either of those specific gaps.
-- Streaming: `buildSessionConfig()` sets `includePartialMessages: true` (issue #103), so the chat
+    per-skill toggle in the search toolbar. Search is a one-shot `inlineChat()` per query rather
+    than a persistent multi-turn session, so there is no `configDirty`/session-continuity
+    motivation for keeping a toggle.
+- Streaming: `buildSessionConfig()` sets `includePartialMessages: true`, so the chat
   panel — and only the chat panel; search/Telegram stay one-shot — gets
   genuine token-level `assistant.message_delta`/`assistant.reasoning_delta` events as the model
   generates, not one lump per turn. The renderer doesn't care which mode produced a given delta:
@@ -88,10 +81,10 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   streamed — a no-op when the accumulated deltas already equal the complete text, so a turn is
   never rendered twice. See `agent-service.md`'s "Partial message streaming" for the
   `Session.convertToSessionEvent()` mapping and why the double-render can't happen.
-- **Waiting/thinking indicator (issue #99):** the `.synapse-thinking` dot-animation (built by the
+- **Waiting/thinking indicator:** the `.synapse-thinking` dot-animation (built by the
   shared `createThinkingIndicator()` helper in `chatRenderer.ts`) is honest about what state the
   turn is actually in — it never claims "Thinking" unless a reasoning block is actually
-  streaming. Partial-message streaming (#103) makes this signal more accurate, not less: the
+  streaming. Partial-message streaming makes this signal more accurate, not less: the
   first `assistant.reasoning_delta` now arrives from a real `thinking_delta` stream chunk as
   reasoning is actually being generated, rather than from a `thinking` block that had already
   finished generating by the time the complete `assistant` message showed up.
@@ -117,18 +110,6 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     (`settings.reasoningEffort`), because models report values beyond the SDK's
     `ReasoningEffort` union (e.g. `max`, `none`). `none` is labelled "Off"; `''` = model
     default. Re-selecting the active level toggles back to `''`.
-  - (issue #106) The menu previously also offered a **Reasoning summary** submenu
-    (`settings.reasoningSummary`) and a **Long context** toggle (`settings.contextTier`).
-    Both were pre-Agent-SDK controls that were never actually passed to `query()` — they
-    persisted a setting and updated the badge, but had zero effect on the session. They were
-    removed rather than wired up: the Agent SDK's long-context equivalent is already covered by
-    picking a `[1m]` model id from the existing model list (`sdkModelId()` in `agentService.ts`
-    surfaces e.g. `sonnet[1m]`), and nothing depended on a reasoning-summary display mode. The
-    settings keys (`contextTier`, `reasoningSummary`) are intentionally left off `SynapseSettings`
-    but tolerated on load — existing `data.json` files carrying the stale keys still load via the
-    `Object.assign({}, DEFAULT_SETTINGS, raw)` merge in `main.ts#loadSettings`; the keys ride along
-    as harmless untyped properties on the in-memory settings object and are silently dropped from
-    subsequent saves (they're not part of the typed shape written back out).
   - An **Infinite sessions** toggle in the same model-icon menu controls the SDK's
     auto-compaction behavior (`settings.infiniteSessionsEnabled`, default `true` — the SDK
     default). When enabled, the SDK compacts the conversation at ~80% context utilization
@@ -137,8 +118,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     reasoning effort, so the model icon stays interactive), sets a persisted setting, marks
     config dirty, and is omitted from session config when `true` (matching the SDK default).
     `infiniteSessions: { enabled: false }` is passed only when the user explicitly disables it.
-    Planned: issue #5.
-- **Task/plan tracking panel** (issue #87): Claude Code surfaces its running plan via a tool
+- **Task/plan tracking panel:** Claude Code surfaces its running plan via a tool
   call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
   are supported. `handleSessionEvent()`'s `tool.execution_start`/`tool.execution_complete` cases
@@ -190,24 +170,15 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     into `bg.currentTodos`/`bg.taskPlan`/`bg.pendingTaskCreates` (no DOM — the session isn't
     visible) so the latest plan state is available if/when the view re-attaches;
     `session.idle`/`session.error` reset all four for the next turn.
-  - **Verified live** (issue #87 deploy-test): the installed CLI (2.1.195) used `TaskCreate`
-    (three sub-tasks with a `subject`/`description`/`activeForm`) followed by `TaskUpdate` calls
-    (dependency links via `addBlockedBy`, then `status: 'in_progress'` → `'completed'`
-    transitions per task) for a multi-step vault-exploration prompt — `TodoWrite` was never
-    emitted by that CLI/session. The panel rendered and updated live from the `TaskCreate`/
-    `TaskUpdate` path.
-- **Message metadata footer (`renderMessageMetadata`)** (issues #88, #178): rendered below completed assistant
+  - **Message metadata footer (`renderMessageMetadata`):** rendered below completed assistant
   messages with chips for elapsed time (`turnStartTime`), token usage (`turnUsage`), and unique tools used
-  (`turnToolsUsed`). Early-returns when none of the three are present. The dead `skill.invoked` event and
-  its "skills used" chip were removed in issue #178 because the Claude Agent SDK provides no signal for skill invocation.
-- **Compaction events in debug view** (issues #5, #177, #181): when the debug toggle is on,
+  (`turnToolsUsed`). Early-returns when none of the three are present.
+- **Compaction events in debug view:** when the debug toggle is on,
   the `session.compaction_complete` event renders an inline debug block in the chat
   (same visibility gating as tool calls via `.synapse-hide-debug`). It always renders as
-  "Compaction complete" — the SDK only emits `compact_boundary` on success, so there is no
-  failure payload to render — and displays pre-compaction tokens, post-compaction tokens,
+  "Compaction complete" and displays pre-compaction tokens, post-compaction tokens,
   tokens removed, duration, and trigger type sourced from SDK `compact_metadata`. Handled in
-  `handleSessionEvent()`. Note: `session.compaction_start` was removed in #177 because the SDK
-  only emits `compact_boundary` at the compaction boundary without an earlier start event.
+  `handleSessionEvent()`.
 - Session restore: resume by id with the full current session config, re-select agent via
   `session.rpc.agent.select`, replay history from `AgentService.getSessionMessages()` (wraps the
   SDK's `getSessionMessages()`, called with no `dir` filter so it searches all project
@@ -226,37 +197,33 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) always applies immediately,
   deferral or not, and an auto-update on the next note switch will still overwrite that manual pick, same as
   before this default flipped.
-  - **Active-note-driven changes are deferred while a conversation is in progress (issue #108, restored by
-    #202):** applying this auto-update unconditionally makes `ensureSession()` (`synapseView.ts`) tear down the
-    live `Session` and rebuild it, resuming by id — a **new CLI process that replays the whole transcript**, so
-    the entire conversation is re-written to the prompt cache on every folder-crossing note switch. Since users
-    switch notes constantly *between* turns, an immediate-apply policy pays that replay cost on a large share of
-    follow-up messages. This is a pure token-cost concern, not a correctness one: issue #104 already fixed the
-    rebuild to always carry `resume` forward (see the bullet below), so no transcript is lost, and issue #131
-    separately verified — empirically, against a real CLI session — that resuming under a *changed* `cwd` does
-    not degrade the model's handling of paths referenced in earlier turns (see
-    `.docs/decisions/2026-09-03-cwd-deferral-removed.md`); neither of those findings is being revisited. What
-    changed is a cost tradeoff #131 never weighed: `updateActiveNote()` (`inputArea.ts`) calls
+  - **Active-note-driven changes are deferred while a conversation is in progress:** applying
+    this auto-update unconditionally makes `ensureSession()` (`synapseView.ts`) tear down the
+    live `Session` and rebuild it, resuming by id — a **new CLI process that replays the whole
+    transcript**, so the entire conversation is re-written to the prompt cache on every
+    folder-crossing note switch. Since users switch notes constantly *between* turns, an
+    immediate-apply policy pays that replay cost on a large share of follow-up messages. This is
+    a pure token-cost concern, not a correctness one. `updateActiveNote()` (`inputArea.ts`) calls
     `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`) with a `conversationInProgress` flag
-    (`currentSession !== null && messages.length > 0`); when true and the folder actually changed, the new
-    directory is held in `SynapseView.pendingWorkingDir` instead of being applied — the working-directory button
-    doesn't move and no rebuild happens — and applied the next time a conversation is *not* in progress
-    (`newConversation()`). If the active note instead returns to the folder the session is already in
-    (`newDir === currentWorkingDir`) while a deferral from an earlier detour is outstanding,
-    `decideWorkingDirAutoUpdate()` reports `clearPending: true` and `updateActiveNote()` clears
-    `pendingWorkingDir` — otherwise the abandoned detour's folder would survive and get silently applied by the
-    next `newConversation()`, even though the user is looking at a note back in the original folder. A *manual*
-    working-directory override (`SynapseView.setWorkingDir()`) bypasses this function entirely and always applies
-    immediately, since it's a deliberate user action rather than a silent side effect of navigation.
-  - **Every `configDirty` rebuild now carries the conversation forward (issue #104):** the
-    toolbar-toggle pattern above (agent/model/reasoning/tools) still marks `configDirty` and lets
-    `ensureSession()` rebuild the `Session` — that part is unchanged, and deliberately so (see
-    `agent-service.md`'s "Carrying a conversation across a rebuilt Session" for why there's no
-    live query to mutate instead). What changed is that `ensureSession()` now reads the outgoing
-    `Session`'s `sessionId` before tearing it down and seeds the rebuilt `SessionConfig` with it
-    (`buildSessionConfig({..., resume})`), so the new `Session`'s first `send()` still resumes the
-    prior conversation even though the `Session` object itself is new. Previously any toolbar
-    config change silently reset the conversation the same way #108/#93 did for note switches.
+    (`currentSession !== null && messages.length > 0`); when true and the folder actually changed,
+    the new directory is held in `SynapseView.pendingWorkingDir` instead of being applied — the
+    working-directory button doesn't move and no rebuild happens — and applied the next time a
+    conversation is *not* in progress (`newConversation()`). If the active note instead returns
+    to the folder the session is already in (`newDir === currentWorkingDir`) while a deferral from
+    an earlier detour is outstanding, `decideWorkingDirAutoUpdate()` reports `clearPending: true`
+    and `updateActiveNote()` clears `pendingWorkingDir` — otherwise the abandoned detour's folder
+    would survive and get silently applied by the next `newConversation()`, even though the user
+    is looking at a note back in the original folder. A *manual* working-directory override
+    (`SynapseView.setWorkingDir()`) bypasses this function entirely and always applies immediately,
+    since it's a deliberate user action rather than a silent side effect of navigation.
+  - **Every `configDirty` rebuild carries the conversation forward:** the toolbar-toggle pattern
+    (agent/model/reasoning/tools) still marks `configDirty` and lets `ensureSession()` rebuild
+    the `Session` — that part is unchanged, and deliberately so (see `agent-service.md`'s
+    "Carrying a conversation across a rebuilt Session" for why there's no live query to mutate
+    instead). `ensureSession()` reads the outgoing `Session`'s `sessionId` before tearing it
+    down and seeds the rebuilt `SessionConfig` with it (`buildSessionConfig({..., resume})`),
+    so the new `Session`'s first `send()` still resumes the prior conversation even though the
+    `Session` object itself is new.
   To anchor path resolution, the session is configured with standard system instructions containing
   the absolute vault root, active note path, and working directory, preventing the LLM from constructing
   incorrect absolute paths (e.g., nesting file paths under attached image subfolders).
@@ -266,7 +233,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   per-turn user message instead (see the stable-vs-volatile split below). (A plain-string
   `systemPrompt` replaces the whole default prompt and the model stops using tools/reading
   files; this applies to chat, advanced search, and the Telegram bot alike.)
-  **Stable vs. volatile split (issue #201):** the system prompt sits at the front of every
+  **Stable vs. volatile split:** the system prompt sits at the front of every
   request, so any change to `systemPrompt.append` invalidates the SDK's cached prefix *and*
   all conversation history behind it — measured at ~50K tokens re-written at cache-write price
   on a turn that changed nothing but the appended block's volatile fields. `buildSessionConfig()`
@@ -283,13 +250,12 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   Telegram bot has no active-note concept — so the split costs nothing there but keeps the
   three call sites consistent.
   A compact `[Vault Structure]` block, part of the per-turn context above, lists top-level
-  vault folder *names only* — no `(N items)` counts (dropped outright, issue #201, since the
-  counts made the block gratuitously volatile without the model needing exact numbers) —
-  excluding system folders (`.obsidian`, `.trash`, the synapse folder, and any dot-prefixed
-  folder). This gives agents awareness of the vault's organization without reading note
-  contents. The scan is performed by `scanVaultStructure()` in `configWriter.ts` (its return
-  shape, including `fileCount`, is unchanged — only the formatter stopped emitting it); the
-  formatter `buildVaultContextBlock()` lives in `sessionConfig.ts`.
+  vault folder *names only* — no `(N items)` counts — excluding system folders (`.obsidian`,
+  `.trash`, the synapse folder, and any dot-prefixed folder). This gives agents awareness of
+  the vault's organization without reading note contents. The scan is performed by
+  `scanVaultStructure()` in `configWriter.ts` (its return shape, including `fileCount`, is
+  unchanged — only the formatter stopped emitting it); the formatter `buildVaultContextBlock()`
+  lives in `sessionConfig.ts`.
   A compact `[Self-Improve]` detection block is appended to every session's system prompt
   (chat, search, and Telegram bot) via `buildSelfImproveHint()` in `sessionConfig.ts`.
   It teaches the active agent to recognize when the user expresses a customization preference
@@ -301,7 +267,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   A compact `[Resilience]` block is appended to every session's system prompt (chat, search,
   and Telegram bot) via `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask
   guidance for failed writes/edits and confirm-before-acting guidance for referenced
-  attachments; see "Write/edit tool error guidance (issue #78)" below. This matters most for
+  attachments; see "Write/edit tool error guidance" below. This matters most for
   the Telegram bot, which runs unattended with `permissionMode: 'bypassPermissions'` and no UI
   to catch a silent failure — `buildResilienceHint()` stays session-stable and is never moved
   out of `systemPrompt.append`, so this guidance can't be silently dropped by the stable/
@@ -315,7 +281,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   The shared `IMAGE_EXTS` constant (`src/types.ts`, not `src/view/types.ts`) defines the supported image extensions
   (`png, jpg, jpeg, gif, webp, bmp, svg`). Non-vision models are unaffected (the SDK/model
   handles or ignores image attachments gracefully).
-- **Tool approval never persists to disk (issue #193).** `buildSessionConfig()`'s `permissionHandler`
+- **Tool approval never persists to disk.** `buildSessionConfig()`'s `permissionHandler`
   (the `CanUseTool` passed as `canUseTool`) has two branches, and neither writes a
   `.claude/settings.local.json` into the vault or anywhere else:
   - `settings.toolApproval === 'allow'` (auto-allow) returns `{behavior: 'allow', updatedInput:
@@ -330,68 +296,60 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     the approval in effect for the rest of that conversation (no re-prompt loop for the same path)
     without touching disk. See `agent-service.md`'s "Session-scoped permission updates" for the
     helper.
-- **A deliberate, permanent grant is back, written by Synapse (issue #197).** #193 removed the CLI's
-  own "always allow" persistence outright (it wrote to whatever `<cwd>/.claude/settings.local.json`
-  happened to be — the drive-wide `Read(//d//**)` blast-radius problem). #194 gives the vault its own
-  settings file Synapse owns, so `ToolApprovalModal` now offers a third action, **Always allow**,
-  alongside **Allow** and **Deny**:
-  - **Allow** is byte-for-byte #193's behavior — conversation-scoped, writes nothing (AC-2). This is
-    unchanged.
-  - **Always allow** returns the same `{behavior: 'allow', ...}` `PermissionResult` as **Allow** (so
-    the current conversation is granted immediately, same as before) but the modal additionally
-    resolves a `persistRules: string[]` alongside it — the rule string(s) (`permissionRuleToString()`'s
+- **Deliberate permanent grants via Always allow.** `ToolApprovalModal` offers a third
+  action, **Always allow**, alongside **Allow** and **Deny**:
+  - **Allow** — conversation-scoped, writes nothing.
+  - **Always allow** returns the same `{behavior: 'allow', ...}` `PermissionResult` as **Allow**
+    (so the current conversation is granted immediately) but the modal additionally resolves a
+    `persistRules: string[]` alongside it — the rule string(s) (`permissionRuleToString()`'s
     syntax) derived from `extractAllowRuleStrings(request.suggestions)`, or, if the CLI sent no
-    `addRules` suggestion to derive one from, a bare `toolName` rule so the button is never a no-op.
-    **The modal shows these exact rule strings above the buttons before they can be clicked** — the
-    literal text that will be written, not a paraphrase — specifically so a drive-wide suggestion like
-    `Read(//d//**)` is visible before the user makes it permanent (the scenario that started #193).
+    `addRules` suggestion to derive one from, a bare `toolName` rule so the button is never a
+    no-op. **The modal shows these exact rule strings above the buttons before they can be
+    clicked** — the literal text that will be written, not a paraphrase — specifically so a
+    drive-wide suggestion like `Read(//d//**)` is visible before the user makes it permanent.
   - The modal itself never writes to disk (it only returns `persistRules`); `buildSessionConfig()`'s
     `permissionHandler` is the one call site that does, via `configWriter.persistToolApprovalRules()`
-    (see `config-writer.md`) — matching the `configWriter.ts` file-writing rule in `CLAUDE.md`. A write
-    failure (e.g. malformed existing `_synapse/settings.json`) surfaces as a `Notice` but does not
-    revoke the in-memory grant already returned to the SDK for the current conversation.
-  - There is no in-app UI to remove a persisted grant (AC-5) — `wiki/Customization.md` documents
+    (see `config-writer.md`) — matching the `configWriter.ts` file-writing rule in `CLAUDE.md`. A
+    write failure (e.g. malformed existing `_synapse/settings.json`) surfaces as a `Notice` but does
+    not revoke the in-memory grant already returned to the SDK for the current conversation.
+  - There is no in-app UI to remove a persisted grant — `wiki/Customization.md` documents
     editing `_synapse/settings.json`'s `permissions.allow` list directly.
-- **In-memory tool-approval grants (issue #193 round 2).** `destination: 'session'` above only
-  covers the CLI process handling the *current* turn — the Agent SDK spawns a fresh process on
-  every `Session.send()` (resuming by session id), so in **ask** mode the grant above was lost on
-  the very next turn, re-prompting for the same path repeatedly. `SynapseView.sessionToolGrants`
-  (a `Set<string>` of CLI rule strings, e.g. `Read(C:\path\**)`) fixes this by accumulating
-  approved grants for the life of the conversation and re-injecting them into every query via
-  `Options.settings` — see `agent-service.md`'s "In-memory tool-approval grants" for the
-  `extractAllowRuleStrings()`/`buildInMemoryPermissionSettings()`/`Session.applyToolGrants()` mechanism.
-  Nothing is written to disk; the set lives only in memory.
+- **In-memory tool-approval grants.** `SynapseView.sessionToolGrants` (a `Set<string>` of CLI
+  rule strings, e.g. `Read(C:\path\**)`) accumulates approved grants for the life of the
+  conversation and re-injects them into every query via `Options.settings` — see
+  `agent-service.md`'s "In-memory tool-approval grants" for the
+  `extractAllowRuleStrings()`/`buildInMemoryPermissionSettings()`/`Session.applyToolGrants()`
+  mechanism. Nothing is written to disk; the set lives only in memory.
   - `buildSessionConfig()`'s `permissionHandler`, on an `'allow'` result with `addRules`/`'allow'`
     suggestions, adds the extracted rule strings to `sessionToolGrants` and immediately calls
     `this.currentSession?.applyToolGrants(...)` so the *next* `send()` on the same, un-rebuilt
     `Session` object already carries the grant — a session that only picked it up on the next
     `configDirty` rebuild would still re-prompt for every turn in between.
   - `buildSessionConfig()` also seeds a freshly (re)built `Session`'s initial `settings` from
-    whatever `sessionToolGrants` already holds, exactly the way `resume` carries the conversation's
-    session id across a rebuild (issue #104) — so a rebuild triggered by e.g. a model change never
-    drops an already-approved grant.
+    whatever `sessionToolGrants` already holds, the same way `resume` carries the conversation's
+    session id across a rebuild — so a rebuild triggered by e.g. a model change never drops an
+    already-approved grant.
   - **Cleared only in `newConversation()`** — a genuinely new conversation starts with no known
-    grants, which is why AC-3's "starting a new conversation prompts again" holds. It is *not*
-    cleared on a `configDirty` rebuild (that would defeat the fix) or on the background-session
+    grants. It is *not* cleared on a `configDirty` rebuild or on the background-session
     round-trip in `sessionSidebar.ts`: `saveCurrentToBackground()`/`restoreFromBackground()` carry
     a `sessionToolGrants` copy on `BackgroundSession` alongside `sdkSeenIndex`, and `selectSession()`
     resets the view's set to empty before either restoring that copy (same conversation, still
     alive in the background) or cold-loading a persisted session from disk (a different
     conversation this view instance has no in-memory grant history for).
-  - Issue #194 layers `_synapse/settings.json` (the vault's own settings) *underneath* whatever
+  - The vault settings layer (`_synapse/settings.json`) is merged *underneath* whatever
     `sessionToolGrants` produces here, inside `AgentService.routeQueryOptions()` — not a second
     merge point in the view layer. A vault-level `permissions.deny` rule still applies even after
     a grant is added mid-conversation, because the merge happens fresh on every query build; see
-    `agent-service.md`'s "Vault settings layer (issue #194)".
-- **`AskUserQuestion` gets a dedicated question UI, not the approval gate (issue #182).**
+    `agent-service.md`'s "Vault settings layer".
+- **`AskUserQuestion` gets a dedicated question UI, not the approval gate.**
   `buildSessionConfig()`'s `permissionHandler` checks `toolName === 'AskUserQuestion'` **before**
   the `settings.toolApproval === 'allow'` auto-allow short-circuit and before `ToolApprovalModal`
-  — verified live against the CLI (`@anthropic-ai/claude-agent-sdk` 0.3.x): `canUseTool` does fire
-  for this tool on the Agent SDK path, and allowing it with **no** `answers` (which is what
-  auto-allow's `updatedInput: input` passthrough would do) is exactly the bug this fixes — the
-  call resolves unanswered and the model falls back to prose instead of a structured question.
+  — `canUseTool` fires for this tool on the Agent SDK path, and allowing it with **no** `answers`
+  (which is what auto-allow's `updatedInput: input` passthrough would do) leaves the call
+  unanswered, causing the model to fall back to prose instead of a structured question.
   (A bare `AskUserQuestion` entry in `allowedTools` would shadow the `canUseTool` callback
   entirely — the SDK warns `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` — so none is added.)
+
   - `AskUserQuestionModal` (`src/modals/askUserQuestionModal.ts`, mirroring `ElicitationModal`'s
     promise-resolving structure) renders every question (1-4) with its `header` chip, the question
     text, and each option (2-4) as a selectable card (label + description); `multiSelect: true`
@@ -415,7 +373,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     dependency, so it's unit-tested in `test/askUserQuestionModal.test.ts` without a live CLI or
     vault) maps the per-question selection state to the `answers`/`annotations` shape the CLI
     expects: `answers` is keyed by the **question text**, valued by the selected option's
-    **label** — for `multiSelect`, the selected labels joined with `", "` (verified live:
+    **label** — for `multiSelect`, the selected labels joined with `", "` (e.g.
     `"Alpha, Gamma"`, in option order); an "Other" answer is the typed string as-is, appended
     **after** the selected labels since it is not one of the listed options.
     `annotations[question].preview` is populated only for a single-select answer whose one
@@ -438,7 +396,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
     (`agentService.ts`, used by search/local-model call sites) and `makeDenyingCanUseTool`
     (`runExecutor.ts`, used by unattended runs) both special-case `toolName ===
     'AskUserQuestion'` before their normal fallback-deny message.
-- Attachment delivery (issue #77): the input area supports drag/drop (OS and vault files),
+- **Attachment delivery:** the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is
   `string | AsyncIterable<SDKUserMessage>` — so attachments are delivered by **inlining an
@@ -449,7 +407,7 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   a real path it reads itself with its own `Read` tool (which already supports image files).
   `type: 'blob'` attachments (clipboard-pasted images — base64 data, no path) are first written
   to a temp file by `materializeBlobAttachments()` under
-  `<os.tmpdir()>/obsidian-synapse-attachments/`, then inlined the same way as file attachments;
+  `<os.tmpdir>/obsidian-synapse-attachments/`, then inlined the same way as file attachments;
   temp files are tracked per-view (`SynapseView.attachmentTempFiles`) and deleted via
   `cleanupAttachmentTempFiles()` in `onClose()` (view unload). For any attachment path that
   falls outside the session's actual `cwd` (`SynapseView.getWorkingDirectory()` — the vault
@@ -465,19 +423,11 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   Attachment tag icons correctly distinguish image types: `type: 'blob'`
   (clipboard paste) and `type: 'file'` with an image extension both display the image icon,
   matching the existing `type: 'image'` path.
-  **Local models removed the need for a separate image/history bridge (issue #220).** Issues
-  #79 (image-bytes multimodal delivery to the BYOK ReAct loop), #135 (`buildLocalHistory()`
-  stateless-turn history payload) and #137 (`computeSdkHistoryGap()`/`buildSdkHistoryInjection()`
-  bridging local turns back into the SDK session) all existed because local/BYOK models ran
-  through a separate hand-rolled ReAct loop with no agentic `Read` tool, no `resume`, and no
-  persisted session. That loop, and the OpenAI-compatible provider matrix that fed it, were
-  removed by #220 (see
-  `.docs/decisions/2026-09-09-anthropic-only-provider-and-batch-loop-removal.md`, which also
-  covers issue #221's separate removal of batch loops):
-  every model — Claude or local (issue #122's local agent endpoint, `AgentService.isLocalModel()`)
-  — now runs through the same real Agent SDK/CLI, with `resume` and the agentic `Read` tool, so
-  the SDK path alone owns image delivery and conversation continuity for all models. There is no
-  separate local-model send path in `handleSend()` anymore.
+  Every model — Claude or local (`AgentService.isLocalModel()`) — runs through the same Agent
+  SDK/CLI path, with `resume` and the agentic `Read` tool, so the SDK path alone owns image
+  delivery and conversation continuity for all models. There is no separate local-model send
+  path in `handleSend()`.
+
 - Sessions are auto-named `<Agent>: <first message>`; search sessions are tagged.
   A new session's id is unknown until the first send streams a message: `handleSend()` stores
   the first-prompt snippet in `pendingSessionLabel`, and the `session.init` event (dispatched
@@ -488,12 +438,11 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
   builds.
 
-## Context-window gauge and live command/agent lists (issue #130)
+## Context-window gauge and live command/agent lists
 
-Capture-and-cache — `.docs/decisions/2026-09-04-persistent-query-cache.md`. `Session` (not the
-view) owns the cache; `synapseView.ts` only reads it via three getters and reacts to a
-`session.metadata` `SessionEvent`. See `agent-service.md`'s "Query metadata cache" for the
-`Session`-side mechanism and its one-turn-stale/timing caveats.
+`Session` (not the view) owns the cache; `synapseView.ts` only reads it via three getters and
+reacts to a `session.metadata` `SessionEvent`. See `agent-service.md`'s "Query metadata cache"
+for the `Session`-side mechanism and its one-turn-stale/timing caveats.
 
 - **The gauge** (`.synapse-context-indicator`, built in `configToolbar.ts`'s
   `buildConfigToolbar()`, before the debug-toggle spacer): an editorial hairline meter
@@ -502,9 +451,8 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
   and a note that the figure is one turn stale. `updateContextIndicator()` reads
   `this.currentSession?.cachedContextUsage` and:
   - **Renders nothing** (`is-hidden`, empty text) when it's `undefined` — before any session has
-    captured a value, and for the entire conversation on a BYOK local model (see
-    `agent-service.md`: the local-provider branch never touches a `Query` handle, so
-    `cachedContextUsage` never becomes defined on that path). Never a placeholder `0%`.
+    captured a value. Never a placeholder `0%`.
+
   - Adds `is-context-warning` at ≥75% and `is-context-critical` at ≥90% (percentage from the
     SDK's own `SDKControlGetContextUsageResponse.percentage`, `sdk.d.ts:3586` — not recomputed
     or estimated here).
@@ -520,8 +468,7 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
   `mergeLiveAgents(session.cachedSupportedAgents, this.agents)` (`sessionConfig.ts`) when the
   current session has captured a value, else the unchanged directory-scan result (`this.skills`
   from `scanSkills()`, `this.agents` from `scanAgents()`). A session that has never sent a turn
-  has an empty cache, so this transparently falls through to the scan — the pre-#130 behavior
-  for that case is unchanged.
+  has an empty cache, so this transparently falls through to the scan.
   - **The merge rule is: the CLI decides membership, the scan supplies config.** An agent the
     CLI did not load is dropped (the CLI is authoritative about what actually loaded); an agent
     present in both keeps its scanned `AgentConfig`. This matters because `AgentInfo` has no
@@ -549,7 +496,7 @@ view) owns the cache; `synapseView.ts` only reads it via three getters and react
     entry's `folderPath` is `''` — never read for those entries, since nothing in the popup or
     picker resolves a folder path for display.
 
-## Loop turn/cost thresholds (issue #88)
+## Loop turn/cost thresholds
 
 Opt-in, settings-backed guardrails for interactive Tier-1 chat runs — distinct from the SDK's
 raw `maxTurns` cap (which fails silently with "Reached maximum number of turns (N)"): these are
@@ -565,11 +512,8 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
   plain number field fits better than parsing `$5`/`5 tokens` strings. Parsed with `Number()` +
   `Number.isInteger()` (not `parseInt()`, which would truncate scientific notation like `1e2` at
   the `e` and silently floor fractional input) — non-integer or out-of-range input is rejected
-  outright rather than saving a value that doesn't match what the user typed. This module
-  implements its own inline `Number()`/`Number.isInteger()`-based parse/threshold checks
-  directly in `synapseView.ts`; it never depended on the now-deleted `src/budget.ts` (that module
-  backed the now-removed batch loop launch flow's free-text budget prompt, issue #74, and was
-  deleted as dead code in #221 once that flow was removed).
+  outright rather than saving a value that doesn't match what the user typed.
+
 - **Run-level counters** (`SynapseView`): `runTurnCount` and `runUsage.totalTokens` are
   distinct from the existing per-*message* `turnStartTime`/`turnUsage` (reset in
   `finalizeStreamingMessage()` after each rendered assistant message). A single `handleSend()`
@@ -615,39 +559,30 @@ Both modes are **read-only**: `tools: ['Read', 'Glob', 'Grep']` (`SEARCH_TOOLS`)
 exec tools regardless of the tool-approval setting.
 
 - **Basic** (`handleBasicSearch`): one-shot `inlineChat` with the feature/search agent,
-  `permissionMode: 'default'`, `maxTurns: 20`, adaptive timeout. (Historic bug: `tools: []` +
-  `maxTurns: 1` + `permissionMode: 'plan'` made every search fail with "Reached maximum number
-  of turns (1)" — a search config must always include the read tools and a multi-turn budget.)
+  `permissionMode: 'default'`, `maxTurns: 20`, adaptive timeout. The search config must always
+  include `SEARCH_TOOLS` and a multi-turn budget — `tools: []` + `maxTurns: 1` would fail with
+  "Reached maximum number of turns (1)".
 - **Advanced** (`handleAdvancedSearch` + `buildSearchSessionConfig`): adds the selected search
   agent, model, vault plugins, and enabled skills (the `skills` option enables the Skill tool
   itself), `maxTurns: 40`, and the resilience/self-improve blocks appended to the
   `claude_code` preset. The resulting session is named `[search] <Agent>: <query>` and added
   to the sidebar (skipped when the query aborted without an id).
 
-**Reaches a local model too, as of issue #167.** Both `inlineChat()` calls now also pass
-`app: this.app` and `canUseTool: autoApproveReadOnlyTools` (`agentService.ts`). Without these,
-`inlineChat()`'s `supportsTools && app && canUseTool` gate (#150) was never satisfied for search,
-so a local/BYOK model got the pre-#150 bare one-shot regardless of `SEARCH_TOOLS` — it could not
-actually explore the vault, only guess from the prompt text. `autoApproveReadOnlyTools` is an
-always-allow `CanUseTool`, safe here specifically because both search call sites restrict `tools`
-to the read-only set (`SEARCH_TOOLS`) — see "Wiring `inlineChat()`'s callers (issue #167)" in
-`agent-service.md` for the full reasoning (parity with the SDK path's own auto-approval of
-read-only tools, and why this is deliberately not #151's unattended `resolveToolApprovalPolicy()`
-mechanism). This does not open an approval modal per tool call — up to `maxTurns: 40` of them
-would make search unusable — and does not change the Claude-path behavior search already has.
+Both `inlineChat()` calls pass `app: this.app` and `canUseTool: autoApproveReadOnlyTools`
+(`agentService.ts`). `autoApproveReadOnlyTools` is an always-allow `CanUseTool`, safe here
+specifically because both search call sites restrict `tools` to the read-only set (`SEARCH_TOOLS`)
+— see "Wiring `inlineChat()`'s callers" in `agent-service.md` for the full reasoning (parity with
+the SDK path's own auto-approval of read-only tools, and why this is deliberately not the
+unattended `resolveToolApprovalPolicy()` mechanism). This does not open an approval modal per
+tool call — up to `maxTurns: 40` of them would make search unusable.
+
 
 ## Error handling
 
 `session.error` events and `handleSend()` catch blocks pass raw errors through
-`formatErrorForChat()` (`synapseView.ts`), which currently just strips a leading `Error: `
-prefix. (The pre-engine-swap Ollama-specific `friendlyOllamaError()` pattern-matcher in
-`src/ollamaErrors.ts` — connection refused, model not found, OOM, etc. — was removed when the
-plugin moved to the Agent SDK and has not been reinstated. Post-#220 there is no local-provider
-preset routing left in `providerModels.ts` either — local models run through the same Agent SDK
-query as Claude, via the local agent endpoint (#122), so chat error display was never
-preset-gated to begin with.)
+`formatErrorForChat()` (`synapseView.ts`), which strips a leading `Error: ` prefix.
 
-### Write/edit tool error guidance (issue #78)
+### Write/edit tool error guidance
 
 Native `Write`/`Edit`/`NotebookEdit` tool calls are executed by the `claude` CLI subprocess —
 the plugin has no custom tool implementation to intercept or retry them. Two complementary
@@ -672,12 +607,12 @@ mechanisms handle failures:
   clarification or re-attachment instead of proceeding with guessed/fabricated content if a
   referenced file can't be found or read.
 
-## Editorial design language & primitives (issue #207)
+## Editorial design language & primitives
 
-Part of the visual restyle (#206) based on `.docs/design/variant-b-editorial.html`. The chat transcript
-is set like a printed page rather than a messaging app: speech bubbles, avatars, badges, and colored
-pill backgrounds are eliminated. Structural clarity is achieved via typography, hairline rules, and
-monospace margin rails, with color reserved exclusively for the interactive accent.
+The chat transcript is set like a printed page rather than a messaging app: speech bubbles,
+avatars, badges, and colored pill backgrounds are eliminated. Structural clarity is achieved via
+typography, hairline rules, and monospace margin rails, with color reserved exclusively for the
+interactive accent.
 
 ### Typography & bundled serif
 - **Newsreader, upright + italic (Latin subset):** Two `@font-face` declarations embedded directly in
@@ -740,7 +675,7 @@ monospace margin rails, with color reserved exclusively for the interactive acce
   voice (upright Newsreader). Set upright rather than italic; with the italic face now bundled this is
   a style choice rather than a constraint.
 
-### Masthead (issue #208)
+### Masthead
 
 The panel header replaces the previous tab bar with an editorial page head:
 - **Serif wordmark:** "Synapse" set in the bundled serif (`--synapse-font-serif`), 19px, font-weight 500, letter-spacing -0.01em.
@@ -749,19 +684,20 @@ The panel header replaces the previous tab bar with an editorial page head:
 - **Text tabs (`.synapse-masthead-tab`):** uppercase letterspaced text buttons (10.5px, letter-spacing 0.1em) on the right side of the masthead. The active tab is underlined with `--synapse-rule-heavy`.
 - **Page head rule:** closed by a heavier rule than the hairlines used inside the transcript (`border-bottom: 1px solid var(--synapse-rule-heavy);`), reading as a printed page header.
 
-### Composer & State line (issue #208)
+### Composer & State line
 
 The input area transforms from a floating card into an editorial ruled footer:
 - **Opening rule:** opened by a heavy rule (`border-top: 1px solid var(--synapse-rule-heavy);`). It is **not** a card: no border radius, no drop shadow, and no inset background panel (`background: transparent; border: none; box-shadow: none;`).
 - **State line (`.synapse-state-line`):** uppercase letterspaced status line (10px, font-weight 500, letter-spacing 0.13em) positioned above the input and chips. Prints the active context as `NOTE / AGENT / MODEL`. The active note/selection is rendered in the accent color (`.synapse-state-note`), separators in subtle rule color, and agent and model in faint text. Updates live via `updateStateLine()` on note switches, selection changes, and agent/model picks.
 - **Textarea (`.synapse-input`):** set in the bundled serif (`--synapse-font-serif`, 14px, line-height 1.5) with an italic placeholder (`color: var(--text-faint); font-style: italic;`), giving prompt writing the tactile feel of writing a note.
-- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope` and `Attach`, styled with uppercase letterspaced typography (11px, letter-spacing 0.07em) and underlined on hover with the accent color, replacing filled icon buttons. (The composer previously also had `Paste` and `Edit` buttons; both were removed to match the design reference — `Paste` read clipboard text into an attachment via `handleClipboard()`, `Edit` opened the current draft in `EditModal` via `openEditFromChat()`.)
+- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope` and `Attach`, styled with uppercase letterspaced typography (11px, letter-spacing 0.07em) and underlined on hover with the accent color, replacing filled icon buttons.
 - **Send button (`.synapse-send-btn`):** 24px square accent block with 2px border radius and centered icon, aligned on the unified single-row footer directly alongside the debug toggle. Transitions to error color and stop icon when streaming is active.
 - **Editorial chips (`.synapse-input-chips`):** attachment, active-note, and vault-scope chips adopt hairline borders (`--synapse-rule-soft`), rectangular 2px border radius, and muted typography. All chips remain removable via a hoverable `x` button.
-- **Toolbar coexistence decision:** The state line was established in #208 displaying `NOTE / AGENT / MODEL`. In slice #210, the coexistence is resolved: the composer state line focuses strictly on the active note / selection context (`.synapse-state-note`), while the restyled config toolbar below houses the interactive controls (agent, model, reasoning effort, tools, working directory, context gauge, debug), completely eliminating duplicated agent/model readouts across the two surfaces.
-- **Sole model control (#215 AC-2 follow-up):** #213 had briefly added its own composer-footer model-picker button (`.synapse-f-btn-model`, `openModelPickerMenu()`), duplicating the toolbar's model `<select>` — the model name was shown twice in the UI. That button has been removed; the toolbar's `modelSelect` (`configToolbar.ts`) is the sole model-switching control, changed via the shared `setModel()` method.
+- **Toolbar coexistence decision:** the composer state line focuses strictly on the active note / selection context (`.synapse-state-note`), while the restyled config toolbar below houses the interactive controls (agent, model, reasoning effort, tools, working directory, context gauge, debug), completely eliminating duplicated agent/model readouts across the two surfaces.
+- **Sole model control:** the toolbar's `modelSelect` (`configToolbar.ts`) is the sole model-switching control, changed via the shared `setModel()` method.
 
-### Session sidebar (issue #209)
+
+### Session sidebar
 
 The session sidebar adopts the prototype's starter list pattern (clean unlined contents column):
 - **Unlined rows:** Each session item (`.synapse-session-item`) renders with a transparent background, no card borders or drop shadows, and no bottom hairline separator (`border-bottom: none;`).
@@ -772,7 +708,7 @@ The session sidebar adopts the prototype's starter list pattern (clean unlined c
 - **Keyboard accessibility:** Session items are fully keyboard-navigable (`tabindex="0"`, `role="button"`). Pressing `Enter` or `Space` selects and restores the session, `F2` triggers session rename, and `Delete` confirms session deletion.
 - **Empty state (`.synapse-sidebar-empty`):** Rendered as a centered italic serif line in faint text (`font-family: var(--synapse-font-serif); font-style: italic;`), without spinners or card boxes.
 
-### Search tab (issue #209)
+### Search tab
 
 The vault search tab is restyled to align with the Editorial design language:
 - **Search composer & state line:** The search interface mirrors the chat view's ruled composer layout:
@@ -788,7 +724,7 @@ The vault search tab is restyled to align with the Editorial design language:
 - **Accent match highlighting:** Search query terms inside excerpts are highlighted using `.synapse-search-highlight` with the interactive accent text color and a subtle bottom accent border over a transparent background, completely eliminating yellow highlight fills.
 - **Sliding hairline loading state:** While searching, `.synapse-search-loading` displays "Searching vault…" in serif italic alongside an animated sliding hairline bar (`.synapse-search-loading-bar` with `@keyframes synapse-slide`), completely eliminating spinners from the search experience. Empty search results render as a serif italic line ("No results found").
 
-### Config toolbar, gauge & task panel (issue #210)
+### Config toolbar, gauge & task panel
 
 The config toolbar, context-window gauge, and live task/plan panel adopt the Editorial design language:
 - **Config toolbar controls:** Agent, model, reasoning effort, tools approval, and debug toggle render as uppercase letterspaced text controls (10px, font-weight 500, letter-spacing 0.13em) separated by thin `/` dividers (`.synapse-toolbar-sep`). Bordered rectangular dropdowns, card containers, and pill badges are eliminated. The reasoning button displays only the selected effort level (e.g. `MEDIUM`), falling back to `REASONING` only when no level is selected. The tools button displays only the selected approval mode directly (`ASK` or `ALLOW`).
@@ -813,9 +749,9 @@ The config toolbar, context-window gauge, and live task/plan panel adopt the Edi
 - **Collapsible behavior & live updates:** The task panel uses native `<details>` and `<summary>` elements (`.synapse-task-panel-header`), providing collapse/expand while preserving the user's toggle state across live `TodoWrite` rebuilds and maintaining live tabular elapsed time tracking.
 - **Theme compliance:** All status indicators, rules, and backgrounds strictly consume Obsidian CSS variables with zero raw hex values across light and dark modes.
 
-### Modals (issue #211)
+### Modals
 
-All plugin modals adopt the Editorial design language (Variant B) so dialogs read as pages from the same document rather than stock Obsidian chrome dropped on top:
+All plugin modals adopt the Editorial design language so dialogs read as pages from the same document rather than stock Obsidian chrome dropped on top:
 - **Masthead title treatment:** Modal titles (`.synapse-modal-title`, `.modal-title`, `h3` inside `.synapse-*-modal`) are set in the bundled serif (`--synapse-font-serif`), 20px, font-weight 400, letter-spacing -0.01em, closed by a heavy rule (`border-bottom: 2px solid var(--synapse-rule-heavy)`).
 - **Serif body prose & uppercase form labels:** Modal prose (prompts, questions, descriptions) is set in the bundled serif (`--synapse-font-serif`, 14.5-15px, line-height 1.55). Form labels (`.synapse-modal-label`, `.synapse-edit-label`, `.synapse-elicitation-label`, `.synapse-askq-chip`) follow the uppercase letterspaced label primitive (10.5px, font-weight 500, letter-spacing 0.12em, interface sans).
 - **Button system:**

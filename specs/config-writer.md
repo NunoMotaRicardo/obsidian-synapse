@@ -1,8 +1,8 @@
-# config-writer (was: config-loader)
+# config-writer
 
 Source: `src/configWriter.ts`. Write-side utilities for the self-improve feature and first-run
-seeding. The read/load side (`configLoader.ts`) has been deleted — the Claude Agent SDK discovers
-agents, skills, and MCP servers natively from the `_synapse/` plugin directory.
+seeding. The Claude Agent SDK discovers agents, skills, and MCP servers natively from the
+`_synapse/` plugin directory.
 
 ## Plugin registration
 
@@ -17,7 +17,7 @@ The SDK discovers:
 - `_synapse/skills/*/SKILL.md` → SDK skills (invocable via `/name`)
 - `_synapse/.mcp.json` → SDK MCP server configs
 
-No `skipMcpDiscovery` — MCP goes fully native. No custom parsing, no `configLoader.ts`.
+No `skipMcpDiscovery` — MCP goes fully native. No custom parsing.
 The CLI spawns fresh per query, re-discovers artifacts each time — no explicit reload needed.
 
 ## Folder layout
@@ -32,8 +32,8 @@ _synapse/                   (hardcoded — not a setting)
 No `prompts/` or `tools/` folders. Prompts merged into skills; MCP config is `.mcp.json` at
 plugin root.
 
-A `triggers/` folder from before issue #188 may still exist in a vault's `_synapse/` — the plugin
-no longer reads it, but does not delete or otherwise touch it; it is inert, user-owned content.
+A `triggers/` folder may still exist in a vault's `_synapse/` — the plugin no longer reads it,
+but does not delete or otherwise touch it; it is inert, user-owned content.
 
 ## Toolbar population (display-only scan)
 
@@ -64,7 +64,7 @@ Write operations for the self-improve feature. All output is SDK-native format.
 - Agent files use `.md` extension (not `.agent.md`) — SDK convention.
 - Agent frontmatter: SDK `AgentDefinition` fields only (`description`, `model`, `tools`,
   `skills`, `disallowedTools`, `mcpServers`). No custom fields.
-- `parseFrontmatter()` and `FM_RE` live in this module (moved from deleted `configLoader.ts`).
+- `parseFrontmatter()` and `FM_RE` live in this module.
 - `modifyArtifact` uses `parseFrontmatter` for in-place patching.
 - No MCP config mutation — `.mcp.json` is user-edited.
 
@@ -86,16 +86,16 @@ the correct inverse of how `serializeFmField` produced it.
 Write and read are round-trip inverses for every string value, including one that already went
 through a prior `writeAgent`/`modifyArtifact` cycle — `modifyArtifact` reads (un-escapes),
 merges, and re-serializes (re-escapes), so an un-escape bug compounds (doubles) on every cycle
-rather than staying constant. See issue #161.
+rather than staying constant.
 
-**Existing on-disk artifacts are not migrated.** A doubled backslash already written by the old
-(unpaired) code path is indistinguishable from a legitimate single escaped backslash — there is
-no reliable way to tell "this was corrupted by the old bug" from "the user's actual value
-contains `\\`". Attempting to "repair" old files on read would silently corrupt values that were
-always correct. Only newly written/modified artifacts benefit from the fix; pre-existing
-corrupted values must be fixed by the user re-entering them.
+**Existing on-disk artifacts are not migrated.** A doubled backslash already written by a prior
+code path is indistinguishable from a legitimate single escaped backslash — there is no reliable
+way to tell corrupted values from correct ones. Attempting to "repair" old files on read would
+silently corrupt values that were always correct. Only newly written/modified artifacts benefit
+from the current implementation; pre-existing corrupted values must be fixed by the user
+re-entering them.
 
-## Tool-approval persistence (issue #197)
+## Tool-approval persistence
 
 `persistToolApprovalRules(app, ruleStrings)` is the one place `ToolApprovalModal`'s **Always
 allow** action writes to disk (the modal itself never touches the filesystem — it only returns
@@ -111,30 +111,31 @@ which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent gra
   `vault.read`, parses as JSON, and writes back **every top-level key untouched** except
   `permissions.allow`, which is unioned (deduplicated, never clobbered) with `ruleStrings`.
 - Uses the `vault`/`vault.adapter.exists` API (not `node:fs`), matching every other writer in this
-  file. `_synapse/settings.json` is read by `AgentService.loadVaultSettings()` (`agent-service.md`,
-  issue #194) via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write
-  here changes that mtime, so the next query picks up the change with no separate invalidation.
+  file. `_synapse/settings.json` is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
+  via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write here changes
+  that mtime, so the next query picks up the change with no separate invalidation.
 - A malformed existing file throws (surfaced by the caller as a `Notice`) rather than being
   silently overwritten; the caller's in-memory, conversation-scoped grant already returned to the
   SDK is unaffected by a persistence failure.
-- No removal UI (AC-5 of issue #197) — removing a persisted grant means hand-editing
-  `_synapse/settings.json`'s `permissions.allow` list; documented in `wiki/Customization.md`.
+- No removal UI — removing a persisted grant means hand-editing `_synapse/settings.json`'s
+  `permissions.allow` list; documented in `wiki/Customization.md`.
 
 ## Vault structure scanner
 
-`scanVaultStructure(app)` scans top-level vault folders (name only, no counts — see the
-"issue #201" note below), excluding `_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders.
-Used by `buildVaultContextBlock()` in `sessionConfig.ts` for the system prompt.
+`scanVaultStructure(app)` scans top-level vault folders (name only, no counts), excluding
+`_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by `buildVaultContextBlock()`
+in `sessionConfig.ts` for the system prompt.
 
 ## Self-improve hint
 
 `buildSelfImproveHint()` in `sessionConfig.ts` teaches agents to recognize customization intent.
-Mentions "agent" and "skill" as artifact types. Session-stable and takes no arguments (issue
-#201) — the volatile "Current agent" line it used to append is now delivered per-turn by
-`buildCurrentAgentLine(agentName)` instead, so this static hint doesn't invalidate the cached
-system-prompt prefix when the selected agent changes.
+Mentions "agent" and "skill" as artifact types. Session-stable and takes no arguments — the
+volatile "Current agent" line is delivered per-turn by `buildCurrentAgentLine(agentName)`
+instead, so this static hint doesn't invalidate the cached system-prompt prefix when the selected
+agent changes.
 
 ## First-run seeding
 
 On plugin startup, if `_synapse/skills/improve-synapse/SKILL.md` does not exist, the plugin
 seeds it as a starter skill demonstrating the format.
+

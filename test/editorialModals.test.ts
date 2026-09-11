@@ -373,7 +373,7 @@ describe('editorial restyle: modals (#211)', () => {
 	describe('AC-11: Spec documentation', () => {
 		it('chat-view.md documents modal editorial specifications', () => {
 			const specContent = readFileSync(resolve(repoRoot, 'specs/chat-view.md'), 'utf8');
-			expect(specContent).toContain('### Modals (issue #211)');
+			expect(specContent).toContain('### Modals');
 			expect(specContent).toContain('Masthead title treatment:');
 			expect(specContent).toContain('Serif body prose & uppercase form labels:');
 			expect(specContent).toContain('Button system:');

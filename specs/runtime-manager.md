@@ -3,11 +3,6 @@
 Source: `src/runtimeManager.ts` — `resolveDefaultCliPath`, `getCliVersion`, `cleanEnv`,
 `BUNDLED_SDK_VERSION`, `getVersionSkewWarning`.
 
-Status: **complete** — rebased to resolve `claude` binary across chain, version check +
-install guidance (#4); CLI/SDK version-skew detection (#102).
-
-Tracked by #4, #102.
-
 ## Module API (`src/runtimeManager.ts`)
 
 - `resolveDefaultCliPath(): Promise<ResolvedCliPath>` — walks the resolution chain below
@@ -44,12 +39,12 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
    3. OS links: WinGet links (`%LOCALAPPDATA%\Microsoft\WinGet\Links\claude.exe`), `~/.claude/bin/claude`, `/usr/local/bin/claude`, `/usr/bin/claude`, `~/.local/bin/claude`.
    4. SDK package binary fallback — both nested and flat paths under `__dirname/node_modules` are existence-checked. Returns the canonical expected path if neither exists (so `ensureConnected()` can surface a clear error).
 
-2. **Version check** (#4):
+2. **Version check**:
    - After connect, `AgentService` calls `getCliVersion(resolved.path)` fire-and-forget and fires its `onVersionInfo` constructor callback with `{version, path}`.
    - `main.ts` wires the callback to `debugTrace('Synapse: Claude CLI v%s at %s')` — only printed to console when debug mode is on.
    - Settings display: the resolved binary path line in Settings → Claude shows version info after connect, e.g. `Resolved CLI: C:\...\claude.exe (from global npm install) — v2.1.258 (SDK v0.3.258)`.
 
-3. **CLI/SDK version-skew detection** (#102):
+3. **CLI/SDK version-skew detection**:
    - The `claude` CLI (`@anthropic-ai/claude-code`) self-updates independently of the plugin's
      bundled `@anthropic-ai/claude-agent-sdk`, so skew is the steady state, not an error condition.
    - Settings → Claude renders a second, non-blocking warning line directly under the resolved
@@ -57,7 +52,7 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
      diverge — e.g. `⚠ CLI (2.1.320) is 62 releases ahead of the bundled SDK (0.3.258)...`. In sync,
      no line is rendered. This never blocks connecting or using the plugin.
 
-4. **Install guidance** (#4):
+4. **Install guidance**:
    - When `initAgentService()` + `ensureConnected()` fails because no CLI was found, `main.ts` shows a platform-specific Obsidian `Notice` (long duration, 30s):
      - Windows: "No Claude CLI found. Install with `winget install Anthropic.ClaudeCode or npm install -g @anthropic-ai/claude-code`, then restart the plugin."
      - macOS/Linux: "No Claude CLI found. Install with `npm install -g @anthropic-ai/claude-code`, then restart the plugin."
