@@ -18,7 +18,13 @@ import type {
 	AgentInfo,
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
-import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
+import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
+import type {ViewContext} from './view/types';
+import {SearchPanelController} from './view/searchPanel';
+import {ConfigToolbarController} from './view/configToolbar';
+import {ChatRendererController} from './view/chatRenderer';
+import {InputAreaController} from './view/inputArea';
+import {SessionSidebarController} from './view/sessionSidebar';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -38,8 +44,14 @@ const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 
 // ── Synapse view ───────────────────────────────────────────────
 
-export class SynapseView extends ItemView {
+export class SynapseView extends ItemView implements ViewContext {
 	plugin: SynapsePlugin;
+
+	// ── ViewContext bridge ─────────────────────────────
+	// `ViewContext.view` — the controllers receive `this` view (see `ViewContext` in
+	// `view/types.ts`); `app`, `plugin`, and `chatContainer` are already fields, and
+	// `isStreaming`/`getVaultBasePath` exist below as method/field shapes adapted here.
+	get view(): SynapseView { return this; }
 
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
@@ -89,8 +101,6 @@ export class SynapseView extends ItemView {
 	attachments: ChatAttachment[] = [];
 	activeNotePath: string | null = null;
 	activeSelection: {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null = null;
-	selectionPollTimer: ReturnType<typeof setInterval> | null = null;
-	editorHadFocus = false;
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
 	workingDir = '';
@@ -104,15 +114,6 @@ export class SynapseView extends ItemView {
 	pendingWorkingDir: string | null = null;
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
-
-	// ── Slash-command skill popup state ──────────────────────────
-	skillPopupEl: HTMLElement | null = null;
-	/** Filtered skill list currently shown in the popup, in display order. */
-	skillPopupMatches: SkillInfo[] = [];
-	/** Index into `skillPopupMatches` of the highlighted row. */
-	skillPopupSelectedIndex = 0;
-	/** Start offset (in `inputEl.value`) of the `/` that triggered the popup. */
-	skillPopupSlashIndex = -1;
 
 	isStreaming = false;
 	configDirty = true;
@@ -159,72 +160,77 @@ export class SynapseView extends ItemView {
 	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}> = new Map();
 
 	// ── Session sidebar state ──────────────────────────────────
+	/**
+	 * Session-sidebar controller (composition refactor — same pattern as `search`;
+	 * owns the sidebar DOM it builds, the sidebar-local filter/sort/width state, and the
+	 * background-save/restore lifecycle). The view reaches it as `this.sidebar.…`.
+	 */
+	readonly sidebar: SessionSidebarController = new SessionSidebarController(this);
+
 	activeSessions = new Map<string, BackgroundSession>();
 	sessionList: import('./agentService').SessionMetadata[] = [];
 	sessionNames: Record<string, string> = {};
 	currentSessionId: string | null = null;
 	/** First-prompt snippet used to name a new session once its id arrives via 'session.init'. */
 	pendingSessionLabel: string | null = null;
-	sidebarWidth = 40;
-	sessionFilter = '';
-	sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
-	sessionSort: 'modified' | 'created' | 'name' = 'modified';
 
 	// ── Tab state ────────────────────────────────────────────────
 	activeTab: 'chat' | 'search' = 'chat';
 
 	// ── Search panel state ───────────────────────────────────────
-	searchAgent = '';
-	searchModel = '';
-	searchWorkingDir = '';
-	searchEnabledSkills: Set<string> = new Set();
-	searchAgentSelect!: HTMLSelectElement;
-	searchModelSelect!: HTMLSelectElement;
-	searchToolsBtnEl!: HTMLButtonElement;
-	searchCwdBtnEl!: HTMLButtonElement;
-	searchScopeBtn?: HTMLButtonElement;
-	searchStateLineEl?: HTMLElement;
-	searchInputEl!: HTMLTextAreaElement;
-	searchBtnEl!: HTMLButtonElement;
-	searchResultsEl!: HTMLElement;
-	searchSession: Session | null = null;
-	isSearching = false;
-	searchModeToggleEl!: HTMLButtonElement;
-	searchAdvancedToolbarEl!: HTMLElement;
-	basicSearchSession: Session | null = null;
+	/**
+	 * Search tab controller (composition refactor,
+	 * `.docs/research/2026-09-11-view-composition-refactor.md` — owns all former
+	 * `search*` view state (agent/model/skills/workingDir, the search DOM refs, the
+	 * live search sessions, `isSearching`). The view reaches it as `this.search.…`.
+	 */
+	readonly search: SearchPanelController = new SearchPanelController(this);
+
+	// ── Config toolbar state ─────────────────────────────────────
+	/**
+	 * Config-toolbar controller (composition refactor — same pattern as `search`;
+	 * owns the chat toolbar DOM refs it builds and the agent/model/reasoning/tools/cwd
+	 * UI logic). The view reaches it as `this.configToolbar.…`.
+	 */
+	readonly configToolbar: ConfigToolbarController = new ConfigToolbarController(this);
+
+	// ── Chat renderer state ──────────────────────────────────────
+	/**
+	 * Chat-renderer controller (composition refactor — same pattern as `search`;
+	 * owns the chat-message/streaming rendering behavior). The streaming-lifecycle
+	 * state it renders still lives on the view (sessionSidebar.ts reads/writes it
+	 * directly for background sessions — see its class doc in view/chatRenderer.ts).
+	 * The view reaches it as `this.renderer.…`.
+	 */
+	readonly renderer: ChatRendererController = new ChatRendererController(this);
+
+	// ── Input area state ─────────────────────────────────────────
+	/**
+	 * Input-area controller (composition refactor — same pattern as `search`;
+	 * owns the composer DOM it builds, the slash-command skill popup, and the
+	 * editor selection-polling loop). The view reaches it as `this.inputArea.…`.
+	 */
+	readonly inputArea: InputAreaController = new InputAreaController(this);
 
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
 	kickerEl!: HTMLElement;
-	stateLineEl!: HTMLElement;
-	stateNoteEl!: HTMLElement;
-	stateAgentEl!: HTMLElement;
-	stateModelEl!: HTMLElement;
 	chatPanelEl!: HTMLElement;
 	searchPanelEl!: HTMLElement;
 	chatContainer!: HTMLElement;
 	streamingBodyEl: HTMLElement | null = null;
 	toolCallsContainer: HTMLElement | null = null;
+	/** The composer textarea — built and assigned by `inputArea.build()`; read/cleared by `handleSend()`. */
 	inputEl!: HTMLTextAreaElement;
-	attachmentsBar!: HTMLElement;
-	activeNoteBar!: HTMLElement;
-	scopeBar!: HTMLElement;
-	scopeBtn?: HTMLButtonElement;
-	attachBtn?: HTMLButtonElement;
 	sendBtn!: HTMLButtonElement;
+	// The agent/model selects and the cwd button stay view-owned DOM refs:
+	// updateConfigUI() rebuilds the selects after every config reload and inputArea.ts
+	// creates the cwd button in the state line; configToolbar reaches them through
+	// ViewContext (see its accessors in view/configToolbar.ts).
 	agentSelect!: HTMLSelectElement;
 	modelSelect!: HTMLSelectElement;
-	reasoningBtnEl!: HTMLButtonElement;
-	toolsBtnEl!: HTMLButtonElement;
 	cwdBtnEl!: HTMLButtonElement;
-	/** Context-window gauge (issue #130) — absent (`is-hidden`) until the first successful capture; see `updateContextIndicator()`. */
-	contextIndicatorEl!: HTMLElement;
-	contextSepEl?: HTMLElement;
-	/** Gauge track/fill/value nodes, built once and reused in place so the CSS width transition can animate (#215). */
-	gaugeFillEl?: HTMLElement;
-	gaugeValueEl?: HTMLElement;
-	debugBtnEl!: HTMLElement;
 	streamingComponent: Component | null = null;
 	streamingWrapperEl: HTMLElement | null = null;
 
@@ -234,13 +240,9 @@ export class SynapseView extends ItemView {
 	configLoadedAt = 0;
 
 	// ── Session sidebar DOM refs ─────────────────────────────────
-	sidebarEl!: HTMLElement;
-	sidebarListEl!: HTMLElement;
-	sidebarSearchEl!: HTMLInputElement;
-	sidebarFilterEl!: HTMLButtonElement;
-	sidebarSortEl!: HTMLButtonElement;
-	sidebarRefreshEl!: HTMLButtonElement;
-	sidebarDeleteEl!: HTMLButtonElement;
+	// The sidebar DOM refs moved to SessionSidebarController; `splitterEl` stays here —
+	// buildUI() creates it (between chat panel and sidebar), the sidebar's
+	// initSplitter() wires the drag behavior onto it.
 	splitterEl!: HTMLElement;
 
 	eventUnsubscribers: (() => void)[] = [];
@@ -282,10 +284,42 @@ export class SynapseView extends ItemView {
 			});
 		}
 
-		if (this.sidebarListEl) {
-			this.renderSessionList();
+		if (this.chatPanelEl) {
+			this.sidebar.renderSessionList();
 		}
 	}
+
+	// ── Lifecycle ────────────────────────────────────────────────
+
+	// ── External entry points (editorMenu.ts / modals call these on the view) ──
+	// Thin delegates to the owning controller so those call sites stay untouched.
+
+	/** @see InputAreaController.setPromptText */
+	setPromptText(text: string): void { this.inputArea.setPromptText(text); }
+
+	/** @see InputAreaController.addSelectionAttachment */
+	addSelectionAttachment(text: string, info: SelectionInfo): void { this.inputArea.addSelectionAttachment(text, info); }
+
+	/** @see InputAreaController.setScope */
+	setScope(paths: string[]): void { this.inputArea.setScope(paths); }
+
+	/** @see InputAreaController.setWorkingDir */
+	setWorkingDir(folderPath: string): void { this.inputArea.setWorkingDir(folderPath); }
+
+	/** @see InputAreaController.openSearchWithScope */
+	openSearchWithScope(folderPath: string): void { this.inputArea.openSearchWithScope(folderPath); }
+
+	/** @see InputAreaController.updateStateLine */
+	updateStateLine(): void { this.inputArea.updateStateLine(); }
+
+	/** @see InputAreaController.renderAttachments */
+	renderAttachments(): void { this.inputArea.renderAttachments(); }
+
+	/** @see InputAreaController.renderScopeBar */
+	renderScopeBar(): void { this.inputArea.renderScopeBar(); }
+
+	/** @see InputAreaController.updateActiveNote */
+	updateActiveNote(): void { this.inputArea.updateActiveNote(); }
 
 	// ── Lifecycle ────────────────────────────────────────────────
 
@@ -305,7 +339,7 @@ export class SynapseView extends ItemView {
 		}
 
 		await this.loadAllConfigs();
-		void this.loadSessions();
+		void this.sidebar.loadSessions();
 
 		// Watch synapse folder for config changes and auto-refresh
 		this.registerConfigFileWatcher();
@@ -315,16 +349,13 @@ export class SynapseView extends ItemView {
 		this.registerEvent(
 			this.app.workspace.on('file-open', () => this.updateActiveNote())
 		);
-		this.startSelectionPolling();
+		this.inputArea.startSelectionPolling();
 	}
 
 	async onClose(): Promise<void> {
-		if (this.selectionPollTimer) { window.clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
+		this.inputArea.destroy();
 		if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
-		if (this.basicSearchSession) {
-			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
-			this.basicSearchSession = null;
-		}
+		await this.search.disconnect();
 		await this.disconnectAllSessions();
 		if (this.attachmentTempFiles.size > 0) {
 			await cleanupAttachmentTempFiles(Array.from(this.attachmentTempFiles));
@@ -353,25 +384,25 @@ export class SynapseView extends ItemView {
 
 		// Chat history (scrollable)
 		this.chatContainer = chatContent.createDiv({cls: 'synapse-chat synapse-hide-debug'});
-		this.renderWelcome();
+		this.renderer.renderWelcome();
 
 		// Bottom panel
 		const bottom = chatContent.createDiv({cls: 'synapse-bottom'});
 
 		// Input area
-		this.buildInputArea(bottom);
+		this.inputArea.build(bottom);
 
 		// Config toolbar (agents, models, skills, tools, action buttons)
-		this.buildConfigToolbar(bottom);
+		this.configToolbar.build(bottom);
 
 		// Splitter + session sidebar inside chat panel
 		this.splitterEl = this.chatPanelEl.createDiv({cls: 'synapse-splitter'});
-		this.initSplitter();
-		this.buildSessionSidebar(this.chatPanelEl);
+		this.sidebar.initSplitter();
+		this.sidebar.build(this.chatPanelEl);
 
 		// ── Search panel ─────────────────────────────────────
 		this.searchPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-search is-hidden'});
-		this.buildSearchPanel(this.searchPanelEl);
+		this.search.build(this.searchPanelEl);
 	}
 
 	buildTabBar(parent: HTMLElement): void {
@@ -455,7 +486,7 @@ export class SynapseView extends ItemView {
 	 * calling `updateStateLine()` directly rather than pulling in this wider refresh.
 	 */
 	refreshComposerState(): void {
-		this.updateStateLine?.();
+		this.updateStateLine();
 		this.updateMastheadKicker();
 	}
 
@@ -506,7 +537,7 @@ export class SynapseView extends ItemView {
 			this.selectedModel = '';
 		}
 
-		this.populateModelSelect();
+		this.configToolbar.populateModelSelect();
 		if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
 			this.modelSelect.value = this.selectedModel;
 		} else {
@@ -549,7 +580,7 @@ export class SynapseView extends ItemView {
 	updateConfigUI(): void {
 		// Agents — sourced from the live CLI's supportedAgents() (issue #130) when a session
 		// has captured one, else the directory scan; see `getEffectiveAgents()`.
-		const agents = this.getEffectiveAgents();
+		const agents = this.configToolbar.getEffectiveAgents();
 		this.agentSelect.empty();
 		const noAgent = this.agentSelect.createEl('option', {text: 'Auto', attr: {value: ''}});
 		noAgent.value = '';
@@ -574,13 +605,13 @@ export class SynapseView extends ItemView {
 
 		// Auto-select agent's preferred model
 		const selectedAgentConfig = agents.find(a => a.name === this.selectedAgent);
-		const resolvedModel = this.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
+		const resolvedModel = this.configToolbar.resolveModelForAgent(selectedAgentConfig, this.selectedModel || undefined);
 		if (resolvedModel) {
 			this.selectedModel = resolvedModel;
 		}
 
 		// Models
-		this.populateModelSelect();
+		this.configToolbar.populateModelSelect();
 		if (this.selectedModel === '') {
 			this.modelSelect.value = '';
 		} else if (this.selectedModel && this.models.some(m => m.id === this.selectedModel)) {
@@ -595,14 +626,12 @@ export class SynapseView extends ItemView {
 		// updateToolsBadge() internally, and populateModelSelect() above already calls
 		// updateStateLine(), so neither is repeated here (#217).
 		const selectedAgentForFilter = agents.find(a => a.name === this.selectedAgent);
-		this.applyAgentToolsAndSkills(selectedAgentForFilter);
-		this.updateReasoningBadge();
-		this.updateCwdButton();
+		this.configToolbar.applyAgentToolsAndSkills(selectedAgentForFilter);
+		this.configToolbar.updateReasoningBadge();
+		this.configToolbar.updateCwdButton();
 
 		// Update search panel dropdowns
-		if (this.searchAgentSelect) {
-			this.updateSearchConfigUI();
-		}
+		this.search.updateSearchConfigUI();
 	}
 
 	// ── Send & abort ─────────────────────────────────────────────
@@ -689,20 +718,20 @@ export class SynapseView extends ItemView {
 		const sendPrompt = prompt;
 
 		// Update UI
-		this.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
+		this.renderer.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
 		this.inputEl.value = '';
 		this.inputEl.setCssProps({'--input-height': 'auto'});
 		this.attachments = [];
-		this.renderAttachments();
+		this.inputArea.renderAttachments();
 
 		// Begin streaming
 		this.isStreaming = true;
 		this.streamingContent = '';
 		this.lastFullRenderLen = 0;
-		this.clearReasoningState();
-		this.updateSendButton();
-		this.renderSessionList();  // Show green active dot
-		this.addAssistantPlaceholder();
+		this.renderer.clearReasoningState();
+		this.renderer.updateSendButton();
+		this.sidebar.renderSessionList();  // Show green active dot
+		this.renderer.addAssistantPlaceholder();
 
 		// Reset run-level guardrail counters (issue #88) — a fresh run starts here,
 		// distinct from the per-message turnStartTime/turnUsage reset in
@@ -783,7 +812,7 @@ export class SynapseView extends ItemView {
 				}
 			}
 		} catch (e) {
-			this.finalizeStreamingMessage();
+			this.renderer.finalizeStreamingMessage();
 			// DEBUG: log full error with stack trace
 			console.error('[synapse] Send error:', e);
 			if (e instanceof Error) {
@@ -795,7 +824,7 @@ export class SynapseView extends ItemView {
 			// re-report it here as a generic "Error: Operation aborted". Same rationale as
 			// the session.error handler above.
 			if (!this.runAutoCancelled) {
-				this.addInfoMessage(this.formatErrorForChat(String(e)));
+				this.renderer.addInfoMessage(this.formatErrorForChat(String(e)));
 			}
 		}
 	}
@@ -813,7 +842,7 @@ export class SynapseView extends ItemView {
 			this.streamingBodyEl.createDiv({cls: 'synapse-thinking synapse-cancelled', text: 'Cancelled'});
 		}
 
-		this.finalizeStreamingMessage();
+		this.renderer.finalizeStreamingMessage();
 	}
 
 	/**
@@ -851,7 +880,7 @@ export class SynapseView extends ItemView {
 		if (!reason) return;
 
 		this.runAutoCancelled = true;
-		this.addInfoMessage(reason);
+		this.renderer.addInfoMessage(reason);
 		void this.handleAbort();
 	}
 
@@ -909,7 +938,7 @@ export class SynapseView extends ItemView {
 		// A rebuilt Session starts with an empty query-metadata cache (issue #130) — hide
 		// the gauge and fall back to the directory scan for agents/skills until this
 		// session's own first turn captures fresh values.
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 		this.updateToolbarLock();
 
 		// Add resumed sessions to the list immediately; brand-new sessions are added
@@ -923,7 +952,7 @@ export class SynapseView extends ItemView {
 				lastModified: now.getTime(),
 			});
 		}
-		this.renderSessionList();
+		this.sidebar.renderSessionList();
 	}
 
 	/** Central event dispatcher — used by both onEvent (early) and typed handlers. */
@@ -949,7 +978,7 @@ export class SynapseView extends ItemView {
 						lastModified: Date.now(),
 					});
 				}
-				this.renderSessionList();
+				this.sidebar.renderSessionList();
 				break;
 			}
 			case 'assistant.turn_start':
@@ -960,16 +989,16 @@ export class SynapseView extends ItemView {
 				this.checkLoopThresholds();
 				break;
 			case 'assistant.reasoning_delta':
-				this.appendReasoningDelta(event.data.deltaContent);
+				this.renderer.appendReasoningDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message_delta':
-				this.appendDelta(event.data.deltaContent);
+				this.renderer.appendDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message':
 				if (event.data.content !== this.streamingContent) {
 					this.streamingContent = event.data.content;
 					if (this.streamingBodyEl) {
-						void this.updateStreamingRender();
+						void this.renderer.updateStreamingRender();
 					}
 				}
 				break;
@@ -997,7 +1026,7 @@ export class SynapseView extends ItemView {
 				const costThreshold = this.plugin.settings.loopCostThresholdUsd;
 				const {totalCostUsd} = event.data;
 				if (costThreshold > 0 && totalCostUsd >= costThreshold) {
-					this.addInfoMessage(
+					this.renderer.addInfoMessage(
 						`Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
 						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
 					);
@@ -1006,9 +1035,9 @@ export class SynapseView extends ItemView {
 			}
 			case 'session.idle':
 				if (this.streamingReasoning && !this.reasoningComplete) {
-					this.finalizeReasoning();
+					this.renderer.finalizeReasoning();
 				}
-				this.finalizeStreamingMessage();
+				this.renderer.finalizeStreamingMessage();
 				// Agent/skill lists refresh here rather than on `session.metadata` (issue
 				// #130): that event fires once per `assistant` message, and `updateConfigUI()`
 				// mutates session configuration (see the `session.metadata` case). The cache
@@ -1020,12 +1049,12 @@ export class SynapseView extends ItemView {
 				if (this.currentSession) {
 					try { void this.currentSession.abort(); } catch { /* ignore */ }
 				}
-				this.finalizeStreamingMessage();
+				this.renderer.finalizeStreamingMessage();
 				// checkLoopThresholds() already reported the specific guardrail reason and
 				// triggered this abort — the resulting session.error is an expected
 				// consequence of that cancellation, not a second failure to report.
 				if (!this.runAutoCancelled) {
-					this.addInfoMessage(this.formatErrorForChat(errMsg));
+					this.renderer.addInfoMessage(this.formatErrorForChat(errMsg));
 				}
 				break;
 			}
@@ -1035,7 +1064,7 @@ export class SynapseView extends ItemView {
 				if (toolName === 'TodoWrite') {
 					const todos = parseTodoWritePayload(toolInput);
 					if (todos) {
-						this.renderTaskPanel(todos);
+						this.renderer.renderTaskPanel(todos);
 						break;
 					}
 					// Payload didn't look like a TodoWrite plan — fall through to generic rendering.
@@ -1067,12 +1096,12 @@ export class SynapseView extends ItemView {
 									activeForm: parsed.activeForm ?? existing.activeForm,
 								});
 							}
-							this.renderTaskPanel([...this.taskPlan.values()]);
+							this.renderer.renderTaskPanel([...this.taskPlan.values()]);
 						}
 						break;
 					}
 				}
-				this.addToolCallBlock(toolCallId, toolName, toolInput);
+				this.renderer.addToolCallBlock(toolCallId, toolName, toolInput);
 				break;
 			}
 			case 'tool.execution_complete': {
@@ -1083,22 +1112,22 @@ export class SynapseView extends ItemView {
 					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
 					if (taskId) {
 						this.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
-						this.renderTaskPanel([...this.taskPlan.values()]);
+						this.renderer.renderTaskPanel([...this.taskPlan.values()]);
 					}
 					break;
 				}
-				this.completeToolCallBlock(toolCallId, success, result, toolError);
+				this.renderer.completeToolCallBlock(toolCallId, success, result, toolError);
 				// Surface a clear, actionable message for transient-looking write/edit
 				// failures (e.g. a file locked by sync or open elsewhere) instead of
 				// leaving the user to dig the raw error out of the collapsed tool block.
 				if (toolError) {
 					const friendly = friendlyWriteToolError(toolName, toolError.message);
-					if (friendly) this.addInfoMessage(friendly);
+					if (friendly) this.renderer.addInfoMessage(friendly);
 				}
 				break;
 			}
 			case 'session.compaction_complete':
-				this.addCompactionCompleteBlock(event.data);
+				this.renderer.addCompactionCompleteBlock(event.data);
 				break;
 			case 'session.metadata':
 				// Capture-and-cache refresh (issue #130) — Session already holds the
@@ -1124,7 +1153,7 @@ export class SynapseView extends ItemView {
 				if (this.currentSession?.cachedSupportedAgents) {
 					this.lastSupportedAgents = this.currentSession.cachedSupportedAgents;
 				}
-				this.updateContextIndicator();
+				this.configToolbar.updateContextIndicator();
 				break;
 		}
 	}
@@ -1187,7 +1216,7 @@ export class SynapseView extends ItemView {
 			} catch { /* ignore */ }
 			this.currentSession = null;
 		}
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 	}
 
 	async disconnectAllSessions(): Promise<void> {
@@ -1205,7 +1234,7 @@ export class SynapseView extends ItemView {
 	newConversation(): void {
 		// Save the current session to background instead of disconnecting it
 		if (this.currentSession && this.currentSessionId) {
-			this.saveCurrentToBackground();
+			this.sidebar.saveCurrentToBackground();
 		} else {
 			// No active session handle, just clean up
 			this.unsubscribeEvents();
@@ -1225,8 +1254,8 @@ export class SynapseView extends ItemView {
 		this.streamingWrapperEl = null;
 		this.toolCallsContainer = null;
 		this.activeToolCalls.clear();
-		this.clearReasoningState();
-		this.clearTaskPanelState();
+		this.renderer.clearReasoningState();
+		this.renderer.clearTaskPanelState();
 		if (this.streamingComponent) {
 			this.removeChild(this.streamingComponent);
 			this.streamingComponent = null;
@@ -1239,20 +1268,20 @@ export class SynapseView extends ItemView {
 		if (this.pendingWorkingDir !== null) {
 			this.workingDir = this.pendingWorkingDir;
 			this.pendingWorkingDir = null;
-			this.updateCwdButton();
+			this.configToolbar.updateCwdButton();
 		}
 		this.updateConfigUI();
-		this.updateContextIndicator();
+		this.configToolbar.updateContextIndicator();
 		this.configDirty = true;
 		this.attachments = [];
 		this.scopePaths = [];
 		this.chatContainer.empty();
-		this.renderWelcome();
-		this.renderAttachments();
-		this.renderScopeBar();
-		this.updateSendButton();
+		this.renderer.renderWelcome();
+		this.inputArea.renderAttachments();
+		this.inputArea.renderScopeBar();
+		this.renderer.updateSendButton();
 		this.updateToolbarLock();
-		this.renderSessionList();
+		this.sidebar.renderSessionList();
 		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
 		// above, so both the kicker and the state line need to reflect it (#217).
 		this.refreshComposerState();
@@ -1432,16 +1461,8 @@ export class SynapseView extends ItemView {
 	}
 }
 
-// ── Install feature modules ─────────────────────────────────────
-// These extend SynapseView.prototype with methods organized by feature area.
-import {installChatRenderer} from './view/chatRenderer';
-import {installSearchPanel} from './view/searchPanel';
-import {installSessionSidebar} from './view/sessionSidebar';
-import {installInputArea} from './view/inputArea';
-import {installConfigToolbar} from './view/configToolbar';
-
-installChatRenderer(SynapseView);
-installSearchPanel(SynapseView);
-installSessionSidebar(SynapseView);
-installInputArea(SynapseView);
-installConfigToolbar(SynapseView);
+// ── Feature modules ─────────────────────────────────────────────
+// All view feature modules now compose as real controller instances on `SynapseView`
+// (`search`, `configToolbar`, `renderer`, `inputArea`, `sidebar`) — the
+// prototype-injection section that used to live here is gone with the last
+// conversion (sessionSidebar → SessionSidebarController).

@@ -7,11 +7,11 @@ import {
 	normalizePath,
 	setIcon,
 } from 'obsidian';
-import type {SynapseView} from '../synapseView';
 import {SYNAPSE_ICON_ID} from '../main';
 import {isImageAttachment, type ChatMessage, type ChatAttachment} from '../types';
 import {renderMarkdownSafe} from './utils';
 import type {TodoItem} from '../agentService';
+import type {ViewContext} from './types';
 import {debugTrace} from '../debug';
 
 const MAX_DEBUG_DISPLAY_LEN = 5000;
@@ -56,50 +56,36 @@ export function formatToolArgsSummary(args: unknown): string {
 	return '';
 }
 
-declare module '../synapseView' {
-	interface SynapseView {
-		addUserMessage(content: string, attachments: ChatAttachment[], scopePaths: string[]): void;
-		addInfoMessage(text: string): void;
-		renderMessageBubble(msg: ChatMessage): Promise<void>;
-		renderUserMessageContent(content: string, body: HTMLElement): void;
-		addAssistantPlaceholder(): void;
-		showProcessingIndicator(): void;
-		removeProcessingIndicator(): void;
-		appendDelta(delta: string): void;
-		updateStreamingRenderIncremental(): void;
-		doFullStreamingRender(): Promise<void>;
-		updateStreamingRender(): Promise<void>;
-		finalizeStreamingMessage(): void;
-		renderMessageMetadata(): void;
-		addToolCallBlock(toolCallId: string, toolName: string, args?: unknown): void;
-		completeToolCallBlock(toolCallId: string, success: boolean, result?: {content?: string; detailedContent?: string}, error?: {message: string}): void;
-		addCompactionCompleteBlock(data: {tokensRemoved?: number; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string}): void;
-		renderWelcome(): void;
-		updateSendButton(): void;
-		renderReasoningBlock(reasoning: string, parent: HTMLElement): Promise<void>;
-		startReasoningBlock(): void;
-		appendReasoningDelta(delta: string): void;
-		syncReasoningContent(content: string): void;
-		doFullReasoningRender(): Promise<void>;
-		finalizeReasoning(): void;
-		clearReasoningState(): void;
-		renderTaskPanel(todos: TodoItem[]): void;
-		updateTaskPanelElapsed(): void;
-		clearTaskPanelState(): void;
-	}
-}
+/** Status column labels for the task panel (uppercase presentation via CSS). */
+const TASK_STATUS_LABEL: Record<TodoItem['status'], string> = {
+	pending: 'TODO',
+	in_progress: 'ACTIVE',
+	completed: 'DONE',
+};
 
-export function installChatRenderer(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as SynapseView;
+/**
+ * Chat-message rendering controller (composition refactor — formerly prototype injection
+ * into `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns the
+ * *behavior* of chat-message rendering — message bubbles, the streaming placeholder, the
+ * reasoning block, tool-call/compaction/task-panel blocks, metadata footers, and the send
+ * button's icon — while the streaming-lifecycle *state* (`streamingContent`,
+ * `streamingReasoning`, `streamingBodyEl`, `toolCallsContainer`, `activeToolCalls`, the
+ * task-plan maps, turn metadata, …) stays on `SynapseView` for now: `sessionSidebar.ts`
+ * still reads and writes those fields directly when a session goes to the background, and
+ * that module is not converted yet (step 5). All such state is reached through
+ * `this.view.view.<x>` (see `ViewContext` in `view/types.ts`).
+ */
+export class ChatRendererController {
+	constructor(private view: ViewContext) {}
 
-	proto.addUserMessage = function (content: string, attachments: ChatAttachment[], scopePaths: string[]): void {
+	addUserMessage(content: string, attachments: ChatAttachment[], scopePaths: string[]): void {
 		// Combine file/clipboard attachments with scope path entries for display
 		const allAttachments = [...attachments];
 		for (const sp of scopePaths) {
-			const displayName = sp === '/' ? this.app.vault.getName() : sp;
+			const displayName = sp === '/' ? this.view.app.vault.getName() : sp;
 			const abstract = sp === '/'
-				? this.app.vault.getRoot()
-				: this.app.vault.getAbstractFileByPath(sp);
+				? this.view.app.vault.getRoot()
+				: this.view.app.vault.getAbstractFileByPath(sp);
 			const type = abstract instanceof TFolder ? 'directory' as const : 'file' as const;
 			allAttachments.push({type, name: displayName, path: sp});
 		}
@@ -111,36 +97,36 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			timestamp: Date.now(),
 			attachments: allAttachments.length > 0 ? allAttachments : undefined,
 		};
-		this.messages.push(msg);
+		this.view.view.messages.push(msg);
 		void this.renderMessageBubble(msg);
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
-	proto.addInfoMessage = function (text: string): void {
+	addInfoMessage(text: string): void {
 		const msg: ChatMessage = {id: `i-${Date.now()}`, role: 'info', content: text, timestamp: Date.now()};
-		this.messages.push(msg);
+		this.view.view.messages.push(msg);
 		void this.renderMessageBubble(msg);
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
-	proto.renderMessageBubble = function (msg: ChatMessage): Promise<void> {
+	async renderMessageBubble(msg: ChatMessage): Promise<void> {
 		if (msg.role === 'info') {
-			const el = this.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-info'});
+			const el = this.view.chatContainer.createDiv({cls: 'synapse-msg synapse-msg-info'});
 			el.createSpan({text: msg.content});
-			return Promise.resolve();
+			return;
 		}
 
 		// Speaker label
 		const speakerCls = msg.role === 'user' ? 'you' : 'ai';
 		const speakerText = msg.role === 'user' ? 'You' : 'Synapse';
 		const speakerId = `synapse-speaker-${msg.id || Date.now()}`;
-		this.chatContainer.createDiv({
+		this.view.chatContainer.createDiv({
 			cls: `synapse-speaker synapse-label-base ${speakerCls}`,
 			text: speakerText,
 			attr: {id: speakerId},
 		});
 
-		const wrapper = this.chatContainer.createDiv({
+		const wrapper = this.view.chatContainer.createDiv({
 			cls: `synapse-msg synapse-msg-${msg.role}`,
 			attr: {'aria-labelledby': speakerId},
 		});
@@ -196,7 +182,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 								return;
 							}
 							const {shell} = window.require('electron') as {shell: {openPath: (p: string) => Promise<string>}};
-							const absPath = this.getVaultBasePath() + '/' + vaultPath;
+							const absPath = this.view.getVaultBasePath() + '/' + vaultPath;
 							void shell.openPath(absPath);
 						} catch (e) {
 							new Notice(`Failed to open image: ${String(e)}`);
@@ -207,13 +193,13 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 					chip.setAttribute('title', 'Reveal in file explorer');
 					chip.addEventListener('click', () => {
 						const folder = att.path === '/'
-							? this.app.vault.getRoot()
-							: this.app.vault.getAbstractFileByPath(att.path!);
+							? this.view.app.vault.getRoot()
+							: this.view.app.vault.getAbstractFileByPath(att.path!);
 						if (folder) {
 							// Reveal the folder in Obsidian's file explorer
-							const fileExplorer = this.app.workspace.getLeavesOfType('file-explorer')[0];
+							const fileExplorer = this.view.app.workspace.getLeavesOfType('file-explorer')[0];
 							if (fileExplorer) {
-								void this.app.workspace.revealLeaf(fileExplorer);
+								void this.view.app.workspace.revealLeaf(fileExplorer);
 								(fileExplorer.view as unknown as {revealInFolder?: (f: unknown) => void}).revealInFolder?.(folder);
 							}
 						}
@@ -229,12 +215,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 						: '';
 					chip.setAttribute('title', `Open ${att.path}${rangeLabel ? ` (${rangeLabel})` : ''}${preview ? `:\n${preview}` : ''}`);
 					chip.addEventListener('click', () => {
-						const file = this.app.vault.getAbstractFileByPath(att.path!);
+						const file = this.view.app.vault.getAbstractFileByPath(att.path!);
 						if (file instanceof TFile) {
-							const leaf = this.app.workspace.getLeaf(false);
+							const leaf = this.view.app.workspace.getLeaf(false);
 							void leaf.openFile(file).then(() => {
 								if (selRange) {
-									const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
+									const mdView = this.view.app.workspace.getActiveViewOfType(MarkdownView);
 									if (mdView) {
 										mdView.editor.setCursor({line: selRange.startLine - 1, ch: selRange.startChar});
 										mdView.editor.setSelection(
@@ -250,9 +236,9 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 					// Vault file: open in Obsidian
 					chip.setAttribute('title', 'Open in Obsidian');
 					chip.addEventListener('click', () => {
-						const file = this.app.vault.getAbstractFileByPath(att.path!);
+						const file = this.view.app.vault.getAbstractFileByPath(att.path!);
 						if (file instanceof TFile) {
-							void this.app.workspace.getLeaf(false).openFile(file);
+							void this.view.app.workspace.getLeaf(false).openFile(file);
 						}
 					});
 				}
@@ -260,13 +246,13 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		}
 
 		if (msg.role === 'assistant' && msg.reasoning) {
-			void this.renderReasoningBlock(msg.reasoning, bodyWrapper);
+			await this.renderReasoningBlock(msg.reasoning, bodyWrapper);
 		}
 
 		const body = bodyWrapper.createDiv({cls: 'synapse-msg-body'});
 
 		if (msg.role === 'assistant') {
-			return renderMarkdownSafe(this.app, msg.content, body, this.streamingComponent ?? this);
+			await renderMarkdownSafe(this.view.app, msg.content, body, this.view.view.streamingComponent ?? this.view.view);
 		} else {
 			this.renderUserMessageContent(msg.content, body);
 			// Copy button for user messages
@@ -281,32 +267,31 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 				window.setTimeout(() => setIcon(copyBtn, 'copy'), 1500);
 			});
 		}
-		return Promise.resolve();
-	};
+	}
 
-	proto.renderReasoningBlock = function (reasoning: string, parent: HTMLElement): Promise<void> {
+	private async renderReasoningBlock(reasoning: string, parent: HTMLElement): Promise<void> {
 		const details = parent.createEl('details', {cls: 'synapse-reasoning'});
 		details.createEl('summary', {cls: 'synapse-reasoning-summary synapse-label-base', text: 'Reasoning'});
 		const body = details.createDiv({cls: 'synapse-reasoning-body'});
-		return renderMarkdownSafe(this.app, reasoning, body, this.streamingComponent ?? this);
-	};
+		await renderMarkdownSafe(this.view.app, reasoning, body, this.view.view.streamingComponent ?? this.view.view);
+	}
 
 	/**
 	 * Render user message content.
 	 */
-	proto.renderUserMessageContent = function (content: string, body: HTMLElement): void {
+	private renderUserMessageContent(content: string, body: HTMLElement): void {
 		body.createEl('p', {text: content});
-	};
+	}
 
-	proto.addAssistantPlaceholder = function (): void {
+	addAssistantPlaceholder(): void {
 		const speakerId = `synapse-speaker-placeholder-${Date.now()}`;
-		this.chatContainer.createDiv({
+		this.view.chatContainer.createDiv({
 			cls: 'synapse-speaker synapse-label-base ai',
 			text: 'Synapse',
 			attr: {id: speakerId},
 		});
 
-		const wrapper = this.chatContainer.createDiv({
+		const wrapper = this.view.chatContainer.createDiv({
 			cls: 'synapse-msg synapse-msg-assistant',
 			attr: {'aria-labelledby': speakerId},
 		});
@@ -314,7 +299,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		const bodyWrapper = wrapper.createDiv({cls: 'synapse-msg-body-wrapper'});
 
 		// Container for collapsible tool call blocks
-		this.toolCallsContainer = bodyWrapper.createDiv({cls: 'synapse-tool-calls'});
+		this.view.view.toolCallsContainer = bodyWrapper.createDiv({cls: 'synapse-tool-calls'});
 
 		const body = bodyWrapper.createDiv({cls: 'synapse-msg-body'});
 		// Honest default copy: no reasoning has streamed yet, so don't claim "Thinking" —
@@ -322,61 +307,61 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		createThinkingIndicator(body, 'Waiting for response…');
 
 		// Clean up any previous streaming component
-		if (this.streamingComponent) {
-			this.removeChild(this.streamingComponent);
-			this.streamingComponent = null;
+		if (this.view.view.streamingComponent) {
+			this.view.view.removeChild(this.view.view.streamingComponent);
+			this.view.view.streamingComponent = null;
 		}
-		this.streamingComponent = this.addChild(new Component());
+		this.view.view.streamingComponent = this.view.view.addChild(new Component());
 
-		this.streamingBodyEl = body;
-		this.streamingWrapperEl = bodyWrapper;
-		this.scrollToBottom();
-	};
+		this.view.view.streamingBodyEl = body;
+		this.view.view.streamingWrapperEl = bodyWrapper;
+		this.view.scrollToBottom();
+	}
 
-	proto.showProcessingIndicator = function (): void {
-		if (!this.streamingBodyEl) return;
+	private showProcessingIndicator(): void {
+		if (!this.view.view.streamingBodyEl) return;
 		// Remove any existing thinking/processing indicator
-		const existing = this.streamingBodyEl.querySelector('.synapse-thinking');
+		const existing = this.view.view.streamingBodyEl.querySelector('.synapse-thinking');
 		if (existing) existing.remove();
-		createThinkingIndicator(this.streamingBodyEl, 'Processing');
-	};
+		createThinkingIndicator(this.view.view.streamingBodyEl, 'Processing');
+	}
 
-	proto.removeProcessingIndicator = function (): void {
-		if (!this.streamingBodyEl) return;
-		const indicator = this.streamingBodyEl.querySelector('.synapse-thinking');
+	private removeProcessingIndicator(): void {
+		if (!this.view.view.streamingBodyEl) return;
+		const indicator = this.view.view.streamingBodyEl.querySelector('.synapse-thinking');
 		if (indicator) indicator.remove();
-	};
+	}
 
 	// ── Streaming ────────────────────────────────────────────────
 
-	proto.appendDelta = function (delta: string): void {
-		this.streamingContent += delta;
+	appendDelta(delta: string): void {
+		this.view.view.streamingContent += delta;
 		// Remove processing indicator once real content starts streaming
 		this.removeProcessingIndicator();
-		if (!this.renderScheduled) {
-			this.renderScheduled = true;
+		if (!this.view.view.renderScheduled) {
+			this.view.view.renderScheduled = true;
 			window.requestAnimationFrame(() => {
-				this.renderScheduled = false;
+				this.view.view.renderScheduled = false;
 				this.updateStreamingRenderIncremental();
 			});
 		}
-	};
+	}
 
 	// ── Reasoning streaming ──────────────────────────────────────
 
-	proto.startReasoningBlock = function (): void {
-		if (this.reasoningEl && !this.reasoningEl.isConnected) {
-			this.reasoningEl = null;
-			this.reasoningBodyEl = null;
+	private startReasoningBlock(): void {
+		if (this.view.view.reasoningEl && !this.view.view.reasoningEl.isConnected) {
+			this.view.view.reasoningEl = null;
+			this.view.view.reasoningBodyEl = null;
 		}
-		if (this.reasoningEl) return;
-		if (!this.streamingWrapperEl || !this.streamingBodyEl) {
+		if (this.view.view.reasoningEl) return;
+		if (!this.view.view.streamingWrapperEl || !this.view.view.streamingBodyEl) {
 			debugTrace('Synapse: startReasoningBlock called with no streaming wrapper/body — reasoning deltas will accumulate without rendering.');
 			return;
 		}
 
 		// Remove the thinking placeholder from the answer body
-		const thinking = this.streamingBodyEl?.querySelector('.synapse-thinking');
+		const thinking = this.view.view.streamingBodyEl?.querySelector('.synapse-thinking');
 		if (thinking) thinking.remove();
 
 		const details = createEl('details');
@@ -393,65 +378,65 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		details.appendChild(body);
 
 		// Insert before the answer body element
-		this.streamingWrapperEl.insertBefore(details, this.streamingBodyEl);
-		this.reasoningEl = details;
-		this.reasoningBodyEl = body;
-	};
+		this.view.view.streamingWrapperEl.insertBefore(details, this.view.view.streamingBodyEl);
+		this.view.view.reasoningEl = details;
+		this.view.view.reasoningBodyEl = body;
+	}
 
-	proto.appendReasoningDelta = function (delta: string): void {
-		if (!this.reasoningEl) {
+	appendReasoningDelta(delta: string): void {
+		if (!this.view.view.reasoningEl) {
 			this.startReasoningBlock();
 		}
-		this.reasoningComplete = false;
-		this.streamingReasoning += delta;
-		if (this.reasoningBodyEl) {
-			this.reasoningBodyEl.appendText(delta);
+		this.view.view.reasoningComplete = false;
+		this.view.view.streamingReasoning += delta;
+		if (this.view.view.reasoningBodyEl) {
+			this.view.view.reasoningBodyEl.appendText(delta);
 		}
-		if (!this.fullReasoningRenderTimer) {
-			this.fullReasoningRenderTimer = window.setTimeout(() => {
-				this.fullReasoningRenderTimer = null;
+		if (!this.view.view.fullReasoningRenderTimer) {
+			this.view.view.fullReasoningRenderTimer = window.setTimeout(() => {
+				this.view.view.fullReasoningRenderTimer = null;
 				void this.doFullReasoningRender();
 			}, 300);
 		}
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
-	proto.syncReasoningContent = function (content: string): void {
+	syncReasoningContent(content: string): void {
 		if (!content) return;
-		if (!this.reasoningEl) {
+		if (!this.view.view.reasoningEl) {
 			this.startReasoningBlock();
 		}
-		this.streamingReasoning = content;
-		if (this.fullReasoningRenderTimer) {
-			window.clearTimeout(this.fullReasoningRenderTimer);
-			this.fullReasoningRenderTimer = null;
+		this.view.view.streamingReasoning = content;
+		if (this.view.view.fullReasoningRenderTimer) {
+			window.clearTimeout(this.view.view.fullReasoningRenderTimer);
+			this.view.view.fullReasoningRenderTimer = null;
 		}
 		void this.doFullReasoningRender();
-	};
+	}
 
-	proto.doFullReasoningRender = async function (): Promise<void> {
-		if (!this.reasoningBodyEl || !this.reasoningBodyEl.isConnected || !this.streamingReasoning) return;
-		this.reasoningBodyEl.empty();
-		await renderMarkdownSafe(this.app, this.streamingReasoning, this.reasoningBodyEl, this.streamingComponent ?? this);
-		this.scrollToBottom();
-	};
+	private async doFullReasoningRender(): Promise<void> {
+		if (!this.view.view.reasoningBodyEl || !this.view.view.reasoningBodyEl.isConnected || !this.view.view.streamingReasoning) return;
+		this.view.view.reasoningBodyEl.empty();
+		await renderMarkdownSafe(this.view.app, this.view.view.streamingReasoning, this.view.view.reasoningBodyEl, this.view.view.streamingComponent ?? this.view.view);
+		this.view.scrollToBottom();
+	}
 
-	proto.finalizeReasoning = function (): void {
-		if (this.reasoningComplete) return;
-		this.reasoningComplete = true;
+	finalizeReasoning(): void {
+		if (this.view.view.reasoningComplete) return;
+		this.view.view.reasoningComplete = true;
 
 		// Cancel pending incremental render and do a final full render
-		if (this.fullReasoningRenderTimer) {
-			window.clearTimeout(this.fullReasoningRenderTimer);
-			this.fullReasoningRenderTimer = null;
+		if (this.view.view.fullReasoningRenderTimer) {
+			window.clearTimeout(this.view.view.fullReasoningRenderTimer);
+			this.view.view.fullReasoningRenderTimer = null;
 		}
 		void this.doFullReasoningRender();
 
-		if (this.reasoningEl) {
-			this.reasoningEl.removeClass('is-live');
+		if (this.view.view.reasoningEl) {
+			this.view.view.reasoningEl.removeClass('is-live');
 			// Collapse the block
-			this.reasoningEl.removeAttribute('open');
-			const summary = this.reasoningEl.querySelector<HTMLElement>('summary');
+			this.view.view.reasoningEl.removeAttribute('open');
+			const summary = this.view.view.reasoningEl.querySelector<HTMLElement>('summary');
 			if (summary) {
 				summary.empty();
 				summary.appendText('Reasoning');
@@ -461,99 +446,99 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		// Reasoning is complete but no answer text has arrived yet — show a waiting indicator
 		// consistent with the pre-reasoning placeholder (reasoning itself already reported its
 		// own "Thinking…" state above; this is just "still waiting for the answer").
-		if (!this.streamingContent && this.streamingBodyEl) {
-			createThinkingIndicator(this.streamingBodyEl, 'Waiting for response…');
+		if (!this.view.view.streamingContent && this.view.view.streamingBodyEl) {
+			createThinkingIndicator(this.view.view.streamingBodyEl, 'Waiting for response…');
 		}
-	};
+	}
 
-	proto.clearReasoningState = function (): void {
-		if (this.fullReasoningRenderTimer) {
-			window.clearTimeout(this.fullReasoningRenderTimer);
-			this.fullReasoningRenderTimer = null;
+	clearReasoningState(): void {
+		if (this.view.view.fullReasoningRenderTimer) {
+			window.clearTimeout(this.view.view.fullReasoningRenderTimer);
+			this.view.view.fullReasoningRenderTimer = null;
 		}
-		this.streamingReasoning = '';
-		this.reasoningEl = null;
-		this.reasoningBodyEl = null;
-		this.reasoningComplete = false;
-	};
+		this.view.view.streamingReasoning = '';
+		this.view.view.reasoningEl = null;
+		this.view.view.reasoningBodyEl = null;
+		this.view.view.reasoningComplete = false;
+	}
 
 	/**
 	 * Append only the new delta text as a plain text node.
 	 * A periodic timer does full markdown re-renders every 300ms
 	 * to resolve cross-boundary syntax (code blocks, lists, etc.).
 	 */
-	proto.updateStreamingRenderIncremental = function (): void {
-		if (!this.streamingBodyEl) return;
+	private updateStreamingRenderIncremental(): void {
+		if (!this.view.view.streamingBodyEl) return;
 
-		const newText = this.streamingContent.slice(this.lastFullRenderLen);
+		const newText = this.view.view.streamingContent.slice(this.view.view.lastFullRenderLen);
 		if (newText) {
 			// Append raw text node for immediate visual feedback
-			this.streamingBodyEl.appendText(newText);
-			this.lastFullRenderLen = this.streamingContent.length;
+			this.view.view.streamingBodyEl.appendText(newText);
+			this.view.view.lastFullRenderLen = this.view.view.streamingContent.length;
 		}
 
 		// Schedule a periodic full re-render if not already scheduled
-		if (!this.fullRenderTimer) {
-			this.fullRenderTimer = window.setTimeout(() => {
-				this.fullRenderTimer = null;
+		if (!this.view.view.fullRenderTimer) {
+			this.view.view.fullRenderTimer = window.setTimeout(() => {
+				this.view.view.fullRenderTimer = null;
 				void this.doFullStreamingRender();
 			}, 300);
 		}
 
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
 	/** Full markdown re-render of the entire streamed content so far. */
-	proto.doFullStreamingRender = async function (): Promise<void> {
-		if (!this.streamingBodyEl) return;
-		this.streamingBodyEl.empty();
-		await renderMarkdownSafe(this.app, this.streamingContent, this.streamingBodyEl, this.streamingComponent ?? this);
-		this.lastFullRenderLen = this.streamingContent.length;
-		this.scrollToBottom();
-	};
+	private async doFullStreamingRender(): Promise<void> {
+		if (!this.view.view.streamingBodyEl) return;
+		this.view.view.streamingBodyEl.empty();
+		await renderMarkdownSafe(this.view.app, this.view.view.streamingContent, this.view.view.streamingBodyEl, this.view.view.streamingComponent ?? this.view.view);
+		this.view.view.lastFullRenderLen = this.view.view.streamingContent.length;
+		this.view.scrollToBottom();
+	}
 
-	proto.updateStreamingRender = async function (): Promise<void> {
-		if (!this.streamingBodyEl) return;
-		this.streamingBodyEl.empty();
-		await renderMarkdownSafe(this.app, this.streamingContent, this.streamingBodyEl, this.streamingComponent ?? this);
-		this.scrollToBottom();
-	};
+	async updateStreamingRender(): Promise<void> {
+		if (!this.view.view.streamingBodyEl) return;
+		this.view.view.streamingBodyEl.empty();
+		await renderMarkdownSafe(this.view.app, this.view.view.streamingContent, this.view.view.streamingBodyEl, this.view.view.streamingComponent ?? this.view.view);
+		this.view.scrollToBottom();
+	}
 
-	proto.finalizeStreamingMessage = function (): void {
+	finalizeStreamingMessage(): void {
 		// Always remove any lingering thinking/processing indicator
 		this.removeProcessingIndicator();
-		if (this.streamingReasoning && !this.reasoningComplete) {
+		if (this.view.view.streamingReasoning && !this.view.view.reasoningComplete) {
 			this.finalizeReasoning();
 		}
 
-		if (this.streamingContent || this.streamingReasoning) {
+		if (this.view.view.streamingContent || this.view.view.streamingReasoning) {
 			const msg: ChatMessage = {
 				id: `a-${Date.now()}`,
 				role: 'assistant',
-				content: this.streamingContent,
-				reasoning: this.streamingReasoning || undefined,
+				content: this.view.view.streamingContent,
+				reasoning: this.view.view.streamingReasoning || undefined,
 				timestamp: Date.now(),
 			};
-			this.messages.push(msg);
+			this.view.view.messages.push(msg);
 		}
 
 		// Clean up incremental render timer and do final full render
-		if (this.fullRenderTimer) {
-			window.clearTimeout(this.fullRenderTimer);
-			this.fullRenderTimer = null;
+		if (this.view.view.fullRenderTimer) {
+			window.clearTimeout(this.view.view.fullRenderTimer);
+			this.view.view.fullRenderTimer = null;
 		}
-		if (this.streamingBodyEl && this.streamingContent) {
-			this.streamingBodyEl.empty();
-			void renderMarkdownSafe(this.app, this.streamingContent, this.streamingBodyEl, this.streamingComponent ?? this);
-		} else if (this.streamingBodyEl && !this.streamingContent && !this.streamingReasoning) {
+		if (this.view.view.streamingBodyEl && this.view.view.streamingContent) {
+			this.view.view.streamingBodyEl.empty();
+			void renderMarkdownSafe(this.view.app, this.view.view.streamingContent, this.view.view.streamingBodyEl, this.view.view.streamingComponent ?? this.view.view);
+		} else if (this.view.view.streamingBodyEl && !this.view.view.streamingContent && !this.view.view.streamingReasoning) {
 			// No text was streamed — show a subtle fallback
-			this.streamingBodyEl.empty();
-			this.streamingBodyEl.createDiv({
+			this.view.view.streamingBodyEl.empty();
+			this.view.view.streamingBodyEl.createDiv({
 				cls: 'synapse-thinking synapse-cancelled',
 				text: 'No response',
 			});
 		}
-		this.lastFullRenderLen = 0;
+		this.view.view.lastFullRenderLen = 0;
 
 		// Render metadata footer
 		this.renderMessageMetadata();
@@ -563,52 +548,52 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		this.updateTaskPanelElapsed();
 		this.clearTaskPanelState();
 
-		this.streamingContent = '';
-		this.streamingBodyEl = null;
-		this.streamingWrapperEl = null;
-		this.toolCallsContainer = null;
-		this.activeToolCalls.clear();
+		this.view.view.streamingContent = '';
+		this.view.view.streamingBodyEl = null;
+		this.view.view.streamingWrapperEl = null;
+		this.view.view.toolCallsContainer = null;
+		this.view.view.activeToolCalls.clear();
 
 		this.clearReasoningState();
 
-		if (this.streamingComponent) {
-			this.removeChild(this.streamingComponent);
-			this.streamingComponent = null;
+		if (this.view.view.streamingComponent) {
+			this.view.view.removeChild(this.view.view.streamingComponent);
+			this.view.view.streamingComponent = null;
 		}
 
 		// Reset turn metadata
-		this.turnStartTime = 0;
-		this.turnToolsUsed = [];
-		this.turnUsage = null;
+		this.view.view.turnStartTime = 0;
+		this.view.view.turnToolsUsed = [];
+		this.view.view.turnUsage = null;
 
-		this.isStreaming = false;
+		this.view.view.isStreaming = false;
 		this.updateSendButton();
 
 		// Update local session timestamp instead of full SDK round-trip
-		if (this.currentSessionId) {
-			const entry = this.sessionList.find(s => s.sessionId === this.currentSessionId);
+		if (this.view.view.currentSessionId) {
+			const entry = this.view.view.sessionList.find(s => s.sessionId === this.view.view.currentSessionId);
 			if (entry) {
 				entry.lastModified = Date.now();
 			}
 		}
-		this.renderSessionList();
-	};
+		this.view.view.sidebar.renderSessionList();
+	}
 
-	proto.renderMessageMetadata = function (): void {
-		if (!this.streamingWrapperEl) return;
+	private renderMessageMetadata(): void {
+		if (!this.view.view.streamingWrapperEl) return;
 
-		const hasTime = this.turnStartTime > 0;
-		const hasTokens = this.turnUsage !== null;
-		const uniqueTools = [...new Set(this.turnToolsUsed)];
+		const hasTime = this.view.view.turnStartTime > 0;
+		const hasTokens = this.view.view.turnUsage !== null;
+		const uniqueTools = [...new Set(this.view.view.turnToolsUsed)];
 		const hasTools = uniqueTools.length > 0;
 
 		if (!hasTime && !hasTokens && !hasTools) return;
 
-		const footer = this.streamingWrapperEl.createDiv({cls: 'synapse-msg-metadata'});
+		const footer = this.view.view.streamingWrapperEl.createDiv({cls: 'synapse-msg-metadata'});
 
 		// Elapsed time
 		if (hasTime) {
-			const elapsed = Date.now() - this.turnStartTime;
+			const elapsed = Date.now() - this.view.view.turnStartTime;
 			const timeText = elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`;
 			const timeSpan = footer.createSpan({cls: 'synapse-metadata-item'});
 			const timeIcon = timeSpan.createSpan({cls: 'synapse-metadata-icon'});
@@ -618,7 +603,7 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 
 		// Token usage — show rounded total, detail on hover
 		if (hasTokens) {
-			const u = this.turnUsage!;
+			const u = this.view.view.turnUsage!;
 			const total = u.inputTokens + u.cacheReadTokens + u.outputTokens;
 			const rounded = total >= 1000 ? `${(total / 1000).toFixed(1)}k` : `${total}`;
 			const tooltipLines: string[] = [];
@@ -643,12 +628,12 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			toolSpan.appendText(toolLabel);
 			toolSpan.setAttribute('title', uniqueTools.join('\n'));
 		}
-	};
+	}
 
-	proto.addToolCallBlock = function (toolCallId: string, toolName: string, args?: unknown): void {
-		if (!this.toolCallsContainer) return;
+	addToolCallBlock(toolCallId: string, toolName: string, args?: unknown): void {
+		if (!this.view.view.toolCallsContainer) return;
 
-		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-tool-call'});
+		const details = this.view.view.toolCallsContainer.createEl('details', {cls: 'synapse-tool-call'});
 		const summary = details.createEl('summary', {cls: 'synapse-tool-call-summary is-live'});
 		summary.createSpan({cls: 'synapse-tool-call-name', text: toolName});
 		const argSummary = formatToolArgsSummary(args);
@@ -666,16 +651,16 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		}
 
 		const startTime = Date.now();
-		this.activeToolCalls.set(toolCallId, {toolName, detailsEl: details, startTime});
+		this.view.view.activeToolCalls.set(toolCallId, {toolName, detailsEl: details, startTime});
 
 		// Show "Processing ..." animation while tools are running
 		this.showProcessingIndicator();
 
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
-	proto.completeToolCallBlock = function (toolCallId: string, success: boolean, result?: {content?: string; detailedContent?: string}, error?: {message: string}): void {
-		const entry = this.activeToolCalls.get(toolCallId);
+	completeToolCallBlock(toolCallId: string, success: boolean, result?: {content?: string; detailedContent?: string}, error?: {message: string}): void {
+		const entry = this.view.view.activeToolCalls.get(toolCallId);
 		if (!entry) return;
 
 		const {detailsEl, startTime} = entry;
@@ -706,38 +691,32 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			pre.createEl('code', {text: displayText});
 		}
 
-		this.activeToolCalls.delete(toolCallId);
-		this.scrollToBottom();
-	};
+		this.view.view.activeToolCalls.delete(toolCallId);
+		this.view.scrollToBottom();
+	}
 
 	// ── Task/plan tracking (TodoWrite #210) ────────────────────
-
-	const TASK_STATUS_LABEL: Record<TodoItem['status'], string> = {
-		pending: 'TODO',
-		in_progress: 'ACTIVE',
-		completed: 'DONE',
-	};
 
 	/**
 	 * Render (or replace) the live task-tracking panel for the current turn. Each `TodoWrite`
 	 * call is the *current* full plan state, so this always rebuilds the panel from scratch
 	 * rather than appending — there is exactly one live panel per turn.
 	 */
-	proto.renderTaskPanel = function (todos: TodoItem[]): void {
-		if (!this.toolCallsContainer) return;
+	renderTaskPanel(todos: TodoItem[]): void {
+		if (!this.view.view.toolCallsContainer) return;
 
 		let wasOpen = true;
-		if (!this.taskPanelEl || !this.taskPanelEl.isConnected) {
-			this.taskPanelEl = this.toolCallsContainer.createEl('details', {cls: 'synapse-task-panel synapse-findings'});
-			(this.taskPanelEl as HTMLDetailsElement).open = true;
+		if (!this.view.view.taskPanelEl || !this.view.view.taskPanelEl.isConnected) {
+			this.view.view.taskPanelEl = this.view.view.toolCallsContainer.createEl('details', {cls: 'synapse-task-panel synapse-findings'});
+			(this.view.view.taskPanelEl as HTMLDetailsElement).open = true;
 			// Keep the panel first among tool blocks — the plan is the headline, tool calls are detail.
-			this.toolCallsContainer.prepend(this.taskPanelEl);
+			this.view.view.toolCallsContainer.prepend(this.view.view.taskPanelEl);
 		} else {
-			wasOpen = (this.taskPanelEl as HTMLDetailsElement).open ?? true;
+			wasOpen = (this.view.view.taskPanelEl as HTMLDetailsElement).open ?? true;
 		}
-		this.currentTodos = todos;
+		this.view.view.currentTodos = todos;
 
-		const panel = this.taskPanelEl as HTMLDetailsElement;
+		const panel = this.view.view.taskPanelEl as HTMLDetailsElement;
 		panel.empty();
 		panel.open = wasOpen;
 
@@ -760,43 +739,43 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 		}
 
 		this.updateTaskPanelElapsed();
-		if (!this.taskPanelTimer) {
+		if (!this.view.view.taskPanelTimer) {
 			const timerId = window.setInterval(() => this.updateTaskPanelElapsed(), 1000);
-			this.taskPanelTimer = timerId as unknown as ReturnType<typeof setInterval>;
-			this.registerInterval(timerId);
+			this.view.view.taskPanelTimer = timerId as unknown as ReturnType<typeof setInterval>;
+			this.view.view.registerInterval(timerId);
 		}
 
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
 	/** Refresh the live elapsed-runtime label in the current task panel, if any is shown. */
-	proto.updateTaskPanelElapsed = function (): void {
-		if (!this.taskPanelEl || !this.taskPanelEl.isConnected || this.turnStartTime === 0) return;
-		const elapsedSpan = this.taskPanelEl.querySelector('[data-synapse-task-elapsed]');
+	private updateTaskPanelElapsed(): void {
+		if (!this.view.view.taskPanelEl || !this.view.view.taskPanelEl.isConnected || this.view.view.turnStartTime === 0) return;
+		const elapsedSpan = this.view.view.taskPanelEl.querySelector('[data-synapse-task-elapsed]');
 		if (!elapsedSpan) return;
-		const elapsed = Date.now() - this.turnStartTime;
+		const elapsed = Date.now() - this.view.view.turnStartTime;
 		const timeText = elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`;
 		elapsedSpan.textContent = timeText;
-	};
+	}
 
 	/** Reset task-panel state (called on turn finalize, new conversation, and session switches). */
-	proto.clearTaskPanelState = function (): void {
-		if (this.taskPanelTimer) {
-			window.clearInterval(this.taskPanelTimer as unknown as number);
-			this.taskPanelTimer = null;
+	clearTaskPanelState(): void {
+		if (this.view.view.taskPanelTimer) {
+			window.clearInterval(this.view.view.taskPanelTimer as unknown as number);
+			this.view.view.taskPanelTimer = null;
 		}
-		this.taskPanelEl = null;
-		this.currentTodos = null;
-		this.taskPlan.clear();
-		this.pendingTaskCreates.clear();
-	};
+		this.view.view.taskPanelEl = null;
+		this.view.view.currentTodos = null;
+		this.view.view.taskPlan.clear();
+		this.view.view.pendingTaskCreates.clear();
+	}
 
 	// ── Compaction debug blocks ─────────────────────────────────
 
-	proto.addCompactionCompleteBlock = function (data: {tokensRemoved?: number; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string}): void {
-		if (!this.toolCallsContainer) return;
+	addCompactionCompleteBlock(data: {tokensRemoved?: number; preCompactionTokens?: number; postCompactionTokens?: number; durationMs?: number; trigger?: string}): void {
+		if (!this.view.view.toolCallsContainer) return;
 
-		const details = this.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
+		const details = this.view.view.toolCallsContainer.createEl('details', {cls: 'synapse-compaction-block'});
 		const summary = details.createEl('summary', {cls: 'synapse-compaction-summary synapse-label-base'});
 		const iconEl = summary.createSpan({cls: 'synapse-compaction-icon'});
 		setIcon(iconEl, 'archive');
@@ -817,11 +796,11 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			pre.createEl('code', {text: lines.join('\n')});
 		}
 
-		this.scrollToBottom();
-	};
+		this.view.scrollToBottom();
+	}
 
-	proto.renderWelcome = function (): void {
-		const welcome = this.chatContainer.createDiv({cls: 'synapse-welcome'});
+	renderWelcome(): void {
+		const welcome = this.view.chatContainer.createDiv({cls: 'synapse-welcome'});
 		const icon = welcome.createDiv({cls: 'synapse-welcome-icon'});
 		setIcon(icon, SYNAPSE_ICON_ID);
 		welcome.createEl('h3', {text: 'Synapse'});
@@ -829,18 +808,18 @@ export function installChatRenderer(ViewClass: {prototype: unknown}): void {
 			text: 'Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!',
 			cls: 'synapse-welcome-desc',
 		});
-	};
+	}
 
-	proto.updateSendButton = function (): void {
-		this.sendBtn.empty();
-		if (this.isStreaming) {
-			setIcon(this.sendBtn, 'square');
-			this.sendBtn.title = 'Stop';
-			this.sendBtn.addClass('is-streaming');
+	updateSendButton(): void {
+		this.view.view.sendBtn.empty();
+		if (this.view.view.isStreaming) {
+			setIcon(this.view.view.sendBtn, 'square');
+			this.view.view.sendBtn.title = 'Stop';
+			this.view.view.sendBtn.addClass('is-streaming');
 		} else {
-			setIcon(this.sendBtn, 'arrow-up');
-			this.sendBtn.title = 'Send message';
-			this.sendBtn.removeClass('is-streaming');
+			setIcon(this.view.view.sendBtn, 'arrow-up');
+			this.view.view.sendBtn.title = 'Send message';
+			this.view.view.sendBtn.removeClass('is-streaming');
 		}
-	};
+	}
 }

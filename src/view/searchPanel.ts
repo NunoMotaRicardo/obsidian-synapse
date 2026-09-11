@@ -1,10 +1,11 @@
 import {Menu, Notice, TFile, normalizePath, setIcon} from 'obsidian';
-import type {SynapseView} from '../synapseView';
 import {autoApproveReadOnlyTools, type SessionConfig} from '../agentService';
+import type {Session} from '../agentService';
 import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 import {getSynapsePluginConfig} from '../vaultPaths';
+import type {ViewContext} from './types';
 
 /** Read-only file tools for vault search — no write/exec access needed. */
 const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
@@ -28,6 +29,7 @@ function highlightQueryTerms(container: HTMLElement, text: string, query?: strin
 		container.setText(text);
 		return;
 	}
+
 	const terms = query
 		.split(/\s+/)
 		.map(t => t.replace(/[^\w-]/g, ''))
@@ -40,6 +42,7 @@ function highlightQueryTerms(container: HTMLElement, text: string, query?: strin
 
 	const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 	const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+
 	const parts = text.split(regex);
 
 	container.empty();
@@ -52,34 +55,56 @@ function highlightQueryTerms(container: HTMLElement, text: string, query?: strin
 	}
 }
 
-declare module '../synapseView' {
-	interface SynapseView {
-		searchAbortController?: AbortController | null;
-		buildSearchPanel(parent: HTMLElement): void;
-		readonly searchMode: 'basic' | 'advanced';
-		toggleSearchMode(): void;
-		updateSearchModeToggle(): void;
-		updateSearchAdvancedVisibility(): void;
-		updateSearchConfigUI(): void;
-		applySearchAgentToolsAndSkills(agent?: AgentConfig): void;
-		openSearchToolsMenu(e: MouseEvent): void;
-		updateSearchToolsBadge(): void;
-		openSearchScopePicker(): void;
-		updateSearchCwdButton(): void;
-		getSearchWorkingDirectory(): string;
-		buildSearchSessionConfig(): SessionConfig;
-		handleSearch(): Promise<void>;
-		handleBasicSearch(query: string): Promise<void>;
-		handleAdvancedSearch(query: string): Promise<void>;
-		renderSearchResults(content: string, query?: string): void;
-		updateSearchButton(): void;
+/**
+ * Search tab controller (composition refactor — formerly prototype injection into
+ * `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns all
+ * search-panel state: the composer/toolbar DOM refs, the selected search
+ * agent/model/skills, the search working directory, and the live search sessions.
+ * Reaches shared view state (session list, session names, tab switching) through its
+ * `ViewContext`.
+ *
+ * The basic/advanced mode is *not* controller state — it is the persisted
+ * `plugin.settings.searchMode`, read via the `searchMode` getter.
+ */
+export class SearchPanelController {
+	// ── Panel state (moved from SynapseView) ─────────────────────
+	searchAgent = '';
+	searchModel = '';
+	searchWorkingDir = '';
+	searchEnabledSkills: Set<string> = new Set();
+	private searchAgentSelect!: HTMLSelectElement;
+	private searchModelSelect!: HTMLSelectElement;
+	private searchToolsBtnEl!: HTMLButtonElement;
+	private searchCwdBtnEl!: HTMLButtonElement;
+	private searchScopeBtn?: HTMLButtonElement;
+	private searchStateLineEl?: HTMLElement;
+	private searchInputEl!: HTMLTextAreaElement;
+	private searchBtnEl!: HTMLButtonElement;
+	private searchResultsEl!: HTMLElement;
+	private searchModeToggleEl!: HTMLButtonElement;
+	private searchAdvancedToolbarEl!: HTMLElement;
+	private searchAbortController: AbortController | null = null;
+	/** The advanced-mode session (persists across queries to resume context). */
+	searchSession: Session | null = null;
+	/** The basic-mode cached session (one-shot searches, no ongoing transcript). */
+	basicSearchSession: Session | null = null;
+	isSearching = false;
+
+	constructor(private view: ViewContext) {}
+
+	/** The persisted search mode — a setting, not controller state. */
+	get searchMode(): 'basic' | 'advanced' {
+		return this.view.plugin.settings.searchMode;
 	}
-}
 
-export function installSearchPanel(ViewClass: { prototype: unknown }): void {
-	const proto = ViewClass.prototype as SynapseView;
+	getSearchWorkingDirectory(): string {
+		const base = this.view.getVaultBasePath();
+		if (!this.searchWorkingDir) return base;
+		return base + '/' + normalizePath(this.searchWorkingDir);
+	}
 
-	proto.buildSearchPanel = function (this: SynapseView, parent: HTMLElement): void {
+	/** Build the whole search panel into `parent`. */
+	build(parent: HTMLElement): void {
 		const wrapper = parent.createDiv({cls: 'synapse-search-wrapper'});
 
 		// Composer container (state line + textarea + unified toolbar)
@@ -145,10 +170,10 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchAgentSelect.addEventListener('change', () => {
 			this.searchAgent = this.searchAgentSelect.value;
 			this.searchAgentSelect.toggleClass('is-active', this.searchAgent !== '');
-			const agent = this.agents.find(a => a.name === this.searchAgent);
+			const agent = this.view.view.agents.find(a => a.name === this.searchAgent);
 			this.searchAgentSelect.title = agent ? agent.instructions : '';
 			// Auto-select agent's preferred model
-			const resolvedModel = this.resolveModelForAgent(agent, this.searchModel || undefined);
+			const resolvedModel = this.view.view.configToolbar.resolveModelForAgent(agent, this.searchModel || undefined);
 			if (resolvedModel && resolvedModel !== this.searchModel) {
 				this.searchModel = resolvedModel;
 				this.searchModelSelect.value = resolvedModel;
@@ -157,8 +182,8 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			// Apply agent's tools and skills filter for search
 			this.applySearchAgentToolsAndSkills(agent);
 			// Persist
-			this.plugin.settings.searchAgent = this.searchAgent;
-			void this.plugin.saveSettings();
+			this.view.plugin.settings.searchAgent = this.searchAgent;
+			void this.view.plugin.saveSettings();
 		});
 
 		addSep();
@@ -198,17 +223,32 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		// ── Results area ──
 		this.searchResultsEl = wrapper.createDiv({cls: 'synapse-search-results'});
-	};
+	}
 
-	Object.defineProperty(proto, 'searchMode', {
-		get(this: SynapseView) { return this.plugin.settings.searchMode; },
-		configurable: true,
-	});
+	/** Open the search tab programmatically with scope set to the given folder. */
+	openSearchWithScope(folderPath: string): void {
+		this.searchWorkingDir = folderPath;
+		this.updateSearchCwdButton();
+		this.view.view.switchTab('search');
+		this.searchInputEl.focus();
+	}
 
-	proto.toggleSearchMode = function (this: SynapseView): void {
+	/** Disconnect both search sessions (view unload / mode switch cleanup). */
+	async disconnect(): Promise<void> {
+		if (this.basicSearchSession) {
+			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
+			this.basicSearchSession = null;
+		}
+		if (this.searchSession) {
+			try { await this.searchSession.disconnect(); } catch { /* ignore */ }
+			this.searchSession = null;
+		}
+	}
+
+	toggleSearchMode(): void {
 		const newMode = this.searchMode === 'basic' ? 'advanced' : 'basic';
-		this.plugin.settings.searchMode = newMode;
-		void this.plugin.saveSettings();
+		this.view.plugin.settings.searchMode = newMode;
+		void this.view.plugin.saveSettings();
 		this.updateSearchModeToggle();
 		this.updateSearchAdvancedVisibility();
 		// Disconnect cached basic session when switching modes
@@ -216,9 +256,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			void this.basicSearchSession.disconnect().catch(() => {});
 			this.basicSearchSession = null;
 		}
-	};
+	}
 
-	proto.updateSearchModeToggle = function (this: SynapseView): void {
+	updateSearchModeToggle(): void {
 		if (!this.searchModeToggleEl) return;
 		this.searchModeToggleEl.empty();
 		if (this.searchMode === 'basic') {
@@ -230,38 +270,43 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			this.searchModeToggleEl.title = 'Advanced mode — click for basic (fast)';
 			this.searchModeToggleEl.toggleClass('is-active', true);
 		}
-	};
+	}
 
-	proto.updateSearchAdvancedVisibility = function (this: SynapseView): void {
+	updateSearchAdvancedVisibility(): void {
 		if (this.searchAdvancedToolbarEl) {
 			this.searchAdvancedToolbarEl.toggleClass('is-hidden', this.searchMode !== 'advanced');
 		}
-	};
+	}
 
-	proto.updateSearchConfigUI = function (this: SynapseView): void {
+	/** Called from `SynapseView.updateConfigUI()` after agents/skills/models reload. */
+	updateSearchConfigUI(): void {
+		// Built-guard (post-review hardening): `updateConfigUI()` can in principle fire
+		// before `build()` ran (e.g. a future caller invoking `loadAllConfigs()` early);
+		// the `!`-assigned DOM refs below would throw on such a call.
+		if (!this.searchAgentSelect) return;
 		// Agents
 		this.searchAgentSelect.empty();
 		const noAgent = this.searchAgentSelect.createEl('option', {text: 'Agent', attr: {value: ''}});
 		noAgent.value = '';
-		for (const agent of this.agents) {
+		for (const agent of this.view.view.agents) {
 			const opt = this.searchAgentSelect.createEl('option', {text: agent.name});
 			opt.value = agent.name;
 			opt.title = agent.instructions;
 		}
 
 		// Restore saved search agent from settings
-		const savedAgent = this.plugin.settings.searchAgent;
-		if (savedAgent && this.agents.some(a => a.name === savedAgent)) {
+		const savedAgent = this.view.plugin.settings.searchAgent;
+		if (savedAgent && this.view.view.agents.some(a => a.name === savedAgent)) {
 			this.searchAgent = savedAgent;
 			this.searchAgentSelect.value = savedAgent;
-			const selAgent = this.agents.find(a => a.name === savedAgent);
+			const selAgent = this.view.view.agents.find(a => a.name === savedAgent);
 			this.searchAgentSelect.title = selAgent ? selAgent.instructions : '';
 		}
 		this.searchAgentSelect.toggleClass('is-active', this.searchAgent !== '');
 
 		// Auto-select agent's preferred model
-		const agentConfig = this.agents.find(a => a.name === this.searchAgent);
-		const resolvedModel = this.resolveModelForAgent(agentConfig, this.searchModel || undefined);
+		const agentConfig = this.view.view.agents.find(a => a.name === this.searchAgent);
+		const resolvedModel = this.view.view.configToolbar.resolveModelForAgent(agentConfig, this.searchModel || undefined);
 		if (resolvedModel) {
 			this.searchModel = resolvedModel;
 		}
@@ -270,13 +315,13 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		this.searchModelSelect.empty();
 		const defaultOpt = this.searchModelSelect.createEl('option', {text: 'Default model'});
 		defaultOpt.value = '';
-		for (const model of this.models) {
+		for (const model of this.view.view.models) {
 			const opt = this.searchModelSelect.createEl('option', {text: model.name});
 			opt.value = model.id;
 		}
 		if (this.searchModel === '') {
 			this.searchModelSelect.value = '';
-		} else if (this.searchModel && this.models.some(m => m.id === this.searchModel)) {
+		} else if (this.searchModel && this.view.view.models.some(m => m.id === this.searchModel)) {
 			this.searchModelSelect.value = this.searchModel;
 		} else {
 			this.searchModel = '';
@@ -286,9 +331,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		// Apply agent's tools and skills filter
 		this.applySearchAgentToolsAndSkills(agentConfig);
-	};
+	}
 
-	proto.applySearchAgentToolsAndSkills = function (this: SynapseView, agent?: AgentConfig): void {
+	applySearchAgentToolsAndSkills(agent?: AgentConfig): void {
 		// Skills: undefined = enable all, [] = disable all, [...] = enable listed.
 		// This is the agent-declared restriction (AgentConfig.skills), independent
 		// from any manual toolbar toggle — all discovered skills are always
@@ -297,20 +342,20 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		if (agent?.skills !== undefined) {
 			const allowed = new Set(agent.skills);
 			this.searchEnabledSkills = new Set(
-				this.skills.filter(s => allowed.has(s.name)).map(s => s.name)
+				this.view.view.skills.filter(s => allowed.has(s.name)).map(s => s.name)
 			);
 		} else {
-			this.searchEnabledSkills = new Set(this.skills.map(s => s.name));
+			this.searchEnabledSkills = new Set(this.view.view.skills.map(s => s.name));
 		}
 
 		this.updateSearchToolsBadge();
-	};
+	}
 
-	proto.openSearchToolsMenu = function (this: SynapseView, e: MouseEvent): void {
+	openSearchToolsMenu(e: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem(item => item.setTitle('No tools configured').setDisabled(true));
 		menu.addSeparator();
-		const currentApproval = this.plugin.settings.toolApproval;
+		const currentApproval = this.view.plugin.settings.toolApproval;
 		menu.addItem(item => {
 			item.setTitle('Approval mode');
 			const sub: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -318,45 +363,45 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 				si.setTitle('Allow (auto-approve)')
 					.setChecked(currentApproval === 'allow')
 					.onClick(async () => {
-						this.plugin.settings.toolApproval = 'allow';
-						await this.plugin.saveSettings();
+						this.view.plugin.settings.toolApproval = 'allow';
+						await this.view.plugin.saveSettings();
 						this.updateSearchToolsBadge();
-						this.updateToolsBadge?.();
+						this.view.view.configToolbar.updateToolsBadge();
 					});
 			});
 			sub.addItem(si => {
 				si.setTitle('Ask (require approval)')
 					.setChecked(currentApproval === 'ask')
 					.onClick(async () => {
-						this.plugin.settings.toolApproval = 'ask';
-						await this.plugin.saveSettings();
+						this.view.plugin.settings.toolApproval = 'ask';
+						await this.view.plugin.saveSettings();
 						this.updateSearchToolsBadge();
-						this.updateToolsBadge?.();
+						this.view.view.configToolbar.updateToolsBadge();
 					});
 			});
 		});
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.updateSearchToolsBadge = function (this: SynapseView): void {
+	updateSearchToolsBadge(): void {
 		if (!this.searchToolsBtnEl) return;
-		const approval = this.plugin.settings.toolApproval;
+		const approval = this.view.plugin.settings.toolApproval;
 		const label = approval === 'allow' ? 'Allow' : 'Ask';
 		this.searchToolsBtnEl.setText(label);
 		this.searchToolsBtnEl.toggleClass('is-active', approval === 'allow');
 		this.searchToolsBtnEl.setAttribute('title', `Tools (${approval === 'allow' ? 'auto-approve' : 'ask before running'})`);
-	};
+	}
 
-	proto.openSearchScopePicker = function (this: SynapseView): void {
-		new FolderTreeModal(this.app, this.searchWorkingDir, (folder) => {
+	openSearchScopePicker(): void {
+		new FolderTreeModal(this.view.app, this.searchWorkingDir, (folder) => {
 			this.searchWorkingDir = folder.path;
 			this.updateSearchCwdButton();
 		}).open();
-	};
+	}
 
-	proto.updateSearchCwdButton = function (this: SynapseView): void {
+	updateSearchCwdButton(): void {
 		if (!this.searchCwdBtnEl) return;
-		const vaultName = this.app.vault.getName();
+		const vaultName = this.view.app.vault.getName();
 		const label = this.searchWorkingDir
 			? `Search scope: ${vaultName}/${this.searchWorkingDir}`
 			: `Search scope: ${vaultName} (entire vault)`;
@@ -370,15 +415,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			? `${folderName.slice(0, CWD_LABEL_MAX_CHARS - 1)}…`
 			: folderName;
 		this.searchCwdBtnEl.setText(truncated ? truncated : 'Dir');
-	};
+	}
 
-	proto.getSearchWorkingDirectory = function (this: SynapseView): string {
-		const base = this.getVaultBasePath();
-		if (!this.searchWorkingDir) return base;
-		return base + '/' + normalizePath(this.searchWorkingDir);
-	};
-
-	proto.buildSearchSessionConfig = function (this: SynapseView): SessionConfig {
+	buildSearchSessionConfig(): SessionConfig {
 		// Self-improve detection hint (static body — issue #201) + resilience hint for
 		// search sessions. The "Current agent" line moved out of this hint's return value
 		// (it's volatile) and is delivered per-turn in the search prompt instead — see
@@ -388,11 +427,11 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 		return {
 			model: this.searchModel || undefined,
-			agent: this.searchAgent || this.plugin.settings.featureAgents?.search || undefined,
-			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
-			...(this.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
+			agent: this.searchAgent || this.view.plugin.settings.featureAgents?.search || undefined,
+			permissionMode: this.view.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
+			...(this.view.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
-			plugins: getSynapsePluginConfig(this.app),
+			plugins: getSynapsePluginConfig(this.view.app),
 			skills: Array.from(this.searchEnabledSkills),
 			// Search is read-only: expose only file-exploration tools. Enabled skills
 			// remain available (the `skills` option enables the Skill tool itself).
@@ -402,9 +441,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			// default system prompt and the model stops using its tools.
 			systemPrompt: {type: 'preset', preset: 'claude_code', append: (resilienceBlock + selfImproveBlock).trim()},
 		};
-	};
+	}
 
-	proto.handleSearch = async function (this: SynapseView): Promise<void> {
+	async handleSearch(): Promise<void> {
 		if (this.isSearching) {
 			// Cancel in-progress search
 			if (this.searchAbortController) {
@@ -427,7 +466,7 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		const query = this.searchInputEl.value.trim();
 		if (!query) return;
 
-		if (!this.plugin.agentService) {
+		if (!this.view.plugin.agentService) {
 			new Notice('Synapse is not configured.');
 			return;
 		}
@@ -456,12 +495,12 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			this.searchAbortController = null;
 			this.updateSearchButton();
 		}
-	};
+	}
 
-	proto.handleBasicSearch = async function (this: SynapseView, query: string): Promise<void> {
+	private async handleBasicSearch(query: string): Promise<void> {
 		const searchPrompt = buildSearchPrompt(query);
 
-		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
+		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
 		// Read-only file tools + enough turns to actually explore the vault.
 		// (tools: [] with maxTurns: 1 made every search fail with
@@ -469,37 +508,37 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		// `app` + `autoApproveReadOnlyTools` (#167) makes this reachable on a local model too —
 		// see the doc comment on `autoApproveReadOnlyTools` in `agentService.ts` for why an
 		// always-allow handler is safe here specifically (tools is restricted to SEARCH_TOOLS).
-		const {content} = await this.plugin.agentService!.inlineChat({
+		const {content} = await this.view.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
-			agent: this.plugin.settings.featureAgents?.search || this.plugin.settings.searchAgent || undefined,
+			agent: this.view.plugin.settings.featureAgents?.search || this.view.plugin.settings.searchAgent || undefined,
 			cwd: this.getSearchWorkingDirectory(),
 			permissionMode: 'default',
 			tools: SEARCH_TOOLS,
 			maxTurns: 20,
 			timeoutMs,
-			app: this.app,
+			app: this.view.app,
 			canUseTool: autoApproveReadOnlyTools,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
 		this.renderSearchResults(content || '', query);
-	};
+	}
 
-	proto.handleAdvancedSearch = async function (this: SynapseView, query: string): Promise<void> {
+	private async handleAdvancedSearch(query: string): Promise<void> {
 		const sessionConfig = this.buildSearchSessionConfig();
 		// Current agent moved out of the (session-stable) self-improve hint in
 		// `buildSearchSessionConfig()` — deliver it per-turn in the prompt instead (issue #201).
 		const searchPrompt = buildSearchPrompt(query) + buildCurrentAgentLine(this.searchAgent || 'Auto');
 
-		const timeoutMs = getAdaptiveTimeout(this.app, this.getSearchWorkingDirectory(), this.plugin.settings.providerRequestTimeout);
+		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
 		// `app` + `autoApproveReadOnlyTools` (#167) — see the doc comment on
 		// `autoApproveReadOnlyTools` in `agentService.ts`. Safe here because
 		// `buildSearchSessionConfig()` always sets `tools: SEARCH_TOOLS` (read-only).
-		const {content, sessionId} = await this.plugin.agentService!.inlineChat({
+		const {content, sessionId} = await this.view.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
 			...sessionConfig,
 			timeoutMs,
-			app: this.app,
+			app: this.view.app,
 			canUseTool: autoApproveReadOnlyTools,
 			...(this.searchAbortController ? {abortController: this.searchAbortController} : {}),
 		});
@@ -511,24 +550,24 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 		}
 		const agentLabel = this.searchAgent || 'Search';
 		const truncated = query.length > 40 ? query.slice(0, 40) + '...' : query;
-		this.sessionNames[sessionId] = `[search] ${agentLabel}: ${truncated}`;
-		this.saveSessionNames();
+		this.view.view.sessionNames[sessionId] = `[search] ${agentLabel}: ${truncated}`;
+		this.view.view.saveSessionNames();
 
 		// Add to session list
-		if (!this.sessionList.some(s => s.sessionId === sessionId)) {
+		if (!this.view.view.sessionList.some(s => s.sessionId === sessionId)) {
 			const now = new Date();
-			this.sessionList.unshift({
+			this.view.view.sessionList.unshift({
 				sessionId,
 				summary: '',
 				lastModified: now.getTime(),
 			});
 		}
-		this.renderSessionList();
+		this.view.view.sidebar.renderSessionList();
 
 		this.renderSearchResults(content || '', query);
-	};
+	}
 
-	proto.renderSearchResults = function (this: SynapseView, content: string, query?: string): void {
+	renderSearchResults(content: string, query?: string): void {
 		this.searchResultsEl.empty();
 
 		// Try to parse JSON array from the response
@@ -562,13 +601,13 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 
 			fileLink.addEventListener('click', () => {
 				if (!filePath) return;
-				const resolved = this.app.vault.getAbstractFileByPath(filePath)
-					?? (result.folder ? this.app.vault.getAbstractFileByPath(result.folder + '/' + filePath) : null);
+				const resolved = this.view.app.vault.getAbstractFileByPath(filePath)
+					?? (result.folder ? this.view.app.vault.getAbstractFileByPath(result.folder + '/' + filePath) : null);
 				if (resolved instanceof TFile) {
-					void this.app.workspace.openLinkText(resolved.path, '', false);
+					void this.view.app.workspace.openLinkText(resolved.path, '', false);
 				} else {
 					// Fallback: let Obsidian try to resolve the link
-					void this.app.workspace.openLinkText(filePath, '', false);
+					void this.view.app.workspace.openLinkText(filePath, '', false);
 				}
 			});
 
@@ -581,9 +620,9 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 				highlightQueryTerms(reasonEl, result.reason, query);
 			}
 		}
-	};
+	}
 
-	proto.updateSearchButton = function (this: SynapseView): void {
+	updateSearchButton(): void {
 		this.searchBtnEl.empty();
 		if (this.isSearching) {
 			setIcon(this.searchBtnEl, 'square');
@@ -594,5 +633,5 @@ export function installSearchPanel(ViewClass: { prototype: unknown }): void {
 			this.searchBtnEl.title = 'Search';
 			this.searchBtnEl.removeClass('is-searching');
 		}
-	};
+	}
 }
