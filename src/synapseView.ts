@@ -22,6 +22,7 @@ import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types'
 import type {ViewContext} from './view/types';
 import {SearchPanelController} from './view/searchPanel';
 import {ConfigToolbarController} from './view/configToolbar';
+import {ChatRendererController} from './view/chatRenderer';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -199,6 +200,16 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	readonly configToolbar: ConfigToolbarController = new ConfigToolbarController(this);
 
+	// ── Chat renderer state ──────────────────────────────────────
+	/**
+	 * Chat-renderer controller (composition refactor — same pattern as `search`;
+	 * owns the chat-message/streaming rendering behavior). The streaming-lifecycle
+	 * state it renders still lives on the view (sessionSidebar.ts reads/writes it
+	 * directly for background sessions — see its class doc in view/chatRenderer.ts).
+	 * The view reaches it as `this.renderer.…`.
+	 */
+	readonly renderer: ChatRendererController = new ChatRendererController(this);
+
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
 	tabBarEl!: HTMLElement;
@@ -351,7 +362,7 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		// Chat history (scrollable)
 		this.chatContainer = chatContent.createDiv({cls: 'synapse-chat synapse-hide-debug'});
-		this.renderWelcome();
+		this.renderer.renderWelcome();
 
 		// Bottom panel
 		const bottom = chatContent.createDiv({cls: 'synapse-bottom'});
@@ -685,7 +696,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		const sendPrompt = prompt;
 
 		// Update UI
-		this.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
+		this.renderer.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
 		this.inputEl.value = '';
 		this.inputEl.setCssProps({'--input-height': 'auto'});
 		this.attachments = [];
@@ -695,10 +706,10 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.isStreaming = true;
 		this.streamingContent = '';
 		this.lastFullRenderLen = 0;
-		this.clearReasoningState();
-		this.updateSendButton();
+		this.renderer.clearReasoningState();
+		this.renderer.updateSendButton();
 		this.renderSessionList();  // Show green active dot
-		this.addAssistantPlaceholder();
+		this.renderer.addAssistantPlaceholder();
 
 		// Reset run-level guardrail counters (issue #88) — a fresh run starts here,
 		// distinct from the per-message turnStartTime/turnUsage reset in
@@ -779,7 +790,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				}
 			}
 		} catch (e) {
-			this.finalizeStreamingMessage();
+			this.renderer.finalizeStreamingMessage();
 			// DEBUG: log full error with stack trace
 			console.error('[synapse] Send error:', e);
 			if (e instanceof Error) {
@@ -791,7 +802,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			// re-report it here as a generic "Error: Operation aborted". Same rationale as
 			// the session.error handler above.
 			if (!this.runAutoCancelled) {
-				this.addInfoMessage(this.formatErrorForChat(String(e)));
+				this.renderer.addInfoMessage(this.formatErrorForChat(String(e)));
 			}
 		}
 	}
@@ -809,7 +820,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			this.streamingBodyEl.createDiv({cls: 'synapse-thinking synapse-cancelled', text: 'Cancelled'});
 		}
 
-		this.finalizeStreamingMessage();
+		this.renderer.finalizeStreamingMessage();
 	}
 
 	/**
@@ -847,7 +858,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		if (!reason) return;
 
 		this.runAutoCancelled = true;
-		this.addInfoMessage(reason);
+		this.renderer.addInfoMessage(reason);
 		void this.handleAbort();
 	}
 
@@ -956,16 +967,16 @@ export class SynapseView extends ItemView implements ViewContext {
 				this.checkLoopThresholds();
 				break;
 			case 'assistant.reasoning_delta':
-				this.appendReasoningDelta(event.data.deltaContent);
+				this.renderer.appendReasoningDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message_delta':
-				this.appendDelta(event.data.deltaContent);
+				this.renderer.appendDelta(event.data.deltaContent);
 				break;
 			case 'assistant.message':
 				if (event.data.content !== this.streamingContent) {
 					this.streamingContent = event.data.content;
 					if (this.streamingBodyEl) {
-						void this.updateStreamingRender();
+						void this.renderer.updateStreamingRender();
 					}
 				}
 				break;
@@ -993,7 +1004,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				const costThreshold = this.plugin.settings.loopCostThresholdUsd;
 				const {totalCostUsd} = event.data;
 				if (costThreshold > 0 && totalCostUsd >= costThreshold) {
-					this.addInfoMessage(
+					this.renderer.addInfoMessage(
 						`Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
 						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
 					);
@@ -1002,9 +1013,9 @@ export class SynapseView extends ItemView implements ViewContext {
 			}
 			case 'session.idle':
 				if (this.streamingReasoning && !this.reasoningComplete) {
-					this.finalizeReasoning();
+					this.renderer.finalizeReasoning();
 				}
-				this.finalizeStreamingMessage();
+				this.renderer.finalizeStreamingMessage();
 				// Agent/skill lists refresh here rather than on `session.metadata` (issue
 				// #130): that event fires once per `assistant` message, and `updateConfigUI()`
 				// mutates session configuration (see the `session.metadata` case). The cache
@@ -1016,12 +1027,12 @@ export class SynapseView extends ItemView implements ViewContext {
 				if (this.currentSession) {
 					try { void this.currentSession.abort(); } catch { /* ignore */ }
 				}
-				this.finalizeStreamingMessage();
+				this.renderer.finalizeStreamingMessage();
 				// checkLoopThresholds() already reported the specific guardrail reason and
 				// triggered this abort — the resulting session.error is an expected
 				// consequence of that cancellation, not a second failure to report.
 				if (!this.runAutoCancelled) {
-					this.addInfoMessage(this.formatErrorForChat(errMsg));
+					this.renderer.addInfoMessage(this.formatErrorForChat(errMsg));
 				}
 				break;
 			}
@@ -1031,7 +1042,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				if (toolName === 'TodoWrite') {
 					const todos = parseTodoWritePayload(toolInput);
 					if (todos) {
-						this.renderTaskPanel(todos);
+						this.renderer.renderTaskPanel(todos);
 						break;
 					}
 					// Payload didn't look like a TodoWrite plan — fall through to generic rendering.
@@ -1063,12 +1074,12 @@ export class SynapseView extends ItemView implements ViewContext {
 									activeForm: parsed.activeForm ?? existing.activeForm,
 								});
 							}
-							this.renderTaskPanel([...this.taskPlan.values()]);
+							this.renderer.renderTaskPanel([...this.taskPlan.values()]);
 						}
 						break;
 					}
 				}
-				this.addToolCallBlock(toolCallId, toolName, toolInput);
+				this.renderer.addToolCallBlock(toolCallId, toolName, toolInput);
 				break;
 			}
 			case 'tool.execution_complete': {
@@ -1079,22 +1090,22 @@ export class SynapseView extends ItemView implements ViewContext {
 					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
 					if (taskId) {
 						this.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
-						this.renderTaskPanel([...this.taskPlan.values()]);
+						this.renderer.renderTaskPanel([...this.taskPlan.values()]);
 					}
 					break;
 				}
-				this.completeToolCallBlock(toolCallId, success, result, toolError);
+				this.renderer.completeToolCallBlock(toolCallId, success, result, toolError);
 				// Surface a clear, actionable message for transient-looking write/edit
 				// failures (e.g. a file locked by sync or open elsewhere) instead of
 				// leaving the user to dig the raw error out of the collapsed tool block.
 				if (toolError) {
 					const friendly = friendlyWriteToolError(toolName, toolError.message);
-					if (friendly) this.addInfoMessage(friendly);
+					if (friendly) this.renderer.addInfoMessage(friendly);
 				}
 				break;
 			}
 			case 'session.compaction_complete':
-				this.addCompactionCompleteBlock(event.data);
+				this.renderer.addCompactionCompleteBlock(event.data);
 				break;
 			case 'session.metadata':
 				// Capture-and-cache refresh (issue #130) — Session already holds the
@@ -1221,8 +1232,8 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.streamingWrapperEl = null;
 		this.toolCallsContainer = null;
 		this.activeToolCalls.clear();
-		this.clearReasoningState();
-		this.clearTaskPanelState();
+		this.renderer.clearReasoningState();
+		this.renderer.clearTaskPanelState();
 		if (this.streamingComponent) {
 			this.removeChild(this.streamingComponent);
 			this.streamingComponent = null;
@@ -1243,10 +1254,10 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.attachments = [];
 		this.scopePaths = [];
 		this.chatContainer.empty();
-		this.renderWelcome();
+		this.renderer.renderWelcome();
 		this.renderAttachments();
 		this.renderScopeBar();
-		this.updateSendButton();
+		this.renderer.updateSendButton();
 		this.updateToolbarLock();
 		this.renderSessionList();
 		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
@@ -1430,14 +1441,12 @@ export class SynapseView extends ItemView implements ViewContext {
 
 // ── Install feature modules ─────────────────────────────────────
 // These extend SynapseView.prototype with methods organized by feature area.
-// (The search panel and the config toolbar moved to real composition —
-// `readonly search` / `readonly configToolbar` — in the composition refactor; the
-// remaining three modules follow the same path, after which this whole section
-// disappears.)
-import {installChatRenderer} from './view/chatRenderer';
+// (The search panel, the config toolbar, and the chat renderer moved to real
+// composition — `readonly search` / `readonly configToolbar` / `readonly renderer`
+// — in the composition refactor; the remaining two modules follow the same path,
+// after which this whole section disappears.)
 import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
 
-installChatRenderer(SynapseView);
 installSessionSidebar(SynapseView);
 installInputArea(SynapseView);

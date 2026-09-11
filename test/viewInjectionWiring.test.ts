@@ -107,8 +107,8 @@ describe('view-injection wiring', () => {
 			totalAssigned += protoAssignments(source).size;
 		}
 		expect(filesWithDeclareBlock).toBeGreaterThan(0);
-		expect(totalDeclared).toBeGreaterThan(50);
-		expect(totalAssigned).toBeGreaterThan(50);
+		expect(totalDeclared).toBeGreaterThan(30);
+		expect(totalAssigned).toBeGreaterThan(30);
 	});
 
 	it('AC-1: every method declared in a declare-module block has a matching proto.<name> = assignment in the same file', () => {

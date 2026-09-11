@@ -20,6 +20,8 @@ export interface ViewContext {
 	readonly view: SynapseView;
 	/** True while a chat run is streaming (view-owned streaming state). */
 	isStreaming: boolean;
+	/** Scroll the chat container to the bottom if the user is already near it (see `SynapseView.scrollToBottom`). */
+	scrollToBottom(): void;
 	/** Absolute on-disk vault root (delegates to `getVaultBasePath(this.app)`). */
 	getVaultBasePath(): string;
 	/** Session's working directory (chat panel). */

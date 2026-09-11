@@ -560,10 +560,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.fullRenderTimer = null;
 		}
 		this.lastFullRenderLen = 0;
-		this.clearReasoningState();
+		this.renderer.clearReasoningState();
 		// The task panel's DOM travels with the saved fragment (it lives inside
 		// toolCallsContainer) — just stop this view's live-elapsed timer for it.
-		this.clearTaskPanelState();
+		this.renderer.clearTaskPanelState();
 
 		// Detach streaming component from the view (it lives in the bg now)
 		if (this.streamingComponent) {
@@ -611,14 +611,14 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.chatContainer.appendChild(bg.savedDom);
 			bg.savedDom = null;
 			if (this.streamingReasoning && this.reasoningBodyEl) {
-				this.syncReasoningContent(this.streamingReasoning);
+				this.renderer.syncReasoningContent(this.streamingReasoning);
 				if (this.reasoningComplete) {
-					this.finalizeReasoning();
+					this.renderer.finalizeReasoning();
 				}
 			}
 			// Re-render the streaming content that accumulated while in background
 			if (this.streamingContent && this.streamingBodyEl) {
-				void this.updateStreamingRender();
+				void this.renderer.updateStreamingRender();
 			}
 			// The saved DOM's task panel (if any) reflects whatever state it was in when the
 			// session was backgrounded — background event routing keeps taskPlan/currentTodos
@@ -628,7 +628,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			// also (re-)starts the live-elapsed timer since it was stopped on background-save.
 			const restoredTodos = this.taskPlan.size > 0 ? [...this.taskPlan.values()] : this.currentTodos;
 			if (restoredTodos) {
-				this.renderTaskPanel(restoredTodos);
+				this.renderer.renderTaskPanel(restoredTodos);
 			} else {
 				this.taskPanelEl = null;
 			}
@@ -638,16 +638,16 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.streamingBodyEl = null;
 			this.streamingWrapperEl = null;
 			this.toolCallsContainer = null;
-			this.clearReasoningState();
+			this.renderer.clearReasoningState();
 			this.activeToolCalls.clear();
-			this.clearTaskPanelState();
+			this.renderer.clearTaskPanelState();
 			const renderPromises: Promise<void>[] = [];
 			for (const msg of this.messages) {
-				renderPromises.push(this.renderMessageBubble(msg));
+				renderPromises.push(this.renderer.renderMessageBubble(msg));
 			}
 			await Promise.all(renderPromises);
 			if (this.messages.length === 0) {
-				this.renderWelcome();
+				this.renderer.renderWelcome();
 			}
 		}
 
@@ -847,7 +847,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		this.streamingWrapperEl = null;
 		this.toolCallsContainer = null;
 		this.activeToolCalls.clear();
-		this.clearReasoningState();
+		this.renderer.clearReasoningState();
 		if (this.streamingComponent) {
 			this.removeChild(this.streamingComponent);
 			this.streamingComponent = null;
@@ -860,7 +860,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		if (bg) {
 			await this.restoreFromBackground(bg);
 			this.renderSessionList();
-			this.updateSendButton();
+			this.renderer.updateSendButton();
 			return;
 		}
 
@@ -928,7 +928,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 						timestamp,
 					};
 					this.messages.push(msg);
-					renderPromises.push(this.renderMessageBubble(msg));
+					renderPromises.push(this.renderer.renderMessageBubble(msg));
 					pendingReasoning = undefined;
 				} else if (sm.type === 'assistant') {
 					const {text, thinking} = extractAssistantContent(sm.message);
@@ -942,7 +942,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 						timestamp,
 					};
 					this.messages.push(msg);
-					renderPromises.push(this.renderMessageBubble(msg));
+					renderPromises.push(this.renderer.renderMessageBubble(msg));
 					pendingReasoning = undefined;
 				}
 				// 'system' messages (compact boundaries etc.) are not requested
@@ -951,7 +951,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			await Promise.all(renderPromises);
 
 			if (this.messages.length === 0) {
-				this.renderWelcome();
+				this.renderer.renderWelcome();
 			}
 
 			// Regular session — keep the handle active for interaction
@@ -972,13 +972,13 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.forceScrollToBottom();
 
 			this.renderSessionList();
-			this.updateSendButton();
+			this.renderer.updateSendButton();
 			// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
 			// state line too, not just the kicker (#217).
 			this.refreshComposerState();
 		} catch (e) {
-			this.addInfoMessage(`Failed to load session: ${String(e)}`);
-			this.renderWelcome();
+			this.renderer.addInfoMessage(`Failed to load session: ${String(e)}`);
+			this.renderer.renderWelcome();
 			this.currentSessionId = null;
 			this.renderSessionList();
 			this.refreshComposerState();
