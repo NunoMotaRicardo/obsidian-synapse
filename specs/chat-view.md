@@ -1,19 +1,57 @@
 # chat-view
 
-Source: `src/synapseView.ts` (panel shell, session orchestration), `src/toolErrors.ts`
-(friendly write/edit tool error formatting), plus `src/view/*`:
+Source: `src/synapseView.ts` (panel shell, session orchestration, `ViewContext`
+implementation), `src/toolErrors.ts` (friendly write/edit tool error formatting), plus
+`src/view/*`:
 
 | File | Role |
 |---|---|
-| `configToolbar.ts` | Agent / model / reasoning-effort / tools / working-dir / debug controls, context-window gauge |
-| `inputArea.ts` | Message input, slash-command skill popup, attachments, vault scope button |
-| `chatRenderer.ts` | Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
-| `sessionSidebar.ts` | Session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
-| `searchPanel.ts` | AI vault search tab (basic/advanced) |
+| `configToolbar.ts` | `ConfigToolbarController` — agent / model / reasoning-effort / tools / working-dir / debug controls, context-window gauge |
+| `inputArea.ts` | `InputAreaController` — message input, slash-command skill popup, attachments, vault scope button |
+| `chatRenderer.ts` | `ChatRendererController` — Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
+| `sessionSidebar.ts` | `SessionSidebarController` — session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
+| `searchPanel.ts` | `SearchPanelController` — AI vault search tab (basic/advanced) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
 
 Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user), ask-user-question
 (`AskUserQuestion` tool), edit modal, vault scope, folder tree.
+
+## View composition
+
+Each `src/view/*` feature file (except `sessionConfig.ts`/`utils.ts`/`types.ts`, which are
+plain helpers) exports a single **controller class** — `SearchPanelController`,
+`ConfigToolbarController`, `ChatRendererController`, `InputAreaController`,
+`SessionSidebarController` — constructed once by `SynapseView` as a `readonly` field
+(`this.search`, `this.configToolbar`, `this.renderer`, `this.inputArea`, `this.sidebar`)
+and built in `buildUI()` via `controller.build(parent)`.
+
+- **Wiring is compiler-checked.** A call to `this.renderer.renderTaskPanel(...)` that doesn't
+  exist, or is spelled wrong, is a compile error — the old pattern's two silent gaps (a
+  `declare module` method with no `proto.<name> =` assignment; an `installX()` export never
+  called from `synapseView.ts`) are structurally impossible now. The source-parsing
+  `test/viewInjectionWiring.test.ts` that used to guard those gaps was deleted with the
+  pattern (see `.docs/research/2026-09-11-view-composition-refactor.md`, which also records
+  the per-module conversion notes).
+- **`ViewContext`** (`src/view/types.ts`) is the narrow bridge each controller receives
+  instead of the whole `SynapseView`: `app`, `plugin`, `chatContainer`, `view` (the owning
+  view — shared state still lives there), `isStreaming`, `getVaultBasePath()`,
+  `getWorkingDirectory()`, `scrollToBottom()`, `configDirty`. Controllers reach cross-module
+  behavior through the view's controller fields (`this.view.view.renderer.…`) and shared
+  state through `this.view.view.<field>`.
+- **State ownership (interim):** module-only state and DOM (search composer, toolbar selects,
+  skill popup, sidebar DOM, state line, splitter) lives privately on its controller; shared
+  streaming/session lifecycle state (`messages`, `sessionToolGrants`, `streaming*`,
+  `activeSessions`, …) still lives on `SynapseView` by design — that migration is a
+  separate step. Fields another module reads but one module creates (`inputEl`, `cwdBtnEl`,
+  `sendBtn`, `agentSelect`, `modelSelect`, `splitterEl`) stay view-owned and are assigned by
+  the creating controller's `build()`.
+- **External callers are insulated.** `editorMenu.ts`/`editModal.ts`/`main.ts` still call
+  `view.setPromptText(...)` etc.; `SynapseView` keeps thin delegates that forward to the
+  owning controller (`this.inputArea.setPromptText(...)`), so no file outside `src/view/`
+  changed.
+- **Lifecycle:** controller constructors only store the view (no DOM access — they run as
+  field initializers before `buildUI()`); `inputArea.destroy()` (selection-poll timer) is
+  called from `onClose()`, and `search.disconnect()` tears down both search sessions there.
 
 ## Behavior contracts
 
@@ -25,20 +63,9 @@ Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user)
   `handleSessionEvent()` switches on (shared with the early-event-buffer replay); this is the only
   place `SessionEvent` (the wrapped union) still appears on the view side.
   See "Session event map" in `agent-service.md`.
-- **View-injection wiring is source-guarded, not compiler-checked:** each
-  `src/view/*.ts` file injects its methods into `SynapseView` via declaration merging
-  (`declare module '../synapseView' { interface SynapseView { ... } }`) plus a prototype
-  assignment inside an exported `installX(ViewClass)` function called from the bottom of
-  `synapseView.ts`. Because the assignment target is cast to `SynapseView`, the compiler catches
-  an undeclared name or a signature mismatch, but not (a) a method declared with no matching
-  `proto.<name> =` assignment — the call site compiles clean and throws "is not a function" at
-  runtime — or (b) a view file whose `installX(SynapseView)` call is missing from
-  `synapseView.ts`, so none of its methods ever attach. Unlike the session-event seam above, this
-  gap has no compiler-checked replacement (that would require converting the injection pattern to
-  real composition — not done). `test/viewInjectionWiring.test.ts`
-  reads `src/view/*.ts` and `src/synapseView.ts` as text and asserts both invariants: every
-  declared method has a same-file `proto.` assignment, and every exported `install*` has a call in
-  `synapseView.ts`. Files are discovered from disk, so a sixth view file is covered automatically.
+- **View wiring is compiler-checked** (see "View composition" above): the former
+  prototype-injection pattern and its source-parsing guard test are gone; every cross-module
+  call goes through a typed controller reference.
 - **Slash-command skill invocation:** the Claude Agent SDK natively recognizes and
   invokes registered skills whenever a literal `/skillname` appears anywhere in the prompt text
   (mid-sentence or not), for every skill loaded into the session — no plugin-side parsing,

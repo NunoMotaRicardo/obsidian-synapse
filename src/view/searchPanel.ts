@@ -280,6 +280,10 @@ export class SearchPanelController {
 
 	/** Called from `SynapseView.updateConfigUI()` after agents/skills/models reload. */
 	updateSearchConfigUI(): void {
+		// Built-guard (post-review hardening): `updateConfigUI()` can in principle fire
+		// before `build()` ran (e.g. a future caller invoking `loadAllConfigs()` early);
+		// the `!`-assigned DOM refs below would throw on such a call.
+		if (!this.searchAgentSelect) return;
 		// Agents
 		this.searchAgentSelect.empty();
 		const noAgent = this.searchAgentSelect.createEl('option', {text: 'Agent', attr: {value: ''}});
