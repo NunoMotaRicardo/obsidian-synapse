@@ -65,7 +65,9 @@ describe('searchPanel.ts wiring (#167)', () => {
 		for (const call of inlineChatCalls) {
 			const closeIdx = call.indexOf('});');
 			const body = closeIdx === -1 ? call.slice(0, 400) : call.slice(0, closeIdx);
-			expect(body).toContain('app: this.app');
+			// `app: this.app` (injection era) became `app: this.view.app` under the
+			// SearchPanelController composition — same value, controller-relative spelling.
+			expect(body).toMatch(/app: this\.(view\.)?app/);
 			expect(body).toContain('canUseTool: autoApproveReadOnlyTools');
 		}
 	});

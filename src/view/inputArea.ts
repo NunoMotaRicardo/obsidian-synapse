@@ -584,10 +584,7 @@ export function installInputArea(ViewClass: {prototype: unknown}): void {
 
 	/** Open the search tab with scope set to the given folder. */
 	proto.openSearchWithScope = function (folderPath: string): void {
-		this.searchWorkingDir = folderPath;
-		this.updateSearchCwdButton();
-		this.switchTab('search');
-		this.searchInputEl.focus();
+		this.search.openSearchWithScope(folderPath);
 	};
 
 	/** Set the working directory programmatically. */

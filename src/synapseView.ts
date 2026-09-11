@@ -19,6 +19,8 @@ import type {
 } from './agentService';
 import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment} from './types';
+import type {ViewContext} from './view/types';
+import {SearchPanelController} from './view/searchPanel';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -38,8 +40,14 @@ const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 
 // ── Synapse view ───────────────────────────────────────────────
 
-export class SynapseView extends ItemView {
+export class SynapseView extends ItemView implements ViewContext {
 	plugin: SynapsePlugin;
+
+	// ── ViewContext bridge ─────────────────────────────
+	// `ViewContext.view` — the controllers receive `this` view (see `ViewContext` in
+	// `view/types.ts`); `app`, `plugin`, and `chatContainer` are already fields, and
+	// `isStreaming`/`getVaultBasePath` exist below as method/field shapes adapted here.
+	get view(): SynapseView { return this; }
 
 	// ── State ────────────────────────────────────────────────────
 	// Properties are non-private to allow access from view extension modules (src/view/).
@@ -174,24 +182,13 @@ export class SynapseView extends ItemView {
 	activeTab: 'chat' | 'search' = 'chat';
 
 	// ── Search panel state ───────────────────────────────────────
-	searchAgent = '';
-	searchModel = '';
-	searchWorkingDir = '';
-	searchEnabledSkills: Set<string> = new Set();
-	searchAgentSelect!: HTMLSelectElement;
-	searchModelSelect!: HTMLSelectElement;
-	searchToolsBtnEl!: HTMLButtonElement;
-	searchCwdBtnEl!: HTMLButtonElement;
-	searchScopeBtn?: HTMLButtonElement;
-	searchStateLineEl?: HTMLElement;
-	searchInputEl!: HTMLTextAreaElement;
-	searchBtnEl!: HTMLButtonElement;
-	searchResultsEl!: HTMLElement;
-	searchSession: Session | null = null;
-	isSearching = false;
-	searchModeToggleEl!: HTMLButtonElement;
-	searchAdvancedToolbarEl!: HTMLElement;
-	basicSearchSession: Session | null = null;
+	/**
+	 * Search tab controller (composition refactor,
+	 * `.docs/research/2026-09-11-view-composition-refactor.md` — owns all former
+	 * `search*` view state (agent/model/skills/workingDir, the search DOM refs, the
+	 * live search sessions, `isSearching`). The view reaches it as `this.search.…`.
+	 */
+	readonly search: SearchPanelController = new SearchPanelController(this);
 
 	// ── DOM refs ─────────────────────────────────────────────────
 	mainEl!: HTMLElement;
@@ -321,10 +318,7 @@ export class SynapseView extends ItemView {
 	async onClose(): Promise<void> {
 		if (this.selectionPollTimer) { window.clearInterval(this.selectionPollTimer); this.selectionPollTimer = null; }
 		if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
-		if (this.basicSearchSession) {
-			try { await this.basicSearchSession.disconnect(); } catch { /* ignore */ }
-			this.basicSearchSession = null;
-		}
+		await this.search.disconnect();
 		await this.disconnectAllSessions();
 		if (this.attachmentTempFiles.size > 0) {
 			await cleanupAttachmentTempFiles(Array.from(this.attachmentTempFiles));
@@ -371,7 +365,7 @@ export class SynapseView extends ItemView {
 
 		// ── Search panel ─────────────────────────────────────
 		this.searchPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-search is-hidden'});
-		this.buildSearchPanel(this.searchPanelEl);
+		this.search.build(this.searchPanelEl);
 	}
 
 	buildTabBar(parent: HTMLElement): void {
@@ -600,9 +594,7 @@ export class SynapseView extends ItemView {
 		this.updateCwdButton();
 
 		// Update search panel dropdowns
-		if (this.searchAgentSelect) {
-			this.updateSearchConfigUI();
-		}
+		this.search.updateSearchConfigUI();
 	}
 
 	// ── Send & abort ─────────────────────────────────────────────
@@ -1434,14 +1426,15 @@ export class SynapseView extends ItemView {
 
 // ── Install feature modules ─────────────────────────────────────
 // These extend SynapseView.prototype with methods organized by feature area.
+// (The search panel moved to real composition — `readonly search` — in the
+// composition refactor; the remaining four modules follow the same path, after
+// which this whole section disappears.)
 import {installChatRenderer} from './view/chatRenderer';
-import {installSearchPanel} from './view/searchPanel';
 import {installSessionSidebar} from './view/sessionSidebar';
 import {installInputArea} from './view/inputArea';
 import {installConfigToolbar} from './view/configToolbar';
 
 installChatRenderer(SynapseView);
-installSearchPanel(SynapseView);
 installSessionSidebar(SynapseView);
 installInputArea(SynapseView);
 installConfigToolbar(SynapseView);
