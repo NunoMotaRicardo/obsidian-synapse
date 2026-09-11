@@ -27,9 +27,6 @@ in `configWriter.ts` and their many callers (self-improve tool handlers, seeding
 // and runs when the lock frees. A bounded acquisition timeout fails gracefully
 // (throws LockAcquisitionError) rather than hanging forever if a holder wedges.
 withLock<T>(path: string, fn: () => Promise<T>): Promise<T>
-
-// Non-throwing probe — true if the path currently has a holder or a queue.
-isLocked(path: string): boolean
 ```
 
 - **Granularity:** one lock per `normalizePath(path)` — the manager normalizes internally, so
@@ -73,7 +70,7 @@ isLocked(path: string): boolean
 - No persistence — the map is rebuilt empty on plugin load; a plugin reload cannot leave a stale
   lock held.
 
-`src/lockManager.ts` exports the `lockManager` singleton (`withLock`/`isLocked`) and
+`src/lockManager.ts` exports the `lockManager` singleton (`withLock`) and
 `LockAcquisitionError`; integrated into `configWriter.ts` (`writeAgent`, `writeSkill`,
 `modifyArtifact`, `deleteArtifact`) and `runExecutor.ts` (`appendReportBlock`, and the
 `write: true` write-back path). Unit tests in `test/lockManager.test.ts` cover FIFO

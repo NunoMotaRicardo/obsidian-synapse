@@ -1572,20 +1572,6 @@ export class Session {
 	 * See specs/agent-service.md "Partial message streaming".
 	 */
 	private readonly partialMessagesEnabled: boolean;
-	/** Expose the RPC-like interface (stubbed — Agent SDK handles agent selection via options). */
-	readonly rpc = {
-		agent: {
-			select: async (_opts: {name: string}): Promise<void> => {
-				// Agent selection is handled via the `agent` option in query().
-				// This is a no-op compatibility stub.
-			},
-		},
-		workingDirectory: {
-			set: async (_dir: string): Promise<void> => {
-				// Working directory is set via the `cwd` option in query().
-			},
-		},
-	};
 
 	constructor(service: AgentService, config: Options, onEvent?: (event: SessionEvent) => void) {
 		this.service = service;

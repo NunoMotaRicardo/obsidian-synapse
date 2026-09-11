@@ -235,22 +235,6 @@ async function executeWithClaude(
 	return {content: result.content ?? '', refusals};
 }
 
-/**
- * Run one item's prompt through `executeWithClaude()` — the single execution
- * branch left since the OpenAI-compatible provider matrix and its local ReAct
- * loop were removed (#220). A local-model id is handled inside
- * `AgentService.inlineChat()` (the local agent endpoint repoint, issue #122),
- * not by a separate branch here.
- */
-async function routeAndRun(
-	plugin: SynapsePlugin,
-	prompt: string,
-	_policy: ToolApprovalPolicy,
-	options: {model?: string; agent?: string; abortController?: AbortController; onEvent?: (msg: SDKMessage) => void} = {},
-): Promise<RunResult> {
-	return executeWithClaude(plugin, prompt, _policy, options);
-}
-
 // ---------------------------------------------------------------------------
 // Write modes
 // ---------------------------------------------------------------------------
@@ -403,7 +387,7 @@ export async function runItem(options: RunItemOptions): Promise<void> {
 	const prompt = substituteTemplates(options.body, options.filePath);
 	const policy = resolveToolApprovalPolicy(options.plugin);
 
-	const {content: result, refusals} = await routeAndRun(options.plugin, prompt, policy, {
+	const {content: result, refusals} = await executeWithClaude(options.plugin, prompt, policy, {
 		model: options.model,
 		agent: options.agent,
 		abortController: options.abortController,

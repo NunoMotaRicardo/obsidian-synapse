@@ -41,11 +41,6 @@ export const LOCK_TIMEOUT_MS = 60_000;
 class LockManager {
 	private readonly tails = new Map<string, Promise<void>>();
 
-	/** True if `path` currently has a holder or queued waiters. */
-	isLocked(path: string): boolean {
-		return this.tails.has(normalizePath(path));
-	}
-
 	/**
 	 * Serialize `fn` against other writers of the same normalized path.
 	 * Queues FIFO behind the current holder (if any) and runs `fn` once

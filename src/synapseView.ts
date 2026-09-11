@@ -923,23 +923,12 @@ export class SynapseView extends ItemView implements ViewContext {
 		// message; 'session.init' delivers it (handled in handleSessionEvent).
 		this.currentSessionId = this.currentSession.sessionId || null;
 
-		// Explicitly select the agent via RPC — the `agent` field in SessionConfig
-		// should do this, but some CLI versions require the explicit call.
-		if (sessionConfig.agent) {
-			try {
-				await this.currentSession.rpc.agent.select({name: sessionConfig.agent});
-			} catch (e) {
-				console.warn('[synapse] agent.select failed:', e);
-			}
-		}
-
 		this.configDirty = false;
 		this.registerSessionEvents();
 		// A rebuilt Session starts with an empty query-metadata cache (issue #130) — hide
 		// the gauge and fall back to the directory scan for agents/skills until this
 		// session's own first turn captures fresh values.
 		this.configToolbar.updateContextIndicator();
-		this.updateToolbarLock();
 
 		// Add resumed sessions to the list immediately; brand-new sessions are added
 		// when 'session.init' delivers their real id (an empty-id entry here would
@@ -1280,7 +1269,6 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.inputArea.renderAttachments();
 		this.inputArea.renderScopeBar();
 		this.renderer.updateSendButton();
-		this.updateToolbarLock();
 		this.sidebar.renderSessionList();
 		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
 		// above, so both the kicker and the state line need to reflect it (#217).
@@ -1417,12 +1405,6 @@ export class SynapseView extends ItemView implements ViewContext {
 	}
 
 	// ── Utilities ────────────────────────────────────────────────
-
-	/** Disable config controls that cannot be changed mid-session. */
-	updateToolbarLock(): void {
-		// No-op: all config changes set configDirty = true, which triggers
-		// a new session on the next send. No need to lock controls.
-	}
 
 	getWorkingDirectory(): string {
 		const base = this.getVaultBasePath();

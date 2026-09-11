@@ -206,8 +206,8 @@ and built in `buildUI()` via `controller.build(parent)`.
   "Compaction complete" and displays pre-compaction tokens, post-compaction tokens,
   tokens removed, duration, and trigger type sourced from SDK `compact_metadata`. Handled in
   `handleSessionEvent()`.
-- Session restore: resume by id with the full current session config, re-select agent via
-  `session.rpc.agent.select`, replay history from `AgentService.getSessionMessages()` (wraps the
+- Session restore: resume by id with the full current session config, replay history from
+  `AgentService.getSessionMessages()` (wraps the
   SDK's `getSessionMessages()`, called with no `dir` filter so it searches all project
   directories — sessions are listed unscoped (`loadSessions()` → `listSessions()`), and a
   session's original working directory can differ from the current one since
