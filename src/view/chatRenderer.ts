@@ -576,7 +576,7 @@ export class ChatRendererController {
 				entry.lastModified = Date.now();
 			}
 		}
-		this.view.view.renderSessionList();
+		this.view.view.sidebar.renderSessionList();
 	}
 
 	private renderMessageMetadata(): void {

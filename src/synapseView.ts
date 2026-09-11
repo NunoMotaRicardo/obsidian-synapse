@@ -24,6 +24,7 @@ import {SearchPanelController} from './view/searchPanel';
 import {ConfigToolbarController} from './view/configToolbar';
 import {ChatRendererController} from './view/chatRenderer';
 import {InputAreaController} from './view/inputArea';
+import {SessionSidebarController} from './view/sessionSidebar';
 import {scanAgents, scanSkills, persistToolApprovalRules} from './configWriter';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from './vaultPaths';
 import {debugTrace} from './debug';
@@ -159,16 +160,19 @@ export class SynapseView extends ItemView implements ViewContext {
 	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}> = new Map();
 
 	// ── Session sidebar state ──────────────────────────────────
+	/**
+	 * Session-sidebar controller (composition refactor — same pattern as `search`;
+	 * owns the sidebar DOM it builds, the sidebar-local filter/sort/width state, and the
+	 * background-save/restore lifecycle). The view reaches it as `this.sidebar.…`.
+	 */
+	readonly sidebar: SessionSidebarController = new SessionSidebarController(this);
+
 	activeSessions = new Map<string, BackgroundSession>();
 	sessionList: import('./agentService').SessionMetadata[] = [];
 	sessionNames: Record<string, string> = {};
 	currentSessionId: string | null = null;
 	/** First-prompt snippet used to name a new session once its id arrives via 'session.init'. */
 	pendingSessionLabel: string | null = null;
-	sidebarWidth = 40;
-	sessionFilter = '';
-	sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
-	sessionSort: 'modified' | 'created' | 'name' = 'modified';
 
 	// ── Tab state ────────────────────────────────────────────────
 	activeTab: 'chat' | 'search' = 'chat';
@@ -236,13 +240,9 @@ export class SynapseView extends ItemView implements ViewContext {
 	configLoadedAt = 0;
 
 	// ── Session sidebar DOM refs ─────────────────────────────────
-	sidebarEl!: HTMLElement;
-	sidebarListEl!: HTMLElement;
-	sidebarSearchEl!: HTMLInputElement;
-	sidebarFilterEl!: HTMLButtonElement;
-	sidebarSortEl!: HTMLButtonElement;
-	sidebarRefreshEl!: HTMLButtonElement;
-	sidebarDeleteEl!: HTMLButtonElement;
+	// The sidebar DOM refs moved to SessionSidebarController; `splitterEl` stays here —
+	// buildUI() creates it (between chat panel and sidebar), the sidebar's
+	// initSplitter() wires the drag behavior onto it.
 	splitterEl!: HTMLElement;
 
 	eventUnsubscribers: (() => void)[] = [];
@@ -284,8 +284,8 @@ export class SynapseView extends ItemView implements ViewContext {
 			});
 		}
 
-		if (this.sidebarListEl) {
-			this.renderSessionList();
+		if (this.chatPanelEl) {
+			this.sidebar.renderSessionList();
 		}
 	}
 
@@ -339,7 +339,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		}
 
 		await this.loadAllConfigs();
-		void this.loadSessions();
+		void this.sidebar.loadSessions();
 
 		// Watch synapse folder for config changes and auto-refresh
 		this.registerConfigFileWatcher();
@@ -397,8 +397,8 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		// Splitter + session sidebar inside chat panel
 		this.splitterEl = this.chatPanelEl.createDiv({cls: 'synapse-splitter'});
-		this.initSplitter();
-		this.buildSessionSidebar(this.chatPanelEl);
+		this.sidebar.initSplitter();
+		this.sidebar.build(this.chatPanelEl);
 
 		// ── Search panel ─────────────────────────────────────
 		this.searchPanelEl = this.mainEl.createDiv({cls: 'synapse-tab-panel synapse-tab-panel-search is-hidden'});
@@ -730,7 +730,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.lastFullRenderLen = 0;
 		this.renderer.clearReasoningState();
 		this.renderer.updateSendButton();
-		this.renderSessionList();  // Show green active dot
+		this.sidebar.renderSessionList();  // Show green active dot
 		this.renderer.addAssistantPlaceholder();
 
 		// Reset run-level guardrail counters (issue #88) — a fresh run starts here,
@@ -952,7 +952,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				lastModified: now.getTime(),
 			});
 		}
-		this.renderSessionList();
+		this.sidebar.renderSessionList();
 	}
 
 	/** Central event dispatcher — used by both onEvent (early) and typed handlers. */
@@ -978,7 +978,7 @@ export class SynapseView extends ItemView implements ViewContext {
 						lastModified: Date.now(),
 					});
 				}
-				this.renderSessionList();
+				this.sidebar.renderSessionList();
 				break;
 			}
 			case 'assistant.turn_start':
@@ -1234,7 +1234,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	newConversation(): void {
 		// Save the current session to background instead of disconnecting it
 		if (this.currentSession && this.currentSessionId) {
-			this.saveCurrentToBackground();
+			this.sidebar.saveCurrentToBackground();
 		} else {
 			// No active session handle, just clean up
 			this.unsubscribeEvents();
@@ -1281,7 +1281,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.inputArea.renderScopeBar();
 		this.renderer.updateSendButton();
 		this.updateToolbarLock();
-		this.renderSessionList();
+		this.sidebar.renderSessionList();
 		// New conversation: currentSessionId/selectedAgent/selectedModel were all just reset
 		// above, so both the kicker and the state line need to reflect it (#217).
 		this.refreshComposerState();
@@ -1461,13 +1461,8 @@ export class SynapseView extends ItemView implements ViewContext {
 	}
 }
 
-// ── Install feature modules ─────────────────────────────────────
-// The session sidebar is the last module still extending SynapseView.prototype with
-// methods organized by feature area.
-// (The search panel, the config toolbar, the chat renderer, and the input area moved
-// to real composition — `readonly search` / `readonly configToolbar` / `readonly
-// renderer` / `readonly inputArea` — in the composition refactor; the sidebar follows
-// the same path, after which this whole section disappears.)
-import {installSessionSidebar} from './view/sessionSidebar';
-
-installSessionSidebar(SynapseView);
+// ── Feature modules ─────────────────────────────────────────────
+// All view feature modules now compose as real controller instances on `SynapseView`
+// (`search`, `configToolbar`, `renderer`, `inputArea`, `sidebar`) — the
+// prototype-injection section that used to live here is gone with the last
+// conversion (sessionSidebar → SessionSidebarController).

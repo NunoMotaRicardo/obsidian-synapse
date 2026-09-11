@@ -558,7 +558,7 @@ export class SearchPanelController {
 				lastModified: now.getTime(),
 			});
 		}
-		this.view.view.renderSessionList();
+		this.view.view.sidebar.renderSessionList();
 
 		this.renderSearchResults(content || '', query);
 	}

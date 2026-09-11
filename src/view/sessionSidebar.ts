@@ -1,44 +1,10 @@
-import type {SynapseView} from '../synapseView';
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
 import type {SessionMetadata, SessionMessage} from '../agentService';
 import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
 import {formatTimeAgo, stripSessionTypePrefix, stripInjectedPromptContext} from './utils';
-import type {BackgroundSession} from './types';
-
-declare module '../synapseView' {
-	interface SynapseView {
-		buildSessionSidebar(parent: HTMLElement): void;
-		initSplitter(): void;
-		loadSessions(): Promise<void>;
-		sortSessionList(): void;
-		renderSessionList(): void;
-		renderSessionItem(container: HTMLElement, session: SessionMetadata, opts: {
-			expanded?: boolean;
-			onClick: () => void;
-			onContextMenu: (e: MouseEvent) => void;
-		}): void;
-		getSessionDisplayName(session: SessionMetadata): string;
-		getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other';
-		openSessionFilterMenu(e: MouseEvent): void;
-		updateFilterBadge(): void;
-		openSessionSortMenu(e: MouseEvent): void;
-		updateSortBadge(): void;
-		saveCurrentToBackground(): void;
-		restoreFromBackground(bg: BackgroundSession): Promise<void>;
-		registerBackgroundEvents(bg: BackgroundSession): void;
-		restoreAgentFromSessionName(sessionId: string): void;
-		selectSession(sessionId: string): Promise<void>;
-		showSessionContextMenu(e: MouseEvent, sessionId: string): void;
-		renameSession(sessionId: string): void;
-		deleteSessionById(sessionId: string): Promise<void>;
-		confirmDeleteSession(sessionId: string): void;
-		confirmDeleteDisplayedSessions(): void;
-		getDisplayedSessions(): SessionMetadata[];
-		deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void>;
-	}
-}
+import type {BackgroundSession, ViewContext} from './types';
 
 /** A single content block from an Anthropic API message (subset used for replay). */
 type AnthropicContentBlock = {
@@ -101,10 +67,53 @@ function extractAssistantContent(message: unknown): {text: string; thinking: str
 	return {text, thinking};
 }
 
-export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
-	const proto = ViewClass.prototype as SynapseView;
+/**
+ * Session-sidebar controller (composition refactor — formerly prototype injection into
+ * `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns the
+ * sidebar DOM it builds (header buttons, search input, session list) and the
+ * sidebar-local UI state (`sessionFilter`, `sessionTypeFilter`, `sessionSort`,
+ * `sidebarWidth`), plus the background-save/restore lifecycle for chat sessions.
+ *
+ * The chat-session state those methods read and write — `activeSessions`,
+ * `sessionList`, `sessionNames`, `currentSession`/`currentSessionId`, the
+ * streaming-lifecycle fields, and the task-plan maps — stays on `SynapseView` for now
+ * (the streaming-lifecycle state migration to the renderer is a later, separate step)
+ * and is reached through its `ViewContext` as `this.view.view.<x>`.
+ */
+export class SessionSidebarController {
+	// ── Sidebar DOM refs (moved from SynapseView) ────────────────
+	private sidebarEl!: HTMLElement;
+	private sidebarListEl!: HTMLElement;
+	private sidebarSearchEl!: HTMLInputElement;
+	private sidebarFilterEl!: HTMLButtonElement;
+	private sidebarSortEl!: HTMLButtonElement;
+	private sidebarRefreshEl!: HTMLButtonElement;
+	private sidebarDeleteEl!: HTMLButtonElement;
 
-	proto.buildSessionSidebar = function (parent: HTMLElement): void {
+	// ── Sidebar state (moved from SynapseView) ───────────────────
+	/** Collapsed-vs-expanded width in px; CSS consumes it via `--sidebar-width`. */
+	private sidebarWidth = 40;
+	private sessionFilter = '';
+	private sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
+	private sessionSort: 'modified' | 'created' | 'name' = 'modified';
+
+	constructor(private view: ViewContext) {}
+
+	// ── View-owned state accessors ───────────────────────────────
+	// Accessors (not copied fields) so the historical `this.<name>` spellings in the
+	// methods below keep compiling against state that still lives on `SynapseView`.
+	// `messages` in particular must keep its `this.messages.length` spelling —
+	// test/editorialSidebarSearch.test.ts asserts that exact substring.
+	private get messages(): ChatMessage[] {
+		return this.view.view.messages;
+	}
+
+	private set messages(value: ChatMessage[]) {
+		this.view.view.messages = value;
+	}
+
+	/** Build the sidebar (header buttons, search, session list) into `parent`. */
+	build(parent: HTMLElement): void {
 		this.sidebarEl = parent.createDiv({cls: 'synapse-sidebar'});
 		this.sidebarEl.setCssProps({'--sidebar-width': `${this.sidebarWidth}px`});
 
@@ -118,7 +127,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			attr: {title: 'New session'},
 		});
 		setIcon(newBtn, 'plus');
-		newBtn.addEventListener('click', () => void this.newConversation());
+		newBtn.addEventListener('click', () => void this.view.view.newConversation());
 
 		this.sidebarFilterEl = headerBtnRow.createEl('button', {
 			cls: 'clickable-icon synapse-sidebar-filter-btn',
@@ -143,7 +152,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		setIcon(this.sidebarRefreshEl, 'refresh-cw');
 		this.sidebarRefreshEl.addEventListener('click', () => {
 			void this.loadSessions();
-			void this.loadAllConfigs();
+			void this.view.view.loadAllConfigs();
 		});
 
 		this.sidebarDeleteEl = headerBtnRow.createEl('button', {
@@ -165,9 +174,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		// Session list (scrollable)
 		this.sidebarListEl = this.sidebarEl.createDiv({cls: 'synapse-sidebar-list'});
-	};
+	}
 
-	proto.initSplitter = function (): void {
+	initSplitter(): void {
 		let startX = 0;
 		let startWidth = 0;
 		let dragging = false;
@@ -185,67 +194,67 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			dragging = false;
 			document.removeEventListener('mousemove', onMouseMove);
 			document.removeEventListener('mouseup', onMouseUp);
-			this.splitterEl.removeClass('is-dragging');
+			this.view.view.splitterEl.removeClass('is-dragging');
 			document.body.removeClass('synapse-no-select');
 			// Re-render session list once on drag end instead of every mousemove
 			this.renderSessionList();
 		};
 
-		this.splitterEl.addEventListener('mousedown', (e) => {
+		this.view.view.splitterEl.addEventListener('mousedown', (e) => {
 			e.preventDefault();
 			dragging = true;
 			startX = e.clientX;
 			startWidth = this.sidebarWidth;
-			this.splitterEl.addClass('is-dragging');
+			this.view.view.splitterEl.addClass('is-dragging');
 			document.body.addClass('synapse-no-select');
 			document.addEventListener('mousemove', onMouseMove);
 			document.addEventListener('mouseup', onMouseUp);
 		});
 
-		this.register(() => {
+		this.view.view.register(() => {
 			document.removeEventListener('mousemove', onMouseMove);
 			document.removeEventListener('mouseup', onMouseUp);
 		});
-	};
+	}
 
-	proto.loadSessions = async function (): Promise<void> {
-		if (!this.plugin.agentService) return;
+	async loadSessions(): Promise<void> {
+		if (!this.view.plugin.agentService) return;
 		try {
-			this.sessionList = await this.plugin.agentService.listSessions();
+			this.view.view.sessionList = await this.view.plugin.agentService.listSessions();
 			this.sortSessionList();
 			this.renderSessionList();
 		} catch {
 			// silently ignore — session list stays as-is
 		}
-	};
+	}
 
-	proto.sortSessionList = function (): void {
+	private sortSessionList(): void {
 		switch (this.sessionSort) {
 			case 'modified':
-				this.sessionList.sort((a, b) => {
+				this.view.view.sessionList.sort((a, b) => {
 					const ta = a.lastModified;
 					const tb = b.lastModified;
 					return tb - ta;
 				});
 				break;
 			case 'created':
-				this.sessionList.sort((a, b) => {
+				this.view.view.sessionList.sort((a, b) => {
 					const ta = a.lastModified;
 					const tb = b.lastModified;
 					return tb - ta;
 				});
 				break;
 			case 'name':
-				this.sessionList.sort((a, b) => {
+				this.view.view.sessionList.sort((a, b) => {
 					const na = this.getSessionDisplayName(a).toLowerCase();
 					const nb = this.getSessionDisplayName(b).toLowerCase();
 					return na.localeCompare(nb);
 				});
 				break;
 		}
-	};
+	}
 
-	proto.renderSessionList = function (): void {
+	renderSessionList(): void {
 		if (!this.sidebarListEl) return;
 		this.sidebarListEl.empty();
 
@@ -279,8 +288,8 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		}
 
 		// Partition into active background sessions and regular/recent sessions
-		const bgSessions = displayedSessions.filter(s => this.activeSessions.has(s.sessionId) && s.sessionId !== this.currentSessionId);
-		const otherSessions = displayedSessions.filter(s => !this.activeSessions.has(s.sessionId) || s.sessionId === this.currentSessionId);
+		const bgSessions = displayedSessions.filter(s => this.view.view.activeSessions.has(s.sessionId) && s.sessionId !== this.view.view.currentSessionId);
+		const otherSessions = displayedSessions.filter(s => !this.view.view.activeSessions.has(s.sessionId) || s.sessionId === this.view.view.currentSessionId);
 
 		if (bgSessions.length > 0) {
 			if (isExpanded) {
@@ -315,16 +324,16 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				});
 			}
 		}
-	};
+	}
 
-	proto.renderSessionItem = function (container: HTMLElement, session: SessionMetadata, opts: {
+	private renderSessionItem(container: HTMLElement, session: SessionMetadata, opts: {
 		expanded?: boolean;
 		onClick: () => void;
 		onContextMenu: (e: MouseEvent) => void;
 	}): void {
 		const expanded = opts.expanded ?? true;
 		const item = container.createDiv({cls: 'synapse-session-item'});
-		const isActive = session.sessionId === this.currentSessionId;
+		const isActive = session.sessionId === this.view.view.currentSessionId;
 		if (isActive) item.addClass('is-active');
 
 		const sessionType = this.getSessionType(session);
@@ -333,8 +342,8 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		setIcon(iconEl, iconName);
 
 		// Green active dot when processing (current or background session)
-		const isCurrentStreaming = isActive && this.isStreaming;
-		const bgSession = this.activeSessions.get(session.sessionId);
+		const isCurrentStreaming = isActive && this.view.view.isStreaming;
+		const bgSession = this.view.view.activeSessions.get(session.sessionId);
 		const isBgStreaming = bgSession?.isStreaming ?? false;
 		if (isCurrentStreaming || isBgStreaming) {
 			iconEl.createSpan({cls: 'synapse-session-active-dot'});
@@ -345,8 +354,8 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			const details = item.createDiv({cls: 'synapse-session-details'});
 			details.createDiv({cls: 'synapse-session-name', text: name});
 			const modTime = new Date(session.lastModified);
-			const rawCount = (session.sessionId === this.currentSessionId ? this.messages.length : undefined)
-				?? this.activeSessions.get(session.sessionId)?.messages.length;
+			const rawCount = (session.sessionId === this.view.view.currentSessionId ? this.messages.length : undefined)
+				?? this.view.view.activeSessions.get(session.sessionId)?.messages.length;
 			const timeAgo = formatTimeAgo(modTime);
 			const metaText = rawCount !== undefined && rawCount > 0
 				? `${timeAgo} · ${rawCount} msg${rawCount === 1 ? '' : 's'}`
@@ -393,26 +402,26 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				this.confirmDeleteSession(session.sessionId);
 			}
 		});
-	};
+	}
 
-	proto.getSessionDisplayName = function (session: SessionMetadata): string {
-		const raw = this.sessionNames[session.sessionId]
+	getSessionDisplayName(session: SessionMetadata): string {
+		const raw = this.view.view.sessionNames[session.sessionId]
 			|| session.summary
 			|| `Session ${session.sessionId.slice(0, 8)}`;
 		// Strip session type prefix for display
 		return stripSessionTypePrefix(raw);
-	};
+	}
 
-	proto.getSessionType = function (session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
-		const name = this.sessionNames[session.sessionId] || '';
+	private getSessionType(session: SessionMetadata): 'chat' | 'inline' | 'search' | 'other' {
+		const name = this.view.view.sessionNames[session.sessionId] || '';
 		debugTrace(`Synapse: getSessionType id=${session.sessionId.slice(0, 8)} name="${name.slice(0, 40)}"`);
 		if (name.startsWith('[chat]')) return 'chat';
 		if (name.startsWith('[inline]')) return 'inline';
 		if (name.startsWith('[search]')) return 'search';
 		return 'other';
-	};
+	}
 
-	proto.openSessionFilterMenu = function (e: MouseEvent): void {
+	private openSessionFilterMenu(e: MouseEvent): void {
 		const menu = new Menu();
 		const types: Array<{value: 'chat' | 'inline' | 'search' | 'other'; label: string}> = [
 			{value: 'chat', label: 'Chat'},
@@ -445,9 +454,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				});
 		});
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.updateFilterBadge = function (): void {
+	private updateFilterBadge(): void {
 		// When no types selected (show all), dim the icon; otherwise mark active
 		const hasFilter = this.sessionTypeFilter.size > 0;
 		this.sidebarFilterEl.toggleClass('is-active', hasFilter);
@@ -455,9 +464,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			hasFilter
 				? `Filter: ${[...this.sessionTypeFilter].join(', ')}`
 				: 'Filter sessions (showing all)');
-	};
+	}
 
-	proto.openSessionSortMenu = function (e: MouseEvent): void {
+	private openSessionSortMenu(e: MouseEvent): void {
 		const menu = new Menu();
 		const sorts: Array<{value: 'modified' | 'created' | 'name'; label: string}> = [
 			{value: 'modified', label: 'Modified date'},
@@ -477,24 +486,24 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			});
 		}
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.updateSortBadge = function (): void {
+	private updateSortBadge(): void {
 		const labels: Record<string, string> = {modified: 'Modified', created: 'Created', name: 'Name'};
 		this.sidebarSortEl.setAttribute('title', `Sort: ${labels[this.sessionSort]}`);
-	};
+	}
 
-	proto.saveCurrentToBackground = function (): void {
-		if (!this.currentSession || !this.currentSessionId) return;
+	saveCurrentToBackground(): void {
+		if (!this.view.view.currentSession || !this.view.view.currentSessionId) return;
 
 		// Evict the oldest idle background session if at capacity
 		const MAX_BACKGROUND_SESSIONS = 8;
-		if (this.activeSessions.size >= MAX_BACKGROUND_SESSIONS) {
+		if (this.view.view.activeSessions.size >= MAX_BACKGROUND_SESSIONS) {
 			let oldestKey: string | null = null;
 			let oldestTime = Infinity;
-			for (const [key, bg] of this.activeSessions) {
+			for (const [key, bg] of this.view.view.activeSessions) {
 				if (bg.isStreaming) continue; // don't evict active streams
-				const entry = this.sessionList.find(s => s.sessionId === key);
+				const entry = this.view.view.sessionList.find(s => s.sessionId === key);
 				const t = entry?.lastModified ?? 0;
 				if (t < oldestTime) {
 					oldestTime = t;
@@ -502,50 +511,50 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				}
 			}
 			if (oldestKey) {
-				const evicted = this.activeSessions.get(oldestKey);
+				const evicted = this.view.view.activeSessions.get(oldestKey);
 				if (evicted) {
 					for (const unsub of evicted.unsubscribers) unsub();
 					evicted.savedDom = null; // release DOM fragment
 					try { void evicted.session.disconnect(); } catch { /* ignore */ }
-					this.activeSessions.delete(oldestKey);
+					this.view.view.activeSessions.delete(oldestKey);
 				}
 			}
 		}
 
 		// Detach events from foreground routing
-		this.unsubscribeEvents();
+		this.view.view.unsubscribeEvents();
 
 		// Save chat DOM into a DocumentFragment for fast restore
 		const fragment = createFragment();
-		while (this.chatContainer.firstChild) {
-			fragment.appendChild(this.chatContainer.firstChild);
+		while (this.view.chatContainer.firstChild) {
+			fragment.appendChild(this.view.chatContainer.firstChild);
 		}
 
 		const bg: BackgroundSession = {
-			sessionId: this.currentSessionId,
-			session: this.currentSession,
+			sessionId: this.view.view.currentSessionId,
+			session: this.view.view.currentSession,
 			messages: [...this.messages],
-			sessionToolGrants: new Set(this.sessionToolGrants),
-			isStreaming: this.isStreaming,
-			streamingContent: this.streamingContent,
-			streamingReasoning: this.streamingReasoning,
-			reasoningComplete: this.reasoningComplete,
+			sessionToolGrants: new Set(this.view.view.sessionToolGrants),
+			isStreaming: this.view.view.isStreaming,
+			streamingContent: this.view.view.streamingContent,
+			streamingReasoning: this.view.view.streamingReasoning,
+			reasoningComplete: this.view.view.reasoningComplete,
 			savedDom: fragment,
 			unsubscribers: [],
-			turnStartTime: this.turnStartTime,
-			turnToolsUsed: [...this.turnToolsUsed],
-			turnUsage: this.turnUsage ? {...this.turnUsage} : null,
-			activeToolCalls: new Map(this.activeToolCalls),
-			streamingComponent: this.streamingComponent,
-			streamingBodyEl: this.streamingBodyEl,
-			streamingWrapperEl: this.streamingWrapperEl,
-			toolCallsContainer: this.toolCallsContainer,
-			reasoningEl: this.reasoningEl,
-			reasoningBodyEl: this.reasoningBodyEl,
-			currentTodos: this.currentTodos,
-			taskPanelEl: this.taskPanelEl,
-			taskPlan: new Map(this.taskPlan),
-			pendingTaskCreates: new Map(this.pendingTaskCreates),
+			turnStartTime: this.view.view.turnStartTime,
+			turnToolsUsed: [...this.view.view.turnToolsUsed],
+			turnUsage: this.view.view.turnUsage ? {...this.view.view.turnUsage} : null,
+			activeToolCalls: new Map(this.view.view.activeToolCalls),
+			streamingComponent: this.view.view.streamingComponent,
+			streamingBodyEl: this.view.view.streamingBodyEl,
+			streamingWrapperEl: this.view.view.streamingWrapperEl,
+			toolCallsContainer: this.view.view.toolCallsContainer,
+			reasoningEl: this.view.view.reasoningEl,
+			reasoningBodyEl: this.view.view.reasoningBodyEl,
+			currentTodos: this.view.view.currentTodos,
+			taskPanelEl: this.view.view.taskPanelEl,
+			taskPlan: new Map(this.view.view.taskPlan),
+			pendingTaskCreates: new Map(this.view.view.pendingTaskCreates),
 		};
 
 		// If still streaming, attach background event routing
@@ -553,72 +562,72 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			this.registerBackgroundEvents(bg);
 		}
 
-		this.activeSessions.set(this.currentSessionId, bg);
+		this.view.view.activeSessions.set(this.view.view.currentSessionId, bg);
 
-		if (this.fullRenderTimer) {
-			window.clearTimeout(this.fullRenderTimer);
-			this.fullRenderTimer = null;
+		if (this.view.view.fullRenderTimer) {
+			window.clearTimeout(this.view.view.fullRenderTimer);
+			this.view.view.fullRenderTimer = null;
 		}
-		this.lastFullRenderLen = 0;
-		this.renderer.clearReasoningState();
+		this.view.view.lastFullRenderLen = 0;
+		this.view.view.renderer.clearReasoningState();
 		// The task panel's DOM travels with the saved fragment (it lives inside
 		// toolCallsContainer) — just stop this view's live-elapsed timer for it.
-		this.renderer.clearTaskPanelState();
+		this.view.view.renderer.clearTaskPanelState();
 
 		// Detach streaming component from the view (it lives in the bg now)
-		if (this.streamingComponent) {
-			this.streamingComponent = null;
+		if (this.view.view.streamingComponent) {
+			this.view.view.streamingComponent = null;
 		}
-		this.currentSession = null;
-		this.currentSessionId = null;
-	};
+		this.view.view.currentSession = null;
+		this.view.view.currentSessionId = null;
+	}
 
-	proto.restoreFromBackground = async function (bg: BackgroundSession): Promise<void> {
+	async restoreFromBackground(bg: BackgroundSession): Promise<void> {
 		// Unsubscribe background event routing
 		for (const unsub of bg.unsubscribers) unsub();
 		bg.unsubscribers = [];
 
 		// Restore state
-		this.currentSession = bg.session;
-		this.currentSessionId = bg.sessionId;
+		this.view.view.currentSession = bg.session;
+		this.view.view.currentSessionId = bg.sessionId;
 		this.messages = bg.messages;
-		this.sessionToolGrants = bg.sessionToolGrants;
-		this.isStreaming = bg.isStreaming;
-		this.streamingContent = bg.streamingContent;
-		this.streamingReasoning = bg.streamingReasoning;
-		this.reasoningComplete = bg.reasoningComplete;
-		this.turnStartTime = bg.turnStartTime;
-		this.turnToolsUsed = bg.turnToolsUsed;
-		this.turnUsage = bg.turnUsage;
-		this.configDirty = false;
-		this.lastFullRenderLen = 0;
+		this.view.view.sessionToolGrants = bg.sessionToolGrants;
+		this.view.view.isStreaming = bg.isStreaming;
+		this.view.view.streamingContent = bg.streamingContent;
+		this.view.view.streamingReasoning = bg.streamingReasoning;
+		this.view.view.reasoningComplete = bg.reasoningComplete;
+		this.view.view.turnStartTime = bg.turnStartTime;
+		this.view.view.turnToolsUsed = bg.turnToolsUsed;
+		this.view.view.turnUsage = bg.turnUsage;
+		this.view.view.configDirty = false;
+		this.view.view.lastFullRenderLen = 0;
 
-		this.chatContainer.empty();
+		this.view.chatContainer.empty();
 
 		if (bg.isStreaming && bg.savedDom) {
 			// Session is still streaming — restore its live DOM (including streaming placeholder)
-			this.streamingComponent = bg.streamingComponent;
-			this.streamingBodyEl = bg.streamingBodyEl;
-			this.streamingWrapperEl = bg.streamingWrapperEl;
-			this.toolCallsContainer = bg.toolCallsContainer;
-			this.activeToolCalls = bg.activeToolCalls;
-			this.reasoningEl = bg.reasoningEl;
-			this.reasoningBodyEl = bg.reasoningBodyEl;
-			this.currentTodos = bg.currentTodos;
-			this.taskPanelEl = bg.taskPanelEl;
-			this.taskPlan = bg.taskPlan;
-			this.pendingTaskCreates = bg.pendingTaskCreates;
-			this.chatContainer.appendChild(bg.savedDom);
+			this.view.view.streamingComponent = bg.streamingComponent;
+			this.view.view.streamingBodyEl = bg.streamingBodyEl;
+			this.view.view.streamingWrapperEl = bg.streamingWrapperEl;
+			this.view.view.toolCallsContainer = bg.toolCallsContainer;
+			this.view.view.activeToolCalls = bg.activeToolCalls;
+			this.view.view.reasoningEl = bg.reasoningEl;
+			this.view.view.reasoningBodyEl = bg.reasoningBodyEl;
+			this.view.view.currentTodos = bg.currentTodos;
+			this.view.view.taskPanelEl = bg.taskPanelEl;
+			this.view.view.taskPlan = bg.taskPlan;
+			this.view.view.pendingTaskCreates = bg.pendingTaskCreates;
+			this.view.chatContainer.appendChild(bg.savedDom);
 			bg.savedDom = null;
-			if (this.streamingReasoning && this.reasoningBodyEl) {
-				this.renderer.syncReasoningContent(this.streamingReasoning);
-				if (this.reasoningComplete) {
-					this.renderer.finalizeReasoning();
+			if (this.view.view.streamingReasoning && this.view.view.reasoningBodyEl) {
+				this.view.view.renderer.syncReasoningContent(this.view.view.streamingReasoning);
+				if (this.view.view.reasoningComplete) {
+					this.view.view.renderer.finalizeReasoning();
 				}
 			}
 			// Re-render the streaming content that accumulated while in background
-			if (this.streamingContent && this.streamingBodyEl) {
-				void this.renderer.updateStreamingRender();
+			if (this.view.view.streamingContent && this.view.view.streamingBodyEl) {
+				void this.view.view.renderer.updateStreamingRender();
 			}
 			// The saved DOM's task panel (if any) reflects whatever state it was in when the
 			// session was backgrounded — background event routing keeps taskPlan/currentTodos
@@ -626,56 +635,56 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			// stale (missing tasks created, or showing pre-update statuses). Force a fresh render
 			// from the up-to-date state now that the session is foreground again; renderTaskPanel()
 			// also (re-)starts the live-elapsed timer since it was stopped on background-save.
-			const restoredTodos = this.taskPlan.size > 0 ? [...this.taskPlan.values()] : this.currentTodos;
+			const restoredTodos = this.view.view.taskPlan.size > 0 ? [...this.view.view.taskPlan.values()] : this.view.view.currentTodos;
 			if (restoredTodos) {
-				this.renderer.renderTaskPanel(restoredTodos);
+				this.view.view.renderer.renderTaskPanel(restoredTodos);
 			} else {
-				this.taskPanelEl = null;
+				this.view.view.taskPanelEl = null;
 			}
 		} else {
 			// Session finished while in background — re-render messages from scratch
-			this.streamingComponent = null;
-			this.streamingBodyEl = null;
-			this.streamingWrapperEl = null;
-			this.toolCallsContainer = null;
-			this.renderer.clearReasoningState();
-			this.activeToolCalls.clear();
-			this.renderer.clearTaskPanelState();
+			this.view.view.streamingComponent = null;
+			this.view.view.streamingBodyEl = null;
+			this.view.view.streamingWrapperEl = null;
+			this.view.view.toolCallsContainer = null;
+			this.view.view.renderer.clearReasoningState();
+			this.view.view.activeToolCalls.clear();
+			this.view.view.renderer.clearTaskPanelState();
 			const renderPromises: Promise<void>[] = [];
 			for (const msg of this.messages) {
-				renderPromises.push(this.renderer.renderMessageBubble(msg));
+				renderPromises.push(this.view.view.renderer.renderMessageBubble(msg));
 			}
 			await Promise.all(renderPromises);
 			if (this.messages.length === 0) {
-				this.renderer.renderWelcome();
+				this.view.view.renderer.renderWelcome();
 			}
 		}
 
 		// Re-attach foreground event routing
-		this.registerSessionEvents();
+		this.view.view.registerSessionEvents();
 
 		// Restored session carries whatever query-metadata cache (#130) it last captured
 		// while backgrounded — reflect it (or its absence) immediately rather than waiting
 		// for this session's next turn.
-		this.configToolbar.updateContextIndicator();
+		this.view.view.configToolbar.updateContextIndicator();
 
 		// Lock toolbar since session is active
-		this.updateToolbarLock();
+		this.view.view.updateToolbarLock();
 
 		// Remove from background map
-		this.activeSessions.delete(bg.sessionId);
+		this.view.view.activeSessions.delete(bg.sessionId);
 
 		// Restore agent from session name
 		this.restoreAgentFromSessionName(bg.sessionId);
 
 		// Force scroll to end
-		this.forceScrollToBottom();
+		this.view.view.forceScrollToBottom();
 		// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
 		// state line too, not just the kicker (#217).
-		this.refreshComposerState();
-	};
+		this.view.view.refreshComposerState();
+	}
 
-	proto.registerBackgroundEvents = function (bg: BackgroundSession): void {
+	private registerBackgroundEvents(bg: BackgroundSession): void {
 		const session = bg.session;
 
 		bg.unsubscribers.push(
@@ -807,26 +816,26 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 				// No DOM manipulation — hidden session
 			}),
 		);
-	};
+	}
 
-	proto.restoreAgentFromSessionName = function (sessionId: string): void {
-		let sessionName = this.sessionNames[sessionId] || '';
+	private restoreAgentFromSessionName(sessionId: string): void {
+		let sessionName = this.view.view.sessionNames[sessionId] || '';
 		// Strip session type prefix
 		sessionName = stripSessionTypePrefix(sessionName);
 		const colonIdx = sessionName.indexOf(':');
 		if (colonIdx > 0) {
 			const agentName = sessionName.substring(0, colonIdx).trim();
-			if (this.agents.some(a => a.name === agentName)) {
-				this.configToolbar.selectAgent(agentName);
+			if (this.view.view.agents.some(a => a.name === agentName)) {
+				this.view.view.configToolbar.selectAgent(agentName);
 			}
 		}
-	};
+	}
 
-	proto.selectSession = async function (sessionId: string): Promise<void> {
-		if (sessionId === this.currentSessionId && this.currentSession) return;
+	async selectSession(sessionId: string): Promise<void> {
+		if (sessionId === this.view.view.currentSessionId && this.view.view.currentSession) return;
 
 		// ── Save current session to background (if streaming, keep it alive) ──
-		if (this.currentSession && this.currentSessionId) {
+		if (this.view.view.currentSession && this.view.view.currentSessionId) {
 			this.saveCurrentToBackground();
 		}
 
@@ -836,31 +845,31 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		// different conversation with no known grants of its own, unless it's still alive in
 		// the background, in which case restoreFromBackground() (below) overwrites this with
 		// that session's own accumulated set.
-		this.sessionToolGrants = new Set();
-		if (this.fullRenderTimer) {
-			window.clearTimeout(this.fullRenderTimer);
-			this.fullRenderTimer = null;
+		this.view.view.sessionToolGrants = new Set();
+		if (this.view.view.fullRenderTimer) {
+			window.clearTimeout(this.view.view.fullRenderTimer);
+			this.view.view.fullRenderTimer = null;
 		}
-		this.streamingContent = '';
-		this.lastFullRenderLen = 0;
-		this.streamingBodyEl = null;
-		this.streamingWrapperEl = null;
-		this.toolCallsContainer = null;
-		this.activeToolCalls.clear();
-		this.renderer.clearReasoningState();
-		if (this.streamingComponent) {
-			this.removeChild(this.streamingComponent);
-			this.streamingComponent = null;
+		this.view.view.streamingContent = '';
+		this.view.view.lastFullRenderLen = 0;
+		this.view.view.streamingBodyEl = null;
+		this.view.view.streamingWrapperEl = null;
+		this.view.view.toolCallsContainer = null;
+		this.view.view.activeToolCalls.clear();
+		this.view.view.renderer.clearReasoningState();
+		if (this.view.view.streamingComponent) {
+			this.view.view.removeChild(this.view.view.streamingComponent);
+			this.view.view.streamingComponent = null;
 		}
-		this.isStreaming = false;
-		this.chatContainer.empty();
+		this.view.view.isStreaming = false;
+		this.view.chatContainer.empty();
 
 		// ── Check if the target session is already alive in background ──
-		const bg = this.activeSessions.get(sessionId);
+		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
 			await this.restoreFromBackground(bg);
 			this.renderSessionList();
-			this.renderer.updateSendButton();
+			this.view.view.renderer.updateSendButton();
 			return;
 		}
 
@@ -868,15 +877,15 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 
 		try {
 			// Build full session config so skills, MCP servers, etc. are available
-			const agent = this.agents.find(a => a.name === this.selectedAgent);
-			const sessionConfig = this.buildSessionConfig({
-				model: this.selectedModel || undefined,
-				selectedAgentName: this.selectedAgent || undefined,
+			const agent = this.view.view.agents.find(a => a.name === this.view.view.selectedAgent);
+			const sessionConfig = this.view.view.buildSessionConfig({
+				model: this.view.view.selectedModel || undefined,
+				selectedAgentName: this.view.view.selectedAgent || undefined,
 				systemContent: agent?.instructions || undefined,
 			});
 
-			this.earlyEventBuffer = [];
-			const session = await this.plugin.agentService!.createSession({
+			this.view.view.earlyEventBuffer = [];
+			const session = await this.view.plugin.agentService!.createSession({
 				...sessionConfig,
 				resume: sessionId,
 			});
@@ -891,7 +900,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			}
 
 			// Load message history from the persisted transcript (cold load).
-			const sessionMeta = this.sessionList.find(s => s.sessionId === sessionId);
+			const sessionMeta = this.view.view.sessionList.find(s => s.sessionId === sessionId);
 			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
 
 			// Deliberately omit `dir`: sessions are listed across all project
@@ -903,7 +912,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			// empty-chat bug this change fixes. Omitting `dir` searches all projects.
 			let sessionMessages: SessionMessage[] = [];
 			try {
-				sessionMessages = await this.plugin.agentService!.getSessionMessages(sessionId);
+				sessionMessages = await this.view.plugin.agentService!.getSessionMessages(sessionId);
 			} catch (e) {
 				console.warn('[synapse] Failed to read session transcript for replay:', e);
 			}
@@ -928,7 +937,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 						timestamp,
 					};
 					this.messages.push(msg);
-					renderPromises.push(this.renderer.renderMessageBubble(msg));
+					renderPromises.push(this.view.view.renderer.renderMessageBubble(msg));
 					pendingReasoning = undefined;
 				} else if (sm.type === 'assistant') {
 					const {text, thinking} = extractAssistantContent(sm.message);
@@ -942,7 +951,7 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 						timestamp,
 					};
 					this.messages.push(msg);
-					renderPromises.push(this.renderer.renderMessageBubble(msg));
+					renderPromises.push(this.view.view.renderer.renderMessageBubble(msg));
 					pendingReasoning = undefined;
 				}
 				// 'system' messages (compact boundaries etc.) are not requested
@@ -951,41 +960,41 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			await Promise.all(renderPromises);
 
 			if (this.messages.length === 0) {
-				this.renderer.renderWelcome();
+				this.view.view.renderer.renderWelcome();
 			}
 
 			// Regular session — keep the handle active for interaction
-			this.currentSession = session;
-			this.currentSessionId = sessionId;
-			this.configDirty = false;
-			this.registerSessionEvents();
+			this.view.view.currentSession = session;
+			this.view.view.currentSessionId = sessionId;
+			this.view.view.configDirty = false;
+			this.view.view.registerSessionEvents();
 			// A cold-resumed session is a brand-new Session object with an empty
 			// query-metadata cache (#130) even though the CLI conversation itself is old —
 			// hide the gauge until this session's own first turn captures a fresh value.
-			this.configToolbar.updateContextIndicator();
-			this.updateToolbarLock();
+			this.view.view.configToolbar.updateContextIndicator();
+			this.view.view.updateToolbarLock();
 
 			// Restore the agent that was used in this session
 			this.restoreAgentFromSessionName(sessionId);
 
 			// Force scroll to the end of the loaded conversation
-			this.forceScrollToBottom();
+			this.view.view.forceScrollToBottom();
 
 			this.renderSessionList();
-			this.renderer.updateSendButton();
+			this.view.view.renderer.updateSendButton();
 			// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
 			// state line too, not just the kicker (#217).
-			this.refreshComposerState();
+			this.view.view.refreshComposerState();
 		} catch (e) {
-			this.renderer.addInfoMessage(`Failed to load session: ${String(e)}`);
-			this.renderer.renderWelcome();
-			this.currentSessionId = null;
+			this.view.view.renderer.addInfoMessage(`Failed to load session: ${String(e)}`);
+			this.view.view.renderer.renderWelcome();
+			this.view.view.currentSessionId = null;
 			this.renderSessionList();
-			this.refreshComposerState();
+			this.view.view.refreshComposerState();
 		}
-	};
+	}
 
-	proto.showSessionContextMenu = function (e: MouseEvent, sessionId: string): void {
+	private showSessionContextMenu(e: MouseEvent, sessionId: string): void {
 		e.preventDefault();
 		e.stopPropagation();
 		const menu = new Menu();
@@ -1001,16 +1010,16 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			.onClick(() => void this.deleteSessionById(sessionId)));
 
 		menu.showAtMouseEvent(e);
-	};
+	}
 
-	proto.renameSession = function (sessionId: string): void {
-		const rawName = this.sessionNames[sessionId] || '';
+	renameSession(sessionId: string): void {
+		const rawName = this.view.view.sessionNames[sessionId] || '';
 		// Extract prefix and display name
 		const prefixMatch = rawName.match(/^(\[(chat|inline|trigger)\]\s*)/);
 		const prefix = prefixMatch ? prefixMatch[1] : '';
 		const displayName = prefix ? rawName.slice(prefix.length) : rawName;
 
-		const modal = new Modal(this.app);
+		const modal = new Modal(this.view.app);
 		modal.titleEl.setText('Rename session');
 
 		const input = modal.contentEl.createEl('input', {
@@ -1025,10 +1034,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		saveBtn.addEventListener('click', () => {
 			const newName = input.value.trim();
 			if (newName) {
-				this.sessionNames[sessionId] = `${prefix}${newName}`;
-				this.saveSessionNames();
+				this.view.view.sessionNames[sessionId] = `${prefix}${newName}`;
+				this.view.view.saveSessionNames();
 				this.renderSessionList();
-				this.updateMastheadKicker();
+				this.view.view.updateMastheadKicker();
 			}
 			modal.close();
 		});
@@ -1047,53 +1056,53 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		modal.open();
 		input.focus();
 		input.select();
-	};
+	}
 
-	proto.deleteSessionById = async function (sessionId: string): Promise<void> {
+	async deleteSessionById(sessionId: string): Promise<void> {
 		// If this is the foreground session and it's actively streaming, interrupt
 		// the in-flight run first (same abort path as the stop button) so we don't
 		// delete the session out from under a still-running stream.
-		if (sessionId === this.currentSessionId && this.isStreaming) {
-			await this.handleAbort();
+		if (sessionId === this.view.view.currentSessionId && this.view.view.isStreaming) {
+			await this.view.view.handleAbort();
 		}
 
 		// Clean up background session if it exists
-		const bg = this.activeSessions.get(sessionId);
+		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
 			for (const unsub of bg.unsubscribers) unsub();
 			try { await bg.session.disconnect(); } catch { /* ignore */ }
 			if (bg.streamingComponent) {
-				try { this.removeChild(bg.streamingComponent); } catch { /* ignore */ }
+				try { this.view.view.removeChild(bg.streamingComponent); } catch { /* ignore */ }
 			}
-			this.activeSessions.delete(sessionId);
+			this.view.view.activeSessions.delete(sessionId);
 		}
 
 		try {
-			await this.plugin.agentService!.deleteSession(sessionId);
+			await this.view.plugin.agentService!.deleteSession(sessionId);
 		} catch (e) {
 			new Notice(`Failed to delete session: ${String(e)}`);
 			return;
 		}
 
-		delete this.sessionNames[sessionId];
-		this.saveSessionNames();
-		this.sessionList = this.sessionList.filter(s => s.sessionId !== sessionId);
+		delete this.view.view.sessionNames[sessionId];
+		this.view.view.saveSessionNames();
+		this.view.view.sessionList = this.view.view.sessionList.filter(s => s.sessionId !== sessionId);
 
-		if (this.currentSessionId === sessionId) {
-			this.currentSessionId = null;
-			this.currentSession = null;
-			this.newConversation();
+		if (this.view.view.currentSessionId === sessionId) {
+			this.view.view.currentSessionId = null;
+			this.view.view.currentSession = null;
+			this.view.view.newConversation();
 		}
 
 		this.renderSessionList();
 		new Notice('Session deleted.');
-	};
+	}
 
-	proto.confirmDeleteSession = function (sessionId: string): void {
-		const session = this.sessionList.find(s => s.sessionId === sessionId);
+	private confirmDeleteSession(sessionId: string): void {
+		const session = this.view.view.sessionList.find(s => s.sessionId === sessionId);
 		const name = session ? this.getSessionDisplayName(session) : 'this session';
 
-		const modal = new Modal(this.app);
+		const modal = new Modal(this.view.app);
 		modal.titleEl.setText('Delete session');
 		modal.contentEl.createEl('p', {
 			text: `Are you sure you want to delete "${name}"?`,
@@ -1106,16 +1115,16 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			void this.deleteSessionById(sessionId);
 		});
 		modal.open();
-	};
+	}
 
-	proto.confirmDeleteDisplayedSessions = function (): void {
+	private confirmDeleteDisplayedSessions(): void {
 		const displayed = this.getDisplayedSessions();
 		if (displayed.length === 0) {
 			new Notice('No sessions to delete.');
 			return;
 		}
 
-		const modal = new Modal(this.app);
+		const modal = new Modal(this.view.app);
 		modal.titleEl.setText('Delete sessions');
 		modal.contentEl.createEl('p', {
 			text: `Are you sure you want to delete ${displayed.length} session${displayed.length === 1 ? '' : 's'}?`,
@@ -1128,10 +1137,10 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			void this.deleteDisplayedSessions(displayed);
 		});
 		modal.open();
-	};
+	}
 
-	proto.getDisplayedSessions = function (): SessionMetadata[] {
-		return this.sessionList.filter(session => {
+	private getDisplayedSessions(): SessionMetadata[] {
+		return this.view.view.sessionList.filter(session => {
 			if (this.sessionTypeFilter.size > 0) {
 				const type = this.getSessionType(session);
 				if (!this.sessionTypeFilter.has(type)) return false;
@@ -1142,9 +1151,9 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			}
 			return true;
 		});
-	};
+	}
 
-	proto.deleteDisplayedSessions = async function (sessions: SessionMetadata[]): Promise<void> {
+	private async deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void> {
 		let deleted = 0;
 		for (const session of sessions) {
 			try {
@@ -1153,6 +1162,5 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 			} catch { /* continue with remaining */ }
 		}
 		new Notice(`Deleted ${deleted} session${deleted === 1 ? '' : 's'}.`);
-	};
-
+	}
 }
