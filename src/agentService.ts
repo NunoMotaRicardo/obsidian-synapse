@@ -259,6 +259,45 @@ export interface ModelInfo {
 }
 
 /**
+ * Model family keywords the third matching tier of {@link matchModelTiers} looks for in the
+ * (lower-cased) target — in escalation order, cheapest family first.
+ */
+const MODEL_KEYWORDS = ['haiku', 'sonnet', 'opus', 'flash', 'pro'] as const;
+
+/**
+ * The shared three-tier model matcher (audit rec 4 — owned here, one implementation):
+ * (1) exact match on `id`, `name` or the SDK's `resolvedModel` (the canonical wire id an alias
+ * row resolves to, so a persisted explicit id like 'claude-sonnet-5' matches the 'sonnet' alias
+ * row deterministically instead of falling through to the substring/keyword heuristics);
+ * (2) substring in either direction between target and `id`;
+ * (3) first {@link MODEL_KEYWORDS} the target contains, matched against `id`/`name`.
+ * Case-insensitive throughout. Returns the first row that matches, or `undefined` when none
+ * does — both consumers keep their own preconditions and fallback semantics around it.
+ */
+export function matchModelTiers(target: string, models: ModelInfo[]): ModelInfo | undefined {
+	const needle = target.toLowerCase();
+	// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
+	// alias row resolves to) so a persisted explicit id like 'claude-sonnet-5' matches
+	// the 'sonnet' alias row deterministically instead of falling through to the
+	// substring/keyword heuristics below.
+	let match = models.find(
+		m => m.id.toLowerCase() === needle || m.name.toLowerCase() === needle || m.resolvedModel?.toLowerCase() === needle
+	);
+	if (!match) {
+		match = models.find(m => m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle) || needle.includes(m.id.toLowerCase()));
+	}
+	if (!match) {
+		for (const key of MODEL_KEYWORDS) {
+			if (needle.includes(key)) {
+				match = models.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
+				if (match) break;
+			}
+		}
+	}
+	return match;
+}
+
+/**
  * Derive the model identifier to pass to the CLI from SDK ModelInfo.
  * `sdk.value` is the model identifier the CLI itself reports and accepts
  * ('default', 'sonnet', 'sonnet[1m]', 'opus', 'claude-fable-5[1m]', …).
@@ -751,25 +790,7 @@ export class AgentService {
 		if (allModels.length === 0) return modelId;
 
 		const target = modelId.toLowerCase();
-		// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
-		// alias row resolves to) so a persisted explicit id like 'claude-sonnet-5' matches
-		// the 'sonnet' alias row deterministically instead of falling through to the
-		// substring/keyword heuristics below.
-		let match = allModels.find(
-			m => m.id.toLowerCase() === target || m.name.toLowerCase() === target || m.resolvedModel?.toLowerCase() === target
-		);
-		if (!match) {
-			match = allModels.find(m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase()));
-		}
-		if (!match) {
-			for (const key of ['haiku', 'sonnet', 'opus', 'flash', 'pro']) {
-				if (target.includes(key)) {
-					match = allModels.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
-					if (match) break;
-				}
-			}
-		}
-		return match ? match.id : undefined;
+		return matchModelTiers(target, allModels)?.id;
 	}
 
 	/** Invalidate the cached delegation server (call when the local agent endpoint config changes). */

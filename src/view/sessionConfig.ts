@@ -1,6 +1,9 @@
 import {normalizePath, TFile} from 'obsidian';
 import type {App} from 'obsidian';
+// Type imports stay type-only; `matchModelTiers` is the one value import from the single
+// SDK service module (no cycle: agentService.ts does not import this module).
 import type {ModelInfo, SlashCommand, AgentInfo} from '../agentService';
+import {matchModelTiers} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
 import type {AgentConfig, ChatAttachment, SkillInfo} from '../types';
 import {IMAGE_EXTS} from '../types';
@@ -11,30 +14,14 @@ import {nodeRequire} from '../nodeRequire';
  * Returns the matching model ID, or falls back to `fallback` when the
  * agent's model doesn't match any available model (avoids passing unknown
  * model IDs to the SDK).
+ *
+ * The tier search itself lives in one shared place — `matchModelTiers()` in
+ * `agentService.ts` (audit rec 4); this wrapper keeps only its own preconditions
+ * (`!agent?.model` → `fallback`) and fallback semantics.
  */
 export function resolveModelForAgent(agent: AgentConfig | undefined, models: ModelInfo[], fallback: string | undefined): string | undefined {
 	if (!agent?.model) return fallback;
-	const target = agent.model.toLowerCase();
-	// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
-	// alias row resolves to) so an agent config naming a canonical id like
-	// 'claude-sonnet-5' matches the 'sonnet' alias row deterministically instead of
-	// falling through to the substring/keyword heuristics below.
-	let match = models.find(
-		m => m.name.toLowerCase() === target || m.id.toLowerCase() === target || m.resolvedModel?.toLowerCase() === target
-	);
-	if (!match) {
-		match = models.find(
-			m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase())
-		);
-	}
-	if (!match) {
-		for (const key of ['haiku', 'sonnet', 'opus', 'flash', 'pro']) {
-			if (target.includes(key)) {
-				match = models.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
-				if (match) break;
-			}
-		}
-	}
+	const match = matchModelTiers(agent.model, models);
 	return match ? match.id : fallback;
 }
 
