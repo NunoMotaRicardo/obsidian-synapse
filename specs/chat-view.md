@@ -461,7 +461,9 @@ and built in `buildUI()` via `controller.build(parent)`.
   by the `Session` wrapper when the SDK delivers the id — see agent-service.md) adopts the id
   into `currentSessionId`, writes the `[chat] <Agent>: <snippet>` name, and adds the sidebar
   entry. Never write a session-name entry keyed by an empty id: `registerInlineSession` (view
-  and editor-menu variants), the edit modal, and advanced search all no-op when `sessionId` is
+  method; the shared free-function registrar used by the editor menu and the edit modal is
+  exported from `synapseView.ts` and delegates to it), and advanced search all no-op when
+  `sessionId` is
   empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
   builds.
 
@@ -607,7 +609,9 @@ tool call — up to `maxTurns: 40` of them would make search unusable.
 ## Error handling
 
 `session.error` events and `handleSend()` catch blocks pass raw errors through
-`formatErrorForChat()` (`synapseView.ts`), which strips a leading `Error: ` prefix.
+`formatErrorForChat()` (`synapseView.ts`), which strips a leading `Error: ` prefix — via the
+shared `stripErrorPrefix()` helper in `toolErrors.ts` (issue #230), which the editor's
+`formatErrorForNotice()` also uses.
 
 ### Write/edit tool error guidance
 

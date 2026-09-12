@@ -157,6 +157,7 @@ import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
 import {getSynapseSettingsPath} from './vaultPaths';
+import {nodeRequire} from './nodeRequire';
 // Static import (matching the now-removed mcpBridge.ts's `_synapse/.mcp.json` read, the closest
 // precedent for reading a small vault-local JSON config synchronously) rather than the lazy
 // `window.require`-gated pattern used elsewhere in this file for fs/promises — that gate exists
@@ -165,9 +166,6 @@ import {getSynapseSettingsPath} from './vaultPaths';
 // query build) and `window.require` is unavailable outside Electron's renderer (e.g. tests),
 // where a static Node import still works.
 import * as fs from 'node:fs';
-
-// Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
-const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
 
 /** Local SDK plugin configuration for discovery. */
 export interface SdkPluginConfig {
@@ -261,6 +259,45 @@ export interface ModelInfo {
 }
 
 /**
+ * Model family keywords the third matching tier of {@link matchModelTiers} looks for in the
+ * (lower-cased) target — in escalation order, cheapest family first.
+ */
+const MODEL_KEYWORDS = ['haiku', 'sonnet', 'opus', 'flash', 'pro'] as const;
+
+/**
+ * The shared three-tier model matcher (audit rec 4 — owned here, one implementation):
+ * (1) exact match on `id`, `name` or the SDK's `resolvedModel` (the canonical wire id an alias
+ * row resolves to, so a persisted explicit id like 'claude-sonnet-5' matches the 'sonnet' alias
+ * row deterministically instead of falling through to the substring/keyword heuristics);
+ * (2) substring in either direction between target and `id`;
+ * (3) first {@link MODEL_KEYWORDS} the target contains, matched against `id`/`name`.
+ * Case-insensitive throughout. Returns the first row that matches, or `undefined` when none
+ * does — both consumers keep their own preconditions and fallback semantics around it.
+ */
+export function matchModelTiers(target: string, models: ModelInfo[]): ModelInfo | undefined {
+	const needle = target.toLowerCase();
+	// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
+	// alias row resolves to) so a persisted explicit id like 'claude-sonnet-5' matches
+	// the 'sonnet' alias row deterministically instead of falling through to the
+	// substring/keyword heuristics below.
+	let match = models.find(
+		m => m.id.toLowerCase() === needle || m.name.toLowerCase() === needle || m.resolvedModel?.toLowerCase() === needle
+	);
+	if (!match) {
+		match = models.find(m => m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle) || needle.includes(m.id.toLowerCase()));
+	}
+	if (!match) {
+		for (const key of MODEL_KEYWORDS) {
+			if (needle.includes(key)) {
+				match = models.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
+				if (match) break;
+			}
+		}
+	}
+	return match;
+}
+
+/**
  * Derive the model identifier to pass to the CLI from SDK ModelInfo.
  * `sdk.value` is the model identifier the CLI itself reports and accepts
  * ('default', 'sonnet', 'sonnet[1m]', 'opus', 'claude-fable-5[1m]', …).
@@ -316,6 +353,44 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
  * to stop a runaway loop in unattended contexts (Telegram, other one-shot runs).
  */
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
+
+/**
+ * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
+ * audit rec 5). The editor's call sites were previously kept consistent only by convention
+ * comments ("pure text transform → `tools: []` + `maxTurns: 1`"); the convention now lives in
+ * this interface — callers name the shape with `profile:` and the preset fills in only the
+ * fields the caller left unset (a caller's explicit value always wins — same convention as
+ * `routeQueryOptions()`).
+ *
+ * Profiles carry no behavior of their own beyond these option defaults; anything a caller
+ * passes explicitly (`permissionMode`, `canUseTool`, …) keeps winning over the preset.
+ */
+export type InlineChatProfileName = 'textTransform' | 'readOnly' | 'attended' | 'unattendedBypass';
+
+/** Option defaults one named profile fills in — every field optional, every field skippable. */
+export interface InlineChatProfile {
+	tools?: Options['tools'];
+	maxTurns?: number;
+	permissionMode?: Options['permissionMode'];
+	allowDangerouslySkipPermissions?: boolean;
+}
+
+export const INLINE_CHAT_PROFILES: Record<InlineChatProfileName, InlineChatProfile> = {
+	/** Pure text transform — no tools, exactly one model turn. */
+	textTransform: {tools: [], maxTurns: 1},
+	/** Single read-only tool, small loop (image reading/analysis). */
+	readOnly: {tools: ['Read'], maxTurns: 10},
+	/**
+	 * Default toolset, small loop (e.g. mermaid conversion, which uses the vault's skills).
+	 * Intentionally leaves `tools` unset → the SDK's FULL default toolset (including
+	 * Write/Edit), gated by `permissionMode: 'default'` approval prompts. "Attended" means
+	 * a human initiated this one-shot action and is present to answer those prompts — NOT
+	 * that the tools are restricted; of the editor profiles only this one is write-capable.
+	 */
+	attended: {maxTurns: 10},
+	/** Unattended runner that must not stop on an approval prompt (Telegram bot). */
+	unattendedBypass: {permissionMode: 'bypassPermissions', allowDangerouslySkipPermissions: true},
+};
 
 /**
  * Connection state tracked by AgentService.
@@ -753,25 +828,7 @@ export class AgentService {
 		if (allModels.length === 0) return modelId;
 
 		const target = modelId.toLowerCase();
-		// Exact match first, including the SDK's `resolvedModel` (the canonical wire id an
-		// alias row resolves to) so a persisted explicit id like 'claude-sonnet-5' matches
-		// the 'sonnet' alias row deterministically instead of falling through to the
-		// substring/keyword heuristics below.
-		let match = allModels.find(
-			m => m.id.toLowerCase() === target || m.name.toLowerCase() === target || m.resolvedModel?.toLowerCase() === target
-		);
-		if (!match) {
-			match = allModels.find(m => m.id.toLowerCase().includes(target) || m.name.toLowerCase().includes(target) || target.includes(m.id.toLowerCase()));
-		}
-		if (!match) {
-			for (const key of ['haiku', 'sonnet', 'opus', 'flash', 'pro']) {
-				if (target.includes(key)) {
-					match = allModels.find(m => m.id.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
-					if (match) break;
-				}
-			}
-		}
-		return match ? match.id : undefined;
+		return matchModelTiers(target, allModels)?.id;
 	}
 
 	/** Invalidate the cached delegation server (call when the local agent endpoint config changes). */
@@ -979,6 +1036,13 @@ export class AgentService {
 		plugins?: SdkPluginConfig[];
 		skills?: string[];
 		agent?: string;
+		/**
+		 * Named preset from `INLINE_CHAT_PROFILES` filling in the recurring option shapes
+		 * (tools/maxTurns/permission fields) — only where the caller left the field unset;
+		 * an explicit caller value always wins (issue #230). Options-bag-only field: never
+		 * part of `SessionConfig` or the SDK's `Options`.
+		 */
+		profile?: InlineChatProfileName;
 		canUseTool?: CanUseTool;
 		onElicitation?: OnElicitation;
 		maxTurns?: number;
@@ -999,6 +1063,10 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
+				// Profile presets fill in only what the caller left unset — a caller's explicit
+				// value always wins (issue #230, same convention as routeQueryOptions()).
+				const profileDefaults = options.profile ? INLINE_CHAT_PROFILES[options.profile] : undefined;
+
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
@@ -1010,11 +1078,11 @@ export class AgentService {
 						canUseTool: options.canUseTool,
 						onElicitation: options.onElicitation,
 						// Agentic default: enough turns for real tool use (Read/Glob/Grep
-						// loops). Callers that want a pure text transform pass maxTurns: 1.
-						maxTurns: options.maxTurns ?? DEFAULT_AGENTIC_MAX_TURNS,
-						permissionMode: options.permissionMode ?? 'default',
-						...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
-						tools: options.tools,
+						// loops). The textTransform profile pins maxTurns to 1 instead.
+						maxTurns: options.maxTurns ?? profileDefaults?.maxTurns ?? DEFAULT_AGENTIC_MAX_TURNS,
+						permissionMode: options.permissionMode ?? profileDefaults?.permissionMode ?? 'default',
+						...(options.allowDangerouslySkipPermissions || profileDefaults?.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
+						tools: options.tools ?? profileDefaults?.tools,
 						env: this.buildEnv(options.model),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),

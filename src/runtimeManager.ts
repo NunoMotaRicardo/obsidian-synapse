@@ -11,8 +11,8 @@
  * on mobile.
  */
 
-// Available at runtime in the esbuild CJS bundle.
-const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
+import {nodeRequire} from './nodeRequire';
+
 declare const __dirname: string;
 declare const process: {
 	platform: string;

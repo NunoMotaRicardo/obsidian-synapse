@@ -35,12 +35,36 @@ import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/types';
 
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
-import {friendlyWriteToolError} from './toolErrors';
+import {friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
 /** Frozen sentinel — when earlyEventBuffer points here, onEvent stops buffering. */
 const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
+
+/**
+ * Register an inline session in the SynapseView session list — the shared free-function
+ * registrar used by the editor's one-shot actions (`editorMenu.ts`) and the edit modal
+ * (`modals/editModal.ts`) (audit rec 4 — one implementation, previously duplicated in both).
+ * Stores the session name with an `[inline]` prefix so the sidebar filter can distinguish
+ * inline sessions from chat sessions, persists it into `plugin.settings.sessionNames`, then
+ * hands off to the view's own `SynapseView#registerInlineSession` method (the view-side entry
+ * that updates the live sidebar session list and re-renders it), when one is open.
+ */
+export function registerInlineSession(plugin: SynapsePlugin, sessionId: string, description: string): void {
+	if (!sessionId) return; // no id (e.g. aborted query) — don't create a junk entry
+	plugin.settings.sessionNames ??= {};
+	plugin.settings.sessionNames[sessionId] = `[inline] ${description}`;
+	void plugin.saveSettings();
+
+	const leaves = plugin.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
+	if (leaves.length > 0 && leaves[0]) {
+		const view = leaves[0].view as SynapseView;
+		if (typeof view.registerInlineSession === 'function') {
+			view.registerInlineSession(sessionId, description);
+		}
+	}
+}
 
 // ── Synapse view ───────────────────────────────────────────────
 
@@ -1414,8 +1438,7 @@ export class SynapseView extends ItemView implements ViewContext {
 
 	/** Format an error for display. */
 	formatErrorForChat(rawError: string): string {
-		const cleanError = rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
-		return `Error: ${cleanError}`;
+		return `Error: ${stripErrorPrefix(rawError)}`;
 	}
 
 	getVaultBasePath(): string {

@@ -78,21 +78,43 @@ describe('searchPanel.ts wiring (#167)', () => {
 	});
 });
 
-describe('editorMenu.ts — tools: [\'Read\'] sites left unwired, deliberately (#167)', () => {
+describe('editorMenu.ts — read-only image sites left unwired, deliberately (#167)', () => {
 	it('does not offer vault tools to the two image-reading inlineChat() call sites', () => {
 		const source = read('src/editor/editorMenu.ts');
-		// Both `tools: ['Read']` call sites (askAboutImage, extractImageContent) must not have
-		// gained `app`/`canUseTool` — see the module doc comment above for why wiring them
-		// would not achieve parity (image bytes never reach the local branch at all).
-		const readToolCallSites = source.split(/\n(?=\t*tools: \['Read'\],)/).filter(s => s.includes("tools: ['Read']"));
-		expect(readToolCallSites.length).toBeGreaterThanOrEqual(2);
+		// The two image-reading call sites (askAboutImage, extractImageContent) request their
+		// `Read` tool via the `readOnly` inlineChat() profile now (issue #230); they must not
+		// have gained `app`/`canUseTool` — see the module doc comment above for why wiring
+		// them would not achieve parity (image bytes never reach the local branch at all).
+		const readProfileCallSites = (source.match(/profile: 'readOnly'/g) ?? []).length;
+		expect(readProfileCallSites).toBeGreaterThanOrEqual(2);
 		expect(source).not.toContain('canUseTool: autoApproveReadOnlyTools');
 		expect(source).not.toMatch(/import\s*\{[^}]*autoApproveReadOnlyTools/);
 	});
 
-	it('leaves the toolless (tools: []) call sites without canUseTool — no vault-tool gating added', () => {
+	it('lets no call site override its own profile with a wider tools/maxTurns value (issue #230)', () => {
+		// The profile convention is "caller's explicit value wins" — which means a call site
+		// could silently defeat its profile's restrictiveness (e.g. `profile: 'textTransform',
+		// tools: ['Write']`). This makes the convention self-enforcing instead: every
+		// textTransform/readOnly/attended call body in editorMenu.ts + editModal.ts must rely
+		// entirely on the profile for its tools/maxTurns shape (deepseek-v4-pro review of #231).
+		for (const rel of ['src/editor/editorMenu.ts', 'src/modals/editModal.ts']) {
+			const source = read(rel);
+			const callBodies = source.split(/inlineChat\(\{/).slice(1)
+				.map(call => call.slice(0, call.indexOf('});')));
+			for (const body of callBodies) {
+				if (!/profile: '(textTransform|readOnly|attended)'/.test(body)) continue;
+				expect(body).not.toMatch(/\btools\s*:/);
+				expect(body).not.toMatch(/\bmaxTurns\s*:/);
+			}
+		}
+	});
+
+	it('leaves the textTransform (profile) call sites without canUseTool — no vault-tool gating added', () => {
 		const source = read('src/editor/editorMenu.ts');
-		expect((source.match(/tools: \[\]/g) ?? []).length).toBeGreaterThanOrEqual(6);
+		// The six pure text-transform call sites request no tools at all — expressed via the
+		// `textTransform` profile since issue #230 (the old literal `tools: []`/`maxTurns: 1`
+		// pairs the convention moved into the interface).
+		expect((source.match(/profile: 'textTransform'/g) ?? []).length).toBeGreaterThanOrEqual(6);
 		// `app: plugin.app` IS now present on these call sites (issue #194 — every inlineChat()
 		// caller passes `app` so AgentService can derive `_synapse/settings.json`'s vault path
 		// for the vault settings layer). Post-#220 there is no local-model branch left to gate:

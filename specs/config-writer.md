@@ -1,8 +1,18 @@
 # config-writer
 
-Source: `src/configWriter.ts`. Write-side utilities for the self-improve feature and first-run
-seeding. The Claude Agent SDK discovers agents, skills, and MCP servers natively from the
+Source: `src/configWriter.ts`. Scan utilities for toolbar display, first-run seeding, and
+documented programmatic-write infrastructure for `_synapse/` artifacts. The Claude Agent SDK
+discovers agents, skills, and MCP servers natively from the
 `_synapse/` plugin directory.
+
+**The live self-improve write path is the CLI agent's own `Write`/`Edit` tools operating on
+`_synapse/`** — an agent asked to propose an artifact writes it directly (guided by the
+self-improve hint, see the bottom of this spec). This module does not sit between the agent and
+the vault. Of its write functions, only `writeSkill` (first-run seeding) and
+`persistToolApprovalRules` (issue #197) have live in-tree callers today; `writeAgent`,
+`modifyArtifact` (reachable only via the caller-less `runExecutor`) and `deleteArtifact`
+currently have no in-tree callers and are kept as documented programmatic-write infrastructure
+(mirroring `run-executor.md`'s candor about `runExecutor` itself).
 
 ## Plugin registration
 
@@ -44,7 +54,9 @@ config load.
 
 ## Config writer (`src/configWriter.ts`)
 
-Write operations for the self-improve feature. All output is SDK-native format.
+Programmatic write operations over `_synapse/` artifacts — documented infrastructure rather than
+the live self-improve write path (see the note at the top of this spec). All output is
+SDK-native format.
 
 ### Functions
 
