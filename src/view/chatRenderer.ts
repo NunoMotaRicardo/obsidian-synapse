@@ -714,7 +714,9 @@ export class ChatRendererController {
 		} else {
 			wasOpen = (this.view.view.taskPanelEl as HTMLDetailsElement).open ?? true;
 		}
-		this.view.view.currentTodos = todos;
+		// The tracker is the plan-state owner (audit §3, #236) — a TodoWrite render IS the
+		// current full plan, so record it on the tracker for background save/restore parity.
+		this.view.view.taskPlanTracker.currentTodos = todos;
 
 		const panel = this.view.view.taskPanelEl as HTMLDetailsElement;
 		panel.empty();
@@ -765,9 +767,8 @@ export class ChatRendererController {
 			this.view.view.taskPanelTimer = null;
 		}
 		this.view.view.taskPanelEl = null;
-		this.view.view.currentTodos = null;
-		this.view.view.taskPlan.clear();
-		this.view.view.pendingTaskCreates.clear();
+		// Clears currentTodos/taskPlan/pendingTaskCreates in one place (audit §3, #236).
+		this.view.view.taskPlanTracker.reset();
 	}
 
 	// ── Compaction debug blocks ─────────────────────────────────

@@ -13,11 +13,11 @@ import type {
 	ReasoningEffort,
 	SessionEvent,
 	SessionEvents,
-	TodoItem,
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
-import {Session, parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput, extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
+import {extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
+import {TaskPlanTracker} from './taskPlanTracker';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
 import {SearchPanelController} from './view/searchPanel';
@@ -114,7 +114,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	lastSupportedCommands: SlashCommand[] | null = null;
 	lastSupportedAgents: AgentInfo[] | null = null;
-	currentSession: Session | null = null;
+	currentSession: import('./agentService').Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
 	skills: SkillInfo[] = [];
@@ -172,16 +172,17 @@ export class SynapseView extends ItemView implements ViewContext {
 	runAutoCancelled = false;
 
 	// ── Task/plan tracking (TodoWrite, or TaskCreate/TaskUpdate) ─
-	/** Current plan's sub-tasks, from the most recent `TodoWrite` call this turn. `null` = no plan yet. */
-	currentTodos: TodoItem[] | null = null;
+	/**
+	 * The single plan-state owner (audit §3, issue #236): the TodoWrite/TaskCreate/TaskUpdate
+	 * branches of `handleSessionEvent()` delegate here; the same tracker class also backs
+	 * background sessions (`sessionSidebar.ts`) and `BackgroundSession` carries its snapshot.
+	 * `renderTodos` returned non-null is rendered via the renderer; the tracker itself is DOM-free.
+	 */
+	readonly taskPlanTracker: TaskPlanTracker = new TaskPlanTracker();
 	/** Root element of the live task panel for the current turn, if a plan exists. */
 	taskPanelEl: HTMLElement | null = null;
 	/** Ticks while a task panel is visible to keep its elapsed-runtime label live. */
 	taskPanelTimer: ReturnType<typeof setInterval> | null = null;
-	/** Incrementally-built plan from `TaskCreate`/`TaskUpdate` calls this turn (taskId -> item), the newer sibling of `TodoWrite`. */
-	taskPlan: Map<string, TodoItem> = new Map();
-	/** `TaskCreate` calls awaiting their `tool.execution_complete` result, which carries the server-assigned task id. */
-	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}> = new Map();
 
 	// ── Session sidebar state ──────────────────────────────────
 	/**
@@ -1074,61 +1075,26 @@ export class SynapseView extends ItemView implements ViewContext {
 			case 'tool.execution_start': {
 				const {toolName, toolCallId, input: toolInput} = event.data;
 				this.turnToolsUsed.push(toolName);
-				if (toolName === 'TodoWrite') {
-					const todos = parseTodoWritePayload(toolInput);
-					if (todos) {
-						this.renderer.renderTaskPanel(todos);
-						break;
-					}
-					// Payload didn't look like a TodoWrite plan — fall through to generic rendering.
-				} else if (toolName === 'TaskCreate') {
-					const parsed = parseTaskCreateInput(toolInput);
-					if (parsed) {
-						// The id is only known once the result arrives — stash the fields keyed by
-						// toolCallId so tool.execution_complete can add the entry to taskPlan.
-						this.pendingTaskCreates.set(toolCallId, parsed);
-						break;
-					}
-				} else if (toolName === 'TaskUpdate') {
-					const parsed = parseTaskUpdateInput(toolInput);
-					if (parsed && this.taskPlan.has(parsed.taskId)) {
-						// The CLI also emits TaskUpdate calls that only touch untracked fields
-						// (e.g. dependencies) — parsed.status/subject/activeForm are all
-						// undefined in that case. Skip the map mutation and DOM rebuild when
-						// nothing displayable actually changed, rather than churning the panel
-						// on every dependency-only update during an agentic loop.
-						const hasVisibleChange = parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined;
-						if (hasVisibleChange) {
-							if (parsed.status === 'deleted') {
-								this.taskPlan.delete(parsed.taskId);
-							} else {
-								const existing = this.taskPlan.get(parsed.taskId)!;
-								this.taskPlan.set(parsed.taskId, {
-									content: parsed.subject ?? existing.content,
-									status: parsed.status ?? existing.status,
-									activeForm: parsed.activeForm ?? existing.activeForm,
-								});
-							}
-							this.renderer.renderTaskPanel([...this.taskPlan.values()]);
-						}
-						break;
-					}
+				// Task-plan state machine (TodoWrite/TaskCreate/TaskUpdate) lives on the tracker
+				// (audit §3, #236) — the same class the background path uses. A consumed event
+				// with todos renders them; anything else falls through to generic rendering.
+				const plan = this.taskPlanTracker.onToolStart(toolName, toolCallId, toolInput);
+				if (plan.renderTodos) {
+					this.renderer.renderTaskPanel(plan.renderTodos);
+					break;
 				}
+				if (plan.handled) break;
 				this.renderer.addToolCallBlock(toolCallId, toolName, toolInput);
 				break;
 			}
 			case 'tool.execution_complete': {
 				const {toolCallId, toolName, success, result, error: toolError} = event.data;
-				if (toolName === 'TaskCreate' && this.pendingTaskCreates.has(toolCallId)) {
-					const pending = this.pendingTaskCreates.get(toolCallId)!;
-					this.pendingTaskCreates.delete(toolCallId);
-					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
-					if (taskId) {
-						this.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
-						this.renderer.renderTaskPanel([...this.taskPlan.values()]);
-					}
+				const plan = this.taskPlanTracker.onToolComplete(toolCallId, toolName, result, toolError);
+				if (plan.renderTodos) {
+					this.renderer.renderTaskPanel(plan.renderTodos);
 					break;
 				}
+				if (plan.handled) break;
 				this.renderer.completeToolCallBlock(toolCallId, success, result, toolError);
 				// Surface a clear, actionable message for transient-looking write/edit
 				// failures (e.g. a file locked by sync or open elsewhere) instead of

@@ -1,8 +1,9 @@
 import type {App, Component} from 'obsidian';
 import type SynapsePlugin from '../main';
 import type {SynapseView} from '../synapseView';
-import type {Session, TodoItem} from '../agentService';
+import type {Session} from '../agentService';
 import type {ChatMessage} from '../types';
+import type {TaskPlanTracker, TaskPlanTrackerState} from '../taskPlanTracker';
 
 /**
  * Narrow bridge a `src/view/*` controller receives instead of the whole `SynapseView`.
@@ -57,11 +58,18 @@ export interface BackgroundSession {
 	toolCallsContainer: HTMLElement | null;
 	reasoningEl: HTMLDetailsElement | null;
 	reasoningBodyEl: HTMLElement | null;
-	/** Current plan's sub-tasks from the most recent `TodoWrite` call this turn, if any. */
-	currentTodos: TodoItem[] | null;
+	/**
+	 * Task-plan state (TodoWrite/TaskCreate/TaskUpdate) as a tracker snapshot (audit §3, #236) —
+	 * the foreground tracker's `snapshot()` on save, restored into the restored foreground
+	 * tracker on re-attach. Serializable-by-copy (plain arrays re-hydrated into Maps).
+	 */
+	taskPlanTrackerState: TaskPlanTrackerState;
+	/**
+	 * The live tracker for this hidden session's `registerBackgroundEvents()` handlers —
+	 * lazily hydrated from `taskPlanTrackerState` on first access and kept in sync with it
+	 * (`restore()`ed from the snapshot when absent, so a save→restore round-trip through the
+	 * state field is always authoritative).
+	 */
+	taskPlanTracker?: TaskPlanTracker;
 	taskPanelEl: HTMLElement | null;
-	/** Incrementally-built plan from `TaskCreate`/`TaskUpdate` calls this turn (taskId -> item). */
-	taskPlan: Map<string, TodoItem>;
-	/** `TaskCreate` calls awaiting their result (which carries the assigned task id). */
-	pendingTaskCreates: Map<string, {subject: string; activeForm?: string}>;
 }
