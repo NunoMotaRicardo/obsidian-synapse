@@ -15,7 +15,7 @@ import {scanAgents, scanSkills} from '../configWriter';
 import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
-import {TelegramApi, TelegramApiError} from './telegramApi';
+import {TelegramApi, TelegramApiError, type TelegramApiLike} from './telegramApi';
 import type {BotConnectionStatus} from './types';
 
 /** Key for a topic-based session: "chatId" or "chatId:threadId". */
@@ -42,7 +42,9 @@ interface ActiveBotSession {
  * and message processing.
  */
 export class TelegramBotService {
-	private api: TelegramApi | null = null;
+	// The seam the apiFactory fills (issue #233) — typed as the interface so tests
+	// can inject a fake; only sendReply()/downloadAttachments()/pollLoop() touch it.
+	private api: TelegramApiLike | null = null;
 	private polling = false;
 	private pollAbort: AbortController | null = null;
 	private offset = 0;
@@ -59,7 +61,16 @@ export class TelegramBotService {
 	/** Status change callbacks. */
 	private statusListeners: Array<(status: BotConnectionStatus) => void> = [];
 
-	constructor(private plugin: SynapsePlugin) {}
+	/**
+	 * `apiFactory` builds the Telegram adapter from the bot token — dependency injection
+	 * for testability (issue #233), not a rewrite: the default keeps constructing the real
+	 * `TelegramApi`, so the production call site (`main.ts`'s `connectTelegram()`) is
+	 * unchanged. Tests pass a fake implementing `TelegramApiLike`.
+	 */
+	constructor(
+		private plugin: SynapsePlugin,
+		private apiFactory: (token: string) => TelegramApiLike = (token) => new TelegramApi(token),
+	) {}
 
 	onStatusChange(cb: (status: BotConnectionStatus) => void): () => void {
 		this.statusListeners.push(cb);
@@ -87,7 +98,7 @@ export class TelegramBotService {
 			throw new Error('Please add at least one allowed user ID before connecting.');
 		}
 
-		this.api = new TelegramApi(botToken);
+		this.api = this.apiFactory(botToken);
 
 		try {
 			const me = await this.api.getMe();
