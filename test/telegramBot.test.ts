@@ -103,6 +103,7 @@ class FakeTelegramApi implements TelegramApiLike {
 	getMeCalls = 0;
 	getMeError?: Error;
 	getUpdatesCalls: Array<{offset?: number; timeout?: number}> = [];
+	/** Successful `sendMessage` calls only — a call that throws (a queued error) is *not* recorded; count every attempt via `sendMessageAttempts`. */
 	sentMessages: SentMessage[] = [];
 	sendMessageAttempts = 0;
 	/** One-shot rejections consumed by the first `sendMessage` calls. */

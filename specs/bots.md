@@ -51,7 +51,7 @@
 No test talks to the network: `connect()`/`getMe`/long-polling/replies/typing/attachments all
 resolve against the recorded fake, `inlineChat` is a mock on the plugin object (no live CLI), and
 the one bonus test exercising the default factory runs the real `TelegramApi` against the mocked
-`requestUrl` transport. The suite covers routing (allowlist enforcement, `/start`//`help`//`new`
+`requestUrl` transport. The suite covers routing (allowlist enforcement, `/start`, `/help`, `/new`
 commands, no-content drops), per-chat/topic queue serialization, reply splitting at the 4096 limit
 plus the "can't parse" retry-as-plain-text path, typing-loop shutdown, attachment download
 (largest-photo selection, filename sanitization, vault-adapter write), session resume identity, and
