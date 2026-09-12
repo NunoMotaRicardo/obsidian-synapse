@@ -142,9 +142,13 @@ export class TaskPlanTracker {
 	 * - `TaskUpdate`: parse → the one `hasVisibleChange` guard → `taskPlan` membership check →
 	 *   delete-on-`'deleted'` or field-merge → render.
 	 *
-	 * Malformed/unrecognized payloads, or a `TaskUpdate` for an untracked id (or one with no
-	 * displayable change), return `{handled: false, renderTodos: null}` so the caller falls
-	 * through to generic tool-call rendering — same behavior as before the extraction.
+	 * Malformed/unrecognized payloads, or a `TaskUpdate` for an untracked id, return
+	 * `{handled: false, renderTodos: null}` so the caller falls through to generic tool-call
+	 * rendering — same behavior as before the extraction. The one subtlety (matching `main`'s
+	 * inline branch): a `TaskUpdate` for a *tracked* id that carries no displayable field is
+	 * absorbed silently (`{handled: true, renderTodos: null}`) — no map mutation, no render, and
+	 * no generic tool-call block — because `main`'s `break` sat inside the
+	 * `parsed && taskPlan.has(taskId)` check.
 	 */
 	onToolStart(toolName: string, toolCallId: string, input: unknown): {handled: boolean; renderTodos: TodoItem[] | null} {
 		if (toolName === 'TodoWrite') {
@@ -168,24 +172,29 @@ export class TaskPlanTracker {
 		}
 		if (toolName === 'TaskUpdate') {
 			const parsed = parseTaskUpdateInput(input);
-			// The CLI also emits TaskUpdate calls that only touch untracked fields
-			// (e.g. dependencies) — parsed.status/subject/activeForm are all
-			// undefined in that case. Skip the map mutation when nothing displayable
-			// actually changed, rather than churning the panel on every dependency-only
-			// update during an agentic loop.
-			const hasVisibleChange = parsed !== null && (parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined);
-			if (parsed && hasVisibleChange && this.taskPlan.has(parsed.taskId)) {
-				if (parsed.status === 'deleted') {
-					this.taskPlan.delete(parsed.taskId);
-				} else {
-					const existing = this.taskPlan.get(parsed.taskId)!;
-					this.taskPlan.set(parsed.taskId, {
-						content: parsed.subject ?? existing.content,
-						status: parsed.status ?? existing.status,
-						activeForm: parsed.activeForm ?? existing.activeForm,
-					});
+			if (parsed && this.taskPlan.has(parsed.taskId)) {
+				// The CLI also emits TaskUpdate calls that only touch untracked fields
+				// (e.g. dependencies) — parsed.status/subject/activeForm are all
+				// undefined in that case. Absorb the event silently (no map mutation, no
+				// render, no generic tool-call block) rather than churning the panel on
+				// every dependency-only update during an agentic loop — this matches
+				// main's inline branch, whose `break` sat inside this membership check.
+				const hasVisibleChange = parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined;
+				if (hasVisibleChange) {
+					if (parsed.status === 'deleted') {
+						this.taskPlan.delete(parsed.taskId);
+					} else {
+						const existing = this.taskPlan.get(parsed.taskId)!;
+						this.taskPlan.set(parsed.taskId, {
+							content: parsed.subject ?? existing.content,
+							status: parsed.status ?? existing.status,
+							activeForm: parsed.activeForm ?? existing.activeForm,
+						});
+					}
+					return {handled: true, renderTodos: [...this.taskPlan.values()]};
 				}
-				return {handled: true, renderTodos: [...this.taskPlan.values()]};
+				// Tracked id, nothing displayable to change — absorbed, don't fall through.
+				return {handled: true, renderTodos: null};
 			}
 			return {handled: false, renderTodos: null};
 		}

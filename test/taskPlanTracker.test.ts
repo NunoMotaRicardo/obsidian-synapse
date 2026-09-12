@@ -109,11 +109,11 @@ describe('TaskPlanTracker — TaskUpdate', () => {
 		expect(tracker.taskPlan.size).toBe(0);
 	});
 
-	it('a dependency-only update (no visible change) is absorbed without a render', () => {
+	it('a dependency-only update on a tracked task (no visible change) is absorbed silently (no render, no fallthrough)', () => {
 		const tracker = new TaskPlanTracker();
 		seedPlan(tracker);
 		const result = tracker.onToolStart('TaskUpdate', 'call-2', {taskId: '1', addBlockedBy: ['2']});
-		expect(result.handled).toBe(false);
+		expect(result.handled).toBe(true);
 		expect(result.renderTodos).toBeNull();
 		// The tracked entry is untouched.
 		expect(tracker.taskPlan.get('1')).toEqual({content: 'First task', status: 'pending', activeForm: 'First-tasking'});
