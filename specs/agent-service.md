@@ -693,7 +693,7 @@ its profile:
 |---|---|---|
 | `textTransform` | `tools: []`, `maxTurns: 1` | editor text actions, note edit/structure, new note/canvas/summary, edit modal |
 | `readOnly` | `tools: ['Read']`, `maxTurns: 10` | `askAboutImage`, `extractImageContent` |
-| `attended` | `maxTurns: 10` (default toolset) | `convertToMermaidBelow` |
+| `attended` | `maxTurns: 10` (full default toolset, including Write/Edit — "attended" means a human is present to answer its approval prompts, **not** that the tools are restricted) | `convertToMermaidBelow` |
 | `unattendedBypass` | `permissionMode: 'bypassPermissions'`, `allowDangerouslySkipPermissions: true` | Telegram bot |
 
 `searchPanel.ts` stays fully explicit (its `SEARCH_TOOLS` + `maxTurns: 20/40` +

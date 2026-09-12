@@ -380,7 +380,13 @@ export const INLINE_CHAT_PROFILES: Record<InlineChatProfileName, InlineChatProfi
 	textTransform: {tools: [], maxTurns: 1},
 	/** Single read-only tool, small loop (image reading/analysis). */
 	readOnly: {tools: ['Read'], maxTurns: 10},
-	/** Default toolset, small loop (attending over skill/tool use, e.g. mermaid conversion). */
+	/**
+	 * Default toolset, small loop (e.g. mermaid conversion, which uses the vault's skills).
+	 * Intentionally leaves `tools` unset → the SDK's FULL default toolset (including
+	 * Write/Edit), gated by `permissionMode: 'default'` approval prompts. "Attended" means
+	 * a human initiated this one-shot action and is present to answer those prompts — NOT
+	 * that the tools are restricted; of the editor profiles only this one is write-capable.
+	 */
 	attended: {maxTurns: 10},
 	/** Unattended runner that must not stop on an approval prompt (Telegram bot). */
 	unattendedBypass: {permissionMode: 'bypassPermissions', allowDangerouslySkipPermissions: true},

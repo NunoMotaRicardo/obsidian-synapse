@@ -91,6 +91,24 @@ describe('editorMenu.ts — read-only image sites left unwired, deliberately (#1
 		expect(source).not.toMatch(/import\s*\{[^}]*autoApproveReadOnlyTools/);
 	});
 
+	it('lets no call site override its own profile with a wider tools/maxTurns value (issue #230)', () => {
+		// The profile convention is "caller's explicit value wins" — which means a call site
+		// could silently defeat its profile's restrictiveness (e.g. `profile: 'textTransform',
+		// tools: ['Write']`). This makes the convention self-enforcing instead: every
+		// textTransform/readOnly/attended call body in editorMenu.ts + editModal.ts must rely
+		// entirely on the profile for its tools/maxTurns shape (deepseek-v4-pro review of #231).
+		for (const rel of ['src/editor/editorMenu.ts', 'src/modals/editModal.ts']) {
+			const source = read(rel);
+			const callBodies = source.split(/inlineChat\(\{/).slice(1)
+				.map(call => call.slice(0, call.indexOf('});')));
+			for (const body of callBodies) {
+				if (!/profile: '(textTransform|readOnly|attended)'/.test(body)) continue;
+				expect(body).not.toMatch(/\btools\s*:/);
+				expect(body).not.toMatch(/\bmaxTurns\s*:/);
+			}
+		}
+	});
+
 	it('leaves the textTransform (profile) call sites without canUseTool — no vault-tool gating added', () => {
 		const source = read('src/editor/editorMenu.ts');
 		// The six pure text-transform call sites request no tools at all — expressed via the
