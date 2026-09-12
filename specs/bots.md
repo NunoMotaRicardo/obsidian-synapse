@@ -24,7 +24,9 @@
 - Runs only while Obsidian is open and connected.
 - **Tool approval policy — deliberately not `settings.toolApproval`.** Every bot session runs
   `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions: true`
-  unconditionally, in `buildBotSessionConfig()`. This is a standing exception to the unified policy
+  unconditionally, passed as the `profile: 'unattendedBypass'` inlineChat() profile at the call
+  site (issue #230 — `INLINE_CHAT_PROFILES` in `agentService.ts`; `buildBotSessionConfig()` no
+  longer carries the permission fields itself). This is a standing exception to the unified policy
   unattended `runExecutor.ts`-backed runs follow (see \"Tool approval policy\" under
   [run-executor.md](run-executor.md)): the bot's whole purpose is unattended remote control of the
   vault from a phone, and it has no per-run override to opt back into `'allow'` if the global
@@ -33,7 +35,7 @@
   global setting for an unrelated reason (e.g. wanting search/editor actions to prompt), with no
   way to recover write access for just the bot. Unlike a `runExecutor.ts`-backed run, the bot
   doesn't go through that policy machinery at all (it calls `AgentService.inlineChat()` directly
-  with the permission options hardcoded in `buildBotSessionConfig()`), so an `'ask'` denial there
+  with the `unattendedBypass` profile), so an `'ask'` denial there
   wouldn't even land in a report the way a `runExecutor.ts` run's does. The bot's actual safety
   control is the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`)
   — see [SECURITY.md](../SECURITY.md) #1.

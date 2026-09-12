@@ -16,8 +16,8 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
     'plan'`).
   - `inlineChat()` defaults to **agentic** behavior: `maxTurns` falls back to
     `DEFAULT_AGENTIC_MAX_TURNS` (50) so multi-step tool use (Read/Glob/Grep loops) can finish.
-    Callers doing pure text transforms (editor text actions, note edit/structure, new
-    note/canvas/summary) must pass `tools: []` + `maxTurns: 1` explicitly.
+    Callers name a recurring call shape with the `profile:` option instead of spelling raw
+    defaults — see "Named `inlineChat()` profiles" below.
 - Re-export all SDK types consumed elsewhere so the SDK import surface stays in one file.
 - Track own `ConnectionState` (`'disconnected' | 'connecting' | 'connected' | 'error'`) around
   resolution and first query attempt.
@@ -239,9 +239,13 @@ Named agents parsed from `_synapse/agents/*.md` (`configWriter.ts`'s `scanAgents
 
 This resolution does not happen inside `AgentService`. `resolveModelForAgent(agent, models,
 fallback)` (`view/sessionConfig.ts`) matches the agent's `model` string against the available
-`ModelInfo[]` (exact id/name/`resolvedModel` match, then substring, then a `haiku`/`sonnet`/
-`opus`/`flash`/`pro` keyword fallback — the same tiers `AgentService#resolveValidModel` uses, see
-"Model list mapping" above) and falls back to the caller-supplied default when nothing matches.
+`ModelInfo[]` and falls back to the caller-supplied default when nothing matches. The tier
+search itself — exact id/name/`resolvedModel` match, then substring, then a `haiku`/`sonnet`/
+`opus`/`flash`/`pro` keyword fallback — is **one shared function owned by this module**:
+`matchModelTiers(target, models)` (`agentService.ts`, audit rec 4), which
+`AgentService#resolveValidModel` delegates to as well (see "Model list mapping" above);
+`resolveModelForAgent` is a thin wrapper keeping only its own `!agent?.model` → `fallback`
+precondition and `?? fallback` semantics.
 Callers resolve the model this way *before* building `Options` — `configToolbar.ts`,
 `synapseView.ts`, `searchPanel.ts`, and `telegramBot.ts` all call it directly — so by the time
 `AgentService.routeQueryOptions(options, app?)` (private; see "Vault settings layer" above) runs,
@@ -450,14 +454,15 @@ of the `ModelInfo` shape (local providers in `providerModels.ts` still populate 
 heuristics/`/api/show` capability lists) — `mapSdkModel()` does not set them.
 
 `resolvedModel` (the canonical wire id an alias row resolves to, e.g. `'sonnet'` ->
-`'claude-sonnet-5'`) is used as an additional exact-match tier in `AgentService#resolveValidModel`
-and `resolveModelForAgent` (`view/sessionConfig.ts`), ahead of their existing substring/keyword
-heuristics: a persisted explicit/canonical id now matches its alias row deterministically instead
-of only via the substring fallback (`target.includes(m.id)`) that already coincidentally caught
-most such cases. The substring and keyword-list (`haiku`/`sonnet`/`opus`/`flash`/`pro`) tiers stay,
-unchanged, because `resolvedModel` is only ever set on SDK-sourced (Claude) rows — local-provider
-rows from `customModels` never have it, and the keyword tier still does useful work for
-non-Claude/partial-name matches.
+`'claude-sonnet-5'`) is used as an additional exact-match tier in `matchModelTiers()`
+(`agentService.ts`) — the one shared tier search both `AgentService#resolveValidModel` and
+`resolveModelForAgent` (`view/sessionConfig.ts`) delegate to — ahead of the existing
+substring/keyword heuristics: a persisted explicit/canonical id now matches its alias row
+deterministically instead of only via the substring fallback (`target.includes(m.id)`) that
+already coincidentally caught most such cases. The substring and keyword-list
+(`haiku`/`sonnet`/`opus`/`flash`/`pro`) tiers stay, unchanged, because `resolvedModel` is only
+ever set on SDK-sourced (Claude) rows — local-provider rows from `customModels` never have it,
+and the keyword tier still does useful work for non-Claude/partial-name matches.
 
 ## Tool execution events
 
@@ -673,8 +678,27 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
 
 Of `inlineChat()`'s call sites, only two genuinely request tools on the SDK path:
 `searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`, `maxTurns: 40`).
-The rest pass `tools: []` deliberately — one-shot generation actions (create note, create canvas,
+The rest pass no tools deliberately — one-shot generation actions (create note, create canvas,
 edit selection) that have no tools — and are untouched.
+
+**Named profiles (issue #230, audit rec 5):** the recurring call shapes are named presets in
+`INLINE_CHAT_PROFILES` (`agentService.ts`), passed via `inlineChat()`'s options-bag-only
+`profile?: InlineChatProfileName` field (not part of `SessionConfig`, not part of the SDK's
+`Options`). A profile fills in **only** the fields the caller left unset — a caller's explicit
+value always wins (same convention as `routeQueryOptions()`), so e.g. the editor's
+`permissionMode: toolApproval === 'allow' ? 'bypassPermissions' : 'default'` keeps overriding
+its profile:
+
+| Profile | Presets | Used by |
+|---|---|---|
+| `textTransform` | `tools: []`, `maxTurns: 1` | editor text actions, note edit/structure, new note/canvas/summary, edit modal |
+| `readOnly` | `tools: ['Read']`, `maxTurns: 10` | `askAboutImage`, `extractImageContent` |
+| `attended` | `maxTurns: 10` (default toolset) | `convertToMermaidBelow` |
+| `unattendedBypass` | `permissionMode: 'bypassPermissions'`, `allowDangerouslySkipPermissions: true` | Telegram bot |
+
+`searchPanel.ts` stays fully explicit (its `SEARCH_TOOLS` + `maxTurns: 20/40` +
+`canUseTool: autoApproveReadOnlyTools` wiring is asserted by wiring tests) and `runExecutor.ts`
+stays on #151's `resolveToolApprovalPolicy()` path — neither uses `profile`.
 
 **Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool`** — not a new
 "attended-but-automated" permission concept, and not `resolveToolApprovalPolicy()` either:

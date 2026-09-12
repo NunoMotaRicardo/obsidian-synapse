@@ -1024,11 +1024,6 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 	}
 }
 
-/**
- * Register an inline session in the SynapseView session list.
- * Stores the session name with an [inline] prefix so the sidebar
- * filter can distinguish inline sessions from chat sessions.
- */
 export {type SelectionInfo} from '../types';
 
 /** "Chat with Synapse" — open the sidebar view, optionally with prompt text and selection. */

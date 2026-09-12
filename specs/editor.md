@@ -19,15 +19,18 @@ so there is no duplication. The image embed is detected via regex matching for c
 extensions in both wikilink and standard markdown syntaxes, then resolved through
 `app.metadataCache.getFirstLinkpathDest()` (and validated against `IMAGE_EXTENSIONS`).
 
-- Quick actions route through handler agents via `AgentService.inlineChat()`. Two profiles:
+- Quick actions route through handler agents via `AgentService.inlineChat()`, naming their call
+  shape with the `profile:` option (issue #230 — `INLINE_CHAT_PROFILES` in `agentService.ts`;
+  see "Wiring `inlineChat()`'s callers" in `agent-service.md`). Two profiles here:
   - **Text transforms** (selection actions, note edit, structure/refine, new note/canvas,
-    folder summary): content is inlined in the prompt, so they pin `tools: []` + `maxTurns: 1`
-    explicitly — deterministic, fast, and immune to the model wandering off into tool use.
+    folder summary — and the edit modal's variation runs): content is inlined in the prompt, so
+    they pass `profile: 'textTransform'` (`tools: []`, `maxTurns: 1`) — deterministic, fast, and
+    immune to the model wandering off into tool use.
     The plugin applies the result itself (editor dispatch / `vault.create`).
-  - **Vision/image actions** (extract text, ask about image → `tools: ['Read']`; convert to
-    mermaid → default toolset for skill access): the model must `Read` the image path inlined
-    in the prompt, so they run with `maxTurns: 10` and their system messages explicitly
-    instruct reading the path first.
+  - **Vision/image actions** (extract text, ask about image → `profile: 'readOnly'`
+    (`tools: ['Read']`); convert to mermaid → `profile: 'attended'` (`maxTurns: 10`, default
+    toolset for skill access)): the model must `Read` the image path inlined in the prompt, so
+    their system messages explicitly instruct reading the path first.
   Text actions bind to the utility agent (`featureAgents.inline`, empty by default — no explicit
   `agent` is passed, so the SDK's own default applies), while image actions bind to the vision-capable
   agent (`featureAgents.vision`, defaulting to `'Vision'`). There is no hard dependency on any
@@ -36,7 +39,8 @@ extensions in both wikilink and standard markdown syntaxes, then resolved throug
 
 ## Constraints
 
-- Text-transform paths (`tools: []` + `maxTurns: 1`) must stay fast: no usable skills or MCP
+- Text-transform paths (`profile: 'textTransform'` → `tools: []` + `maxTurns: 1`) must stay fast:
+  no usable skills or MCP
   servers (nothing is permitted to call them), minimal system prompt. This does not apply to the
   vision/image profile — convert-to-mermaid deliberately runs with the default toolset so it can
   use the vault's mermaid skill (see above).
