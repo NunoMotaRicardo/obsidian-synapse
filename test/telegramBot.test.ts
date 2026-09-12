@@ -75,13 +75,15 @@ function userMessage(overrides: Partial<TelegramMessage> & {chatId?: number; sen
 // `failPendingPoll` rejects an in-flight long-poll to exercise the backoff.
 // ---------------------------------------------------------------------------
 
-interface SentMessage {
-	chat_id: number;
-	text: string;
-	message_thread_id?: number;
-	reply_to_message_id?: number;
-}
+/**
+ * The full `TelegramApiLike['sendMessage']` parameter shape — the fake records
+ * every field the call site sends rather than narrowing to today's subset, so a
+ * future `parse_mode`/`disable_web_page_preview` addition at the call site flows
+ * into the recordings (and drift shows up as a diff), not silently away.
+ */
+type SentMessage = Parameters<TelegramApiLike['sendMessage']>[0];
 
+/** The `inlineChat` option fields the suite records/observes (a subset of the real bag). */
 interface InlineChatCall {
 	prompt: string;
 	profile?: string;
