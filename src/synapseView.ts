@@ -13,6 +13,7 @@ import type {
 	ReasoningEffort,
 	SessionEvent,
 	SessionEvents,
+	Session,
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
@@ -114,7 +115,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	lastSupportedCommands: SlashCommand[] | null = null;
 	lastSupportedAgents: AgentInfo[] | null = null;
-	currentSession: import('./agentService').Session | null = null;
+	currentSession: Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
 	skills: SkillInfo[] = [];

@@ -613,25 +613,28 @@ the `TodoItem` type) normalizes an `input` value into a todo list:
   form shown while a task is in progress, e.g. "Running tests") is included only when present as
   a non-empty string. Non-object entries in `todos` are skipped.
 
-**`TaskCreate`/`TaskUpdate`** — no single call carries the full plan, so the view accumulates a
-`TaskPlan` (`Map<string, TodoItem>`, keyed by the server-assigned task id) across calls in a
-turn:
+**`TaskCreate`/`TaskUpdate`** — no single call carries the full plan, so the plan state is
+accumulated in a `TaskPlan` (`Map<string, TodoItem>`, keyed by the server-assigned task id)
+across calls in a turn. Since issue #236 the accumulation lives on the DOM-free
+`TaskPlanTracker` (`src/taskPlanTracker.ts`, re-exported through this module; see
+`chat-view.md` for how the foreground and background paths delegate to it) — "the tracker"
+below:
 
 - `parseTaskCreateInput(input): {subject, activeForm?} | null` parses the fields available at
   call time — the id isn't known yet (it's server-assigned and only appears in the result), so
-  the view stashes the parsed fields keyed by `toolCallId` (a `pendingTaskCreates` map) until the
+  the tracker stashes the parsed fields keyed by `toolCallId` (a `pendingTaskCreates` map) until the
   matching `tool.execution_complete` arrives.
 - `parseTaskCreateResultId(resultText): string | null` extracts the id from the `TaskCreate`
   result's flattened text content. The CLI's `TaskCreateOutput` type is structured
   (`{task: {id, subject}}`), but `tool_result` content already arrives at the view as plain text
   (`convertToSessionEvent()` flattens it) — observed format:
   `"Task #<id> created successfully: <subject>"`. On a successful `TaskCreate` completion with a
-  parseable id, the view adds `{content: subject, status: 'pending', activeForm}` to `TaskPlan`.
+  parseable id, the tracker adds `{content: subject, status: 'pending', activeForm}` to `TaskPlan`.
 - `parseTaskUpdateInput(input): {taskId, status?, subject?, activeForm?} | null` parses a patch;
-  `status` additionally recognizes `'deleted'` (not a valid `TodoItem` status — the view removes
+  `status` additionally recognizes `'deleted'` (not a valid `TodoItem` status — the tracker removes
   the entry from `TaskPlan` instead of rendering a fourth status). Dependency fields
   (`addBlocks`/`addBlockedBy`) aren't part of the return value — the panel tracks status, not the
-  dependency graph. The view only applies an update if `taskId` already exists in `TaskPlan`
+  dependency graph. The tracker only applies an update if `taskId` already exists in `TaskPlan`
   (ignores updates to unknown/untracked ids rather than fabricating a placeholder entry).
 
 ## Local models
