@@ -18,7 +18,7 @@ import type {App} from 'obsidian';
 
 /**
  * Hardcoded vault folder for Synapse customization artifacts (agents,
- * skills, reports, `.mcp.json`). Canonical definition — every
+ * skills, `.mcp.json`). Canonical definition — every
  * other module imports it from here. `settings.ts` re-exports it (rather
  * than importing it under a new name) so `configWriter.ts`'s existing
  * `import {SYNAPSE_FOLDER} from './settings'` keeps working unmodified.

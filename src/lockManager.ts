@@ -25,7 +25,7 @@ export class LockAcquisitionError extends Error {
 
 /**
  * Bounded wait for a queued acquisition. Generous enough to cover a slow
- * `inlineChat()`-backed write (report appends, artifact writes) without
+ * `vault.modify()`-backed write (settings persistence, artifact writes) without
  * making a genuinely wedged holder block the queue indefinitely. 60s
  * comfortably exceeds ordinary vault.modify() latency; a holder still
  * running past that is treated as wedged.

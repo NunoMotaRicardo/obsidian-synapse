@@ -807,7 +807,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(panel)
 			.setName('Tools approval')
-			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs. For unattended runs, which have no one to ask, "ask" instead denies tool calls outright and logs the denial to that run\'s report, while "allow" runs them without asking. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
+			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs, while "allow" runs them without asking. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
 			.addDropdown(dropdown => dropdown
 				.addOptions({allow: 'Allow (auto-approve)', ask: 'Ask (require approval)'})
 				.setValue(this.plugin.settings.toolApproval)
