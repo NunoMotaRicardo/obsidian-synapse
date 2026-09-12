@@ -346,6 +346,6 @@ configurations between machines.
 - [`.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`](../.docs/decisions/2026-06-28-claude-agent-sdk-migration.md) —
   the migration decision that introduced the agent-first routing model.
 - [`specs/config-writer.md`](../specs/config-writer.md) — technical spec for config-writer
-  (`writeAgent`, `writeSkill`, etc.).
+  (`writeSkill`, scans, tool-approval persistence).
 - [Claude Agent SDK documentation](https://docs.anthropic.com/en/docs/claude-code/sdk) —
   authoritative reference for `AgentDefinition` fields, `Options`, MCP config, and skills.

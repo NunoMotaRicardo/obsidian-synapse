@@ -32,7 +32,6 @@ specs/                       ← repo root — architecture overview + one file 
   config-writer.md
   editor.md
   lock-manager.md
-  run-executor.md
   runtime-manager.md
   settings.md
   vault-paths.md

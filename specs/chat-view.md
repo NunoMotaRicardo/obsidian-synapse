@@ -419,10 +419,9 @@ and built in `buildUI()` via `controller.build(parent)`.
   - This is a question UI, not an approval gate: unlike `ToolApprovalModal`, there is no
     `suggestions`/`persistRules`/`sessionToolGrants` handling for this branch.
   - **Unattended paths still deny it**, with a message explaining no one is available to answer
-    rather than the generic wording each site otherwise uses: `autoApproveReadOnlyTools`
-    (`agentService.ts`, used by search/local-model call sites) and `makeDenyingCanUseTool`
-    (`runExecutor.ts`, used by unattended runs) both special-case `toolName ===
-    'AskUserQuestion'` before their normal fallback-deny message.
+    rather than the generic wording: `autoApproveReadOnlyTools`
+    (`agentService.ts`, used by search/local-model call sites) special-cases `toolName ===
+    'AskUserQuestion'` before its normal fallback-deny message.
 - **Attachment delivery:** the input area supports drag/drop (OS and vault files),
   clipboard paste (screenshot to blob), and the paperclip attachment button. The Agent SDK's
   `query()` `Options` has no top-level `attachments` field — `prompt` is
@@ -601,8 +600,7 @@ Both `inlineChat()` calls pass `app: this.app` and `canUseTool: autoApproveReadO
 (`agentService.ts`). `autoApproveReadOnlyTools` is an always-allow `CanUseTool`, safe here
 specifically because both search call sites restrict `tools` to the read-only set (`SEARCH_TOOLS`)
 — see "Wiring `inlineChat()`'s callers" in `agent-service.md` for the full reasoning (parity with
-the SDK path's own auto-approval of read-only tools, and why this is deliberately not the
-unattended `resolveToolApprovalPolicy()` mechanism). This does not open an approval modal per
+the SDK path's own auto-approval of read-only tools). This does not open an approval modal per
 tool call — up to `maxTurns: 40` of them would make search unusable.
 
 

@@ -337,13 +337,12 @@ export class TelegramBotService {
 		return {
 			model,
 			// Bot sessions run bypassPermissions unconditionally — deliberately NOT
-			// driven by settings.toolApproval, unlike runExecutor.ts's unattended-run
-			// policy (issue #151). Threading toolApproval through here would make
-			// remote-control-a-vault-from-your-phone (the bot's entire purpose) silently
-			// stop writing the moment someone sets the global setting to "ask" for an
-			// unrelated reason (e.g. wanting search/editor actions to prompt), with no
-			// per-message equivalent of a trigger's toolApproval: allow opt-in to recover
-			// with. The bot's real safety control is the numeric allowlist gating who can
+			// driven by settings.toolApproval (issue #151). Threading toolApproval
+			// through here would make remote-control-a-vault-from-your-phone (the bot's
+			// entire purpose) silently stop writing the moment someone sets the global
+			// setting to "ask" for an unrelated reason (e.g. wanting search/editor
+			// actions to prompt), with no per-message equivalent of a trigger's
+			// toolApproval: allow opt-in to recover with. The bot's real safety control is the numeric allowlist gating who can
 			// reach it at all (connect()/handleMessage() below) — see SECURITY.md #1,
 			// which this doesn't change. If unattended-vs-interactive nuance is wanted for
 			// the bot too, that's a follow-up with its own design (e.g. a bot-specific

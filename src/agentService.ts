@@ -313,8 +313,7 @@ function sdkModelId(sdk: SDKModelInfo): string {
  * Map SDK ModelInfo to the plugin's ModelInfo shape.
  * Only fields the SDK actually publishes are populated — no vision/tools/context-window
  * claims. The SDK's `ModelInfo` has no vision or tool-support field at all, so those stay
- * absent rather than guessed (consumers already treat absent as "assume supported", e.g.
- * `runExecutor.ts`'s `modelInfo?.supportsTools !== false`).
+ * absent rather than guessed (consumers already treat absent as "assume supported").
  */
 export function mapSdkModel(sdk: SDKModelInfo): ModelInfo {
 	const efforts = sdk.supportedEffortLevels ?? [];
@@ -1021,8 +1020,7 @@ export class AgentService {
 	 * modal/search caller passes it per call.
 	 *
 	 * Tools are only offered here when the caller *also* supplies `canUseTool` — editor actions
-	 * are one-shot rather than an ongoing attended conversation, so there is no "unattended by
-	 * design" precedent (`runExecutor.ts`) to fall back to running ungated; every tool call this
+	 * are one-shot rather than an ongoing attended conversation, so every tool call this
 	 * method makes must go through the same approval path as the chat panel's, never a silent
 	 * auto-approve. A caller with `app` but no `canUseTool` gets no tools rather than an
 	 * ungated one (fails closed, not "always denied" — the tool is simply never offered, so the
@@ -1544,10 +1542,8 @@ export async function refreshQueryMetadataCache(
  * tool set — `['Read']` or `['Read', 'Glob', 'Grep']`. Introduced by #167 for `searchPanel.ts`
  * (`maxTurns: 40`) so a search never opens one approval modal per tool call.
  *
- * This is deliberately **not** a new permission concept, and is narrower than #151's
- * `resolveToolApprovalPolicy()` (`src/runExecutor.ts`), which governs unattended runs that may
- * request write-capable tools and therefore must fail closed (`'ask'` == deny with no human to
- * ask). The read-only case is different: a verified spike against the live CLI showed the Agent
+ * This is deliberately **not** a new permission concept. The read-only case is different
+ * from a write-capable unattended run: a verified spike against the live CLI showed the Agent
  * SDK path *never invokes* `canUseTool` for `Read`/`Glob`/`Grep` at all — it auto-approves them
  * before the callback would even fire — while a write tool (`Write`) still goes through
  * `canUseTool` and is denied with no attended handler present. This handler therefore
@@ -1558,8 +1554,7 @@ export async function refreshQueryMetadataCache(
  * `READ_ONLY_TOOL_NAMES` is denied. `inlineChat()` forwards the same `canUseTool` to the raw
  * Claude-path `query()` call too, so a blanket always-allow handler would silently grant writes
  * to any future call site that wired it in alongside a write-capable tool. Failing closed on the
- * tool name keeps the guarantee in the code rather than in this comment. Call sites that
- * legitimately need write-capable tools stay on #151's `resolveToolApprovalPolicy()` path.
+ * tool name keeps the guarantee in the code rather than in this comment.
  */
 const READ_ONLY_TOOL_NAMES = new Set([
 	// searchPanel's SEARCH_TOOLS and editorMenu's ['Read'].

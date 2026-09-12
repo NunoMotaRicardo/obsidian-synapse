@@ -1,18 +1,15 @@
 # config-writer
 
 Source: `src/configWriter.ts`. Scan utilities for toolbar display, first-run seeding, and
-documented programmatic-write infrastructure for `_synapse/` artifacts. The Claude Agent SDK
+tool-approval persistence. The Claude Agent SDK
 discovers agents, skills, and MCP servers natively from the
 `_synapse/` plugin directory.
 
 **The live self-improve write path is the CLI agent's own `Write`/`Edit` tools operating on
 `_synapse/`** — an agent asked to propose an artifact writes it directly (guided by the
 self-improve hint, see the bottom of this spec). This module does not sit between the agent and
-the vault. Of its write functions, only `writeSkill` (first-run seeding) and
-`persistToolApprovalRules` (issue #197) have live in-tree callers today; `writeAgent`,
-`modifyArtifact` (reachable only via the caller-less `runExecutor`) and `deleteArtifact`
-currently have no in-tree callers and are kept as documented programmatic-write infrastructure
-(mirroring `run-executor.md`'s candor about `runExecutor` itself).
+the vault. Its write surface is `writeSkill` (first-run seeding) and
+`persistToolApprovalRules` (issue #197), both with live in-tree callers.
 
 ## Plugin registration
 
@@ -54,8 +51,8 @@ config load.
 
 ## Config writer (`src/configWriter.ts`)
 
-Programmatic write operations over `_synapse/` artifacts — documented infrastructure rather than
-the live self-improve write path (see the note at the top of this spec). All output is
+Writes for the module's two live write paths (first-run seeding and tool-approval persistence)
+plus the shared serialization helpers they rest on. All output is
 SDK-native format.
 
 ### Functions
@@ -64,10 +61,7 @@ SDK-native format.
 |---|---|---|
 | `scanAgents(app, folder)` | — | Reads `_synapse/agents/*.md` → `AgentConfig[]` |
 | `scanSkills(app, folder)` | — | Reads `_synapse/skills/*/SKILL.md` → `SkillInfo[]` |
-| `writeAgent(app, folder, config)` | `*.md` | `_synapse/agents/<kebab-name>.md` |
 | `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `_synapse/skills/<kebab-name>/SKILL.md` |
-| `modifyArtifact(app, filePath, updates)` | — | Patches frontmatter/body in-place |
-| `deleteArtifact(app, filePath)` | — | Moves to Obsidian trash |
 | `ensureFolder(app, path)` | Folder | Creates intermediates |
 | `persistToolApprovalRules(app, ruleStrings)` | `settings.json` (if absent) | `_synapse/settings.json`'s `permissions.allow` |
 
@@ -76,8 +70,8 @@ SDK-native format.
 - Agent files use `.md` extension (not `.agent.md`) — SDK convention.
 - Agent frontmatter: SDK `AgentDefinition` fields only (`description`, `model`, `tools`,
   `skills`, `disallowedTools`, `mcpServers`). No custom fields.
-- `parseFrontmatter()` and `FM_RE` live in this module.
-- `modifyArtifact` uses `parseFrontmatter` for in-place patching.
+- `parseFrontmatter()` and `FM_RE` live in this module; `parseFrontmatter` is the reader behind
+  the scans (`scanAgents`, `scanSkills`).
 - No MCP config mutation — `.mcp.json` is user-edited.
 
 ### Frontmatter value escaping (write ↔ read must be inverses)
@@ -95,10 +89,11 @@ literal backslash that sits immediately before an escaped quote; the single alte
 pass consumes each two-character escape token (`\\` or `\"`) atomically, left to right, which is
 the correct inverse of how `serializeFmField` produced it.
 
-Write and read are round-trip inverses for every string value, including one that already went
-through a prior `writeAgent`/`modifyArtifact` cycle — `modifyArtifact` reads (un-escapes),
-merges, and re-serializes (re-escapes), so an un-escape bug compounds (doubles) on every cycle
-rather than staying constant.
+Write and read are round-trip inverses for every string value the live writer (`writeSkill`, via
+`serializeFmField`/`buildMarkdown`) produces — a skill's `description` field exercises the same
+quoting/escaping paths (colons, quotes, backslashes, whitespace padding) the round-trip unit
+tests assert. Every write starts from an in-memory value rather than a re-serialized read, so
+an un-escape bug could not compound across cycles.
 
 **Existing on-disk artifacts are not migrated.** A doubled backslash already written by a prior
 code path is indistinguishable from a legitimate single escaped backslash — there is no reliable

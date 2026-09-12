@@ -200,30 +200,6 @@ export async function ensureFolder(app: App, path: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Write an agent configuration as `<kebab-name>.md`.
- * Returns the vault-relative path of the created file.
- */
-export async function writeAgent(
-	app: App,
-	folder: string,
-	config: Omit<AgentConfig, 'filePath'>,
-): Promise<string> {
-	await ensureFolder(app, folder);
-	const slug = toKebab(config.name);
-	const filePath = normalizePath(`${folder}/${slug}.md`);
-
-	const fields: [string, string | string[] | boolean | undefined][] = [
-		['description', config.description],
-		['model', config.model],
-		['tools', config.tools],
-		['skills', config.skills],
-	];
-	const content = buildMarkdown(fields, config.instructions);
-	await lockManager.withLock(filePath, () => app.vault.create(filePath, content));
-	return filePath;
-}
-
-/**
  * Write a skill as `<skills-folder>/<kebab-name>/SKILL.md`.
  * Creates the skill subdirectory if it does not exist.
  * Returns the vault-relative path of the created SKILL.md.
@@ -248,69 +224,6 @@ export async function writeSkill(
 }
 
 // ---------------------------------------------------------------------------
-// Modify / Delete
-// ---------------------------------------------------------------------------
-
-/**
- * Modify an existing artifact file by patching frontmatter fields and/or body.
- * Only the keys present in `updates` are changed; others are preserved.
- * Pass `body` in updates to replace the markdown body.
- */
-export async function modifyArtifact(
-	app: App,
-	filePath: string,
-	updates: Record<string, string | string[] | boolean | undefined> & {body?: string},
-): Promise<void> {
-	const normalized = normalizePath(filePath);
-
-	await lockManager.withLock(normalized, async () => {
-		const file = app.vault.getAbstractFileByPath(normalized);
-		if (!(file instanceof TFile)) {
-			throw new Error(`Artifact not found: ${normalized}`);
-		}
-
-		const raw = await app.vault.read(file);
-		const {meta, body} = parseFrontmatter(raw);
-
-		// Merge frontmatter updates
-		const merged: Record<string, string | string[] | boolean> = {};
-		for (const [k, v] of Object.entries(meta)) {
-			merged[k] = v;
-		}
-		for (const [k, v] of Object.entries(updates)) {
-			if (k === 'body') continue;
-			if (v === undefined) {
-				delete merged[k];
-			} else {
-				merged[k] = v;
-			}
-		}
-
-		const newBody = updates.body !== undefined ? updates.body : body.trim();
-		const fields: [string, string | string[] | boolean][] = Object.entries(merged);
-		const content = buildMarkdown(
-			fields.map(([k, v]) => [k, v] as [string, string | string[] | boolean | undefined]),
-			newBody,
-		);
-		await app.vault.modify(file, content);
-	});
-}
-
-/**
- * Delete an artifact file using Obsidian-safe trash.
- */
-export async function deleteArtifact(app: App, filePath: string): Promise<void> {
-	const normalized = normalizePath(filePath);
-	await lockManager.withLock(normalized, async () => {
-		const file = app.vault.getAbstractFileByPath(normalized);
-		if (!(file instanceof TFile)) {
-			throw new Error(`Artifact not found: ${normalized}`);
-		}
-		await app.vault.trash(file, false);
-	});
-}
-
-// ---------------------------------------------------------------------------
 // Tool-approval persistence (issue #197)
 // ---------------------------------------------------------------------------
 
@@ -321,9 +234,10 @@ export async function deleteArtifact(app: App, filePath: string): Promise<void> 
  * `extractAllowRuleStrings()` (`agentService.ts`) so what's shown to the user in
  * `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
  *
- * Uses `vault.adapter.exists` + `vault.read`/`vault.create`/`vault.modify` — the same pattern
- * `appendReportBlock()` (`runExecutor.ts`) uses for a vault-relative file that may or may not
- * exist yet — rather than `node:fs`, parses the existing content as JSON, and writes back every
+ * Uses `vault.adapter.exists` + `vault.read`/`vault.create`/`vault.modify` — the same
+ * vault-relative exists/read/create-or-modify pattern `writeSkill()` uses for
+ * a vault file that may or may not exist yet — rather
+ * than `node:fs`, parses the existing content as JSON, and writes back every
  * other top-level key untouched: only `permissions.allow` is unioned with `ruleStrings` (never
  * clobbered, never duplicated). `_synapse/settings.json` is read directly by
  * `AgentService.loadVaultSettings()` via `node:fs`, cached by mtime (issue #194): a plain
