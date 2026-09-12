@@ -26,17 +26,14 @@
   `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions: true`
   unconditionally, passed as the `profile: 'unattendedBypass'` inlineChat() profile at the call
   site (issue #230 — `INLINE_CHAT_PROFILES` in `agentService.ts`; `buildBotSessionConfig()` no
-  longer carries the permission fields itself). This is a standing exception to the unified policy
-  unattended `runExecutor.ts`-backed runs follow (see \"Tool approval policy\" under
-  [run-executor.md](run-executor.md)): the bot's whole purpose is unattended remote control of the
-  vault from a phone, and it has no per-run override to opt back into `'allow'` if the global
-  setting is `'ask'` (`resolveToolApprovalPolicy()` only ever reads `settings.toolApproval`) — so
-  making the bot follow `'ask'` would silently stop it from writing the moment someone flips the
-  global setting for an unrelated reason (e.g. wanting search/editor actions to prompt), with no
-  way to recover write access for just the bot. Unlike a `runExecutor.ts`-backed run, the bot
-  doesn't go through that policy machinery at all (it calls `AgentService.inlineChat()` directly
-  with the `unattendedBypass` profile), so an `'ask'` denial there
-  wouldn't even land in a report the way a `runExecutor.ts` run's does. The bot's actual safety
+  longer carries the permission fields itself). This deliberately overrides the global tool
+  approval setting rather than following it: the bot's whole purpose is unattended remote control
+  of the vault from a phone, and it has no per-run override to opt back into `'allow'` if the
+  global setting is `'ask'` — so making the bot follow `'ask'` would silently stop it from
+  writing the moment someone flips the global setting for an unrelated reason (e.g. wanting
+  search/editor actions to prompt), with no way to recover write access for just the bot. The
+  bot calls `AgentService.inlineChat()` directly with the `unattendedBypass` profile — there is
+  no policy machinery to opt out of. The bot's actual safety
   control is the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`)
   — see [SECURITY.md](../SECURITY.md) #1.
 

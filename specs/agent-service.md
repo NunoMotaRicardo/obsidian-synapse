@@ -143,7 +143,7 @@ is applied inside `AgentService`, not written by the plugin.
 paths — `chat()`, `inlineChat()`, and `Session.send()` (via `AgentService.createQuery()`) — funnel
 through the private `routeQueryOptions(options, app?)`, which already resolves the bound model and
 merges the delegation MCP server. The vault settings layer is merged there too, so none of the ~7
-call sites that build `Options` (`chat-view.md`'s `buildSessionConfig()`, `runExecutor.ts`,
+call sites that build `Options` (`chat-view.md`'s `buildSessionConfig()`,
 `editorMenu.ts`, `editModal.ts`, `searchPanel.ts` x2, `telegramBot.ts`) needed to change their own
 settings-building logic — they only needed to pass the `App` handle they already have (see
 "Caller wiring" below).
@@ -202,8 +202,8 @@ plumbing stays UI-agnostic), so every caller passes its own handle:
 - `inlineChat()`/`Session.send()` have `app?: App`. `SynapseView` passes
   `app: this.app` unconditionally on every `Session.send()` call, and `searchPanel.ts`'s two
   `inlineChat()` calls pass `app: this.app` — no change needed for the chat
-  panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`, `telegramBot.ts`, and
-  `runExecutor.ts`'s `executeWithClaude()` pass `app` to
+  panel or search. `editorMenu.ts` (9 call sites), `editModal.ts`, and
+  `telegramBot.ts` pass `app` to
   `inlineChat()` purely to make the vault path derivable — none of
   their own settings-building logic changed.
 - Passing `app` alone does not by itself grant tool access — a caller must also supply
@@ -444,7 +444,7 @@ valid model identifiers.
 `supportsEffort`/`supportedEffortLevels`.
 `mapSdkModel()` does not stamp hardcoded `limits` or blanket `vision`/`tools` flags — absent beats
 wrong. Consumers that read `supportsTools` treat absence as
-"assume supported" (`runExecutor.ts`: `modelInfo?.supportsTools !== false`), so Claude models
+"assume supported", so Claude models
 keep working. `ModelInfo.capabilities.limits` stays typed as an open
 `Record<string, unknown>` bag (not currently populated for Claude models) rather than removed
 outright, because `synapseView.ts` reads a `limits['vision'].max_prompt_images` shape that some
@@ -664,9 +664,8 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
 - **Continuity and images**: since every model runs through the CLI with `resume` and the
   agentic `Read` tool, the Agent SDK path alone owns conversation continuity and image delivery
   for all models.
-- **Tool approval**: a local-model query is gated by the exact same `canUseTool`/
-  `resolveToolApprovalPolicy()` machinery as a Claude-model query (see "Session-scoped
-  permission updates" above and `run-executor.md`'s "Tool approval policy").
+- **Tool approval**: a local-model query is gated by the exact same `canUseTool` machinery as a
+  Claude-model query (see "Session-scoped permission updates" above).
   `autoApproveReadOnlyTools`'s `READ_ONLY_TOOL_NAMES` is `Read`/`Glob`/`Grep` only;
   see "Wiring `inlineChat()`'s callers" below.
 - **Security note (settings UI copy, per the repo's network-access convention)**: a
@@ -697,18 +696,18 @@ its profile:
 | `unattendedBypass` | `permissionMode: 'bypassPermissions'`, `allowDangerouslySkipPermissions: true` | Telegram bot |
 
 `searchPanel.ts` stays fully explicit (its `SEARCH_TOOLS` + `maxTurns: 20/40` +
-`canUseTool: autoApproveReadOnlyTools` wiring is asserted by wiring tests) and `runExecutor.ts`
-stays on #151's `resolveToolApprovalPolicy()` path — neither uses `profile`.
+`canUseTool: autoApproveReadOnlyTools` wiring is asserted by wiring tests) — it does not use
+`profile`.
 
 **Resolution: `autoApproveReadOnlyTools`, a dedicated read-only-only `CanUseTool`** — not a new
-"attended-but-automated" permission concept, and not `resolveToolApprovalPolicy()` either:
+"attended-but-automated" permission concept:
 
-- It is **not** `resolveToolApprovalPolicy()` (`src/runExecutor.ts`, "Tool approval policy" — governs
-  `runExecutor.ts`'s unattended runs, where `'ask'` means "no human to
-  ask, so deny" because those runs may request write-capable tools). `autoApproveReadOnlyTools`
+- `autoApproveReadOnlyTools`
   is attended (a human clicked "Search"), and every call site wiring it in restricts `tools` to
-  the read-only set — the two contexts differ on both axes (attended vs. unattended, read-only
-  vs. write-capable) and are kept as two separate mechanisms rather than unified.
+  the read-only set — unlike a hypothetical unattended, write-capable runner, which would need
+  to fail closed on `'ask'` ("no human to ask, so deny") because those runs may request
+  write-capable tools. The two contexts differ on both axes (attended vs. unattended, read-only
+  vs. write-capable) and are kept as separate mechanisms rather than unified.
 - A verified spike against the live CLI showed the Agent SDK path *never invokes* `canUseTool`
   for `Read`/`Glob`/`Grep` at all — the CLI auto-approves them before the callback would even
   fire — while a write tool (`Write`) still goes through `canUseTool` and is denied when there's
@@ -719,8 +718,7 @@ stays on #151's `resolveToolApprovalPolicy()` path — neither uses `profile`.
   else**. The check is in the handler rather than left to the caller on purpose: `inlineChat()`
   forwards the same `canUseTool` to the raw `query()` call too (it is a single option, not two),
   so an unconditional always-allow handler would silently grant writes at any future call site
-  that wired it in alongside a write-capable tool. Call sites that legitimately need
-  write-capable tools use `resolveToolApprovalPolicy()` instead.
+  that wired it in alongside a write-capable tool.
 - Wired into `searchPanel.ts`'s `handleBasicSearch()`/`handleAdvancedSearch()`: both pass
   `app: this.app, canUseTool: autoApproveReadOnlyTools` alongside their existing
   `tools: SEARCH_TOOLS`.

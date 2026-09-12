@@ -36,12 +36,10 @@ token secret, and treat everyone on the allowlist as someone you'd hand your vau
 — because that's what adding them does.
 
 This is a deliberate, standing exception to the **tool approval** setting described in #3 below:
-unattended runs going through `src/runExecutor.ts` honour `toolApproval` — `'ask'` denies a tool
-call and logs the refusal to the run's report, since there's no one to actually ask — but the
-Telegram bot does not, on purpose (issue #151). The bot's remote-control use case has no
-equivalent opt-in to recover write access with if the global setting were flipped to `'ask'` for
-an unrelated reason, so it stays unconditionally `bypassPermissions`, gated only by the allowlist
-above.
+the Telegram bot does not honour `toolApproval`, on purpose (issue #151). The bot's
+remote-control use case has no equivalent opt-in to recover write access with if the global
+setting were flipped to `'ask'` for an unrelated reason, so it stays unconditionally
+`bypassPermissions`, gated only by the allowlist above.
 
 ### 2. MCP servers are arbitrary local processes
 
@@ -64,11 +62,6 @@ The **tool approval** setting, when set to allow, flips the agent session used b
 the agent reads, writes, or deletes a file, or runs a tool. It's the same trade-off as the
 Telegram bot above (speed and flow over a human in the loop) but scoped to the desktop UI, where
 you're the one at the keyboard. Understand what you're turning off before you turn it on.
-
-The same setting also drives unattended runs going through `src/runExecutor.ts` (issue #151):
-`allow` lets them write without asking, same as above; `ask` (the default) denies their tool calls
-instead of prompting, since an unattended run has no one at the keyboard to prompt — see
-[specs/run-executor.md](specs/run-executor.md).
 
 ## Other things worth knowing
 

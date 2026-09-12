@@ -3,10 +3,7 @@ import type {App} from 'obsidian';
 import {
 	parseFrontmatter,
 	ensureFolder,
-	writeAgent,
 	writeSkill,
-	modifyArtifact,
-	deleteArtifact,
 	scanVaultStructure,
 	scanAgents,
 	ensureImproveSynapseSkill,
@@ -112,12 +109,12 @@ describe('parseFrontmatter', () => {
 		expect(meta['tools']).toEqual(['Read', 'Write']);
 	});
 
-	it('round-trips a value written by writeAgent through serializeFmField/buildMarkdown', async () => {
+	it('round-trips a value written by writeSkill through serializeFmField/buildMarkdown', async () => {
 		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'My Agent',
+		const path = await writeSkill(app, '_synapse/skills', {
+			name: 'My Skill',
 			description: 'Handles: research and citations',
-			instructions: 'Be helpful.',
+			content: 'Be helpful.',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
@@ -129,10 +126,10 @@ describe('parseFrontmatter', () => {
 
 	it('round-trips a value with leading/trailing whitespace', async () => {
 		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Padded',
 			description: '  padded value  ',
-			instructions: '',
+			content: '',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
@@ -148,10 +145,10 @@ describe('parseFrontmatter', () => {
 	it('round-trips a value containing a double quote', async () => {
 		const app = createMockApp() as unknown as App;
 		const original = 'He said "hi" to me';
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Quote Value',
 			description: original,
-			instructions: '',
+			content: '',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
@@ -162,10 +159,10 @@ describe('parseFrontmatter', () => {
 		const app = createMockApp() as unknown as App;
 		// The colon is what triggers quoting/escaping for this value.
 		const original = 'C:\\Users\\me: path';
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Backslash Value',
 			description: original,
-			instructions: '',
+			content: '',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
@@ -179,10 +176,10 @@ describe('parseFrontmatter', () => {
 		// replacing all `\\` first turns it into `...end\"` before the quote pass ever runs,
 		// which then wrongly consumes the literal backslash as part of a fake escape sequence.
 		const original = 'value ending in backslash\\" and more';
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Backslash Before Quote',
 			description: original,
-			instructions: '',
+			content: '',
 		});
 		const raw = await readVaultFile(app, path);
 		const {meta} = parseFrontmatter(raw);
@@ -192,10 +189,10 @@ describe('parseFrontmatter', () => {
 	it('leaves an unquoted value containing a backslash unchanged (no colon/quote/newline to trigger escaping)', async () => {
 		const app = createMockApp() as unknown as App;
 		const original = 'Users\\me\\docs';
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Plain Backslash',
 			description: original,
-			instructions: '',
+			content: '',
 		});
 		const raw = await readVaultFile(app, path);
 		// Confirm it was written unquoted (the case that was already correct and must not regress).
@@ -204,21 +201,20 @@ describe('parseFrontmatter', () => {
 		expect(meta['description']).toBe(original);
 	});
 
-	it('keeps a quoted+escaped value byte-identical across writeAgent and repeated modifyArtifact cycles', async () => {
+	it('round-trips a value combining backslashes, colons, and quotes (write → parse exactness)', async () => {
 		const app = createMockApp() as unknown as App;
+		// Formerly asserted byte-identity across repeated modifyArtifact cycles; that
+		// writer is gone (#232). The write → parse round trip on the live writer
+		// (writeSkill) must still be exact for the hardest combined value.
 		const original = 'C:\\Users\\me: path with "quotes"';
-		const path = await writeAgent(app, '_synapse/agents', {
+		const path = await writeSkill(app, '_synapse/skills', {
 			name: 'Cycle Value',
 			description: original,
-			instructions: '',
+			content: '',
 		});
-
-		for (let i = 0; i < 4; i++) {
-			await modifyArtifact(app, path, {description: original});
-			const raw = await readVaultFile(app, path);
-			const {meta} = parseFrontmatter(raw);
-			expect(meta['description']).toBe(original);
-		}
+		const raw = await readVaultFile(app, path);
+		const {meta} = parseFrontmatter(raw);
+		expect(meta['description']).toBe(original);
 	});
 });
 
@@ -249,45 +245,8 @@ describe('ensureFolder', () => {
 });
 
 // ---------------------------------------------------------------------------
-// writeAgent / writeSkill — kebab naming, folder creation
+// writeSkill — kebab naming, folder creation
 // ---------------------------------------------------------------------------
-
-describe('writeAgent', () => {
-	it('writes a kebab-case filename under the given folder', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Academic Research',
-			description: 'desc',
-			instructions: 'instr',
-		});
-		expect(path).toBe('_synapse/agents/academic-research.md');
-	});
-
-	it('omits undefined optional fields from the written frontmatter', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Minimal',
-			description: 'desc',
-			instructions: 'instr',
-		});
-		const raw = await readVaultFile(app, path);
-		expect(raw).not.toContain('model:');
-		expect(raw).not.toContain('tools:');
-	});
-
-	it('serializes list fields (tools/skills) as YAML lists', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Tooled',
-			description: 'desc',
-			instructions: 'instr',
-			tools: ['Read', 'Write'],
-		});
-		const raw = await readVaultFile(app, path);
-		const {meta} = parseFrontmatter(raw);
-		expect(meta['tools']).toEqual(['Read', 'Write']);
-	});
-});
 
 describe('writeSkill', () => {
 	it('writes SKILL.md inside a kebab-case subfolder', async () => {
@@ -298,82 +257,6 @@ describe('writeSkill', () => {
 			content: 'content',
 		});
 		expect(path).toBe('_synapse/skills/apa-citations/SKILL.md');
-	});
-});
-
-// ---------------------------------------------------------------------------
-// modifyArtifact
-// ---------------------------------------------------------------------------
-
-describe('modifyArtifact', () => {
-	it('merges updates into existing frontmatter, preserving untouched fields', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Merge Test',
-			description: 'original description',
-			instructions: 'body text',
-			model: 'sonnet',
-		});
-		await modifyArtifact(app, path, {description: 'updated description'});
-		const raw = await readVaultFile(app, path);
-		const {meta, body} = parseFrontmatter(raw);
-		expect(meta['description']).toBe('updated description');
-		expect(meta['model']).toBe('sonnet');
-		expect(body.trim()).toBe('body text');
-	});
-
-	it('removes a key when the update value is undefined', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Removable',
-			description: 'desc',
-			instructions: '',
-			model: 'sonnet',
-		});
-		await modifyArtifact(app, path, {model: undefined});
-		const raw = await readVaultFile(app, path);
-		expect(raw).not.toContain('model:');
-	});
-
-	it('replaces the body when updates.body is provided', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Body Swap',
-			description: 'desc',
-			instructions: 'old body',
-		});
-		await modifyArtifact(app, path, {body: 'new body'});
-		const raw = await readVaultFile(app, path);
-		const {body} = parseFrontmatter(raw);
-		// buildMarkdown wraps the body in a leading/trailing newline; callers
-		// throughout the codebase (scanAgents) always `.trim()` it.
-		expect(body.trim()).toBe('new body');
-	});
-
-	it('throws when the target file does not exist', async () => {
-		const app = createMockApp() as unknown as App;
-		await expect(modifyArtifact(app, '_synapse/agents/missing.md', {description: 'x'}))
-			.rejects.toThrow('Artifact not found');
-	});
-});
-
-// ---------------------------------------------------------------------------
-// deleteArtifact
-// ---------------------------------------------------------------------------
-
-describe('deleteArtifact', () => {
-	it('trashes an existing artifact file', async () => {
-		const app = createMockApp() as unknown as App;
-		const path = await writeAgent(app, '_synapse/agents', {
-			name: 'Doomed', description: 'd', instructions: '',
-		});
-		await deleteArtifact(app, path);
-		expect(app.vault.getAbstractFileByPath(path)).toBeNull();
-	});
-
-	it('throws when the target file does not exist', async () => {
-		const app = createMockApp() as unknown as App;
-		await expect(deleteArtifact(app, '_synapse/agents/missing.md')).rejects.toThrow('Artifact not found');
 	});
 });
 
@@ -418,18 +301,22 @@ describe('scanAgents', () => {
 		expect(await scanAgents(app, '_synapse/agents')).toEqual([]);
 	});
 
-	it('reads back an agent written by writeAgent, including tools/skills lists', async () => {
-		// writeAgent does not persist `name` in frontmatter (only `description`,
-		// `model`, `tools`, `skills`) — scanAgents falls back to the kebab-case
-		// filename derived from the write, so the read-back name is the slug,
-		// not the original display name passed to writeAgent.
+	it('reads back an agent file with hand-written frontmatter, including tools/skills lists', async () => {
+		// Seeded directly rather than via a writer: writeAgent is gone (#232) and
+		// writeSkill writes skills (no tools/skills lists), so this covers scanAgents'
+		// list parsing against a realistic on-disk artifact shape.
 		const app = createMockApp() as unknown as App;
-		await writeAgent(app, '_synapse/agents', {
-			name: 'Round Trip',
-			description: 'desc',
-			instructions: 'Body content.',
-			tools: ['Read', 'Write'],
-		});
+		seedFile(app, '_synapse/agents/round-trip.md', [
+			'---',
+			'description: desc',
+			'tools:',
+			'  - Read',
+			'  - Write',
+			'---',
+			'',
+			'Body content.',
+			'',
+		].join('\n'));
 		const agents = await scanAgents(app, '_synapse/agents');
 		expect(agents).toHaveLength(1);
 		expect(agents[0]).toMatchObject({

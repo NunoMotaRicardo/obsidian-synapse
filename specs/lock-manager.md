@@ -3,11 +3,11 @@
 ## Overview
 
 An in-memory, per-file **advisory** write lock that serializes plugin-initiated writes to the same
-vault-relative path, so concurrent self-improve/config writes and report appends do not
+vault-relative path, so concurrent config writes do not
 interleave `vault.read()`/`vault.modify()` and clobber one another.
 
 Advisory and in-process: the lock only guards writes that go **through the plugin's own code
-paths** (`configWriter.ts`, `runExecutor.ts`'s report appends). It does
+paths** (`configWriter.ts`'s locked writers — `writeSkill`, `persistToolApprovalRules`). It does
 **not** — and cannot — guard writes the Claude CLI performs directly via its own file tools during
 an `inlineChat()` run, nor a user's manual edits in the Obsidian editor. Those are outside the
 plugin's write surface. The lock's job is narrow: stop the plugin from racing *itself* when two of
@@ -47,17 +47,8 @@ withLock<T>(path: string, fn: () => Promise<T>): Promise<T>
 ## Integration points
 
 - **`configWriter.ts`** — every function that mutates a vault file wraps its `vault.create`/
-  `vault.modify`/`vault.trash` in `withLock(targetPath, …)`: `writeAgent`,
-  `writeSkill`, `modifyArtifact`, `deleteArtifact`. Read-only scans (`scanAgents`, etc.) and
-  `ensureFolder` are not locked.
-- **`runExecutor.ts`** — `appendReportBlock(app, target, block)` wraps its read-modify-write in
-  `withLock(target.path, …)`, so two concurrent runs writing the same day's report do
-  not interleave (`runExecutor.ts` currently has no in-tree caller — see
-  [run-executor.md](run-executor.md)). A caller running many items through this pipeline is
-  expected to let a `LockAcquisitionError` from a report append propagate like any other write
-  failure into its own per-item error handling. `runExecutor.ts` also wraps the `write: true`
-  write-back mode's file modify in `withLock`, catching `LockAcquisitionError` specifically to fall
-  back to a report append instead of failing the run.
+  `vault.modify` in `withLock(targetPath, …)`: `writeSkill`, `persistToolApprovalRules`.
+  Read-only scans (`scanAgents`, etc.) and `ensureFolder` are not locked.
 
 ## Invariants
 
@@ -71,9 +62,8 @@ withLock<T>(path: string, fn: () => Promise<T>): Promise<T>
   lock held.
 
 `src/lockManager.ts` exports the `lockManager` singleton (`withLock`) and
-`LockAcquisitionError`; integrated into `configWriter.ts` (`writeAgent`, `writeSkill`,
-`modifyArtifact`, `deleteArtifact`) and `runExecutor.ts` (`appendReportBlock`, and the
-`write: true` write-back path). Unit tests in `test/lockManager.test.ts` cover FIFO
+`LockAcquisitionError`; integrated into `configWriter.ts` (`writeSkill`,
+`persistToolApprovalRules`). Unit tests in `test/lockManager.test.ts` cover FIFO
 serialization, independent-path concurrency, release-on-throw, and the
 timeout/`LockAcquisitionError` path.
 

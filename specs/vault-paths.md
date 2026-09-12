@@ -4,21 +4,18 @@
 
 A small, dependency-free module giving every caller a single source of truth for vault-path
 derivation: the vault's on-disk base path, the `_synapse/` customization folder, the SDK plugin
-config that points at it, the reports folder, and today's-date string used in report filenames.
+config that points at it, and the `_synapse/settings.json` path.
 
 Source: `src/vaultPaths.ts`.
 
 ## Interface
 
 ```ts
-// Hardcoded vault folder for Synapse customization artifacts (agents, skills,
-// reports, .mcp.json). Canonical definition — settings.ts re-exports
+// Hardcoded vault folder for Synapse customization artifacts (agents,
+// skills, .mcp.json). Canonical definition — settings.ts re-exports
 // it so configWriter.ts's existing `import {SYNAPSE_FOLDER} from './settings'`
 // keeps working unmodified (see Invariants).
 export const SYNAPSE_FOLDER = '_synapse';
-
-// Vault-relative folder where unattended runs append their run reports.
-export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 // Structurally compatible with agentService.ts's SdkPluginConfig (a strict
 // subset — no skipMcpDiscovery). Defined locally rather than imported, to
@@ -41,9 +38,6 @@ export function getSynapsePluginConfig(app: App): LocalPluginConfig[]
 // Pure path derivation only — does not check existence or read the
 // file; see agentService.ts's AgentService#loadVaultSettings for that.
 export function getSynapseSettingsPath(app: App): string
-
-// Today's date as `YYYY-MM-DD`, for report filenames/headings.
-export function todayString(): string
 ```
 
 ## Design decisions
@@ -81,9 +75,6 @@ export function todayString(): string
   `view/*` prototype-extension modules) delegates to `getVaultBasePath(this.app)`;
   `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill
   scan paths.
-- **`runExecutor.ts`** — `executeWithClaude` uses `getVaultBasePath`/`getSynapsePluginConfig`;
-  `REPORTS_FOLDER`/`todayString` in the report-append path. `runExecutor.ts` currently has no
-  in-tree caller — see [run-executor.md](run-executor.md).
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 - **`agentService.ts`** — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
   to locate `_synapse/settings.json`, the sole caller of that function.
@@ -96,16 +87,15 @@ layout to a human/model reader rather than resolving a path.
 ## Invariants
 
 - `getVaultBasePath` never returns `undefined`/`null` — either a non-empty `string`, or it throws.
-- `SYNAPSE_FOLDER` and `REPORTS_FOLDER` are each defined exactly once (`vaultPaths.ts`); every
-  other module imports them rather than redefining.
-- `todayString()` is defined exactly once (`vaultPaths.ts`); imported by `runExecutor.ts`.
+- `SYNAPSE_FOLDER` is defined exactly once (`vaultPaths.ts`); every other module imports it
+  rather than redefining.
 - No inline `_synapse` string literal or `basePath` cast remains outside `vaultPaths.ts`,
   `configWriter.ts` (prose only — see Integration points), and prose comments/user-facing copy
   elsewhere.
 
-`src/vaultPaths.ts` exports `SYNAPSE_FOLDER`, `REPORTS_FOLDER`, `getVaultBasePath`,
-`getSynapsePluginConfig`, `getSynapseSettingsPath`, and `todayString`. Unit tests in
-`test/vaultPaths.test.ts` cover the basePath cast/throw, backslash normalization in the plugin
-config path and the settings path, and `todayString()`'s zero-padding across fake-timer dates.
+`src/vaultPaths.ts` exports `SYNAPSE_FOLDER`, `getVaultBasePath`,
+`getSynapsePluginConfig`, and `getSynapseSettingsPath`. Unit tests in
+`test/vaultPaths.test.ts` cover the basePath cast/throw and backslash normalization in the plugin
+config path and the settings path.
 
 

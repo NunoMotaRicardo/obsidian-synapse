@@ -340,23 +340,6 @@ export default tseslint.config(
 		},
 	},
 	{
-		files: ['src/configWriter.ts'],
-		rules: {
-			// Permanently disabled (investigated under #115, settled here): deleteArtifact()
-			// intentionally always uses Obsidian's local .trash folder (vault.trash(file,
-			// false)), not FileManager.trashFile() / the user's "Deleted files" preference.
-			// These are `_synapse/{agents,skills,triggers}` customization artifacts, not user
-			// notes — and deleteArtifact() exists for artifact-management flows an agent can
-			// drive semi-autonomously (self-improve conversations), where an unintended
-			// deletion needs a guaranteed, in-vault undo path. If "Deleted files" is set to
-			// "Permanently delete", switching to trashFile() would make such deletions
-			// unrecoverable; local .trash always keeps them recoverable regardless of that
-			// setting. That's the safer default for agent-initiated file operations, so this
-			// stays off.
-			'obsidianmd/prefer-file-manager-trash-file': 'off',
-		},
-	},
-	{
 		files: ['src/agentService.ts'],
 		rules: {
 			// The scoped setTimeout shim (#116) must patch the exact global binding the

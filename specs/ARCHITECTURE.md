@@ -35,9 +35,8 @@ CLI process per query.
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots.md](bots.md) | `src/bots/*` | Telegram bot front-end |
-| run-executor | [run-executor.md](run-executor.md) | `src/runExecutor.ts` | Per-item run pipeline (substitute → run via `AgentService.inlineChat()` → apply write mode → append report); no in-tree caller currently, kept as reusable infrastructure |
-| lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (config writes, report appends) |
-| vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, reports folder, today's-date helper |
+| lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (config writes, tool-approval persistence) |
+| vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, settings.json path |
 
 ## Vault customization (`_synapse/`)
 
@@ -48,8 +47,9 @@ The `_synapse/` folder in the user's vault is registered as an SDK local plugin 
 - `_synapse/skills/*/SKILL.md` → skills (invocable via `/name`)
 - `_synapse/.mcp.json` → MCP server configs
 
-No custom config loader. The plugin provides write-side utilities (`configWriter.ts`) for the
-self-improve feature and first-run seeding. A lightweight directory scan populates toolbar
+No custom config loader. The plugin provides write-side utilities (`configWriter.ts`) for
+first-run seeding and tool-approval persistence; the live self-improve write path is the CLI
+agent's own `Write`/`Edit` tools. A lightweight directory scan populates toolbar
 dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
 
 ## Key dependency facts

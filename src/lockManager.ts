@@ -1,12 +1,12 @@
 /**
  * Lock manager — an in-memory, per-file **advisory** write lock that
  * serializes plugin-initiated writes to the same vault-relative note, so
- * concurrent self-improve/config writes and report appends don't
+ * concurrent config writes don't
  * interleave `vault.read()`/`vault.modify()` and clobber each other.
  *
  * Advisory and in-process only: this guards writes that go through the
- * plugin's own code paths (`configWriter.ts`, and `runExecutor.ts`'s report
- * appends). It cannot
+ * plugin's own code paths (`configWriter.ts`'s locked writers —
+ * `writeSkill`, `persistToolApprovalRules`). It cannot
  * — and does not try to —
  * guard writes the Claude CLI makes via its own file tools during an
  * `inlineChat()` run, nor a user's manual edits in the Obsidian editor. See

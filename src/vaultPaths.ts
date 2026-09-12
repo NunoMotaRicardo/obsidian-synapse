@@ -1,18 +1,17 @@
 /**
  * Vault path derivation — a small, dependency-free module giving every
  * caller a single source of truth for the vault's on-disk base path, the
- * `_synapse/` customization folder, the SDK plugin config that points at
- * it, the reports folder, and today's date string for report filenames.
+ * `_synapse/` customization folder, and the SDK plugin config that points
+ * at it.
  *
  * Extracted here (rather than duplicated) because `getVaultBasePath()`'s
- * `basePath` cast, the `_synapse/`-plugin-config object shape, and
- * `todayString()` were each independently copy-pasted across several call
- * sites (`bots/telegramBot.ts`, `editor/editorMenu.ts`,
- * `modals/editModal.ts`, `synapseView.ts`, `runExecutor.ts`,
- * `view/searchPanel.ts`) — see issue #153. Model: the now-removed
- * `src/budget.ts` (#74's extraction for the same reason, one level down;
- * deleted as dead code in #221 once its only consumer, `batchLoopExecutor.ts`,
- * was removed).
+ * `basePath` cast and the `_synapse/`-plugin-config object shape were each
+ * independently copy-pasted across several call sites
+ * (`bots/telegramBot.ts`, `editor/editorMenu.ts`,
+ * `modals/editModal.ts`, `synapseView.ts`, `view/searchPanel.ts`) — see
+ * issue #153. Model: the now-removed `src/budget.ts` (#74's extraction for
+ * the same reason, one level down; deleted as dead code in #221 once its
+ * only consumer, `batchLoopExecutor.ts`, was removed).
  */
 
 import type {App} from 'obsidian';
@@ -25,9 +24,6 @@ import type {App} from 'obsidian';
  * `import {SYNAPSE_FOLDER} from './settings'` keeps working unmodified.
  */
 export const SYNAPSE_FOLDER = '_synapse';
-
-/** Vault-relative folder where unattended runs append their run reports. */
-export const REPORTS_FOLDER = `${SYNAPSE_FOLDER}/reports`;
 
 /**
  * SDK plugin config pointing at the vault's `_synapse/` folder, in the
@@ -83,13 +79,4 @@ export function getSynapsePluginConfig(app: App): LocalPluginConfig[] {
 export function getSynapseSettingsPath(app: App): string {
 	const normalizedBase = getVaultBasePath(app).replace(/\\/g, '/');
 	return `${normalizedBase}/${SYNAPSE_FOLDER}/settings.json`;
-}
-
-/** Today's date as `YYYY-MM-DD`, for report filenames/headings. */
-export function todayString(): string {
-	const d = new Date();
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, '0');
-	const day = String(d.getDate()).padStart(2, '0');
-	return `${y}-${m}-${day}`;
 }
