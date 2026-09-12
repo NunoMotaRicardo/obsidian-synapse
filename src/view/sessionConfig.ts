@@ -4,10 +4,7 @@ import type {ModelInfo, SlashCommand, AgentInfo} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
 import type {AgentConfig, ChatAttachment, SkillInfo} from '../types';
 import {IMAGE_EXTS} from '../types';
-
-// Lazy-loaded Node built-ins (same pattern as agentService.ts / runtimeManager.ts) —
-// used only for writing clipboard/blob attachments to temp files.
-const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
+import {nodeRequire} from '../nodeRequire';
 
 /**
  * Resolve a model ID from an agent's preferred model name / partial match.

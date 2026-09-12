@@ -157,6 +157,7 @@ import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
 import {getSynapseSettingsPath} from './vaultPaths';
+import {nodeRequire} from './nodeRequire';
 // Static import (matching the now-removed mcpBridge.ts's `_synapse/.mcp.json` read, the closest
 // precedent for reading a small vault-local JSON config synchronously) rather than the lazy
 // `window.require`-gated pattern used elsewhere in this file for fs/promises — that gate exists
@@ -165,9 +166,6 @@ import {getSynapseSettingsPath} from './vaultPaths';
 // query build) and `window.require` is unavailable outside Electron's renderer (e.g. tests),
 // where a static Node import still works.
 import * as fs from 'node:fs';
-
-// Lazy-loaded for fs.access check in ensureConnected (same pattern as runtimeManager).
-const nodeRequire = typeof window.require === 'function' ? window.require : undefined;
 
 /** Local SDK plugin configuration for discovery. */
 export interface SdkPluginConfig {
