@@ -4,16 +4,15 @@ import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 import type {SdkPluginConfig} from '../agentService';
 import {getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 
-import {SYNAPSE_VIEW_TYPE, SynapseView} from '../synapseView';
+import {SYNAPSE_VIEW_TYPE, SynapseView, registerInlineSession} from '../synapseView';
+import {stripErrorPrefix} from '../toolErrors';
 import {EditModal} from '../modals/editModal';
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TextTask} from '../tasks';
 import type {SelectionInfo} from '../types';
 /** Format an error for display in a Notice. */
 function formatErrorForNotice(error: unknown): string {
-	const rawError = String(error);
-	const cleanError = rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
-	return `Synapse: error — ${cleanError}`;
+	return `Synapse: error — ${stripErrorPrefix(String(error))}`;
 }
 
 // Re-export for consumers that still import from editorMenu
@@ -1038,21 +1037,6 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
  * Stores the session name with an [inline] prefix so the sidebar
  * filter can distinguish inline sessions from chat sessions.
  */
-function registerInlineSession(plugin: SynapsePlugin, sessionId: string, description: string): void {
-	if (!sessionId) return; // no id (e.g. aborted query) — don't create a junk entry
-	plugin.settings.sessionNames ??= {};
-	plugin.settings.sessionNames[sessionId] = `[inline] ${description}`;
-	void plugin.saveSettings();
-
-	const leaves = plugin.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
-	if (leaves.length > 0 && leaves[0]) {
-		const view = leaves[0].view as SynapseView;
-		if (typeof view.registerInlineSession === 'function') {
-			view.registerInlineSession(sessionId, description);
-		}
-	}
-}
-
 export {type SelectionInfo} from '../types';
 
 /** "Chat with Synapse" — open the sidebar view, optionally with prompt text and selection. */

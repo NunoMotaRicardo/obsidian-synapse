@@ -3,7 +3,7 @@ import type SynapsePlugin from '../main';
 // Agent SDK types imported via AgentService
 import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
 import type {TaskLabel} from '../tasks';
-import {SynapseView, SYNAPSE_VIEW_TYPE} from '../synapseView';
+import {registerInlineSession} from '../synapseView';
 import {DEFAULT_EDIT_MODAL} from '../settings';
 import {getSynapsePluginConfig} from '../vaultPaths';
 
@@ -470,21 +470,8 @@ export class EditModal extends Modal {
 		});
 
 		// Register as inline session so the sidebar filter can distinguish it
-		// (skip if the query never got an id, e.g. aborted — avoids a junk entry)
-		if (sessionId) {
-			const editDesc = this.editPrompt.trim() || 'Edit';
-			this.plugin.settings.sessionNames ??= {};
-			this.plugin.settings.sessionNames[sessionId] = `[inline] Edit: ${editDesc.slice(0, 30)}`;
-			void this.plugin.saveSettings();
-
-			const leaves = this.plugin.app.workspace.getLeavesOfType(SYNAPSE_VIEW_TYPE);
-			if (leaves.length > 0 && leaves[0]) {
-				const view = leaves[0].view as SynapseView;
-				if (typeof view.registerInlineSession === 'function') {
-					view.registerInlineSession(sessionId, `Edit: ${editDesc.slice(0, 30)}`);
-				}
-			}
-		}
+		// (the shared registrar skips an empty id, e.g. aborted — avoids a junk entry)
+		registerInlineSession(this.plugin, sessionId, `Edit: ${(this.editPrompt.trim() || 'Edit').slice(0, 30)}`);
 
 		if (!result) throw new Error('No response received.');
 

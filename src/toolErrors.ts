@@ -13,6 +13,15 @@
 /** Native SDK tool names that write to disk. */
 const WRITE_TOOL_NAMES = new Set(['Write', 'Edit', 'NotebookEdit']);
 
+/**
+ * Strip the leading `Error: ` prefix `String(error)` can leave in front of an error message
+ * (audit rec 4 — one shared implementation). Consumers re-wrap the returned text in their own
+ * display format (the chat view's `Error: ${clean}` vs editor actions' `Synapse: error — ${clean}`).
+ */
+export function stripErrorPrefix(rawError: string): string {
+	return rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
+}
+
 export function isWriteToolName(toolName: string | undefined): boolean {
 	return !!toolName && WRITE_TOOL_NAMES.has(toolName);
 }
