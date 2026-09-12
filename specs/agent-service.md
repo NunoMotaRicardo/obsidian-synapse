@@ -5,6 +5,26 @@ Source: `src/agentService.ts` — class `AgentService`. The single place the plu
 
 > **Module naming:** The spec filename is `agent-service.md`. The live class and all code references use `AgentService`.
 
+## Module layout
+
+The SDK surface is split across focused files behind an unchanged re-export surface (audit §1,
+issue #236) — the architecture rule is about the *SDK import surface*, not one physical file:
+
+| File | Owns |
+|---|---|
+| `src/agentService.ts` | `AgentService` class, the model layer (`ModelInfo`, `mapSdkModel`, `matchModelTiers`, `FALLBACK_CLAUDE_MODELS`, `INLINE_CHAT_PROFILES`), the delegation MCP server, and the re-export block |
+| `src/sdkShims.ts` | The Electron compatibility shims — the top-level `setMaxListeners` wrapper (installed at module load; `agentService.ts` imports this module statically so load order is unchanged) and the refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`forceRestoreSetTimeoutShim`, `ABORT_SHIM_GRACE_MS`). `Session.abort()` (below) installs/removes the scoped shim; `AgentService.stop()` force-restores it. |
+| `src/permissions.ts` | `sessionScopePermissions`, `permissionRuleToString`, `extractAllowRuleStrings`, `buildInMemoryPermissionSettings`, `mergeVaultSettingsLayer` |
+| `src/session.ts` | The `Session` class, `SessionEvents`/`SessionEvent`/`SessionEventHandler`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`) |
+| `src/taskPlanTracker.ts` | `TodoItem`, `TaskPlan`, the four plan-parse functions, and the `TaskPlanTracker` class — see `chat-view.md` for the tracker's consumers |
+
+All of these are re-exported from `agentService.ts`, so consumers (and tests) keep importing
+from `../agentService` — no consumer file changed its import specifier. The split-out modules
+import SDK types only as `import type` (erased at runtime) or via `agentService`'s re-exports;
+`session.ts` imports `AgentService` **type-only** — the runtime import direction is
+`agentService.ts` importing `Session` for `createSession()`, so there is no circular runtime
+import.
+
 ## Responsibilities
 
 - Build query options (`pathToClaudeCodeExecutable`, `env`, `model`, `plugins`, `skills`, etc.)
@@ -544,8 +564,8 @@ callback).
    above). No shim involved; this handles the common "user clicked stop" case cleanly.
 2. Falls back to hard-aborting `AbortController` only if there is no in-flight query to interrupt,
    or `interrupt()` itself throws (older CLI, unresponsive process). This path forces the kill
-   while the subprocess may still be alive, so `agentService.ts` installs a temporary, refcounted
-   `setTimeout` shim (`installSetTimeoutShim()`/`uninstallSetTimeoutShim()`) — wraps the numeric id in a `Number` object with no-op
+   while the subprocess may still be alive, so `Session.abort()` installs a temporary, refcounted
+   `setTimeout` shim (`installSetTimeoutShim()`/`uninstallSetTimeoutShim()` from `sdkShims.ts`) — wraps the numeric id in a `Number` object with no-op
    `unref`/`ref`, still coercing to the same id for `clearTimeout()` via `valueOf()` — only around
    this call, for `ABORT_SHIM_GRACE_MS` (8s, comfortably past the SDK's own ~7s worst case of
    escalation timers), then restores the original. Refcounted so overlapping aborts across
