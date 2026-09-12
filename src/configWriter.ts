@@ -235,7 +235,8 @@ export async function writeSkill(
  * `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
  *
  * Uses `vault.adapter.exists` + `vault.read`/`vault.create`/`vault.modify` — the same
- * vault-relative exists/read/create-or-modify pattern other writers in this module use — rather
+ * vault-relative exists/read/create-or-modify pattern `writeSkill()` uses for
+ * a vault file that may or may not exist yet — rather
  * than `node:fs`, parses the existing content as JSON, and writes back every
  * other top-level key untouched: only `permissions.allow` is unioned with `ruleStrings` (never
  * clobbered, never duplicated). `_synapse/settings.json` is read directly by
