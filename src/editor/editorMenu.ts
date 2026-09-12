@@ -244,8 +244,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 				'You are a note creation assistant. When asked to create a note, return a title line ' +
 				'followed by the separator --- and then the note body in Markdown. ' +
 				'Do not include markdown code fences or extra explanations.',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 		registerInlineSession(plugin, sessionId, `New note in ${folder.name}`);
 
@@ -342,8 +341,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 				'fromSide, toSide ("top"|"bottom"|"left"|"right"), and optionally "label" (string).\n' +
 				'Layout nodes with enough spacing (at least 50px gaps). Use reasonable sizes (width 250-400, height 100-250).\n' +
 				'Do not include markdown code fences or extra explanations. Return ONLY the title and JSON.',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 		registerInlineSession(plugin, sessionId, `New canvas in ${folder.name}`);
 
@@ -433,8 +431,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 			systemMessage:
 				'You are a note summarisation assistant. Return ONLY the summary note in Markdown. ' +
 				'Do not include markdown code fences, introductory text, or explanations.',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 		registerInlineSession(plugin, sessionId, `Summary of ${folder.name}`);
 
@@ -512,8 +509,7 @@ async function runActionPrompt(
 		plugins: getVaultPlugins(plugin),
 		systemMessage: TEXT_ACTION_SYSTEM_MESSAGE,
 		permissionMode: plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
-		tools: [],
-		maxTurns: 1,
+		profile: 'textTransform',
 	});
 	registerInlineSession(plugin, sessionId, action.label);
 
@@ -642,8 +638,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 				'You are an image analysis assistant. Read the image at the provided path with your Read tool, ' +
 				'then answer the user’s question about it. ' +
 				'Return your answer as clean Markdown. Do not include markdown code fences or introductory text.',
-			tools: ['Read'],
-			maxTurns: 10,
+			profile: 'readOnly',
 		});
 		registerInlineSession(plugin, sessionId, `Ask: ${userPrompt.slice(0, 30)}`);
 
@@ -721,8 +716,7 @@ async function extractImageContent(plugin: SynapsePlugin, file: TFile): Promise<
 			'then extract all visible content from it ' +
 			'and return it as clean Markdown. Do not include markdown code fences, introductory text, or explanations. ' +
 			'Return only the extracted content.',
-		tools: ['Read'],
-		maxTurns: 10,
+		profile: 'readOnly',
 	});
 	registerInlineSession(plugin, sessionId, `Extract ${file.name}`);
 
@@ -871,7 +865,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
 				'Analyze the provided image and return a single Mermaid code block (wrapped in ```mermaid ... ```) ' +
 				'that faithfully represents the structure shown. Do not include any introductory text or explanation.',
-			maxTurns: 10,
+			profile: 'attended',
 		});
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
 
@@ -952,8 +946,7 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 			systemMessage:
 				'You are a note editor. When given a note and an edit instruction, return ONLY the updated note content. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 		registerInlineSession(plugin, sessionId, `Edit: ${userPrompt.slice(0, 30)}`);
 		if (!result) { notice.hide(); new Notice('Synapse: no response.'); return; }
@@ -1018,8 +1011,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 			systemMessage:
 				'You are a note structuring assistant. Return ONLY the restructured note in Markdown. ' +
 				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 		registerInlineSession(plugin, sessionId, 'Structure and refine');
 		if (!result) { notice.hide(); new Notice('Synapse: no response.'); return; }

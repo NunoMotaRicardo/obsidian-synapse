@@ -465,8 +465,7 @@ export class EditModal extends Modal {
 			plugins: getSynapsePluginConfig(this.plugin.app),
 			systemMessage,
 			permissionMode: this.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
-			tools: [],
-			maxTurns: 1,
+			profile: 'textTransform',
 		});
 
 		// Register as inline session so the sidebar filter can distinguish it

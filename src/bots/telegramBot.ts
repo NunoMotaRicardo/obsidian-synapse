@@ -276,6 +276,9 @@ export class TelegramBotService {
 			const {content, sessionId} = await this.plugin.agentService!.inlineChat({
 				prompt: sendOpts.prompt,
 				app: this.plugin.app,
+				// Bot sessions run bypassPermissions unconditionally (see the comment in
+				// buildBotSessionConfig() below for why this must not track settings.toolApproval).
+				profile: 'unattendedBypass',
 				...(entry.sessionId ? {resume: entry.sessionId} : {}),
 				...config,
 				timeoutMs,
@@ -345,8 +348,8 @@ export class TelegramBotService {
 			// which this doesn't change. If unattended-vs-interactive nuance is wanted for
 			// the bot too, that's a follow-up with its own design (e.g. a bot-specific
 			// approval setting), not a silent side effect of this issue.
-			permissionMode: 'bypassPermissions' as const,
-			allowDangerouslySkipPermissions: true,
+			// The bypass fields themselves are set by the unattendedBypass inlineChat()
+			// profile at the call site above (issue #230).
 			cwd: basePath,
 			plugins: getSynapsePluginConfig(this.plugin.app),
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as import('../agentService').ReasoningEffort} : {}),

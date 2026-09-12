@@ -355,6 +355,38 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
 /**
+ * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
+ * audit rec 5). The editor's call sites were previously kept consistent only by convention
+ * comments ("pure text transform → `tools: []` + `maxTurns: 1`"); the convention now lives in
+ * this interface — callers name the shape with `profile:` and the preset fills in only the
+ * fields the caller left unset (a caller's explicit value always wins — same convention as
+ * `routeQueryOptions()`).
+ *
+ * Profiles carry no behavior of their own beyond these option defaults; anything a caller
+ * passes explicitly (`permissionMode`, `canUseTool`, …) keeps winning over the preset.
+ */
+export type InlineChatProfileName = 'textTransform' | 'readOnly' | 'attended' | 'unattendedBypass';
+
+/** Option defaults one named profile fills in — every field optional, every field skippable. */
+export interface InlineChatProfile {
+	tools?: Options['tools'];
+	maxTurns?: number;
+	permissionMode?: Options['permissionMode'];
+	allowDangerouslySkipPermissions?: boolean;
+}
+
+export const INLINE_CHAT_PROFILES: Record<InlineChatProfileName, InlineChatProfile> = {
+	/** Pure text transform — no tools, exactly one model turn. */
+	textTransform: {tools: [], maxTurns: 1},
+	/** Single read-only tool, small loop (image reading/analysis). */
+	readOnly: {tools: ['Read'], maxTurns: 10},
+	/** Default toolset, small loop (attending over skill/tool use, e.g. mermaid conversion). */
+	attended: {maxTurns: 10},
+	/** Unattended runner that must not stop on an approval prompt (Telegram bot). */
+	unattendedBypass: {permissionMode: 'bypassPermissions', allowDangerouslySkipPermissions: true},
+};
+
+/**
  * Connection state tracked by AgentService.
  * The Agent SDK spawns the CLI per-query, so 'connected' means 'ready to query'.
  */
@@ -998,6 +1030,13 @@ export class AgentService {
 		plugins?: SdkPluginConfig[];
 		skills?: string[];
 		agent?: string;
+		/**
+		 * Named preset from `INLINE_CHAT_PROFILES` filling in the recurring option shapes
+		 * (tools/maxTurns/permission fields) — only where the caller left the field unset;
+		 * an explicit caller value always wins (issue #230). Options-bag-only field: never
+		 * part of `SessionConfig` or the SDK's `Options`.
+		 */
+		profile?: InlineChatProfileName;
 		canUseTool?: CanUseTool;
 		onElicitation?: OnElicitation;
 		maxTurns?: number;
@@ -1018,6 +1057,10 @@ export class AgentService {
 			try {
 				await this.ensureConnected();
 
+				// Profile presets fill in only what the caller left unset — a caller's explicit
+				// value always wins (issue #230, same convention as routeQueryOptions()).
+				const profileDefaults = options.profile ? INLINE_CHAT_PROFILES[options.profile] : undefined;
+
 				const stream = query({
 					prompt: options.prompt,
 					options: this.routeQueryOptions({
@@ -1029,11 +1072,11 @@ export class AgentService {
 						canUseTool: options.canUseTool,
 						onElicitation: options.onElicitation,
 						// Agentic default: enough turns for real tool use (Read/Glob/Grep
-						// loops). Callers that want a pure text transform pass maxTurns: 1.
-						maxTurns: options.maxTurns ?? DEFAULT_AGENTIC_MAX_TURNS,
-						permissionMode: options.permissionMode ?? 'default',
-						...(options.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
-						tools: options.tools,
+						// loops). The textTransform profile pins maxTurns to 1 instead.
+						maxTurns: options.maxTurns ?? profileDefaults?.maxTurns ?? DEFAULT_AGENTIC_MAX_TURNS,
+						permissionMode: options.permissionMode ?? profileDefaults?.permissionMode ?? 'default',
+						...(options.allowDangerouslySkipPermissions || profileDefaults?.allowDangerouslySkipPermissions ? {allowDangerouslySkipPermissions: true} : {}),
+						tools: options.tools ?? profileDefaults?.tools,
 						env: this.buildEnv(options.model),
 						pathToClaudeCodeExecutable: this.resolvedCli?.path,
 						...(options.mcpServers ? {mcpServers: options.mcpServers} : {}),
