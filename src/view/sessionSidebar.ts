@@ -239,8 +239,12 @@ export class SessionSidebarController {
 				break;
 			case 'created':
 				this.view.view.sessionList.sort((a, b) => {
-					const ta = a.lastModified;
-					const tb = b.lastModified;
+					// `createdAt` is set-once from the transcript's first entry's timestamp
+					// (SDK `SDKSessionInfo.createdAt?`); older sessions may not carry it, so
+					// fall back to `lastModified` — this case was previously a byte-identical
+					// copy of the `modified` sort (audit §6, issue #236), i.e. a dead branch.
+					const ta = a.createdAt ?? a.lastModified;
+					const tb = b.createdAt ?? b.lastModified;
 					return tb - ta;
 				});
 				break;
