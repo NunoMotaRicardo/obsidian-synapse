@@ -133,9 +133,36 @@ export class TelegramApiError extends Error {
 }
 
 /**
+ * The Telegram Bot API surface `TelegramBotService` uses — the seam a test fake
+ * implements (test/telegramBot.test.ts, issue #233). `TelegramApi` satisfies it
+ * structurally; `TelegramBotService` depends on this interface, not the concrete
+ * class, so a fake adapter can be injected via its constructor without the
+ * production call site (`main.ts`'s `connectTelegram()`) changing behavior.
+ */
+export interface TelegramApiLike {
+	getMe(): Promise<TelegramUser>;
+	getUpdates(offset?: number, timeout?: number): Promise<TelegramUpdate[]>;
+	sendMessage(params: {
+		chat_id: number;
+		text: string;
+		message_thread_id?: number;
+		parse_mode?: 'MarkdownV2' | 'HTML';
+		reply_to_message_id?: number;
+		disable_web_page_preview?: boolean;
+	}): Promise<TelegramMessage>;
+	sendChatAction(params: {
+		chat_id: number;
+		action: string;
+		message_thread_id?: number;
+	}): Promise<boolean>;
+	getFile(fileId: string): Promise<TelegramFile>;
+	downloadFile(filePath: string): Promise<ArrayBuffer>;
+}
+
+/**
  * Low-level Telegram Bot API client.
  */
-export class TelegramApi {
+export class TelegramApi implements TelegramApiLike {
 	private readonly baseUrl: string;
 
 	constructor(private readonly token: string) {

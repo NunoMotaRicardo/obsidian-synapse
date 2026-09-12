@@ -2,7 +2,9 @@
 
 ## Telegram bot (`src/bots/`)
 
-- `telegramApi.ts`: thin long-polling Bot API client (no webhooks). `telegramBot.ts`: bridge.
+- `telegramApi.ts`: thin long-polling Bot API client (no webhooks), exposing `TelegramApiLike` —
+  the structural seam interface `TelegramBotService` depends on (its constructor takes an adapter
+  factory defaulting to the real `TelegramApi`; see Testing below). `telegramBot.ts`: bridge.
 - Allowlist of numeric user ids; messages from others are silently ignored.
 - One session per chat/topic; `/new` resets, `/help` explains.
 - Attachments (photo/document/audio/video) are downloaded to `_synapse/bot-attachments/` and their
@@ -39,4 +41,18 @@
   wouldn't even land in a report the way a `runExecutor.ts` run's does. The bot's actual safety
   control is the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`)
   — see [SECURITY.md](../SECURITY.md) #1.
+
+## Testing
+
+`test/telegramBot.test.ts` exercises the bot behind a fake adapter injected at the
+`TelegramApiLike` seam (`src/bots/telegramApi.ts` defines the interface next to the concrete
+`TelegramApi`; `TelegramBotService`'s constructor takes an adapter factory defaulting to the real
+`TelegramApi`, so the production call site — `main.ts`'s `connectTelegram()` — is unchanged).
+No test talks to the network: `connect()`/`getMe`/long-polling/replies/typing/attachments all
+resolve against the recorded fake, and `inlineChat` is a mock on the plugin object (no live CLI).
+The suite covers routing (allowlist enforcement, `/start`//`help`//`new` commands, no-content
+drops), per-chat/topic queue serialization, reply splitting at the 4096 limit plus the
+"can't parse" retry-as-plain-text path, typing-loop shutdown, attachment download
+(largest-photo selection, filename sanitization, vault-adapter write) and session resume
+identity. Time-dependent paths (typing interval, poll backoff) run under fake timers.
 
