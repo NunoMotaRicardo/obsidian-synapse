@@ -79,16 +79,13 @@ interface SentMessage {
 	chat_id: number;
 	text: string;
 	message_thread_id?: number;
-	parse_mode?: 'MarkdownV2' | 'HTML';
 	reply_to_message_id?: number;
-	disable_web_page_preview?: boolean;
 }
 
 interface InlineChatCall {
 	prompt: string;
 	profile?: string;
 	resume?: string;
-	timeoutMs?: number;
 	abortController?: AbortController;
 }
 
@@ -277,7 +274,6 @@ function makeHarness(opts?: {allowedUsers?: string; defaultFactory?: boolean}): 
 					prompt: options.prompt,
 					profile: options.profile,
 					resume: options.resume,
-					timeoutMs: options.timeoutMs,
 					abortController: options.abortController,
 				});
 				// Gates park this reply until the test releases the match — how the
@@ -371,6 +367,11 @@ const mockedRequestUrl = vi.mocked(requestUrl);
 
 beforeEach(() => {
 	vi.useFakeTimers();
+	// Fresh ids per test so assertions against captured message_id values stay local
+	// (assertions compare against the captured msg object, but a reset keeps the
+	// intent obvious and ids from piling up across tests).
+	nextMessageId = 1;
+	nextUpdateId = 1;
 });
 
 afterEach(async () => {
