@@ -5,9 +5,9 @@ import {TaskPlanTracker, type TaskPlanTrackerState} from '../src/taskPlanTracker
 // TaskPlanTracker (audit §3, issue #236) — the single owner of the
 // TodoWrite/TaskCreate/TaskUpdate plan state both the foreground
 // (synapseView.ts#handleSessionEvent) and background
-// (sessionSidebar.ts#registerBackgroundEvents) paths previously mutated
-// copy-pasted. DOM-free: handlers return `{handled, renderTodos}` and the
-// caller decides whether to render.
+// (view/backgroundSession.ts's `BackgroundSession.attach()`) paths previously
+// mutated copy-pasted. DOM-free: handlers return `{handled, renderTodos}` and
+// the caller decides whether to render.
 // ---------------------------------------------------------------------------
 
 describe('TaskPlanTracker — TodoWrite', () => {

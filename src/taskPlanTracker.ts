@@ -5,9 +5,9 @@
  * Owns the whole `TodoWrite`/`TaskCreate`/`TaskUpdate` plan-state machine in ONE place: the
  * parse functions previously in `agentService.ts` (moved verbatim, doc comments intact) and the
  * `TaskPlanTracker` class that replaces the copy-pasted foreground (`synapseView.ts`'s
- * `handleSessionEvent()`) and background (`sessionSidebar.ts`'s `registerBackgroundEvents()`)
- * plan-mutation branches. DOM-free — both callers render `renderTodos` through their own
- * rendering path, or ignore it (hidden session).
+ * `handleSessionEvent()`) and background (`view/backgroundSession.ts`'s `BackgroundSession.
+ * attach()`) plan-mutation branches. DOM-free — both callers render `renderTodos` through their
+ * own rendering path, or ignore it (hidden session).
  *
  * Not part of the SDK service surface proper (it touches no SDK types) — but `agentService.ts`
  * re-exports `TodoItem`/`TaskPlan` and the four parse functions so the consumer import surface
@@ -113,8 +113,8 @@ export interface TaskPlanTrackerState {
 
 /**
  * Owns the task-plan state both the foreground (`synapseView.ts`'s `handleSessionEvent()`) and
- * background (`sessionSidebar.ts`'s `registerBackgroundEvents()`) event paths mutate — the
- * single implementation of the `TodoWrite` replace / `TaskCreate` stash-and-adopt /
+ * background (`view/backgroundSession.ts`'s `BackgroundSession.attach()`) event paths mutate —
+ * the single implementation of the `TodoWrite` replace / `TaskCreate` stash-and-adopt /
  * `TaskUpdate` patch-delete semantics (audit §3, issue #236: exactly one `hasVisibleChange`
  * guard, one `status === 'deleted'` delete, one field-merge).
  *
@@ -231,9 +231,9 @@ export class TaskPlanTracker {
 	}
 
 	/**
-	 * Serializable-by-copy snapshot for the background save/restore path (`BackgroundSession`
-	 * carries this instead of the three mirrored fields). Plain arrays, so a structured clone
-	 * survives; `restore()` re-hydrates the Maps.
+	 * Serializable-by-copy snapshot used to copy plan state between the foreground tracker and
+	 * a `BackgroundSession`'s own live tracker on save/restore (`view/backgroundSession.ts`).
+	 * Plain arrays, so a structured clone survives; `restore()` re-hydrates the Maps.
 	 */
 	snapshot(): TaskPlanTrackerState {
 		return {

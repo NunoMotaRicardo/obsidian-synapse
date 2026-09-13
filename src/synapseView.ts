@@ -33,7 +33,7 @@ import {ToolApprovalModal} from './modals/toolApprovalModal';
 import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 // UserInputModal removed — Agent SDK handles user input via hooks
 import {ElicitationModal} from './modals/elicitationModal';
-import type {BackgroundSession} from './view/types';
+import type {BackgroundSession} from './view/backgroundSession';
 
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
 import {friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
@@ -176,7 +176,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	/**
 	 * The single plan-state owner (audit §3, issue #236): the TodoWrite/TaskCreate/TaskUpdate
 	 * branches of `handleSessionEvent()` delegate here; the same tracker class also backs
-	 * background sessions (`sessionSidebar.ts`) and `BackgroundSession` carries its snapshot.
+	 * background sessions (`sessionSidebar.ts`'s `BackgroundSession` owns its own live instance).
 	 * `renderTodos` returned non-null is rendered via the renderer; the tracker itself is DOM-free.
 	 */
 	readonly taskPlanTracker: TaskPlanTracker = new TaskPlanTracker();
@@ -1202,11 +1202,8 @@ export class SynapseView extends ItemView implements ViewContext {
 	async disconnectAllSessions(): Promise<void> {
 		await this.disconnectSession();
 		for (const [, bg] of this.activeSessions) {
-			for (const unsub of bg.unsubscribers) unsub();
+			bg.detach();
 			try { await bg.session.disconnect(); } catch { /* ignore */ }
-			if (bg.streamingComponent) {
-				try { this.removeChild(bg.streamingComponent); } catch { /* ignore */ }
-			}
 		}
 		this.activeSessions.clear();
 	}

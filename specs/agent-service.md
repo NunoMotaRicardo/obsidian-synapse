@@ -395,7 +395,7 @@ doc comment in `agentService.ts` for the full list.
 
 **Partial registration is intentional, not a gap to close.** `SessionEvents` describes every
 event a `Session` can dispatch; a given `session.on(...)` call site is free to subscribe to a
-subset (`registerBackgroundEvents()` deliberately omits `session.init`, `assistant.run_result`,
+subset (`BackgroundSession.attach()` deliberately omits `session.init`, `assistant.run_result`,
 `session.compaction_complete`, and `session.metadata` — see "Query metadata cache" below for how
 `session.metadata`'s omission there is compensated). `on()` is not exhaustiveness-checked against
 `SessionEvents`, and should not become so.
