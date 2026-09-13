@@ -26,7 +26,11 @@ CLI process per query.
 | Module | Spec | Source | Responsibility |
 |---|---|---|---|
 | main | — | `src/main.ts` | Plugin lifecycle, service wiring, commands, ribbon |
-| agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, sessions, one-shot chat helpers |
+| agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, one-shot chat helpers, model layer, delegation MCP server, re-export surface |
+| agent-service (SDK shims) | [agent-service.md](agent-service.md) | `src/sdkShims.ts` | Electron compatibility shims: top-level `setMaxListeners` wrapper + refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`forceRestoreSetTimeoutShim`) |
+| agent-service (permissions) | [agent-service.md](agent-service.md) | `src/permissions.ts` | Session-scoped permission updates, in-memory grant settings, vault settings layer merge |
+| agent-service (session) | [agent-service.md](agent-service.md) | `src/session.ts` | `Session` wrapper (`send`/`abort`/`dispatch`/`convertToSessionEvent`), `SessionEvents` map, `QueryMetadataCache` + refresh, `sendAndWaitWithAbort`, `resolveResumeSessionId`, `autoApproveReadOnlyTools` |
+| task-plan tracker | [chat-view.md](chat-view.md) | `src/taskPlanTracker.ts` | `TaskPlanTracker` — the single TodoWrite/TaskCreate/TaskUpdate plan-state owner for foreground + background paths (DOM-free), plus the plan payload parse functions |
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
 | provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button) |

@@ -1,6 +1,6 @@
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
 import type {SessionMetadata, SessionMessage} from '../agentService';
-import {parseTodoWritePayload, parseTaskCreateInput, parseTaskCreateResultId, parseTaskUpdateInput} from '../agentService';
+import {TaskPlanTracker} from '../taskPlanTracker';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
 import {formatTimeAgo, stripSessionTypePrefix, stripInjectedPromptContext} from './utils';
@@ -239,8 +239,12 @@ export class SessionSidebarController {
 				break;
 			case 'created':
 				this.view.view.sessionList.sort((a, b) => {
-					const ta = a.lastModified;
-					const tb = b.lastModified;
+					// `createdAt` is set-once from the transcript's first entry's timestamp
+					// (SDK `SDKSessionInfo.createdAt?`); older sessions may not carry it, so
+					// fall back to `lastModified` — this case was previously a byte-identical
+					// copy of the `modified` sort (audit §6, issue #236), i.e. a dead branch.
+					const ta = a.createdAt ?? a.lastModified;
+					const tb = b.createdAt ?? b.lastModified;
 					return tb - ta;
 				});
 				break;
@@ -551,10 +555,8 @@ export class SessionSidebarController {
 			toolCallsContainer: this.view.view.toolCallsContainer,
 			reasoningEl: this.view.view.reasoningEl,
 			reasoningBodyEl: this.view.view.reasoningBodyEl,
-			currentTodos: this.view.view.currentTodos,
+			taskPlanTrackerState: this.view.view.taskPlanTracker.snapshot(),
 			taskPanelEl: this.view.view.taskPanelEl,
-			taskPlan: new Map(this.view.view.taskPlan),
-			pendingTaskCreates: new Map(this.view.view.pendingTaskCreates),
 		};
 
 		// If still streaming, attach background event routing
@@ -613,10 +615,8 @@ export class SessionSidebarController {
 			this.view.view.activeToolCalls = bg.activeToolCalls;
 			this.view.view.reasoningEl = bg.reasoningEl;
 			this.view.view.reasoningBodyEl = bg.reasoningBodyEl;
-			this.view.view.currentTodos = bg.currentTodos;
+			this.view.view.taskPlanTracker.restore(bg.taskPlanTrackerState);
 			this.view.view.taskPanelEl = bg.taskPanelEl;
-			this.view.view.taskPlan = bg.taskPlan;
-			this.view.view.pendingTaskCreates = bg.pendingTaskCreates;
 			this.view.chatContainer.appendChild(bg.savedDom);
 			bg.savedDom = null;
 			if (this.view.view.streamingReasoning && this.view.view.reasoningBodyEl) {
@@ -630,12 +630,13 @@ export class SessionSidebarController {
 				void this.view.view.renderer.updateStreamingRender();
 			}
 			// The saved DOM's task panel (if any) reflects whatever state it was in when the
-			// session was backgrounded — background event routing keeps taskPlan/currentTodos
-			// current but deliberately does no DOM work while hidden, so the panel itself can be
-			// stale (missing tasks created, or showing pre-update statuses). Force a fresh render
-			// from the up-to-date state now that the session is foreground again; renderTaskPanel()
+			// session was backgrounded — background event routing keeps the tracker current but
+			// deliberately does no DOM work while hidden, so the panel itself can be stale
+			// (missing tasks created, or showing pre-update statuses). Force a fresh render from
+			// the up-to-date state now that the session is foreground again; renderTaskPanel()
 			// also (re-)starts the live-elapsed timer since it was stopped on background-save.
-			const restoredTodos = this.view.view.taskPlan.size > 0 ? [...this.view.view.taskPlan.values()] : this.view.view.currentTodos;
+			const tracker = this.view.view.taskPlanTracker;
+			const restoredTodos = tracker.hasPlan ? (tracker.taskPlan.size > 0 ? [...tracker.taskPlan.values()] : tracker.currentTodos) : null;
 			if (restoredTodos) {
 				this.view.view.renderer.renderTaskPanel(restoredTodos);
 			} else {
@@ -683,6 +684,15 @@ export class SessionSidebarController {
 
 	private registerBackgroundEvents(bg: BackgroundSession): void {
 		const session = bg.session;
+
+		// Lazily hydrate the live tracker from the snapshot the session was saved with — the
+		// state field stays authoritative for save/restore; the live instance is what the
+		// hidden-session handlers mutate while the session streams in the background.
+		const bgTracker = bg.taskPlanTracker ?? new TaskPlanTracker();
+		if (!bg.taskPlanTracker) {
+			bgTracker.restore(bg.taskPlanTrackerState);
+			bg.taskPlanTracker = bgTracker;
+		}
 
 		bg.unsubscribers.push(
 			session.on('assistant.turn_start', () => {
@@ -739,10 +749,9 @@ export class SessionSidebarController {
 				bg.turnToolsUsed = [];
 				bg.turnUsage = null;
 				bg.isStreaming = false;
-				bg.currentTodos = null;
 				bg.taskPanelEl = null;
-				bg.taskPlan.clear();
-				bg.pendingTaskCreates.clear();
+				bgTracker.reset();
+				bg.taskPlanTrackerState = bgTracker.snapshot();
 				// Re-render sidebar to remove the green dot
 				this.renderSessionList();
 				void this.loadSessions();
@@ -765,51 +774,24 @@ export class SessionSidebarController {
 				bg.reasoningBodyEl = null;
 				bg.activeToolCalls.clear();
 				bg.streamingComponent = null;
-				bg.currentTodos = null;
 				bg.taskPanelEl = null;
-				bg.taskPlan.clear();
-				bg.pendingTaskCreates.clear();
+				bgTracker.reset();
+				bg.taskPlanTrackerState = bgTracker.snapshot();
 				this.renderSessionList();
 			}),
 			session.on('tool.execution_start', (data) => {
 				const {toolName, toolCallId, input: toolInput} = data;
 				bg.turnToolsUsed.push(toolName);
-				if (toolName === 'TodoWrite') {
-					const todos = parseTodoWritePayload(toolInput);
-					if (todos) bg.currentTodos = todos;
-				} else if (toolName === 'TaskCreate') {
-					const parsed = parseTaskCreateInput(toolInput);
-					if (parsed) bg.pendingTaskCreates.set(toolCallId, parsed);
-				} else if (toolName === 'TaskUpdate') {
-					const parsed = parseTaskUpdateInput(toolInput);
-					// Same untracked-field guard as the foreground path in synapseView.ts —
-					// skip the mutation entirely for dependency-only updates.
-					const hasVisibleChange = parsed !== null && (parsed.status !== undefined || parsed.subject !== undefined || parsed.activeForm !== undefined);
-					if (parsed && hasVisibleChange && bg.taskPlan.has(parsed.taskId)) {
-						if (parsed.status === 'deleted') {
-							bg.taskPlan.delete(parsed.taskId);
-						} else {
-							const existing = bg.taskPlan.get(parsed.taskId)!;
-							bg.taskPlan.set(parsed.taskId, {
-								content: parsed.subject ?? existing.content,
-								status: parsed.status ?? existing.status,
-								activeForm: parsed.activeForm ?? existing.activeForm,
-							});
-						}
-					}
-				}
-				// No DOM manipulation — hidden session
+				// Same tracker as the foreground path (audit §3, #236) — renderTodos is ignored
+				// here: no DOM manipulation for a hidden session. The state field is refreshed
+				// after each event so a save during streaming carries the latest plan.
+				bgTracker.onToolStart(toolName, toolCallId, toolInput);
+				bg.taskPlanTrackerState = bgTracker.snapshot();
 			}),
 			session.on('tool.execution_complete', (data) => {
 				const {toolName, toolCallId, result, error: toolError} = data;
-				if (toolName === 'TaskCreate' && bg.pendingTaskCreates.has(toolCallId)) {
-					const pending = bg.pendingTaskCreates.get(toolCallId)!;
-					bg.pendingTaskCreates.delete(toolCallId);
-					const taskId = !toolError ? parseTaskCreateResultId(result.content) : null;
-					if (taskId) {
-						bg.taskPlan.set(taskId, {content: pending.subject, status: 'pending', activeForm: pending.activeForm});
-					}
-				}
+				bgTracker.onToolComplete(toolCallId, toolName, result, toolError);
+				bg.taskPlanTrackerState = bgTracker.snapshot();
 				// No DOM manipulation — hidden session
 			}),
 		);

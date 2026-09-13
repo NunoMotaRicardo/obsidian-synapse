@@ -148,8 +148,27 @@ and built in `buildUI()` via `controller.build(parent)`.
 - **Task/plan tracking panel:** Claude Code surfaces its running plan via a tool
   call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
-  are supported. `handleSessionEvent()`'s `tool.execution_start`/`tool.execution_complete` cases
-  branch on `toolName`:
+  are supported. The whole plan-state machine lives in the DOM-free `TaskPlanTracker`
+  (`src/taskPlanTracker.ts`, audit §3 — issue #236), which owns `currentTodos`, `taskPlan`, and
+  `pendingTaskCreates` and exposes `onToolStart(toolName, toolCallId, input)` /
+  `onToolComplete(toolCallId, toolName, result, error)` returning `{handled, renderTodos}`, plus
+  `reset()` and `snapshot()`/`restore()` for the background save/restore path. The parse
+  functions it uses (`parseTodoWritePayload()`, `parseTaskCreateInput()`,
+  `parseTaskCreateResultId()`, `parseTaskUpdateInput()`) are re-exported from `agentService.ts`.
+  Both the foreground and background paths delegate to the same tracker class; their
+  copy-pasted branches are gone:
+  - `SynapseView` holds one `taskPlanTracker` instance; `handleSessionEvent()`'s
+    `tool.execution_start`/`tool.execution_complete` cases call it and render `renderTodos` via
+    `renderTaskPanel(...)` when non-null. `turnToolsUsed.push(toolName)` and the generic
+    `addToolCallBlock()` fallthrough stay in the view.
+  - `renderTaskPanel(todos)` (chatRenderer.ts) records the rendered plan on the view's tracker
+    (`taskPlanTracker.currentTodos = todos`) — a `TodoWrite` render IS the current full plan —
+    and `clearTaskPanelState()` clears via `taskPlanTracker.reset()`.
+  - Background sessions (`sessionSidebar.ts`) hydrate a live tracker from
+    `BackgroundSession.taskPlanTrackerState` and feed their `tool.execution_start`/`complete`
+    handlers through it, ignoring `renderTodos` (no DOM while hidden); the state field is
+    re-snapshotted after each event so a save during streaming carries the latest plan.
+  Semantics (unchanged by the extraction, now asserted in one place by `test/taskPlanTracker.test.ts`):
   - `TodoWrite`: parses `data.input` with `parseTodoWritePayload()` (a standalone function
     exported from `agentService.ts`, imported directly — not an `AgentService` method) and, when
     it returns a non-null list, calls `renderTaskPanel(todos)` directly (the call is authoritative
@@ -187,16 +206,17 @@ and built in `buildUI()` via `controller.build(parent)`.
     never gets a `.synapse-task-panel` child, so nothing renders (the container itself is hidden
     when empty via existing `:empty` CSS).
   - Turn/session-switch lifecycle: `newConversation()` and `finalizeStreamingMessage()` call
-    `clearTaskPanelState()` (clears `currentTodos`/`taskPanelEl`/`taskPlan`/`pendingTaskCreates`,
-    stops the timer). Background sessions (`sessionSidebar.ts`) carry the same four fields on
-    `BackgroundSession`, the same way as `toolCallsContainer`/`activeToolCalls` — the panel's DOM
-    travels inside the saved `chatContainer` fragment on `saveCurrentToBackground()` (no separate
-    serialization needed), and `restoreFromBackground()` resumes the live-elapsed timer if a panel
-    is still showing for an in-progress background turn. A hidden/background session's
-    `tool.execution_start`/`tool.execution_complete` handlers mirror the foreground parsing logic
-    into `bg.currentTodos`/`bg.taskPlan`/`bg.pendingTaskCreates` (no DOM — the session isn't
-    visible) so the latest plan state is available if/when the view re-attaches;
-    `session.idle`/`session.error` reset all four for the next turn.
+    `clearTaskPanelState()` (clears the tracker via `reset()`, nulls `taskPanelEl`, stops the
+    timer). `BackgroundSession` carries the tracker's snapshot (`taskPlanTrackerState`, replacing
+    the three mirrored fields the audit flagged) alongside `taskPanelEl`, the same way as
+    `toolCallsContainer`/`activeToolCalls` — the panel's DOM travels inside the saved
+    `chatContainer` fragment on `saveCurrentToBackground()` (no separate serialization needed),
+    and `restoreFromBackground()` resumes the live-elapsed timer if a panel is still showing for
+    an in-progress background turn. On re-attach, `restoreFromBackground()` restores the
+    foreground tracker from the snapshot and re-renders from it (the tracker's `taskPlan` values
+    when present, else `currentTodos`, else nothing);
+    `session.idle`/`session.error` in the background call `tracker.reset()` (and re-snapshot the
+    state field) for the next turn.
   - **Message metadata footer (`renderMessageMetadata`):** rendered below completed assistant
   messages with chips for elapsed time (`turnStartTime`), token usage (`turnUsage`), and unique tools used
   (`turnToolsUsed`). Early-returns when none of the three are present.
@@ -735,6 +755,12 @@ The session sidebar adopts the prototype's starter list pattern (clean unlined c
 - **Section headings (`.synapse-sidebar-heading`):** Follow the uppercase letterspaced label primitive (10px, font-weight 500, letter-spacing 0.14em, faint text) with a trailing hairline rule filling the remaining width via `::after`. Renders a "Background" section when active background sessions exist alongside a "Sessions" section.
 - **Underline-on-hover affordances:** Header icon controls (new, filter, sort, refresh, bulk delete) and inline row action buttons (rename, delete) use transparent backgrounds with the underline-on-hover border transition (`border-bottom-color: var(--interactive-accent)`), eliminating filled buttons.
 - **Keyboard accessibility:** Session items are fully keyboard-navigable (`tabindex="0"`, `role="button"`). Pressing `Enter` or `Space` selects and restores the session, `F2` triggers session rename, and `Delete` confirms session deletion.
+- **Sorting:** the sort menu offers Modified date / Created date / Name. The `created` case
+  sorts by `createdAt ?? lastModified` descending (audit §6, issue #236 — previously a
+  byte-identical copy of the `modified` sort). `SessionMetadata` (the SDK's `SDKSessionInfo`)
+  carries `createdAt?: number` — "Creation time in integer milliseconds since epoch, extracted
+  from the first entry's timestamp" — so the menu entry reflects real creation order; sessions
+  missing `createdAt` fall back to their `lastModified`.
 - **Empty state (`.synapse-sidebar-empty`):** Rendered as a centered italic serif line in faint text (`font-family: var(--synapse-font-serif); font-style: italic;`), without spinners or card boxes.
 
 ### Search tab
