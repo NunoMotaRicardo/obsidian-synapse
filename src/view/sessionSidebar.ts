@@ -96,8 +96,15 @@ export class SessionSidebarController {
 	private sessionFilter = '';
 	private sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
 	private sessionSort: 'modified' | 'created' | 'name' = 'modified';
+	/** Monotonically increasing token to guard against overlapping session selections / stale restores. */
+	private selectionToken = 0;
 
 	constructor(private view: ViewContext) {}
+
+	/** Invalidate any in-flight session selection or restore (e.g. when starting a new conversation). */
+	cancelInFlightSelection(): void {
+		this.selectionToken++;
+	}
 
 	// ── View-owned state accessors ───────────────────────────────
 	// Accessors (not copied fields) so the historical `this.<name>` spellings in the
@@ -588,7 +595,7 @@ export class SessionSidebarController {
 		this.view.view.currentSessionId = null;
 	}
 
-	async restoreFromBackground(bg: BackgroundSession): Promise<void> {
+	async restoreFromBackground(bg: BackgroundSession, token = this.selectionToken): Promise<void> {
 		// **No listener-gap window.** `bg` stays attached (still routing SDK events into its
 		// own model) through every `await` below until the exact synchronous point where we
 		// flip ownership: `bg.detach()` immediately followed, with no intervening `await`, by
@@ -606,6 +613,13 @@ export class SessionSidebarController {
 		//      `turnUsage`, the task-plan tracker snapshot, …) is read in the single synchronous
 		//      block right after `bg.detach()`, not before the history-render awaits, so it
 		//      reflects whatever `bg` last observed, not a stale pre-render snapshot.
+		//
+		// **Selection token guard against concurrent session selections.** If the user selects
+		// another session (or starts a new conversation) while the renders below are in flight,
+		// `token` becomes stale (`this.selectionToken !== token`). We check freshness before
+		// and between async renders and immediately before adopting background state. If stale,
+		// we return early without detaching `bg` or touching foreground state, ensuring `bg`
+		// remains safely attached in `activeSessions` with zero lost events.
 		this.view.chatContainer.empty();
 
 		const historySnapshot = bg.messages.slice();
@@ -615,20 +629,26 @@ export class SessionSidebarController {
 		}
 		await Promise.all(renderPromises);
 
+		if (this.selectionToken !== token) return;
+
 		// Render any message(s) `bg`'s still-attached handlers pushed (e.g. a `session.idle`
 		// finalize) while the history above was rendering — one at a time, re-checking the
 		// live length each iteration, so a burst of idle→next-turn-idle while we awaited is
 		// still fully rendered in order.
 		let renderedCount = historySnapshot.length;
 		while (renderedCount < bg.messages.length) {
+			if (this.selectionToken !== token) return;
 			const nextMsg = bg.messages[renderedCount];
 			if (!nextMsg) break;
 			await this.view.view.renderer.renderMessageBubble(nextMsg);
 			renderedCount++;
 		}
 
+		if (this.selectionToken !== token) return;
+
 		// ── Atomic ownership switch — no `await` between here and `registerSessionEvents()` ──
 		bg.detach();
+		this.view.view.activeSessions.delete(bg.sessionId);
 
 		this.view.view.currentSession = bg.session;
 		this.view.view.currentSessionId = bg.sessionId;
@@ -674,6 +694,7 @@ export class SessionSidebarController {
 			if (this.view.view.streamingContent) {
 				await this.view.view.renderer.updateStreamingRender();
 			}
+			if (this.selectionToken !== token) return;
 			const tracker = this.view.view.taskPlanTracker;
 			const restoredTodos = tracker.hasPlan ? (tracker.taskPlan.size > 0 ? [...tracker.taskPlan.values()] : tracker.currentTodos) : null;
 			if (restoredTodos) {
@@ -683,13 +704,12 @@ export class SessionSidebarController {
 			this.view.view.renderer.renderWelcome();
 		}
 
+		if (this.selectionToken !== token) return;
+
 		// Restored session carries whatever query-metadata cache (#130) it last captured
 		// while backgrounded — reflect it (or its absence) immediately rather than waiting
 		// for this session's next turn.
 		this.view.view.configToolbar.updateContextIndicator();
-
-		// Remove from background map
-		this.view.view.activeSessions.delete(bg.sessionId);
 
 		// Restore agent from session name
 		this.restoreAgentFromSessionName(bg.sessionId);
@@ -716,6 +736,8 @@ export class SessionSidebarController {
 
 	async selectSession(sessionId: string): Promise<void> {
 		if (sessionId === this.view.view.currentSessionId && this.view.view.currentSession) return;
+
+		const token = ++this.selectionToken;
 
 		// ── Save current session to background (if streaming, keep it alive) ──
 		if (this.view.view.currentSession && this.view.view.currentSessionId) {
@@ -750,7 +772,8 @@ export class SessionSidebarController {
 		// ── Check if the target session is already alive in background ──
 		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
-			await this.restoreFromBackground(bg);
+			await this.restoreFromBackground(bg, token);
+			if (this.selectionToken !== token) return;
 			this.renderSessionList();
 			this.view.view.renderer.updateSendButton();
 			return;
@@ -773,6 +796,11 @@ export class SessionSidebarController {
 				resume: sessionId,
 			});
 
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
+			}
+
 			// Load message history from the persisted transcript (cold load).
 			const sessionMeta = this.view.view.sessionList.find(s => s.sessionId === sessionId);
 			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
@@ -789,6 +817,11 @@ export class SessionSidebarController {
 				sessionMessages = await this.view.plugin.agentService!.getSessionMessages(sessionId);
 			} catch (e) {
 				console.warn('[synapse] Failed to read session transcript for replay:', e);
+			}
+
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
 			}
 
 			const renderPromises: Promise<void>[] = [];
@@ -833,6 +866,11 @@ export class SessionSidebarController {
 			}
 			await Promise.all(renderPromises);
 
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
+			}
+
 			if (this.messages.length === 0) {
 				this.view.view.renderer.renderWelcome();
 			}
@@ -859,6 +897,7 @@ export class SessionSidebarController {
 			// state line too, not just the kicker (#217).
 			this.view.view.refreshComposerState();
 		} catch (e) {
+			if (this.selectionToken !== token) return;
 			this.view.view.renderer.addInfoMessage(`Failed to load session: ${String(e)}`);
 			this.view.view.renderer.renderWelcome();
 			this.view.view.currentSessionId = null;

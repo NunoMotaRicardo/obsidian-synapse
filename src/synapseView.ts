@@ -1209,6 +1209,9 @@ export class SynapseView extends ItemView implements ViewContext {
 	}
 
 	newConversation(): void {
+		// Invalidate any in-flight session selection or restore
+		this.sidebar.cancelInFlightSelection();
+
 		// Save the current session to background instead of disconnecting it
 		if (this.currentSession && this.currentSessionId) {
 			this.sidebar.saveCurrentToBackground();

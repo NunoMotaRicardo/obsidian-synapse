@@ -533,6 +533,13 @@ physically moved live DOM nodes out of the chat container and back in).
   delta, a `tool.execution_complete`, or the terminal `session.idle`/`session.error`) had no
   listener at all and was silently dropped. `test/backgroundSessionRestoreOrdering.test.ts`
   guards the ordering at the source level.
+- **Monotonic selection token guards concurrent session switching:** `selectSession()` increments a
+  monotonically increasing `selectionToken` before initiating restore or cold load.
+  `restoreFromBackground()` and `selectSession()` verify token freshness before and between async
+  renders, and immediately before adopting background state. If superseded by a newer selection
+  (or `newConversation()`), the earlier operation aborts cleanly without calling `bg.detach()` or
+  mutating foreground state, ensuring the superseded session remains safely attached in
+  `activeSessions` and the latest user selection always wins foreground ownership.
 - **Active-stream switching stays correct:** `unsubscribeEvents()`/`registerSessionEvents()`
   still gate whether events reach the foreground `handleSessionEvent()` switch vs. a
   `BackgroundSession`'s own `attach()`ed handlers — exactly one of the two is ever listening for
