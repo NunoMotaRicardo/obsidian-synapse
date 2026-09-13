@@ -166,6 +166,19 @@ const {
 			return file;
 		}
 
+		async createBinary(path: string, _data: ArrayBuffer): Promise<TFile> {
+			const key = normalize(path);
+			if (this.nodes.has(key)) {
+				throw new Error(`File already exists: "${key}"`);
+			}
+			const parent = this.getParentFolderOrThrow(key);
+			const file = new TFile(key);
+			file.parent = parent;
+			parent.children.push(file);
+			this.nodes.set(key, file);
+			return file;
+		}
+
 		async read(file: TFile): Promise<string> {
 			const content = this.contents.get(file.path);
 			if (content === undefined) {

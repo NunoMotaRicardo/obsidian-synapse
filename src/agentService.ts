@@ -14,10 +14,8 @@
  * use (audit §1, issue #236).
  */
 
-// The Electron SDK shims moved to ./sdkShims (statically imported there at module load) —
-// `AgentService.stop()` below still needs the force-restore for the unload path; `Session.abort()`
-// (in ./session.ts) installs/uninstalls them around the forced-kill window.
-import {forceRestoreSetTimeoutShim} from './sdkShims';
+// The Electron SDK shims are statically imported from ./sdkShims at module load.
+import {uninstallSetTimeoutShim, ABORT_SHIM_GRACE_MS} from './sdkShims';
 import {
 	sessionScopePermissions,
 	permissionRuleToString,
@@ -1116,14 +1114,12 @@ export class AgentService {
 	 * Stop the service. For the Agent SDK, there is no persistent client
 	 * to tear down — queries manage their own subprocess lifecycle.
 	 *
-	 * Also force-restores `globalThis.setTimeout` if `Session.abort()`'s scoped shim (#116)
-	 * happens to still be installed — e.g. the plugin is unloaded a few seconds after a user
-	 * clicked stop, before the shim's own grace-period timer got to it — so the plugin never
-	 * leaves the global patched past its own lifecycle.
+	 * Views may dispose SDK streams before this hook is reached, so the timer shim is installed
+	 * for the plugin lifetime. Keep it through the process-cleanup grace window before release.
 	 */
 	async stop(): Promise<void> {
 		this.state = 'disconnected';
-		forceRestoreSetTimeoutShim();
+		window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
 	}
 }
 

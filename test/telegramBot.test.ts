@@ -47,11 +47,6 @@ async function flush(): Promise<void> {
 	}
 }
 
-/** Mirrors Obsidian's normalizePath as stubbed in test/setup.ts. */
-function normalizeMockPath(p: string): string {
-	return p.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-}
-
 let nextMessageId = 1;
 let nextUpdateId = 1;
 
@@ -201,7 +196,7 @@ class FakeTelegramApi implements TelegramApiLike {
 
 // ---------------------------------------------------------------------------
 // Harness — bot + fake + mock plugin (inlineChat mock with release gates) +
-// a mock app whose adapter has the methods downloadAttachments() calls.
+// a mock app whose Vault API records attachment writes.
 // ---------------------------------------------------------------------------
 
 interface Harness {
@@ -233,28 +228,21 @@ function makeHarness(opts?: {allowedUsers?: string; defaultFactory?: boolean}): 
 	let makeReply: (prompt: string) => {content: string | undefined; sessionId: string} =
 		(prompt) => ({content: `reply: ${prompt}`, sessionId: 's1'});
 
-	// createMockApp() gives the vault (basePath + exists on the adapter); extend it
-	// with the adapter methods downloadAttachments() actually calls (mkdir,
-	// writeBinary) and the workspace stub that keeps getSynapseView() leafless —
-	// models then resolve to [] and resolveModelForAgent() to undefined, which is
-	// exactly what an unconfigured bot sees.
+	// The mock Vault records createFolder/createBinary calls used by attachments;
+	// the workspace stub keeps getSynapseView() leafless, so models resolve to []
+	// and resolveModelForAgent() to undefined, matching an unconfigured bot.
 	const {vault} = createMockApp(VAULT_BASE);
-	const adapter = vault.adapter as {
-		basePath: string;
-		exists: (path: string) => Promise<boolean>;
-		mkdir: (path: string) => Promise<void>;
-		writeBinary: (path: string, data: ArrayBuffer) => Promise<void>;
-	};
 	const written: Array<{path: string; data: ArrayBuffer}> = [];
 	const mkdirCalls: string[] = [];
-	const knownDirs = new Set<string>();
-	adapter.exists = async (path: string) => knownDirs.has(normalizeMockPath(path));
-	adapter.mkdir = async (path: string) => {
+	const originalCreateFolder = vault.createFolder.bind(vault);
+	vault.createFolder = async (path: string) => {
 		mkdirCalls.push(path);
-		knownDirs.add(normalizeMockPath(path));
+		return originalCreateFolder(path);
 	};
-	adapter.writeBinary = async (path: string, data: ArrayBuffer) => {
+	const originalCreateBinary = vault.createBinary.bind(vault);
+	vault.createBinary = async (path: string, data: ArrayBuffer) => {
 		written.push({path, data});
+		return originalCreateBinary(path, data);
 	};
 	const mockApp = {
 		vault,
@@ -734,7 +722,7 @@ describe('TelegramBotService typing loop', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Attachments — largest photo, filename sanitization, adapter write, prompt inlining.
+// Attachments — largest photo, filename sanitization, Vault write, prompt inlining.
 // ---------------------------------------------------------------------------
 
 describe('TelegramBotService attachments', () => {
@@ -757,8 +745,8 @@ describe('TelegramBotService attachments', () => {
 		// Only the largest resolution is requested (photo array is ordered small→large).
 		expect(h.fake.getFileCalls).toEqual(['big']);
 		expect(h.fake.downloadCalls).toEqual(['photos/big.jpg']);
-		// Saved via the vault adapter under _synapse/bot-attachments/.
-		expect(h.mkdirCalls).toEqual(['_synapse/bot-attachments']);
+		// Saved through the Vault API under _synapse/bot-attachments/.
+		expect(h.mkdirCalls).toEqual(['_synapse', '_synapse/bot-attachments']);
 		const writtenPath = h.written[0]?.path ?? '';
 		expect(writtenPath).toMatch(new RegExp(`^_synapse/bot-attachments/\\d+_photo_${msg.message_id}\\.jpg$`));
 		expect(h.written[0]?.data).toBe(bytes);

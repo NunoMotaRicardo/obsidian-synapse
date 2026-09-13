@@ -22,17 +22,13 @@ import type {
 import type {App} from 'obsidian';
 import type {AgentService} from './agentService';
 import {debugTrace} from './debug';
-import {
-	installSetTimeoutShim,
-	uninstallSetTimeoutShim,
-	ABORT_SHIM_GRACE_MS,
-} from './sdkShims';
+import {abortWithSetTimeoutShim} from './sdkShims';
 import {buildInMemoryPermissionSettings} from './permissions';
 
 /**
  * Executes a query/stream operation with active cancellation and optional timeout.
- * Wraps execution so that on timeout, error, or cancellation, abortController.abort() is invoked
- * to drop in-flight work and resources immediately, and the error is re-thrown.
+ * Wraps execution so that on timeout, error, or cancellation, the controller is aborted through
+ * the Electron-compatible SDK teardown shim before the error is re-thrown.
  */
 export async function sendAndWaitWithAbort<T>(
 	fn: (controller: AbortController) => Promise<T>,
@@ -43,9 +39,9 @@ export async function sendAndWaitWithAbort<T>(
 	let onExternalAbort: (() => void) | undefined;
 	if (options?.signal) {
 		if (options.signal.aborted) {
-			controller.abort();
+			abortWithSetTimeoutShim(controller);
 		} else {
-			onExternalAbort = () => controller.abort();
+			onExternalAbort = () => abortWithSetTimeoutShim(controller);
 			options.signal.addEventListener('abort', onExternalAbort, {once: true});
 		}
 	}
@@ -55,7 +51,7 @@ export async function sendAndWaitWithAbort<T>(
 	if (options?.timeoutMs && options.timeoutMs > 0) {
 		timer = window.setTimeout(() => {
 			timedOut = true;
-			controller.abort();
+			abortWithSetTimeoutShim(controller);
 		}, options.timeoutMs);
 	}
 
@@ -63,7 +59,7 @@ export async function sendAndWaitWithAbort<T>(
 		const result = await fn(controller);
 		return result;
 	} catch (e) {
-		controller.abort();
+		abortWithSetTimeoutShim(controller);
 		if (timedOut) {
 			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
 		}
@@ -502,12 +498,7 @@ export class Session {
 			}
 		}
 		if (!this.abortController) return;
-		installSetTimeoutShim();
-		try {
-			this.abortController.abort();
-		} finally {
-			window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
-		}
+		abortWithSetTimeoutShim(this.abortController);
 	}
 
 	/**

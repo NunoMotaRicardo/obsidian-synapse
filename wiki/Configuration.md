@@ -1,32 +1,44 @@
 # Configuration
 
-**Settings → Synapse**
+Open **Settings → Synapse**. The settings screen has five tabs.
 
-### Models
+## Claude
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Endpoint URL** | *(empty)* | Base URL of a Messages-API-speaking endpoint, e.g. `http://localhost:11434` for Ollama v0.14.0+. Blank = only Claude models are available |
-| **Endpoint API key** | *(empty)* | API key sent to the endpoint. Ollama ignores the value but requires the header — leave blank to send `ollama` automatically |
+Choose how Synapse authenticates with Claude:
+
+- **Claude subscription (OAuth)** — use the Claude CLI login; run `claude login` in a terminal if needed.
+- **Anthropic API key** — enter an API key, which Synapse stores in vault-specific local storage rather than the plugin data file.
+- **Claude CLI location** — optionally set a path to the CLI; leave it blank for automatic discovery. The page shows the resolved CLI and version.
 
 ### Local agent endpoint
 
-Local models — Ollama, or any other endpoint that speaks the **Anthropic Messages API** — run
-through the same Claude Agent SDK/CLI as Claude models: full skills, subagents, sessions,
-permission modes, and streaming. There is no provider preset dropdown and no
-OpenAI-compatible-only integration; an endpoint that speaks only the OpenAI-shaped
-`/v1/chat/completions` surface (LM Studio, llama.cpp, vLLM, a bare OpenAI-compatible server) is
-not supported directly — put a Messages-API-speaking gateway in front of it, or use Ollama, which
-speaks the Messages API natively.
+Set an **Endpoint URL** and optional **Endpoint API key** to use Ollama v0.14.0+ or another endpoint that speaks the Anthropic Messages API. The **Test** button verifies the endpoint, and its model catalogue is added to the chat model picker. A configured endpoint receives the entire agent loop, including tool calls, so use only an endpoint you trust with your vault context.
 
-See [Local-Models-Ollama](Local-Models-Ollama.md) for Ollama-specific setup, including Ollama
-Cloud models and context-window tuning.
+OpenAI-compatible-only endpoints are not supported directly. See [Local models with Ollama](Local-Models-Ollama.md) for setup and context-window guidance.
 
-### Synapse settings
+## Feature Map & Agents
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Inline operations model** | Default | Model for context-menu actions |
-| **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
-| **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
-| **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
+Choose the default agent for the chat panel, inline editor operations, semantic search, Telegram, and image reading. Synapse discovers custom agents in `_synapse/agents/`; their model bindings can also be edited here. See [Customization](Customization.md) for the file formats.
+
+## Capabilities
+
+Use **Initialize** to create `_synapse/` with sample agents and skills. This tab also controls:
+
+- automatic working-directory updates as you switch notes;
+- automatically attaching images embedded in the active note and the image limit;
+- request timeout; and
+- optional chat-run turn, token, and dollar guardrails. Turn and token limits can cancel a run; the dollar budget is reported after a run completes.
+
+## Tools
+
+**Tools approval** defaults to **Ask**, which asks before a tool runs. **Allow** automatically approves tool calls for chat, editor actions, and search. Telegram sessions always run unattended, so restrict bot access carefully.
+
+## Bots
+
+Configure and connect a Telegram bot with its identifier, token, allowed user IDs, and default agent. The token is stored securely. Only add trusted users: an allowed Telegram user can invoke unattended agent tool calls against the vault.
+
+## Suggested reading
+
+- [Customization](Customization.md) — agents, skills, MCP servers, and vault settings
+- [Local models with Ollama](Local-Models-Ollama.md) — compatible endpoint setup
+- [Claude Code settings](https://code.claude.com/docs/en/settings) — settings supported by the Claude CLI

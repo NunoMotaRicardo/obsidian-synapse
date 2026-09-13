@@ -7,7 +7,7 @@ This wiki covers **installing, configuring, and customizing** the plugin. For an
 ## Getting started
 
 - [Installation](Installation.md) — install via BRAT or manually, configure your API/CLI, initialize `_synapse/`
-- [Configuration](Configuration.md) — the full **Settings → Synapse** reference
+- [Configuration](Configuration.md) — authentication, agents, capabilities, tools, and bots
 
 ## Customization
 

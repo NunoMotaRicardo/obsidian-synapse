@@ -11,12 +11,13 @@ import type {SessionConfig} from '../agentService';
 // Session import removed — bot uses inlineChat directly
 import type {AgentConfig, SkillInfo} from '../types';
 import {SYNAPSE_FOLDER, getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
-import {scanAgents, scanSkills} from '../configWriter';
+import {ensureFolder, scanAgents, scanSkills} from '../configWriter';
 import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from '../view/sessionConfig';
 import {resolveModelForAgent} from '../view/sessionConfig';
 import type {TelegramMessage} from './telegramApi';
 import {TelegramApi, TelegramApiError, type TelegramApiLike} from './telegramApi';
 import type {BotConnectionStatus} from './types';
+import {abortWithSetTimeoutShim} from '../sdkShims';
 
 /** Key for a topic-based session: "chatId" or "chatId:threadId". */
 function sessionKey(chatId: number, threadId?: number): string {
@@ -129,7 +130,7 @@ export class TelegramBotService {
 		// Clear all sessions (abort any in-flight requests)
 		for (const sess of this.sessions.values()) {
 			if (sess.abortController) {
-				try { sess.abortController.abort(); } catch { /* ignore */ }
+				try { abortWithSetTimeoutShim(sess.abortController); } catch { /* ignore */ }
 				sess.abortController = null;
 			}
 		}
@@ -217,7 +218,7 @@ export class TelegramBotService {
 			const key = sessionKey(chatId, threadId);
 			const existing = this.sessions.get(key);
 			if (existing?.abortController) {
-				try { existing.abortController.abort(); } catch { /* ignore */ }
+				try { abortWithSetTimeoutShim(existing.abortController); } catch { /* ignore */ }
 				existing.abortController = null;
 			}
 			this.sessions.delete(key);
@@ -484,17 +485,14 @@ export class TelegramBotService {
 
 				const data = await this.api.downloadFile(fileInfo.file_path);
 
-				// Save to temp location in vault
+				// Save to a vault-managed temporary location.
 				const tempDir = normalizePath(`${SYNAPSE_FOLDER}/bot-attachments`);
-				const adapter = this.plugin.app.vault.adapter;
-				if (!await adapter.exists(tempDir)) {
-					await adapter.mkdir(tempDir);
-				}
+				await ensureFolder(this.plugin.app, tempDir);
 
 				// Sanitize filename
 				const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 				const filePath = normalizePath(`${tempDir}/${Date.now()}_${safeName}`);
-				await adapter.writeBinary(filePath, data);
+				await this.plugin.app.vault.createBinary(filePath, data);
 
 				const basePath = this.getVaultBasePath();
 				results.push({name: safeName, path: `${basePath}/${filePath}`});

@@ -55,7 +55,8 @@ try {
 // outside the SDK's own try/catch, while the process is typically still running — hitting the
 // crash once immediately (the outer escalation timer) and, on win32, potentially again ~2s
 // later (the nested SIGKILL timer scheduled by that same escalation callback). See
-// `Session.abort()`, which installs this shim only around that forced-kill window.
+// `Session.abort()` and other SDK query owners, which install this shim only around that
+// forced-kill window.
 //
 // Refcounted so overlapping aborts (e.g. two sessions racing to stop) don't restore the
 // original `setTimeout` while another abort is still relying on the shim.
@@ -94,16 +95,22 @@ export function uninstallSetTimeoutShim(): void {
 	}
 }
 
+// Views can dispose their SDK query streams before Plugin.onunload() reaches
+// AgentService.stop(). Keep the compatibility layer active for the plugin lifetime so that
+// teardown ordering cannot expose the browser's numeric timer handles to the SDK.
+installSetTimeoutShim();
+
 /**
- * Force-restore `globalThis.setTimeout` immediately, regardless of outstanding refcount.
- * Called from `AgentService.stop()` (plugin unload path) so an in-flight abort's shim never
- * outlives the plugin — see the register/unload conventions in CLAUDE.md.
+ * Hard-abort an SDK query while its CLI subprocess may still be alive.
+ * The scoped shim prevents the SDK's process-cleanup timer from calling `.unref()` on
+ * Electron's numeric timer handle. Keep it installed through the SDK's escalation window.
  */
-export function forceRestoreSetTimeoutShim(): void {
-	setTimeoutShimRefCount = 0;
-	if (originalSetTimeout) {
-		globalThis.setTimeout = originalSetTimeout;
-		originalSetTimeout = null;
+export function abortWithSetTimeoutShim(controller: AbortController): void {
+	installSetTimeoutShim();
+	try {
+		controller.abort();
+	} finally {
+		window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
 	}
 }
 

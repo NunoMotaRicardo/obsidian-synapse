@@ -234,9 +234,7 @@ export async function writeSkill(
  * `extractAllowRuleStrings()` (`agentService.ts`) so what's shown to the user in
  * `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
  *
- * Uses `vault.adapter.exists` + `vault.read`/`vault.create`/`vault.modify` — the same
- * vault-relative exists/read/create-or-modify pattern `writeSkill()` uses for
- * a vault file that may or may not exist yet — rather
+ * Uses `vault.getAbstractFileByPath` + `vault.read`/`vault.create`/`vault.modify` rather
  * than `node:fs`, parses the existing content as JSON, and writes back every
  * other top-level key untouched: only `permissions.allow` is unioned with `ruleStrings` (never
  * clobbered, never duplicated). `_synapse/settings.json` is read directly by
@@ -255,8 +253,7 @@ export async function persistToolApprovalRules(app: App, ruleStrings: string[]):
 	await lockManager.withLock(path, async () => {
 		await ensureFolder(app, SYNAPSE_FOLDER);
 
-		const exists = await app.vault.adapter.exists(path);
-		const existingFile = exists ? app.vault.getAbstractFileByPath(path) : null;
+		const existingFile = app.vault.getAbstractFileByPath(path);
 		let settings: Record<string, unknown> = {};
 		if (existingFile instanceof TFile) {
 			const raw = await app.vault.read(existingFile);
