@@ -33,4 +33,4 @@ export function resolveFilePath(file: File): string {
  */
 export function getCmView(view: MarkdownView | MarkdownFileInfo): EditorView | undefined {
 	return (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
-}
+}
