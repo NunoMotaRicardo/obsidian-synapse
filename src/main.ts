@@ -9,6 +9,7 @@ import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
 import {ensureImproveSynapseSkill} from './configWriter';
 import {debugTrace} from './debug';
+import {getCmView} from './utils';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -55,7 +56,7 @@ export default class SynapsePlugin extends Plugin {
 		const getEditorView = (): EditorView | null => {
 			const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!mdView) return null;
-			return (mdView as unknown as {editor?: {cm?: EditorView}}).editor?.cm ?? null;
+			return getCmView(mdView) ?? null;
 		};
 
 		// Command: Chat with Synapse (send selection or open chat)
@@ -93,7 +94,7 @@ export default class SynapsePlugin extends Plugin {
 			name: 'Edit the note',
 			hotkeys: [{modifiers: ['Mod', 'Shift'], key: 'e'}],
 			editorCallback: (_editor, view) => {
-				const cmView = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+				const cmView = getCmView(view);
 				if (cmView) showEditNoteModal(this, cmView);
 			},
 		});
@@ -103,7 +104,7 @@ export default class SynapsePlugin extends Plugin {
 			id: 'structure-and-refine',
 			name: 'Structure and refine',
 			editorCallback: (_editor, view) => {
-				const cmView = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+				const cmView = getCmView(view);
 				if (cmView) showStructureModal(this, cmView);
 			},
 		});
@@ -113,7 +114,7 @@ export default class SynapsePlugin extends Plugin {
 			id: 'edit-selection',
 			name: 'Edit selection',
 			editorCallback: (_editor, view) => {
-				const cmView = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+				const cmView = getCmView(view);
 				if (!cmView) return;
 				const sel = cmView.state.selection.main;
 				if (sel.empty) {
@@ -134,7 +135,7 @@ export default class SynapsePlugin extends Plugin {
 				id: `text-action-${task.label.toLowerCase().replace(/\s+/g, '-')}`,
 				name: task.label,
 				editorCallback: (_editor, view) => {
-					const cmView = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+					const cmView = getCmView(view);
 					if (!cmView) return;
 					const sel = cmView.state.selection.main;
 					if (sel.empty) {

@@ -1,8 +1,10 @@
-import {Editor, EventRef, MarkdownView, Menu, Modal, Notice, TextComponent, TFile, TFolder, normalizePath} from 'obsidian';
+import {Editor, EventRef, MarkdownView, Menu, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
 import type {SdkPluginConfig} from '../agentService';
 import {getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
+import {getCmView} from '../utils';
+import {promptModal} from '../modals/promptModal';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView, registerInlineSession} from '../synapseView';
 import {stripErrorPrefix} from '../toolErrors';
@@ -27,7 +29,7 @@ export type {TextTask as TextAction} from '../tasks';
 export function registerEditorMenu(plugin: SynapsePlugin): void {
 	plugin.registerEvent(
 		(plugin.app.workspace as unknown as {on: (name: string, cb: (menu: Menu, editor: Editor, view: MarkdownView) => void) => EventRef}).on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
-			const cmView: EditorView | undefined = (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+			const cmView = getCmView(view);
 			if (!cmView) return;
 
 			menu.addItem((item) => {
@@ -50,7 +52,7 @@ async function openFileAndGetView(plugin: SynapsePlugin, file: TFile): Promise<E
 	await leaf.openFile(file);
 	const view = leaf.view;
 	if (view instanceof MarkdownView) {
-		return (view as unknown as {editor?: {cm?: EditorView}}).editor?.cm ?? null;
+		return getCmView(view) ?? null;
 	}
 	return null;
 }
@@ -163,8 +165,12 @@ function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): vo
 
 /* ── Folder actions ─────────────────────────────────────────── */
 
-/** Generate a unique filename in the folder, based on a stem. */
-function uniqueFileName(folder: TFolder, stem: string, extension: string): string {
+/**
+ * Generate a unique filename in the folder, based on a stem and extension
+ * (issue #238 — consolidated from the former identical `uniqueFileName` and
+ * `uniqueNoteName` pair; callers pass `'md'` or `'canvas'`).
+ */
+function uniqueName(folder: TFolder, stem: string, extension: string): string {
 	const existing = new Set(
 		folder.children
 			.filter((c): c is TFile => c instanceof TFile && c.extension === extension)
@@ -177,47 +183,15 @@ function uniqueFileName(folder: TFolder, stem: string, extension: string): strin
 	}
 }
 
-function uniqueNoteName(folder: TFolder, stem: string): string {
-	const existing = new Set(
-		folder.children
-			.filter((c): c is TFile => c instanceof TFile && c.extension === 'md')
-			.map((f) => f.basename),
-	);
-	if (!existing.has(stem)) return stem;
-	for (let i = 2; ; i++) {
-		const candidate = `${stem} ${i}`;
-		if (!existing.has(candidate)) return candidate;
-	}
-}
-
 /** Show a modal asking for an optional template type, then create a new note. */
 function showNewNoteModal(plugin: SynapsePlugin, folder: TFolder): void {
-	const modal = new Modal(plugin.app);
-	modal.titleEl.setText('New note');
-
-	modal.contentEl.createEl('p', {
-		text: 'Optionally specify a template type for the note:',
-		cls: 'synapse-menu-modal-desc',
+	promptModal(plugin.app, {
+		title: 'New note',
+		description: 'Optionally specify a template type for the note:',
+		placeholder: 'Ex: daily notes, meeting notes, project brief',
+		goLabel: 'Create',
+		onSubmit: (templateType) => void createNewNote(plugin, folder, templateType),
 	});
-
-	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('synapse-modal-text-input');
-	tc.setPlaceholder('Ex: daily notes, meeting notes, project brief');
-
-	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-	const goBtn = btnRow.createEl('button', {text: 'Create', cls: 'mod-cta'});
-	const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-
-	goBtn.addEventListener('click', () => {
-		modal.close();
-		void createNewNote(plugin, folder, tc.getValue().trim());
-	});
-	cancelBtn.addEventListener('click', () => modal.close());
-
-	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
-
-	modal.open();
-	tc.inputEl.focus();
 }
 
 async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateType: string): Promise<void> {
@@ -265,7 +239,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 
 		// Sanitise title for filename
 		title = title.replace(/[\\/:*?"<>|]/g, '').trim() || 'New note';
-		const basename = uniqueNoteName(folder, title);
+		const basename = uniqueName(folder, title, 'md');
 		const filePath = normalizePath(`${folder.path}/${basename}.md`);
 
 		const newFile = await plugin.app.vault.create(filePath, content);
@@ -283,32 +257,13 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 
 /** Show a modal asking for an optional template type, then create a new canvas. */
 function showNewCanvasModal(plugin: SynapsePlugin, folder: TFolder): void {
-	const modal = new Modal(plugin.app);
-	modal.titleEl.setText('New canvas');
-
-	modal.contentEl.createEl('p', {
-		text: 'Optionally specify a template type for the canvas:',
-		cls: 'synapse-menu-modal-desc',
+	promptModal(plugin.app, {
+		title: 'New canvas',
+		description: 'Optionally specify a template type for the canvas:',
+		placeholder: 'Ex: brainstorming, project plan, mind map',
+		goLabel: 'Create',
+		onSubmit: (templateType) => void createNewCanvas(plugin, folder, templateType),
 	});
-
-	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('synapse-modal-text-input');
-	tc.setPlaceholder('Ex: brainstorming, project plan, mind map');
-
-	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-	const goBtn = btnRow.createEl('button', {text: 'Create', cls: 'mod-cta'});
-	const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-
-	goBtn.addEventListener('click', () => {
-		modal.close();
-		void createNewCanvas(plugin, folder, tc.getValue().trim());
-	});
-	cancelBtn.addEventListener('click', () => modal.close());
-
-	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
-
-	modal.open();
-	tc.inputEl.focus();
 }
 
 async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateType: string): Promise<void> {
@@ -378,7 +333,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 
 		// Sanitise title for filename
 		title = title.replace(/[\\/:*?"<>|]/g, '').trim() || 'New canvas';
-		const basename = uniqueFileName(folder, title, 'canvas');
+		const basename = uniqueName(folder, title, 'canvas');
 		const filePath = normalizePath(`${folder.path}/${basename}.canvas`);
 
 		const newFile = await plugin.app.vault.create(filePath, content);
@@ -437,7 +392,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 
 		if (!result) { notice.hide(); new Notice('Synapse: no response.'); return; }
 
-		const basename = uniqueNoteName(folder, `${folder.name} — Summary`);
+		const basename = uniqueName(folder, `${folder.name} — Summary`, 'md');
 		const filePath = normalizePath(`${folder.path}/${basename}.md`);
 
 		const newFile = await plugin.app.vault.create(filePath, result.trim());
@@ -588,34 +543,14 @@ function buildEditorImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile, em
 
 /** "Ask about image" — user enters a free-form prompt about the image. */
 function showAskAboutImageModal(plugin: SynapsePlugin, file: TFile, embedHint?: {from: number; to: number}): void {
-	const modal = new Modal(plugin.app);
-	modal.titleEl.setText('Ask about image');
-
-	modal.contentEl.createEl('p', {
-		text: `Ask a question about ${file.name}:`,
-		cls: 'synapse-menu-modal-desc',
+	promptModal(plugin.app, {
+		title: 'Ask about image',
+		description: `Ask a question about ${file.name}:`,
+		placeholder: 'Ex: what does this diagram show?',
+		goLabel: 'Ask',
+		requiredNotice: 'Please enter a question.',
+		onSubmit: (prompt) => void askAboutImage(plugin, file, prompt, embedHint),
 	});
-
-	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('synapse-modal-text-input');
-	tc.setPlaceholder('Ex: what does this diagram show?');
-
-	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-	const goBtn = btnRow.createEl('button', {text: 'Ask', cls: 'mod-cta'});
-	const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-
-	goBtn.addEventListener('click', () => {
-		const prompt = tc.getValue().trim();
-		if (!prompt) { new Notice('Please enter a question.'); return; }
-		modal.close();
-		void askAboutImage(plugin, file, prompt, embedHint);
-	});
-	cancelBtn.addEventListener('click', () => modal.close());
-
-	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
-
-	modal.open();
-	tc.inputEl.focus();
 }
 
 /** Send a user prompt about an image and insert the response below the embed. */
@@ -778,7 +713,7 @@ function getActiveEditorAndEmbed(
 		new Notice('Synapse: open a note that contains this image first.');
 		return null;
 	}
-	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+	const cmView = getCmView(activeView);
 	if (!cmView) return null;
 
 	const embed = embedHint ?? findImageEmbed(cmView, file);
@@ -901,34 +836,14 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 
 /** "Edit the note" — user enters a free-form editing prompt. */
 export function showEditNoteModal(plugin: SynapsePlugin, view: EditorView): void {
-	const modal = new Modal(plugin.app);
-	modal.titleEl.setText('Edit the note');
-
-	modal.contentEl.createEl('p', {
-		text: 'Describe how the note should be edited:',
-		cls: 'synapse-menu-modal-desc',
+	promptModal(plugin.app, {
+		title: 'Edit the note',
+		description: 'Describe how the note should be edited:',
+		placeholder: 'Ex: convert bullet points to a table',
+		goLabel: 'Apply',
+		requiredNotice: 'Please enter a prompt.',
+		onSubmit: (prompt) => void applyEditNote(plugin, view, prompt),
 	});
-
-	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('synapse-modal-text-input');
-	tc.setPlaceholder('Ex: convert bullet points to a table');
-
-	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-	const goBtn = btnRow.createEl('button', {text: 'Apply', cls: 'mod-cta'});
-	const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-
-	goBtn.addEventListener('click', () => {
-		const prompt = tc.getValue().trim();
-		if (!prompt) { new Notice('Please enter a prompt.'); return; }
-		modal.close();
-		void applyEditNote(plugin, view, prompt);
-	});
-	cancelBtn.addEventListener('click', () => modal.close());
-
-	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
-
-	modal.open();
-	tc.inputEl.focus();
 }
 
 async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt: string): Promise<void> {
@@ -961,33 +876,16 @@ async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt
 
 /** "Structure and refine" — restructures the note with optional template type. */
 export function showStructureModal(plugin: SynapsePlugin, view: EditorView): void {
-	const modal = new Modal(plugin.app);
-	modal.titleEl.setText('Structure and refine');
-
-	modal.contentEl.createEl('p', {
-		text: 'The note will be restructured using Markdown and refined for clarity.',
-		cls: 'synapse-menu-modal-desc',
+	promptModal(plugin.app, {
+		title: 'Structure and refine',
+		description: 'The note will be restructured using Markdown and refined for clarity.',
+		placeholder: 'Ex: daily notes, meeting notes, project brief',
+		goLabel: 'Structure',
+		inputLabel: {text: 'Template type (optional):', cls: 'synapse-modal-label'},
+		// This modal never focused its input pre-refactor — preserved (#238).
+		focusInput: false,
+		onSubmit: (templateType) => void applyStructure(plugin, view, templateType),
 	});
-
-	modal.contentEl.createEl('label', {text: 'Template type (optional):', cls: 'synapse-modal-label'});
-
-	const tc = new TextComponent(modal.contentEl);
-	tc.inputEl.classList.add('synapse-modal-text-input');
-	tc.setPlaceholder('Ex: daily notes, meeting notes, project brief');
-
-	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
-	const goBtn = btnRow.createEl('button', {text: 'Structure', cls: 'mod-cta'});
-	const cancelBtn = btnRow.createEl('button', {text: 'Cancel'});
-
-	goBtn.addEventListener('click', () => {
-		modal.close();
-		void applyStructure(plugin, view, tc.getValue().trim());
-	});
-	cancelBtn.addEventListener('click', () => modal.close());
-
-	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
-
-	modal.open();
 }
 
 async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateType: string): Promise<void> {
