@@ -1,28 +1,30 @@
-# vscode
-.vscode 
-
-# Intellij
+# Editors and operating systems
+.vscode/
+.idea/
 *.iml
-.idea
+.DS_Store
+Thumbs.db
 
-# npm
-node_modules
+# Dependencies and package-manager diagnostics
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# vitest coverage output
-coverage
+# Build, TypeScript, lint, and test output
+main.js
+*.map
+*.tsbuildinfo
+.eslintcache
+coverage/
 coverage-output.txt
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-main.js
+# Local environment and secrets (commit a named example file when needed)
+.env
+.env.*
+!.env.example
 
-# Exclude sourcemaps
-*.map
-
-# obsidian
+# Obsidian plugin-local settings
+# They contain machine- and vault-specific configuration, including secrets.
 data.json
-
-# Exclude macOS Finder (System Explorer) View States
-.DS_Store
-
-#.github/
