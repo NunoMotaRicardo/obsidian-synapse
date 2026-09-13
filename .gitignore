@@ -1,3 +1,7 @@
+.claude/
+.agents/
+.docs/
+
 # Editors and operating systems
 .vscode/
 .idea/
