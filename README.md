@@ -372,29 +372,16 @@ These are configured from the config toolbar inside the chat panel itself, not f
 | **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
 | **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
 
-Full reference, including every tab: [Configuration](wiki/Configuration.md).
+Core settings reference: [Configuration](wiki/Configuration.md).
 
 ---
 
-## Using your vault with Claude / VS Code
+## Using your vault with Claude Code or VS Code
 
-Your Synapse agents, skills, and tools can also work with Claude CLI or VS Code. Simply create a `.github` symbolic link pointing to your `_synapse` folder — developer tools automatically pick up instructions, agents, and MCP configurations from `.github/`.
-
-### Create the symlinks
-
-Open a terminal at your vault root and run:
-
-**Windows (PowerShell — run as Administrator):**
-
-```powershell
-New-Item -ItemType SymbolicLink -Path ".github" -Target "_synapse"
-```
-
-**macOS / Linux:**
-
-```bash
-ln -s _synapse .github
-```
+`_synapse/` is Synapse's vault-local customization folder. Synapse registers it with the
+Claude Agent SDK for its own sessions; it does **not** configure Claude Code, VS Code, or other
+developer tools. Configure those tools through their own documented project settings rather than
+symlinking `_synapse/` to `.github/`.
 
 ---
 

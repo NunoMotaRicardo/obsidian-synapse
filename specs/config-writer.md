@@ -117,8 +117,9 @@ which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent gra
 - Creates `_synapse/settings.json` (and `_synapse/` itself) if absent, otherwise reads it via
   `vault.read`, parses as JSON, and writes back **every top-level key untouched** except
   `permissions.allow`, which is unioned (deduplicated, never clobbered) with `ruleStrings`.
-- Uses the `vault`/`vault.adapter.exists` API (not `node:fs`), matching every other writer in this
-  file. `_synapse/settings.json` is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
+- Uses the Vault API (not `node:fs` or `vault.adapter`): `getAbstractFileByPath()` determines
+  whether the file exists before `vault.read`, `vault.create`, or `vault.modify`. `_synapse/settings.json`
+  is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
   via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write here changes
   that mtime, so the next query picks up the change with no separate invalidation.
 - A malformed existing file throws (surfaced by the caller as a `Notice`) rather than being

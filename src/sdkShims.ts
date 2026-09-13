@@ -55,20 +55,36 @@ try {
 // outside the SDK's own try/catch, while the process is typically still running — hitting the
 // crash once immediately (the outer escalation timer) and, on win32, potentially again ~2s
 // later (the nested SIGKILL timer scheduled by that same escalation callback). See
-// `Session.abort()`, which installs this shim only around that forced-kill window.
+// `Session.abort()` and other SDK query owners, which install this shim only around that
+// forced-kill window.
 //
 // Refcounted so overlapping aborts (e.g. two sessions racing to stop) don't restore the
 // original `setTimeout` while another abort is still relying on the shim.
-let setTimeoutShimRefCount = 0;
-let originalSetTimeout: typeof globalThis.setTimeout | null = null;
+interface SetTimeoutShimState {
+	refCount: number;
+	original: typeof globalThis.setTimeout | null;
+}
+
+const SET_TIMEOUT_SHIM_STATE = Symbol.for('synapse.setTimeoutShimState');
+
+function getSetTimeoutShimState(): SetTimeoutShimState {
+	const globals = globalThis as typeof globalThis & Record<symbol, SetTimeoutShimState | undefined>;
+	let state = globals[SET_TIMEOUT_SHIM_STATE];
+	if (!state) {
+		state = {refCount: 0, original: null};
+		globals[SET_TIMEOUT_SHIM_STATE] = state;
+	}
+	return state;
+}
 
 export function installSetTimeoutShim(): void {
-	setTimeoutShimRefCount++;
-	if (setTimeoutShimRefCount > 1) return;
+	const state = getSetTimeoutShimState();
+	state.refCount++;
+	if (state.refCount > 1) return;
 	try {
-		originalSetTimeout = globalThis.setTimeout;
-		if (typeof originalSetTimeout !== 'function') return;
-		const original = originalSetTimeout;
+		state.original = globalThis.setTimeout;
+		if (typeof state.original !== 'function') return;
+		const original = state.original;
 		globalThis.setTimeout = ((...args: Parameters<typeof original>) => {
 			const id: unknown = original(...args);
 			if (id === null || (typeof id !== 'number' && typeof id !== 'bigint')) return id;
@@ -87,23 +103,35 @@ export function installSetTimeoutShim(): void {
 }
 
 export function uninstallSetTimeoutShim(): void {
-	setTimeoutShimRefCount = Math.max(0, setTimeoutShimRefCount - 1);
-	if (setTimeoutShimRefCount === 0 && originalSetTimeout) {
-		globalThis.setTimeout = originalSetTimeout;
-		originalSetTimeout = null;
+	const state = getSetTimeoutShimState();
+	state.refCount = Math.max(0, state.refCount - 1);
+	if (state.refCount === 0 && state.original) {
+		globalThis.setTimeout = state.original;
+		state.original = null;
 	}
 }
 
+// Views can dispose their SDK query streams before Plugin.onunload() reaches
+// AgentService.stop(). Keep the compatibility layer active for the plugin lifetime so that
+// teardown ordering cannot expose the browser's numeric timer handles to the SDK.
+installSetTimeoutShim();
+
+/** Release this module load's lifecycle reference after the SDK cleanup window. */
+export function releasePluginSetTimeoutShim(): void {
+	window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
+}
+
 /**
- * Force-restore `globalThis.setTimeout` immediately, regardless of outstanding refcount.
- * Called from `AgentService.stop()` (plugin unload path) so an in-flight abort's shim never
- * outlives the plugin — see the register/unload conventions in CLAUDE.md.
+ * Hard-abort an SDK query while its CLI subprocess may still be alive.
+ * The scoped shim prevents the SDK's process-cleanup timer from calling `.unref()` on
+ * Electron's numeric timer handle. Keep it installed through the SDK's escalation window.
  */
-export function forceRestoreSetTimeoutShim(): void {
-	setTimeoutShimRefCount = 0;
-	if (originalSetTimeout) {
-		globalThis.setTimeout = originalSetTimeout;
-		originalSetTimeout = null;
+export function abortWithSetTimeoutShim(controller: AbortController): void {
+	installSetTimeoutShim();
+	try {
+		controller.abort();
+	} finally {
+		window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
 	}
 }
 

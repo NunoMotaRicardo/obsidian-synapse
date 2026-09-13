@@ -6,11 +6,12 @@
   the structural seam interface `TelegramBotService` depends on (its constructor takes an adapter
   factory defaulting to the real `TelegramApi`; see Testing below). `telegramBot.ts`: bridge.
 - Allowlist of numeric user ids; messages from others are silently ignored.
-- One session per chat/topic; `/new` resets, `/help` explains.
-- Attachments (photo/document/audio/video) are downloaded to `_synapse/bot-attachments/` and their
-  absolute paths are inlined into the outgoing prompt text (the Agent SDK's `Options` has no
-  top-level attachments field — a real path the model can `Read` itself is the only way the content
-  reaches it, the same mechanism the chat view's `buildPrompt()` uses).
+- One session per chat/topic; `/new` resets, `/help` explains. Reset and disconnect hard-abort an in-flight SDK query through `abortWithSetTimeoutShim()` so Electron's numeric timer handles cannot trigger the SDK's `.unref()` teardown error.
+- Attachments (photo/document/audio/video) are downloaded to `_synapse/bot-attachments/` through
+  the Vault API (`ensureFolder()` and `createBinary()`), then their absolute paths are inlined into
+  the outgoing prompt text. The Agent SDK's `Options` has no top-level attachments field — a real
+  path the model can `Read` itself is the only way the content reaches it, the same mechanism the
+  chat view's `buildPrompt()` uses.
 - Uses the default agent from settings; skills and MCP servers are discovered natively via the
   `_synapse/` plugin registration (passed in session `Options.plugins`).
 - The `[Self-Improve]` detection block (its static body only — `buildSelfImproveHint()`) is

@@ -27,7 +27,7 @@ CLI process per query.
 |---|---|---|---|
 | main | — | `src/main.ts` | Plugin lifecycle, service wiring, commands, ribbon |
 | agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, one-shot chat helpers, model layer, delegation MCP server, re-export surface |
-| agent-service (SDK shims) | [agent-service.md](agent-service.md) | `src/sdkShims.ts` | Electron compatibility shims: top-level `setMaxListeners` wrapper + refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`forceRestoreSetTimeoutShim`) |
+| agent-service (SDK shims) | [agent-service.md](agent-service.md) | `src/sdkShims.ts` | Electron compatibility shims: top-level `setMaxListeners` wrapper + reload-safe refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`abortWithSetTimeoutShim`) |
 | agent-service (permissions) | [agent-service.md](agent-service.md) | `src/permissions.ts` | Session-scoped permission updates, in-memory grant settings, vault settings layer merge |
 | agent-service (session) | [agent-service.md](agent-service.md) | `src/session.ts` | `Session` wrapper (`send`/`abort`/`dispatch`/`convertToSessionEvent`), `SessionEvents` map, `QueryMetadataCache` + refresh, `sendAndWaitWithAbort`, `resolveResumeSessionId`, `autoApproveReadOnlyTools` |
 | task-plan tracker | [chat-view.md](chat-view.md) | `src/taskPlanTracker.ts` | `TaskPlanTracker` — the single TodoWrite/TaskCreate/TaskUpdate plan-state owner for foreground + background paths (DOM-free), plus the plan payload parse functions |
