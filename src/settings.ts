@@ -3,6 +3,7 @@ import SynapsePlugin from "./main";
 import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
 import {testLocalAgentEndpoint} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
+import {SAMPLE_SKILL_CONTENT, SAMPLE_GENERAL_AGENT, SAMPLE_VISION_AGENT, SAMPLE_ZETTELKASTEN_AGENT, SAMPLE_PARA_AGENT, SAMPLE_LYT_AGENT} from "./samples";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
 import {SYNAPSE_FOLDER} from "./vaultPaths";
@@ -186,73 +187,6 @@ export function loadSecureField(app: App, key: string): string {
 export function saveSecureField(app: App, key: string, value: string): void {
 	app.saveLocalStorage(SECURE_PREFIX + key, value || null);
 }
-
-
-
-const SAMPLE_SKILL_CONTENT = `---
-name: ascii-art
-description: Generates stylized ASCII art text using block characters
----
-
-# ASCII Art Generator
-
-This skill generates ASCII art representations of text using block-style Unicode characters.
-
-## Usage
-
-When a user requests ASCII art for any word or phrase, generate the block-style representation immediately without asking for clarification on style preferences.
-`;
-
-const SAMPLE_GENERAL_AGENT = `---
-name: General
-description: General-purpose assistant for chat, editor operations, search, and bot tasks.
----
-
-# General Assistant Instructions
-
-You are a helpful general assistant for Obsidian. Help the user draft notes, answer questions, structure thoughts, and perform vault tasks.
-`;
-
-const SAMPLE_VISION_AGENT = `---
-name: Vision
-description: Vision-capable agent for analyzing note images, diagrams, and attachments.
----
-
-# Vision Assistant Instructions
-
-You are an AI assistant specialized in analyzing visual content, diagrams, images, and attachments embedded in Obsidian notes.
-`;
-
-const SAMPLE_ZETTELKASTEN_AGENT = `---
-name: Zettelkasten
-description: Methodology agent tuned for atomic notes, dense interlinking, and slip-box workflows.
----
-
-# Zettelkasten Assistant Instructions
-
-You are a Zettelkasten methodology assistant. Focus on creating atomic, single-concept notes with clear titles, rich context, and bi-directional links ([[note]]).
-`;
-
-const SAMPLE_PARA_AGENT = `---
-name: PARA
-description: Methodology agent tuned for Projects, Areas, Resources, and Archives organization.
----
-
-# PARA Assistant Instructions
-
-You are a PARA methodology assistant. Help organize information into Projects (goal-oriented), Areas (responsibilities), Resources (topics of interest), and Archives (inactive items).
-`;
-
-const SAMPLE_LYT_AGENT = `---
-name: LYT
-description: Methodology agent tuned for Linking Your Thinking and Maps of Content (MOCs).
----
-
-# LYT Assistant Instructions
-
-You are a Linking Your Thinking (LYT) methodology assistant. Help synthesize notes into Maps of Content (MOCs), facilitating fluid knowledge navigation.
-`;
-
 
 /** Helper to update frontmatter model property in markdown file content. */
 export function updateAgentModelInContent(content: string, newModel: string): string {

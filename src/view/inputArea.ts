@@ -2,6 +2,7 @@ import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
 import {IMAGE_EXTS, isImageAttachment, type ChatAttachment, type SelectionInfo, type SkillInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
 import {decideWorkingDirAutoUpdate} from './sessionConfig';
+import {resolveFilePath} from '../utils';
 import type {ViewContext} from './types';
 
 /**
@@ -239,23 +240,10 @@ export class InputAreaController {
 		input.addEventListener('change', () => {
 			if (!input.files) { input.remove(); return; }
 
-			// Resolve absolute OS path: prefer Electron webUtils, fallback to File.path
-			let getPath: (f: File) => string;
-			try {
-				const {webUtils} = window.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
-				if (webUtils?.getPathForFile) {
-					getPath = (f: File) => webUtils.getPathForFile(f);
-				} else {
-					getPath = (f: File) => (f as unknown as {path: string}).path || '';
-				}
-			} catch {
-				getPath = (f: File) => (f as unknown as {path: string}).path || '';
-			}
-
 			for (let i = 0; i < input.files.length; i++) {
 				const file = input.files[i];
 				if (!file) continue;
-				const filePath = getPath(file);
+				const filePath = resolveFilePath(file);
 				if (!filePath) {
 					continue;
 				}
@@ -339,24 +327,12 @@ export class InputAreaController {
 		}
 
 		// ── External OS file drag ────────────────────────────────
-		// Resolve absolute OS path using Electron webUtils, same as handleAttachFile
-		let getPath: (f: File) => string;
-		try {
-			const {webUtils} = window.require('electron') as {webUtils?: {getPathForFile: (f: File) => string}};
-			if (webUtils?.getPathForFile) {
-				getPath = (f: File) => webUtils.getPathForFile(f);
-			} else {
-				getPath = (f: File) => (f as unknown as {path: string}).path || '';
-			}
-		} catch {
-			getPath = (f: File) => (f as unknown as {path: string}).path || '';
-		}
-
+		// Resolve absolute OS path using the shared helper, same as handleAttachFile
 		let attached = 0;
 		for (let i = 0; i < dt.files.length; i++) {
 			const file = dt.files[i];
 			if (!file) continue;
-			const filePath = getPath(file);
+			const filePath = resolveFilePath(file);
 			if (!filePath) continue;
 
 			const ext = file.name.split('.').pop()?.toLowerCase() ?? '';

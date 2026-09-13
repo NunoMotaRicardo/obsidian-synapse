@@ -1,6 +1,27 @@
 # editor
 
-Source: `src/editor/editorMenu.ts`, `src/modals/editModal.ts`.
+Source: `src/editor/editorMenu.ts`, `src/modals/editModal.ts`, `src/modals/promptModal.ts`,
+`src/utils.ts`.
+
+## Shared helpers
+
+- **`promptModal()`** (`src/modals/promptModal.ts`) — generic one-input prompt modal used by the
+  five editor-menu modals (new note, new canvas, ask about image, edit the note, structure and
+  refine): description `<p>` (`.synapse-menu-modal-desc`), optional label
+  (`.synapse-modal-label`), `TextComponent` (`.synapse-modal-text-input`), go/cancel buttons
+  (`.modal-button-container`, go = `.mod-cta`), Enter wired via `modal.scope.register`, input
+  focused on open. Returns the `Modal` (callers may `close()` it inside their callback).
+  Options: `title`, `description`, `placeholder`, `goLabel`, optional `inputLabel`,
+  optional `requiredNotice` (an empty trimmed input shows this Notice and does **not** submit —
+  used by the ask-about-image and edit-the-note prompts), optional `focusInput`, and `onSubmit`
+  receiving the trimmed text after the modal closes.
+- **`getCmView(view)`** (`src/utils.ts`) — the single home for the
+  `(view as unknown as {editor?: {cm?: EditorView}}).editor?.cm` cast: unwraps the CM6
+  `EditorView` from a `MarkdownView`, returning `undefined` when absent. Used by `main.ts`
+  command handlers and the editor menu instead of inline casts.
+- **`resolveFilePath(file)`** (`src/utils.ts`) — absolute OS path of a picked/dropped `File`:
+  tries Electron `webUtils.getPathForFile` (via the shared `nodeRequire` shim), falls back to
+  the legacy `File.path`, else `''`. Used by the chat input's attach and drop handlers.
 
 ## Context-menu actions (`editorMenu.ts`)
 
