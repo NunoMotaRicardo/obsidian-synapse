@@ -10,6 +10,7 @@ implementation), `src/toolErrors.ts` (friendly write/edit tool error formatting)
 | `inputArea.ts` | `InputAreaController` — message input, slash-command skill popup, attachments, vault scope button |
 | `chatRenderer.ts` | `ChatRendererController` — Markdown rendering of messages, reasoning blocks, tool-call details, task/plan tracking panel |
 | `sessionSidebar.ts` | `SessionSidebarController` — session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
+| `backgroundSession.ts` | `BackgroundSession` — owns the state of one chat session kept running while another is foreground (see "Background-session state ownership" below) |
 | `searchPanel.ts` | `SearchPanelController` — AI vault search tab (basic/advanced) |
 | `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
 
@@ -56,7 +57,7 @@ and built in `buildUI()` via `controller.build(parent)`.
 ## Behavior contracts
 
 - **Session event wiring is compiler-checked:** `registerSessionEvents()`
-  (`synapseView.ts`) and `registerBackgroundEvents()` (`sessionSidebar.ts`) both register against
+  (`synapseView.ts`) and `BackgroundSession.attach()` (`src/view/backgroundSession.ts`) both register against
   `AgentService`'s `SessionEvents` map — an unknown event name or a handler expecting the wrong
   payload shape is a build error, not a runtime silent-drop. `registerSessionEvents()`'s handlers
   wrap `Session.on()`'s bare, per-event-typed `data` back into the `{type, data}` shape
@@ -164,10 +165,10 @@ and built in `buildUI()` via `controller.build(parent)`.
   - `renderTaskPanel(todos)` (chatRenderer.ts) records the rendered plan on the view's tracker
     (`taskPlanTracker.currentTodos = todos`) — a `TodoWrite` render IS the current full plan —
     and `clearTaskPanelState()` clears via `taskPlanTracker.reset()`.
-  - Background sessions (`sessionSidebar.ts`) hydrate a live tracker from
-    `BackgroundSession.taskPlanTrackerState` and feed their `tool.execution_start`/`complete`
-    handlers through it, ignoring `renderTodos` (no DOM while hidden); the state field is
-    re-snapshotted after each event so a save during streaming carries the latest plan.
+  - Background sessions (`src/view/backgroundSession.ts`'s `BackgroundSession` class) own a live
+    tracker instance directly and feed their `tool.execution_start`/`complete`
+    handlers through it, ignoring `renderTodos` (no DOM while hidden) — see "Background-session
+    state ownership" below for how it's copied to/from the foreground tracker on save/restore.
   Semantics (unchanged by the extraction, now asserted in one place by `test/taskPlanTracker.test.ts`):
   - `TodoWrite`: parses `data.input` with `parseTodoWritePayload()` (a standalone function
     exported from `agentService.ts`, imported directly — not an `AgentService` method) and, when
@@ -207,16 +208,10 @@ and built in `buildUI()` via `controller.build(parent)`.
     when empty via existing `:empty` CSS).
   - Turn/session-switch lifecycle: `newConversation()` and `finalizeStreamingMessage()` call
     `clearTaskPanelState()` (clears the tracker via `reset()`, nulls `taskPanelEl`, stops the
-    timer). `BackgroundSession` carries the tracker's snapshot (`taskPlanTrackerState`, replacing
-    the three mirrored fields the audit flagged) alongside `taskPanelEl`, the same way as
-    `toolCallsContainer`/`activeToolCalls` — the panel's DOM travels inside the saved
-    `chatContainer` fragment on `saveCurrentToBackground()` (no separate serialization needed),
-    and `restoreFromBackground()` resumes the live-elapsed timer if a panel is still showing for
-    an in-progress background turn. On re-attach, `restoreFromBackground()` restores the
-    foreground tracker from the snapshot and re-renders from it (the tracker's `taskPlan` values
-    when present, else `currentTodos`, else nothing);
-    `session.idle`/`session.error` in the background call `tracker.reset()` (and re-snapshot the
-    state field) for the next turn.
+    timer). A `BackgroundSession` owns its own live `taskPlanTracker` instance (copied to/from the
+    foreground tracker via `snapshot()`/`restore()` on save/restore — see "Background-session
+    state ownership" below); `session.idle`/`session.error` in the background call the
+    background tracker's own `reset()` for the next turn.
   - **Message metadata footer (`renderMessageMetadata`):** rendered below completed assistant
   messages with chips for elapsed time (`turnStartTime`), token usage (`turnUsage`), and unique tools used
   (`turnToolsUsed`). Early-returns when none of the three are present.
@@ -378,8 +373,8 @@ and built in `buildUI()` via `controller.build(parent)`.
     already-approved grant.
   - **Cleared only in `newConversation()`** — a genuinely new conversation starts with no known
     grants. It is *not* cleared on a `configDirty` rebuild or on the background-session
-    round-trip in `sessionSidebar.ts`: `saveCurrentToBackground()`/`restoreFromBackground()` carry
-    a `sessionToolGrants` copy on `BackgroundSession` alongside `sdkSeenIndex`, and `selectSession()`
+    round-trip: `BackgroundSession` (`src/view/backgroundSession.ts`) owns its own
+    `sessionToolGrants` copy, and `selectSession()` (`sessionSidebar.ts`)
     resets the view's set to empty before either restoring that copy (same conversation, still
     alive in the background) or cold-loading a persisted session from disk (a different
     conversation this view instance has no in-memory grant history for).
@@ -485,6 +480,70 @@ and built in `buildUI()` via `controller.build(parent)`.
   `sessionId` is
   empty (aborted queries), and `onOpen()` deletes any legacy `''`-keyed entry left by older
   builds.
+
+## Background-session state ownership
+
+`BackgroundSession` (`src/view/backgroundSession.ts`) is a chat session kept running while the
+user is looking at a different session — no longer a struct the foreground view fills and
+drains (audit §4, issue #237: the previous `view/types.ts#BackgroundSession` was a ~30-field
+1:1 mirror of `SynapseView`'s mutable state, including a `savedDom: DocumentFragment` that
+physically moved live DOM nodes out of the chat container and back in).
+
+- **It owns its own state, no DOM refs.** Fields: `sessionId`, `session` (the SDK `Session`),
+  `messages`, `sessionToolGrants`, `isStreaming`, `streamingContent`, `streamingReasoning`,
+  `reasoningComplete`, `turnStartTime`, `turnToolsUsed`, `turnUsage`, and a `taskPlanTracker`
+  (a live `TaskPlanTracker` instance — see "Task/plan tracking panel" above). It holds **no**
+  `activeToolCalls`/`streamingComponent`/`streamingBodyEl`/`streamingWrapperEl`/
+  `toolCallsContainer`/`reasoningEl`/`reasoningBodyEl`/`taskPanelEl`/`savedDom` — those are
+  transient DOM concerns that belong only to whichever session is currently foreground.
+- **`attach(callbacks)`/`detach()`** replace the old free function `registerBackgroundEvents()`.
+  `attach()` registers typed `Session.on()` handlers (same `SessionEvents` map the foreground
+  `registerSessionEvents()` uses — an unlisted event is still a compile error) that mutate the
+  model's own fields directly (no `bg.` struct indirection) and call back into
+  `BackgroundSessionCallbacks.onIdle()`/`onError()` so the sidebar can refresh its list without
+  the model needing to know about sidebar DOM. `detach()` unsubscribes; both are idempotent.
+- **`SessionSidebarController.saveCurrentToBackground()`** empties `chatContainer` (no more
+  fragment capture), constructs a `new BackgroundSession({...})` from the view's current
+  plain-data state, copies the foreground `taskPlanTracker`'s `snapshot()` into the new
+  instance's own tracker via `restore()`, and calls `attach()` only if the session is still
+  streaming. Eviction of the oldest idle background session (`MAX_BACKGROUND_SESSIONS = 8`)
+  calls `evicted.detach()` instead of iterating a raw `unsubscribers` array.
+- **`restoreFromBackground()` reconstructs the DOM by re-rendering from state, always** — it no
+  longer branches on a saved DOM fragment. Finalized history renders via
+  `renderer.renderMessageBubble()` for each message (the same path a cold, SDK-transcript
+  restore already used). If the session is still streaming, it then calls
+  `renderer.addAssistantPlaceholder()` for a fresh placeholder and populates it from
+  `streamingReasoning` (`syncReasoningContent()` + `finalizeReasoning()` if already complete) and
+  `streamingContent` (`updateStreamingRender()`), and renders the task panel if the restored
+  tracker has a plan. The one accepted simplification: a tool-call block still `is-live` when
+  the session went to the background is not restorable in full visual detail — only its
+  plain-text/reasoning/task-plan effects survive. This is not a new gap: a session that
+  *finishes* in the background has always re-rendered from `messages` and dropped that same
+  per-turn tool-call/metadata DOM; this just makes the still-streaming path consistent with it
+  instead of special-casing it with a DOM fragment.
+- **No listener-gap window during restore (reviewer-flagged HIGH fix).** `bg` stays `attach()`ed
+  — still routing SDK events into its own model — through every `await` in the history-render
+  path above; only once history is fully rendered (including catching up on any message(s) a
+  live `session.idle`/`session.error` pushed to `bg.messages` *while* that render was in
+  flight — a `while` loop re-checks `bg.messages.length` after each render) does
+  `restoreFromBackground()` call `bg.detach()`, immediately followed — with **zero** `await` in
+  between — by copying `bg`'s then-current fields onto the view and calling
+  `registerSessionEvents()`. An earlier version detached `bg` first and only registered
+  foreground handlers after awaiting the render, so any event arriving in that window (a final
+  delta, a `tool.execution_complete`, or the terminal `session.idle`/`session.error`) had no
+  listener at all and was silently dropped. `test/backgroundSessionRestoreOrdering.test.ts`
+  guards the ordering at the source level.
+- **Monotonic selection token guards concurrent session switching:** `selectSession()` increments a
+  monotonically increasing `selectionToken` before initiating restore or cold load.
+  `restoreFromBackground()` and `selectSession()` verify token freshness before and between async
+  renders, and immediately before adopting background state. If superseded by a newer selection
+  (or `newConversation()`), the earlier operation aborts cleanly without calling `bg.detach()` or
+  mutating foreground state, ensuring the superseded session remains safely attached in
+  `activeSessions` and the latest user selection always wins foreground ownership.
+- **Active-stream switching stays correct:** `unsubscribeEvents()`/`registerSessionEvents()`
+  still gate whether events reach the foreground `handleSessionEvent()` switch vs. a
+  `BackgroundSession`'s own `attach()`ed handlers — exactly one of the two is ever listening for
+  a given `Session` at a time, so a switch never double-delivers or drops an event.
 
 ## Context-window gauge and live command/agent lists
 

@@ -357,7 +357,7 @@ export class Session {
 
 	/**
 	 * Register an event handler for one `SessionEvents` key. Returns an unsubscribe function.
-	 * Partial registration is correct: a call site (e.g. `registerBackgroundEvents()`) is free to
+	 * Partial registration is correct: a call site (e.g. `BackgroundSession.attach()`) is free to
 	 * subscribe to a subset of `SessionEvents` — this is not exhaustiveness-checked, by design.
 	 */
 	on<K extends keyof SessionEvents>(eventType: K, handler: (data: SessionEvents[K]) => void): () => void {

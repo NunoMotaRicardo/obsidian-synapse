@@ -1,10 +1,10 @@
 import {Menu, Modal, Notice, setIcon} from 'obsidian';
 import type {SessionMetadata, SessionMessage} from '../agentService';
-import {TaskPlanTracker} from '../taskPlanTracker';
 import type {ChatMessage} from '../types';
 import {debugTrace} from '../debug';
 import {formatTimeAgo, stripSessionTypePrefix, stripInjectedPromptContext} from './utils';
-import type {BackgroundSession, ViewContext} from './types';
+import type {ViewContext} from './types';
+import {BackgroundSession} from './backgroundSession';
 
 /** A single content block from an Anthropic API message (subset used for replay). */
 type AnthropicContentBlock = {
@@ -96,8 +96,15 @@ export class SessionSidebarController {
 	private sessionFilter = '';
 	private sessionTypeFilter = new Set<'chat' | 'inline' | 'search' | 'other'>(['chat']);
 	private sessionSort: 'modified' | 'created' | 'name' = 'modified';
+	/** Monotonically increasing token to guard against overlapping session selections / stale restores. */
+	private selectionToken = 0;
 
 	constructor(private view: ViewContext) {}
+
+	/** Invalidate any in-flight session selection or restore (e.g. when starting a new conversation). */
+	cancelInFlightSelection(): void {
+		this.selectionToken++;
+	}
 
 	// ── View-owned state accessors ───────────────────────────────
 	// Accessors (not copied fields) so the historical `this.<name>` spellings in the
@@ -517,8 +524,7 @@ export class SessionSidebarController {
 			if (oldestKey) {
 				const evicted = this.view.view.activeSessions.get(oldestKey);
 				if (evicted) {
-					for (const unsub of evicted.unsubscribers) unsub();
-					evicted.savedDom = null; // release DOM fragment
+					evicted.detach();
 					try { void evicted.session.disconnect(); } catch { /* ignore */ }
 					this.view.view.activeSessions.delete(oldestKey);
 				}
@@ -528,13 +534,12 @@ export class SessionSidebarController {
 		// Detach events from foreground routing
 		this.view.view.unsubscribeEvents();
 
-		// Save chat DOM into a DocumentFragment for fast restore
-		const fragment = createFragment();
-		while (this.view.chatContainer.firstChild) {
-			fragment.appendChild(this.view.chatContainer.firstChild);
-		}
+		// No more DOM-fragment handoff (audit §4, issue #237): the container is simply
+		// cleared here, and `restoreFromBackground()` reconstructs the DOM by re-rendering
+		// from the model's plain-data state instead of resurrecting saved live DOM nodes.
+		this.view.chatContainer.empty();
 
-		const bg: BackgroundSession = {
+		const bg = new BackgroundSession({
 			sessionId: this.view.view.currentSessionId,
 			session: this.view.view.currentSession,
 			messages: [...this.messages],
@@ -543,25 +548,24 @@ export class SessionSidebarController {
 			streamingContent: this.view.view.streamingContent,
 			streamingReasoning: this.view.view.streamingReasoning,
 			reasoningComplete: this.view.view.reasoningComplete,
-			savedDom: fragment,
-			unsubscribers: [],
 			turnStartTime: this.view.view.turnStartTime,
 			turnToolsUsed: [...this.view.view.turnToolsUsed],
 			turnUsage: this.view.view.turnUsage ? {...this.view.view.turnUsage} : null,
-			activeToolCalls: new Map(this.view.view.activeToolCalls),
-			streamingComponent: this.view.view.streamingComponent,
-			streamingBodyEl: this.view.view.streamingBodyEl,
-			streamingWrapperEl: this.view.view.streamingWrapperEl,
-			toolCallsContainer: this.view.view.toolCallsContainer,
-			reasoningEl: this.view.view.reasoningEl,
-			reasoningBodyEl: this.view.view.reasoningBodyEl,
-			taskPlanTrackerState: this.view.view.taskPlanTracker.snapshot(),
-			taskPanelEl: this.view.view.taskPanelEl,
-		};
+		});
+		bg.taskPlanTracker.restore(this.view.view.taskPlanTracker.snapshot());
 
 		// If still streaming, attach background event routing
 		if (bg.isStreaming) {
-			this.registerBackgroundEvents(bg);
+			bg.attach({
+				onIdle: () => {
+					// Re-render sidebar to remove the green dot
+					this.renderSessionList();
+					void this.loadSessions();
+				},
+				onError: () => {
+					this.renderSessionList();
+				},
+			});
 		}
 
 		this.view.view.activeSessions.set(this.view.view.currentSessionId, bg);
@@ -572,24 +576,80 @@ export class SessionSidebarController {
 		}
 		this.view.view.lastFullRenderLen = 0;
 		this.view.view.renderer.clearReasoningState();
-		// The task panel's DOM travels with the saved fragment (it lives inside
-		// toolCallsContainer) — just stop this view's live-elapsed timer for it.
+		// The task panel's DOM no longer travels with a saved fragment — it was discarded
+		// with the container above; just stop this view's live-elapsed timer for it.
 		this.view.view.renderer.clearTaskPanelState();
 
-		// Detach streaming component from the view (it lives in the bg now)
+		// Release the streaming component and its DOM — the background model owns none of
+		// this; restoring re-renders it fresh from `bg.streamingContent`/`bg.streamingReasoning`.
 		if (this.view.view.streamingComponent) {
+			this.view.view.removeChild(this.view.view.streamingComponent);
 			this.view.view.streamingComponent = null;
 		}
+		this.view.view.streamingBodyEl = null;
+		this.view.view.streamingWrapperEl = null;
+		this.view.view.toolCallsContainer = null;
+		this.view.view.activeToolCalls.clear();
+
 		this.view.view.currentSession = null;
 		this.view.view.currentSessionId = null;
 	}
 
-	async restoreFromBackground(bg: BackgroundSession): Promise<void> {
-		// Unsubscribe background event routing
-		for (const unsub of bg.unsubscribers) unsub();
-		bg.unsubscribers = [];
+	async restoreFromBackground(bg: BackgroundSession, token = this.selectionToken): Promise<void> {
+		// **No listener-gap window.** `bg` stays attached (still routing SDK events into its
+		// own model) through every `await` below until the exact synchronous point where we
+		// flip ownership: `bg.detach()` immediately followed, with no intervening `await`, by
+		// copying `bg`'s *then-current* fields onto the view and calling
+		// `registerSessionEvents()`. Reviewer finding (HIGH): an earlier version detached `bg`
+		// first and only registered foreground handlers after awaiting the history render —
+		// any `session.idle`/`tool.*`/delta event that arrived in that window had no listener
+		// at all and was silently dropped. Two consequences of keeping `bg` attached during the
+		// renders:
+		//   1. History rendering below must snapshot `bg.messages` up front (it's still being
+		//      pushed to by a live `session.idle`/`session.error` handler) and, after the
+		//      render awaits, render any messages that landed while we were awaiting — a
+		//      `while` loop re-reading `bg.messages.length` handles any number of them.
+		//   2. Every other field read to populate the view (`isStreaming`, `streamingContent`,
+		//      `turnUsage`, the task-plan tracker snapshot, …) is read in the single synchronous
+		//      block right after `bg.detach()`, not before the history-render awaits, so it
+		//      reflects whatever `bg` last observed, not a stale pre-render snapshot.
+		//
+		// **Selection token guard against concurrent session selections.** If the user selects
+		// another session (or starts a new conversation) while the renders below are in flight,
+		// `token` becomes stale (`this.selectionToken !== token`). We check freshness before
+		// and between async renders and immediately before adopting background state. If stale,
+		// we return early without detaching `bg` or touching foreground state, ensuring `bg`
+		// remains safely attached in `activeSessions` with zero lost events.
+		this.view.chatContainer.empty();
 
-		// Restore state
+		const historySnapshot = bg.messages.slice();
+		const renderPromises: Promise<void>[] = [];
+		for (const msg of historySnapshot) {
+			renderPromises.push(this.view.view.renderer.renderMessageBubble(msg));
+		}
+		await Promise.all(renderPromises);
+
+		if (this.selectionToken !== token) return;
+
+		// Render any message(s) `bg`'s still-attached handlers pushed (e.g. a `session.idle`
+		// finalize) while the history above was rendering — one at a time, re-checking the
+		// live length each iteration, so a burst of idle→next-turn-idle while we awaited is
+		// still fully rendered in order.
+		let renderedCount = historySnapshot.length;
+		while (renderedCount < bg.messages.length) {
+			if (this.selectionToken !== token) return;
+			const nextMsg = bg.messages[renderedCount];
+			if (!nextMsg) break;
+			await this.view.view.renderer.renderMessageBubble(nextMsg);
+			renderedCount++;
+		}
+
+		if (this.selectionToken !== token) return;
+
+		// ── Atomic ownership switch — no `await` between here and `registerSessionEvents()` ──
+		bg.detach();
+		this.view.view.activeSessions.delete(bg.sessionId);
+
 		this.view.view.currentSession = bg.session;
 		this.view.view.currentSessionId = bg.sessionId;
 		this.messages = bg.messages;
@@ -603,74 +663,53 @@ export class SessionSidebarController {
 		this.view.view.turnUsage = bg.turnUsage;
 		this.view.view.configDirty = false;
 		this.view.view.lastFullRenderLen = 0;
+		this.view.view.taskPlanTracker.restore(bg.taskPlanTracker.snapshot());
 
-		this.view.chatContainer.empty();
+		this.view.view.streamingComponent = null;
+		this.view.view.streamingBodyEl = null;
+		this.view.view.streamingWrapperEl = null;
+		this.view.view.toolCallsContainer = null;
+		this.view.view.activeToolCalls.clear();
+		this.view.view.renderer.clearReasoningState();
+		this.view.view.renderer.clearTaskPanelState();
 
-		if (bg.isStreaming && bg.savedDom) {
-			// Session is still streaming — restore its live DOM (including streaming placeholder)
-			this.view.view.streamingComponent = bg.streamingComponent;
-			this.view.view.streamingBodyEl = bg.streamingBodyEl;
-			this.view.view.streamingWrapperEl = bg.streamingWrapperEl;
-			this.view.view.toolCallsContainer = bg.toolCallsContainer;
-			this.view.view.activeToolCalls = bg.activeToolCalls;
-			this.view.view.reasoningEl = bg.reasoningEl;
-			this.view.view.reasoningBodyEl = bg.reasoningBodyEl;
-			this.view.view.taskPlanTracker.restore(bg.taskPlanTrackerState);
-			this.view.view.taskPanelEl = bg.taskPanelEl;
-			this.view.chatContainer.appendChild(bg.savedDom);
-			bg.savedDom = null;
-			if (this.view.view.streamingReasoning && this.view.view.reasoningBodyEl) {
+		// Re-attach foreground event routing — from this statement on, `handleSessionEvent()`
+		// is the only listener for this `Session`, so nothing after this point can land in a
+		// gap even though the rendering below still awaits.
+		this.view.view.registerSessionEvents();
+		// ── End of the atomic switch ──
+
+		if (this.view.view.isStreaming) {
+			// Turn still in progress — rebuild a live placeholder from the accumulated
+			// streaming buffers. A tool-call block still `is-live` when the session went to
+			// the background is not restorable in full visual detail here (see the class doc
+			// on `BackgroundSession`) — only its plain-text/reasoning/task-plan effects survive.
+			this.view.view.renderer.addAssistantPlaceholder();
+			if (this.view.view.streamingReasoning) {
 				this.view.view.renderer.syncReasoningContent(this.view.view.streamingReasoning);
 				if (this.view.view.reasoningComplete) {
 					this.view.view.renderer.finalizeReasoning();
 				}
 			}
-			// Re-render the streaming content that accumulated while in background
-			if (this.view.view.streamingContent && this.view.view.streamingBodyEl) {
-				void this.view.view.renderer.updateStreamingRender();
+			if (this.view.view.streamingContent) {
+				await this.view.view.renderer.updateStreamingRender();
 			}
-			// The saved DOM's task panel (if any) reflects whatever state it was in when the
-			// session was backgrounded — background event routing keeps the tracker current but
-			// deliberately does no DOM work while hidden, so the panel itself can be stale
-			// (missing tasks created, or showing pre-update statuses). Force a fresh render from
-			// the up-to-date state now that the session is foreground again; renderTaskPanel()
-			// also (re-)starts the live-elapsed timer since it was stopped on background-save.
+			if (this.selectionToken !== token) return;
 			const tracker = this.view.view.taskPlanTracker;
 			const restoredTodos = tracker.hasPlan ? (tracker.taskPlan.size > 0 ? [...tracker.taskPlan.values()] : tracker.currentTodos) : null;
 			if (restoredTodos) {
 				this.view.view.renderer.renderTaskPanel(restoredTodos);
-			} else {
-				this.view.view.taskPanelEl = null;
 			}
-		} else {
-			// Session finished while in background — re-render messages from scratch
-			this.view.view.streamingComponent = null;
-			this.view.view.streamingBodyEl = null;
-			this.view.view.streamingWrapperEl = null;
-			this.view.view.toolCallsContainer = null;
-			this.view.view.renderer.clearReasoningState();
-			this.view.view.activeToolCalls.clear();
-			this.view.view.renderer.clearTaskPanelState();
-			const renderPromises: Promise<void>[] = [];
-			for (const msg of this.messages) {
-				renderPromises.push(this.view.view.renderer.renderMessageBubble(msg));
-			}
-			await Promise.all(renderPromises);
-			if (this.messages.length === 0) {
-				this.view.view.renderer.renderWelcome();
-			}
+		} else if (this.messages.length === 0) {
+			this.view.view.renderer.renderWelcome();
 		}
 
-		// Re-attach foreground event routing
-		this.view.view.registerSessionEvents();
+		if (this.selectionToken !== token) return;
 
 		// Restored session carries whatever query-metadata cache (#130) it last captured
 		// while backgrounded — reflect it (or its absence) immediately rather than waiting
 		// for this session's next turn.
 		this.view.view.configToolbar.updateContextIndicator();
-
-		// Remove from background map
-		this.view.view.activeSessions.delete(bg.sessionId);
 
 		// Restore agent from session name
 		this.restoreAgentFromSessionName(bg.sessionId);
@@ -680,121 +719,6 @@ export class SessionSidebarController {
 		// restoreAgentFromSessionName() above may have changed selectedAgent, so refresh the
 		// state line too, not just the kicker (#217).
 		this.view.view.refreshComposerState();
-	}
-
-	private registerBackgroundEvents(bg: BackgroundSession): void {
-		const session = bg.session;
-
-		// Lazily hydrate the live tracker from the snapshot the session was saved with — the
-		// state field stays authoritative for save/restore; the live instance is what the
-		// hidden-session handlers mutate while the session streams in the background.
-		const bgTracker = bg.taskPlanTracker ?? new TaskPlanTracker();
-		if (!bg.taskPlanTracker) {
-			bgTracker.restore(bg.taskPlanTrackerState);
-			bg.taskPlanTracker = bgTracker;
-		}
-
-		bg.unsubscribers.push(
-			session.on('assistant.turn_start', () => {
-				if (bg.turnStartTime === 0) bg.turnStartTime = Date.now();
-			}),
-			session.on('assistant.reasoning_delta', (data) => {
-				bg.streamingReasoning += data.deltaContent;
-				bg.reasoningComplete = false;
-			}),
-			session.on('assistant.message_delta', (data) => {
-				bg.streamingContent += data.deltaContent;
-				// No DOM rendering — session is hidden
-			}),
-			session.on('assistant.message', (data) => {
-				if (data.content !== bg.streamingContent) {
-					bg.streamingContent = data.content;
-				}
-			}),
-			session.on('assistant.usage', (data) => {
-				// input + output only — `assistant.usage` never carries cache token fields
-				// (see `SessionEvents` in agentService.ts), so `turnUsage`'s cache fields stay
-				// at 0 rather than implying cache usage is tracked. Same as synapseView.ts's
-				// `handleSessionEvent()`.
-				if (!bg.turnUsage) {
-					bg.turnUsage = {inputTokens: data.inputTokens, outputTokens: data.outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, model: data.model};
-				} else {
-					bg.turnUsage.inputTokens += data.inputTokens;
-					bg.turnUsage.outputTokens += data.outputTokens;
-					if (data.model) bg.turnUsage.model = data.model;
-				}
-			}),
-			session.on('session.idle', () => {
-				// Finalize the background streaming turn
-				if (bg.streamingContent || bg.streamingReasoning) {
-					bg.messages.push({
-						id: `a-${Date.now()}`,
-						role: 'assistant',
-						content: bg.streamingContent,
-						reasoning: bg.streamingReasoning || undefined,
-						timestamp: Date.now(),
-					});
-				}
-				bg.streamingContent = '';
-				bg.streamingReasoning = '';
-				bg.reasoningComplete = false;
-				bg.streamingBodyEl = null;
-				bg.streamingWrapperEl = null;
-				bg.toolCallsContainer = null;
-				bg.reasoningEl = null;
-				bg.reasoningBodyEl = null;
-				bg.activeToolCalls.clear();
-				bg.streamingComponent = null;
-				bg.turnStartTime = 0;
-				bg.turnToolsUsed = [];
-				bg.turnUsage = null;
-				bg.isStreaming = false;
-				bg.taskPanelEl = null;
-				bgTracker.reset();
-				bg.taskPlanTrackerState = bgTracker.snapshot();
-				// Re-render sidebar to remove the green dot
-				this.renderSessionList();
-				void this.loadSessions();
-			}),
-			session.on('session.error', (data) => {
-				bg.messages.push({
-					id: `i-${Date.now()}`,
-					role: 'info',
-					content: `Error: ${data.error || 'Unknown error'}`,
-					timestamp: Date.now(),
-				});
-				bg.isStreaming = false;
-				bg.streamingContent = '';
-				bg.streamingReasoning = '';
-				bg.reasoningComplete = false;
-				bg.streamingBodyEl = null;
-				bg.streamingWrapperEl = null;
-				bg.toolCallsContainer = null;
-				bg.reasoningEl = null;
-				bg.reasoningBodyEl = null;
-				bg.activeToolCalls.clear();
-				bg.streamingComponent = null;
-				bg.taskPanelEl = null;
-				bgTracker.reset();
-				bg.taskPlanTrackerState = bgTracker.snapshot();
-				this.renderSessionList();
-			}),
-			session.on('tool.execution_start', (data) => {
-				const {toolName, toolCallId, input: toolInput} = data;
-				bg.turnToolsUsed.push(toolName);
-				// Same tracker as the foreground path (audit §3, #236) — renderTodos is ignored
-				// here: no DOM manipulation for a hidden session. The state field is refreshed
-				// after each event so a save during streaming carries the latest plan.
-				bgTracker.onToolStart(toolName, toolCallId, toolInput);
-				bg.taskPlanTrackerState = bgTracker.snapshot();
-			}),
-			session.on('tool.execution_complete', (data) => {
-				const {toolName, toolCallId, result, error: toolError} = data;
-				bgTracker.onToolComplete(toolCallId, toolName, result, toolError);
-				bg.taskPlanTrackerState = bgTracker.snapshot();
-				// No DOM manipulation — hidden session
-			}),
-		);
 	}
 
 	private restoreAgentFromSessionName(sessionId: string): void {
@@ -812,6 +736,8 @@ export class SessionSidebarController {
 
 	async selectSession(sessionId: string): Promise<void> {
 		if (sessionId === this.view.view.currentSessionId && this.view.view.currentSession) return;
+
+		const token = ++this.selectionToken;
 
 		// ── Save current session to background (if streaming, keep it alive) ──
 		if (this.view.view.currentSession && this.view.view.currentSessionId) {
@@ -846,7 +772,8 @@ export class SessionSidebarController {
 		// ── Check if the target session is already alive in background ──
 		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
-			await this.restoreFromBackground(bg);
+			await this.restoreFromBackground(bg, token);
+			if (this.selectionToken !== token) return;
 			this.renderSessionList();
 			this.view.view.renderer.updateSendButton();
 			return;
@@ -869,6 +796,11 @@ export class SessionSidebarController {
 				resume: sessionId,
 			});
 
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
+			}
+
 			// Load message history from the persisted transcript (cold load).
 			const sessionMeta = this.view.view.sessionList.find(s => s.sessionId === sessionId);
 			const fallbackTimestamp = sessionMeta?.createdAt ?? sessionMeta?.lastModified ?? Date.now();
@@ -885,6 +817,11 @@ export class SessionSidebarController {
 				sessionMessages = await this.view.plugin.agentService!.getSessionMessages(sessionId);
 			} catch (e) {
 				console.warn('[synapse] Failed to read session transcript for replay:', e);
+			}
+
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
 			}
 
 			const renderPromises: Promise<void>[] = [];
@@ -929,6 +866,11 @@ export class SessionSidebarController {
 			}
 			await Promise.all(renderPromises);
 
+			if (this.selectionToken !== token) {
+				try { void session.disconnect(); } catch { /* ignore */ }
+				return;
+			}
+
 			if (this.messages.length === 0) {
 				this.view.view.renderer.renderWelcome();
 			}
@@ -955,6 +897,7 @@ export class SessionSidebarController {
 			// state line too, not just the kicker (#217).
 			this.view.view.refreshComposerState();
 		} catch (e) {
+			if (this.selectionToken !== token) return;
 			this.view.view.renderer.addInfoMessage(`Failed to load session: ${String(e)}`);
 			this.view.view.renderer.renderWelcome();
 			this.view.view.currentSessionId = null;
@@ -1038,11 +981,8 @@ export class SessionSidebarController {
 		// Clean up background session if it exists
 		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
-			for (const unsub of bg.unsubscribers) unsub();
+			bg.detach();
 			try { await bg.session.disconnect(); } catch { /* ignore */ }
-			if (bg.streamingComponent) {
-				try { this.view.view.removeChild(bg.streamingComponent); } catch { /* ignore */ }
-			}
 			this.view.view.activeSessions.delete(sessionId);
 		}
 
