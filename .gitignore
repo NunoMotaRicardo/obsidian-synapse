@@ -25,6 +25,9 @@ coverage-output.txt
 .env.*
 !.env.example
 
+# Local project documentation and working notes
+.docs/
+
 # Obsidian plugin-local settings
 # They contain machine- and vault-specific configuration, including secrets.
 data.json
