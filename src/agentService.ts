@@ -14,8 +14,6 @@
  * use (audit §1, issue #236).
  */
 
-// The Electron SDK shims are statically imported from ./sdkShims at module load.
-import {uninstallSetTimeoutShim, ABORT_SHIM_GRACE_MS} from './sdkShims';
 import {
 	sessionScopePermissions,
 	permissionRuleToString,
@@ -1114,12 +1112,9 @@ export class AgentService {
 	 * Stop the service. For the Agent SDK, there is no persistent client
 	 * to tear down — queries manage their own subprocess lifecycle.
 	 *
-	 * Views may dispose SDK streams before this hook is reached, so the timer shim is installed
-	 * for the plugin lifetime. Keep it through the process-cleanup grace window before release.
 	 */
 	async stop(): Promise<void> {
 		this.state = 'disconnected';
-		window.setTimeout(() => uninstallSetTimeoutShim(), ABORT_SHIM_GRACE_MS);
 	}
 }
 

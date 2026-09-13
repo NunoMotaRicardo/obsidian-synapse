@@ -330,13 +330,7 @@ export default tseslint.config(
 			// treat it as a brand-new command, silently orphaning any binding the user set.
 			// No safe migration exists, so this stays off for good.
 			//
-			// no-default-hotkeys — shipping default hotkeys (Mod+Shift+K/L/E) for this
-			// plugin's most-used commands is a deliberate, longstanding UX choice, not an
-			// oversight. Removing them would silently strip a working keybinding for every
-			// existing user with no prompt or replacement — a real regression, not a
-			// lint fix. Kept as-is.
 			'obsidianmd/commands/no-plugin-id-in-command-id': 'off',
-			'obsidianmd/commands/no-default-hotkeys': 'off',
 		},
 	},
 	{

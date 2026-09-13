@@ -1,6 +1,7 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
 import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {AgentService, type ModelInfo} from "./agentService";
+import {releasePluginSetTimeoutShim} from './sdkShims';
 import {fetchEndpointModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
@@ -267,6 +268,7 @@ export default class SynapsePlugin extends Plugin {
 		if (this.agentService) {
 			void this.agentService.stop();
 		}
+		releasePluginSetTimeoutShim();
 		if (this.telegramBot) {
 			void this.telegramBot.disconnect();
 		}

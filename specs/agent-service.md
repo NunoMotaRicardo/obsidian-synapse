@@ -13,7 +13,7 @@ issue #236) — the architecture rule is about the *SDK import surface*, not one
 | File | Owns |
 |---|---|
 | `src/agentService.ts` | `AgentService` class, the model layer (`ModelInfo`, `mapSdkModel`, `matchModelTiers`, `FALLBACK_CLAUDE_MODELS`, `INLINE_CHAT_PROFILES`), the delegation MCP server, and the re-export block |
-| `src/sdkShims.ts` | The Electron compatibility shims — the top-level `setMaxListeners` wrapper and refcounted `setTimeout` shim (both installed at module load; `agentService.ts` imports this module statically so load order is unchanged). The timer shim covers view disposal that can precede `Plugin.onunload()` as well as direct Agent SDK query-controller aborts; `AgentService.stop()` releases its lifecycle reference after the SDK process-cleanup grace window. |
+| `src/sdkShims.ts` | The Electron compatibility shims — the top-level `setMaxListeners` wrapper and refcounted `setTimeout` shim (both installed at module load; `agentService.ts` imports this module statically so load order is unchanged). The timer shim covers view disposal that can precede `Plugin.onunload()` as well as direct Agent SDK query-controller aborts; `Plugin.onunload()` releases its lifecycle reference after the SDK process-cleanup grace window. |
 | `src/permissions.ts` | `sessionScopePermissions`, `permissionRuleToString`, `extractAllowRuleStrings`, `buildInMemoryPermissionSettings`, `mergeVaultSettingsLayer` |
 | `src/session.ts` | The `Session` class, `SessionEvents`/`SessionEvent`/`SessionEventHandler`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`) |
 | `src/taskPlanTracker.ts` | `TodoItem`, `TaskPlan`, the four plan-parse functions, and the `TaskPlanTracker` class — see `chat-view.md` for the tracker's consumers |
@@ -571,8 +571,9 @@ callback).
    `unref`/`ref`, while preserving `clearTimeout()` coercion via `valueOf()`. The 8-second window
    exceeds the SDK's ~7-second worst-case escalation sequence. `sendAndWaitWithAbort()` uses the
    same helper for timeout, external-signal, and error cleanup aborts; Telegram session
-   reset/disconnect also uses it. `AgentService.stop()` releases the lifecycle reference after its
-   cleanup grace window, while refcounting prevents overlapping aborts from restoring early.
+   reset/disconnect also uses it. `Plugin.onunload()` releases the lifecycle reference after its
+   cleanup grace window, while a global refcount preserves the shim across rapid plugin reloads
+   and prevents overlapping aborts from restoring early.
 
 Both paths were verified with the Obsidian dev console: zero `TypeError` on repeated
 partial-message sends, zero `TypeError` on mid-stream interrupts via the graceful path, and zero
