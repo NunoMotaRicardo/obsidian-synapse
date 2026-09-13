@@ -1954,8 +1954,14 @@
 	display: none;
 }
 
-/* Hide debug info (metadata + compaction blocks) when unchecked */
+/* Hide diagnostic details when debug is disabled, while retaining task plans. */
+.synapse-hide-debug .synapse-tool-call,
+.synapse-hide-debug .synapse-compaction-block,
 .synapse-hide-debug .synapse-msg-metadata {
+	display: none;
+}
+
+.synapse-hide-debug .synapse-tool-calls:not(:has(.synapse-task-panel)) {
 	display: none;
 }
 

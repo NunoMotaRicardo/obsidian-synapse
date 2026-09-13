@@ -775,6 +775,8 @@ interactive accent.
   ledger row: tool name (rendered uppercase via CSS), compact arguments summary (`.synapse-tool-call-arg`),
   right-aligned tabular elapsed time (`.synapse-tool-call-time`). Live calls pulse the accent (`is-live`);
   no spinner icon. Expanding a call reveals the input and output detail sections as collapsible code blocks.
+  They are hidden when **Debug** is off, along with compaction and message metadata; task-plan panels remain
+  visible so the user can follow task progress without enabling diagnostic details.
 - **Reasoning blocks (`.synapse-reasoning`):** single hairline left rule, uppercase letterspaced
   summary label (`Thinking…` while streaming with accent pulse, `Reasoning` when complete or historical;
   sentence case in DOM, rendered uppercase via CSS), serif body matching the assistant's voice.
