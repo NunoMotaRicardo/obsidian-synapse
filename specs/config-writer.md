@@ -137,13 +137,31 @@ in `sessionConfig.ts` for the system prompt.
 ## Self-improve hint
 
 `buildSelfImproveHint()` in `sessionConfig.ts` teaches agents to recognize customization intent.
-Mentions "agent" and "skill" as artifact types. Session-stable and takes no arguments — the
+Mentions "agent" and "skill" as artifact types and names the `synapse-config` skill. Session-stable and takes no arguments — the
 volatile "Current agent" line is delivered per-turn by `buildCurrentAgentLine(agentName)`
 instead, so this static hint doesn't invalidate the cached system-prompt prefix when the selected
 agent changes.
 
-## First-run seeding
+## Starter kit
 
-On plugin startup, if `_synapse/skills/improve-synapse/SKILL.md` does not exist, the plugin
-seeds it as a starter skill demonstrating the format.
+`installStarterKit(app, synapseFolder?)` writes the plugin's starter kit into `_synapse/` and
+returns the vault paths it created. The kit's content lives as plain Markdown under
+`src/starter/` (mirroring the paths below `_synapse/`) and is bundled into `main.js` as text by
+esbuild's `.md` loader (`vitest.config.ts` mirrors that loader for tests); `src/starterKit.ts`
+lists the files in `STARTER_FILES`:
+
+- `agents/writer.agent.md` — **Writer** agent (structure of essays, documents, speeches, articles).
+- `skills/synapse-config/` — authoring agents, skills, and MCP servers; `setup.md` builds
+  custom writing styles from the user's own documents.
+- `skills/obsidian/` — Obsidian Flavored Markdown, Bases, and the `obsidian` CLI.
+- `skills/think/` — one-question-at-a-time interview before producing output.
+- `skills/writing-style/` — voice selection (custom styles in `styles/` or built-in defaults)
+  and AI-tell removal.
+
+Never overwrites: an existing file is skipped, so re-running only restores missing files.
+Called from two places:
+
+- **First run** — `main.ts` `onload()` registers an `onLayoutReady` callback (so the vault index
+  is loaded) that installs the kit only when the `_synapse/` folder does not exist.
+- **Settings → Capabilities → Initialize** — installs any missing starter files.
 

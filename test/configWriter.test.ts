@@ -6,10 +6,10 @@ import {
 	writeSkill,
 	scanVaultStructure,
 	scanAgents,
-	ensureImproveSynapseSkill,
-	IMPROVE_SYNAPSE_SKILL_NAME,
+	installStarterKit,
 	persistToolApprovalRules,
 } from '../src/configWriter';
+import {STARTER_FILES, SYNAPSE_CONFIG_SKILL_NAME} from '../src/starterKit';
 import {createMockApp, seedFile, seedFolder, readVaultFile} from './setup';
 
 // ---------------------------------------------------------------------------
@@ -399,21 +399,36 @@ describe('persistToolApprovalRules', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ensureImproveSynapseSkill
+// installStarterKit
 // ---------------------------------------------------------------------------
 
-describe('ensureImproveSynapseSkill', () => {
-	it('seeds the skill when absent and returns its path', async () => {
+describe('installStarterKit', () => {
+	it('installs every starter file under _synapse/ with its bundled content', async () => {
 		const app = createMockApp() as unknown as App;
-		const path = await ensureImproveSynapseSkill(app);
-		expect(path).toBe(`_synapse/skills/${IMPROVE_SYNAPSE_SKILL_NAME}/SKILL.md`);
-		expect(app.vault.getAbstractFileByPath(path!)).not.toBeNull();
+		const created = await installStarterKit(app);
+		expect(created).toHaveLength(STARTER_FILES.length);
+		for (const file of STARTER_FILES) {
+			expect(await readVaultFile(app, `_synapse/${file.path}`)).toBe(file.content);
+		}
+		expect(created).toContain(`_synapse/skills/${SYNAPSE_CONFIG_SKILL_NAME}/SKILL.md`);
 	});
 
-	it('returns null and does not overwrite when the skill already exists', async () => {
+	it('ships skills whose frontmatter name matches their folder', () => {
+		for (const file of STARTER_FILES.filter(f => f.path.endsWith('/SKILL.md'))) {
+			const folder = file.path.split('/')[1];
+			expect(parseFrontmatter(file.content).meta.name).toBe(folder);
+		}
+	});
+
+	it('leaves existing files untouched and only creates the missing ones', async () => {
 		const app = createMockApp() as unknown as App;
-		await ensureImproveSynapseSkill(app);
-		const result = await ensureImproveSynapseSkill(app);
-		expect(result).toBeNull();
+		const custom = '_synapse/skills/writing-style/SKILL.md';
+		seedFile(app, custom, 'customized');
+
+		const created = await installStarterKit(app);
+		expect(created).toHaveLength(STARTER_FILES.length - 1);
+		expect(created).not.toContain(custom);
+		expect(await readVaultFile(app, custom)).toBe('customized');
+		expect(await installStarterKit(app)).toEqual([]);
 	});
 });

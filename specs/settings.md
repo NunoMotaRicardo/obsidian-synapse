@@ -12,21 +12,14 @@ it is shared across tabs, so nothing needed to become a class-level field.
 ## Groups
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
-- **Feature Map & Agents** — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), shipping methodology-tuned default agents (`General`, `Vision`, `Zettelkasten`, `PARA`, `LYT`), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
-- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (creates `_synapse/agents/` and `_synapse/skills/` with sample agents and skills). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails", opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `chat-view.md` "Loop turn/cost thresholds" for enforcement details.
+- **Feature Map & Agents** — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), listing the agents discovered in `_synapse/agents/` (plus **Auto**, the empty value = SDK default agent), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
+- **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (installs the starter kit via `installStarterKit()` — see `config-writer.md` "Starter kit"; never overwrites). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails", opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `chat-view.md` "Loop turn/cost thresholds" for enforcement details.
 - **Tools** — tools approval mode (`ask` or `allow`).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
 
 ## Feature Map & Agents
 
-The **Feature Map & Agents** tab maps each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent persona loaded from vault or shipped defaults. Lightweight features default to `General` out of the box with zero required local setup. Vision-dependent features map to `Vision`.
-
-Folder initialization creates five distinct agent files in `_synapse/agents/`:
-- `general.agent.md`: General-purpose assistant for general chat, editing, and search.
-- `vision.agent.md`: Vision-capable assistant for image and diagram analysis.
-- `zettelkasten.agent.md`: Methodology assistant for atomic notes and dense linking.
-- `para.agent.md`: Methodology assistant for Projects, Areas, Resources, and Archives.
-- `lyt.agent.md`: Methodology assistant for Linking Your Thinking and Maps of Content (MOCs).
+The **Feature Map & Agents** tab maps each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent from `_synapse/agents/`. Every feature defaults to empty (**Auto**), which passes no `agent` to the SDK, so nothing depends on a particular agent file existing. The starter kit ships one agent, **Writer**.
 
 Per-agent model bindings: each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the underlying `.agent.md` file in the vault.
 

@@ -1,396 +1,138 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./wiki/images/synapse_banner2.png">
+  <img alt="Synapse — your Claude-native AI assistant inside Obsidian" src="./wiki/images/synapse_banner1.png">
+</picture>
+
 # Synapse
 
-![Obsidian Synapse](./wiki/images/banner.png)
+### Your notes already hold what you know. Synapse puts Claude to work on them.
 
-Your Claude-native AI assistant inside Obsidian. Chat with agents, run tools, search your vault with AI, and transform text — all without leaving your notes.
+Most AI tools make you copy notes into a chat window and paste the answers back. Synapse works
+the other way round. It brings the **Claude agent** into Obsidian, where it can read your notes,
+follow your links, write and reorganize files, run tools, and keep a history of every
+conversation. Your vault becomes the agent's workspace.
 
-Synapse connects to Claude (via the Anthropic API or OAuth) or your own local AI provider (like Ollama) and gives you a fully configurable assistant panel with agents, skills, MCP tool servers, and an AI-powered editor.
+It isn't a thin chat wrapper. Synapse is a **native Claude Agent SDK plugin**: every message runs
+on the same agent loop as Claude Code. You get real sessions, subagents, skills, MCP tools,
+permission controls, and live reasoning, all inside your vault.
 
----
+### Claude when you need the best. Local models when you want privacy.
 
-## Overview
+Synapse runs **Claude** and **local models through Ollama** in the same agent. Switch models from
+the chat panel, or bind a model to each agent. Keep private notes on your own machine and bring in
+Claude for the hard problems. You can also use Ollama's cloud models, or any endpoint that speaks
+the **Anthropic Messages API**.
 
-The Synapse panel sits in the right sidebar alongside your notes. Pick an agent, toggle skills and tools, then chat — responses stream in with full Markdown rendering and collapsible tool-call details.
+Local models aren't a stripped-down mode. They run through the same Claude Agent SDK, so they get
+the same sessions, skills, subagents, and MCP tools as Claude.
 
-![Obsidian Synapse Screenshot](./wiki/images/screenshot.png)
-
-**What you see above:** the chat tab with an active agent, model selector, reasoning toggle, and a streamed response. The session sidebar on the right lists past conversations. Context-menu actions and search all work from the same panel.
-
-> [!CAUTION]
-> **With great power comes great responsibility.** This plugin can execute tools, run CLI commands, and modify your files on your behalf. This software is provided as open-source without any warranty or support. Use at your own risk.
-
----
-
-## Quick start
+![Synapse chat panel open beside a note in Obsidian](./wiki/images/synapse-chat.png)
 
 > [!IMPORTANT]
-> Synapse requires Obsidian Desktop 1.13.0 or newer (Node.js 20.19+ runtime) and talks to the Claude CLI via `@anthropic-ai/claude-agent-sdk`.
-
-1. **Install** — Either:
-   - **Via BRAT** — Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin, then add this repository as a beta plugin. BRAT handles downloads and updates automatically.
-   - **Manual** — Download `main.js`, `styles.css`, and `manifest.json` from the latest release into `<YourVault>/.obsidian/plugins/synapse/`. Then reload Obsidian and enable **Synapse** in **Settings → Community plugins**.
-2. **Configure API / CLI** — Open **Settings → Synapse**. Configure your **Anthropic API Key** or use **OAuth** (Claude Subscription), or configure a local model provider like **Ollama**.
-3. **Initialize** — Under **Synapse settings** (Capabilities tab), click **Initialize** to scaffold the config structure under the hardcoded `_synapse/` folder:
-   ```
-   _synapse/
-     agents/    ← *.md agent/persona files
-     skills/    ← subfolder per skill with SKILL.md
-     .mcp.json  ← MCP server config
-   ```
-4. **Open Synapse** — Click the **brain** icon in the ribbon, or run **Open Synapse** from the command palette.
-
-More detail, including troubleshooting: [Installation](wiki/Installation.md).
-
-You're ready. Start chatting, or read on to unlock every feature.
+> **Synapse runs on the Claude CLI, which you need to install**, even if you use only local models.
+> For Claude, sign in with your Claude subscription or use an Anthropic API key. For local models,
+> run [Ollama](https://ollama.com) v0.14.0 or newer and point Synapse at it. Requires Obsidian
+> Desktop 1.13.0 or newer.
 
 ---
 
-## Table of contents
+## Why Synapse
 
-- [The Synapse panel](#the-synapse-panel)
-- [Agents](#agents)
-- [Models](#models)
-- [Skills](#skills)
-- [MCP Tools (MCP servers)](#mcp-tools-mcp-servers)
-- [Browser use](#browser-use)
-- [Bots](#bots)
-- [Inline edits](#inline-edits)
-- [Settings reference](#settings-reference)
-- [Using your vault with Claude / VS Code](#using-your-vault-with-claude--vs-code)
-- [Feedback](#feedback)
+**It knows where you are.** The note you're looking at is already in the conversation. Scope a
+chat to a folder, drop in files and images, and reopen any past session exactly where you left off.
 
----
+**It writes like you, not like an AI.** Give Synapse a few pieces you've written and it builds a
+style guide from them. Drafts, rewrites, and emails then follow your voice, and AI filler words get
+stripped out.
 
-## The Synapse panel
+**You shape it by talking to it.** Tell it *"always cite sources in APA"* or *"I need an agent that
+turns meeting notes into action items"*. Synapse proposes the agent or skill, shows you the file,
+and writes it when you say yes. No config screens, and no reload.
 
-The panel lives in the right sidebar and has two tabs: **Chat** and **Search**.
+**Everything is a note.** Agents and skills are Markdown files in your vault. Read them, edit
+them, version them with git, and sync them across devices like any other note.
 
-### Chat tab
+**It works where you work.** Chat in the side panel. Right-click selected text to rewrite,
+proofread, expand, or summarize it. Right-click a folder to summarize everything in it. Search your
+vault by describing what you want. Or message your agents from your phone through Telegram.
 
-A streaming AI conversation with full Markdown rendering. Type a message and press **Enter** to send (**Shift+Enter** for newlines).
-
-**While a response is in flight**, the status indicator tells you which stage the turn is at:
-
-| Indicator | Meaning |
-|---------|-------------|
-| **Waiting for response…** | Sent — nothing has streamed back yet |
-| **Thinking…** (in a collapsible block) | The model is streaming its reasoning; expand the block to read it live |
-| **Processing…** | A tool call is running mid-turn |
-
-Models that don't produce reasoning go straight from **Waiting for response…** to the answer — no
-reasoning block appears, because there is none to show.
-
-**Toolbar:**
-
-| Control | What it does |
-|---------|-------------|
-| **+** | New conversation |
-| **↻** | Reload all config files |
-| **Agent** dropdown | Pick an agent — auto-selects its model, tools, and skills |
-| **Model** dropdown | Switch AI model |
-| **Reasoning** (brain icon) | Set reasoning effort (low / medium / high / xhigh) — appears when the selected model supports it |
-| **Skills** (wand icon) | Toggle skills on/off |
-| **Tools** (plug icon) | Toggle MCP servers on/off |
-| **Working dir** (drive icon) | Set the working directory for file operations |
-| **Debug** (bug icon) | Show tool calls, token usage, and timing |
-
-**Input bar:**
-
-| Button | What it does |
-|--------|-------------|
-| **Folder** | Set a vault scope — limit which files and folders the AI can see |
-| **Paperclip** | Attach files from your OS |
-| **Clipboard** | Paste clipboard text as an attachment |
-
-The **active note** is automatically included as context. The working directory follows the active note's parent folder.
-
-### Search tab
-
-AI-powered semantic search across your vault. Toggle between **basic** mode (quick answers, minimal config) and **advanced** mode (pick an agent, model, skills, and tools for the search).
-
-### Session sidebar
-
-The right edge of the panel lists your conversation sessions.
-
-- **Click** a session to restore it — its full message history is replayed from disk, so
-  conversations survive restarting Obsidian.
-- **Right-click** to rename or delete.
-- **Filter** sessions with the search box.
-- A **green dot** means a session is actively streaming.
-- Search sessions run in the background and are tagged accordingly.
-
-Sessions are auto-named as `<Agent>: <first message>`.
-
-> [!NOTE]
-> A restored conversation replays messages and reasoning, but not the collapsible tool-call blocks
-> from the original turns. Those are only rendered live.
+**It connects to everything else.** Add MCP servers to give Synapse a browser, GitHub, web search,
+or your own tools. Approve each tool call, or allow them once you trust your setup.
 
 ---
 
-## Agents
+## Useful from the first message: the starter kit
 
-Agents live in `_synapse/agents/` as `*.md` files. Each one defines a persona with its own system prompt, preferred model, and access controls.
+Synapse installs a small starter kit into `_synapse/` on first run. It's useful from day one, and
+built to be made your own.
 
-### Example: `grammar.md`
+| | What it gives you |
+|---|---|
+| **`synapse-config`** skill | Customizes Synapse from chat. Describe what you want and it proposes an agent, skill, or MCP server, shows you the exact file, and writes it only after you approve. It also runs the **setup workflow**, which builds writing styles from your own documents. |
+| **Writer** agent | Delivers finished prose, not outlines: essays, reports, proposals, emails, speeches, and articles. It picks the right structure, asks only for what's missing, and hands over the whole piece. |
+| **`writing-style`** skill | Controls how the words sound. It uses your own styles when you have them, falls back to four built-in voices (personal, technical, spoken, professional), and strips AI-sounding phrasing. |
+| **`think`** skill | Helps you think before anything gets written. It asks one question at a time, suggests an answer, and checks your vault first so it doesn't ask what you've already written down. |
+| **`obsidian`** skill | Obsidian know-how: wikilinks, embeds, callouts, properties, **Bases**, and the `obsidian` CLI. What it writes renders correctly the first time. |
 
-```yaml
----
-name: Grammar
-description: Helps users improve their writing
-model: sonnet
-skills:
-  - ascii-art
----
+### Start here: make it yours with `synapse-config`
 
-You are the **Grammar Assistant** — help users write clearly and correctly.
-```
+Open Synapse and type:
 
-### Frontmatter fields
+> **Set up my writing styles.**
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Display name in the agent dropdown |
-| `description` | No | Short purpose description |
-| `model` | No | Preferred model (auto-selected when the agent is chosen) |
-| `tools` | No | List of allowed tool names (omit = inherit all) |
-| `disallowedTools`| No | Explicitly blocked tool names |
-| `skills` | No | List of skill names to preload |
+`synapse-config` suggests a style for each kind of writing you do. It asks for 3–5 pieces you wrote
+yourself, studies their voice, structure, rhythm, and vocabulary, and shows you a style file to
+approve. From then on, the Writer agent and every rewrite sound like you.
 
-The Markdown body is the agent's **system prompt**, sent as context with every message.
+The same skill lets Synapse keep growing with you. Whenever you notice you're repeating an
+instruction, turn it into an agent or skill in a single message.
 
 ---
 
-## Models
+## Get started in three steps
 
-Synapse is built natively for Claude models (via the Anthropic API or OAuth). It also supports
-local models — Ollama, or any other endpoint that speaks the **Anthropic Messages API** — as a
-free, offline alternative. Every model, Claude or local, runs through the same Claude Agent SDK/CLI:
-full skills, subagents, sessions, permission modes, and streaming. There is no separate,
-degraded local-model loop and no OpenAI-compatible provider matrix.
+1. **Install the [Claude CLI](https://code.claude.com/docs/en/setup)** and sign in by running `claude`,
+   or have an Anthropic API key ready. For local models, also install [Ollama](https://ollama.com).
+2. **Install Synapse** with [BRAT](https://github.com/TfTHacker/obsidian42-brat) by adding
+   `https://github.com/NunoMotaRicardo/obsidian-synapse`, or manually from the
+   [latest release](https://github.com/NunoMotaRicardo/obsidian-synapse/releases).
+3. **Open Synapse** from the ribbon icon or the command **Open chat**, and ask it to set up your
+   writing styles.
 
-### Local agent endpoint
+Full walkthrough, including local models: **[Installation](wiki/Installation.md)**.
 
-Ollama v0.14.0+ speaks the same Anthropic Messages API the Claude CLI itself uses. Under
-**Settings → Synapse → Claude → Local agent endpoint**, set:
-
-- **Endpoint URL** — `http://localhost:11434` for a local Ollama v0.14.0+, or any other endpoint
-  that speaks the Anthropic Messages API. Leave blank (default) to use only Claude models.
-- **Endpoint API key** — optional; Ollama requires the header but ignores its value, so leave this
-  blank to send `ollama` automatically.
-
-The section's **Test** button verifies the endpoint end to end: it sends one minimal
-`/v1/messages` request with the same credentials the agent path uses and reports whether the
-endpoint answered in Messages API shape — so a typo'd URL or a non-Messages-API server is caught
-at configuration time, not mid-conversation. Once an endpoint is configured, its model catalogue
-(`GET <baseUrl>/v1/models`) is fetched automatically and the models appear in the chat panel's
-model picker alongside Claude's.
-
-A configured endpoint redirects the *entire* agent loop for a local-model query — including tool
-calls — to that address, so only point it at an endpoint you trust with your conversation and tool
-data (loopback Ollama by default; treat a remote/proxied endpoint the same as any other network
-destination you'd send vault content to).
-
-An OpenAI-shaped-only endpoint (one that does **not** speak the Anthropic Messages API — e.g. LM
-Studio, llama.cpp, vLLM, or a bare OpenAI-compatible `/v1/chat/completions` server) is not
-supported directly; put a Messages-API-speaking gateway in front of it, or use Ollama, which
-speaks the Messages API natively.
+> [!CAUTION]
+> **With great power comes great responsibility.** Synapse can run tools, execute commands, and
+> modify files on your behalf. Keep tool approval on **Ask** until you trust your setup. This
+> open-source software comes without warranty or support. Use at your own risk.
 
 ---
 
-## Skills
+## Learn more
 
-Skills are subfolders inside `_synapse/skills/`, each containing a `SKILL.md` file that provides domain-specific knowledge to the AI.
+The [wiki](wiki/Home.md) has the details:
 
-### Example: `_synapse/skills/ascii-art/SKILL.md`
+- **[Installation](wiki/Installation.md)**: requirements, the Claude CLI, BRAT or manual install, and first run
+- **[Using Synapse](wiki/Using-Synapse.md)**: the chat panel, search, sessions, and editor actions
+- **[Starter kit](wiki/Starter-Kit.md)**: every bundled skill and agent, and the `synapse-config` setup workflow
+- **[Customization](wiki/Customization.md)**: agents, skills, MCP servers, and vault settings in `_synapse/`
+- **[Configuration](wiki/Configuration.md)**: every settings tab
+- **[Local models with Ollama](wiki/Local-Models-Ollama.md)**: running Synapse on local or cloud Ollama models
+- **[Telegram bot](wiki/Telegram-Bot.md)**: chatting with your agents from anywhere
 
-```yaml
----
-name: ascii-art
-description: Generates stylized ASCII art text using block characters
----
+## Credits
 
-# ASCII Art Generator
-
-Generate ASCII art representations of text using block-style Unicode characters.
-```
-
-Toggle skills on/off from the **wand** icon in the toolbar.
-
----
-
-## MCP Tools (MCP servers)
-
-Configure external tool servers in `_synapse/.mcp.json`. Synapse discovers and spawns stdio and SSE-based MCP servers.
-
-### Example: `.mcp.json`
-
-```json
-{
-  "mcpServers": {
-    "workiq": {
-      "command": "npx",
-      "args": ["-y", "@microsoft/workiq", "mcp"]
-    },
-    "my-local-tool": {
-      "command": "node",
-      "args": ["./my-tool/index.js"],
-      "env": { "API_KEY": "..." }
-    }
-  }
-}
-```
-
-### Tool approval
-
-In **Settings → Synapse → Tools**, set **Tools approval**:
-
-- **Allow** — Tool calls run automatically.
-- **Ask** — Confirm each tool call in a modal before execution.
-
----
-
-## Browser use
-
-Give Synapse control of a real browser — navigate pages, click elements, fill forms, take screenshots, and extract content — all driven by AI through the Playwright MCP server.
-
-### 1. Install the browser extension
-
-Install the [Playwright MCP Bridge](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm) extension on any Chromium browser (Edge, Chrome).
-
-### 2. Add the Playwright MCP server
-
-In `_synapse/.mcp.json`, add the `playwright-extension` server:
-
-```json
-{
-  "mcpServers": {
-    "playwright-extension": {
-      "command": "npx",
-      "args": ["@playwright/mcp@latest", "--extension"]
-    }
-  }
-}
-```
-
----
-
-## Bots
-
-Connect external messaging platforms to Synapse so you can chat with your agents from anywhere — not just inside Obsidian.
-
-### Telegram
-
-Turn a Telegram bot into a front-end for your Synapse agents. Messages you send in Telegram are processed by Synapse using your configured agent, model, skills, and MCP tools — then the response is sent back to the chat.
-
-#### 1. Create a Telegram bot
-
-1. Open Telegram and message [@BotFather](https://t.me/BotFather).
-2. Send `/newbot` and follow the prompts.
-3. Copy the **bot token**.
-
-#### 2. Configure in Synapse
-
-Go to **Settings → Synapse → Bots**:
-
-| Setting | Description |
-|---------|-------------|
-| **Bot ID** | Your bot's username — informational only |
-| **Bot token** | The token from BotFather (stored securely) |
-| **Allowed users** | Comma-separated Telegram user IDs (required) |
-| **Default agent** | Which agent responds to incoming messages |
-
-The bot silently ignores messages from anyone not in the allowed list. Use the `/new` command in Telegram to reset the session.
-
----
-
-## Inline edits
-
-### Editor context menu
-
-Right-click in any note → **Synapse** to access inline AI actions. The menu adapts based on whether you have text selected.
-
-If you prefer not to see the inline Synapse icon beside the active line, disable **Show inline Synapse icon** in **Settings → Synapse → Capabilities**.
-
-#### With text selected
-
-| Action | What happens |
-|--------|-------------|
-| **Edit** | Opens the Edit modal with tone, format, and length controls |
-| **Rewrite** | Improves clarity and readability |
-| **Proofread** | Fixes grammar, spelling, and punctuation |
-| **Use synonyms** | Swaps words for variety |
-| **Minor revise** | Polishes without changing meaning |
-| **Major revise** | Reworks structure and flow |
-| **Describe** | Explains what the text conveys |
-| **Answer** | Responds to a question in the text |
-| **Explain** | Breaks down in simple terms |
-| **Expand** | Adds detail and depth |
-| **Summarize** | Creates a concise summary |
-| **Chat with Synapse** | Opens chat with the selection as context |
-
-Quick actions **replace the selected text** in-place using the **Inline operations model**.
-
-#### Without a selection
-
-| Action | What happens |
-|--------|-------------|
-| **Edit the note** | Opens the Edit modal for the whole note |
-| **Structure and refine** | Restructures and improves the entire note |
-| **Chat with Synapse** | Opens the chat panel |
-
-### File and folder context menu
-
-Right-click a file or folder in the vault explorer → **Synapse**.
-
-- **Markdown files:** Edit the note, Structure and refine, Chat with Synapse.
-- **Folders:** New note (AI-generated), New summary note (summarizes all notes in the folder), Chat with Synapse.
-- **Images:** Insert extracted content below, Replace with extracted content, or Convert to mermaid diagram below — uses AI to pull text from images or generate a Mermaid diagram representing the image.
-
----
-
-## Settings reference
-
-### Settings → Synapse → Claude → Local agent endpoint
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Endpoint URL** | *(empty)* | Base URL of a Messages-API-speaking endpoint, e.g. `http://localhost:11434` for Ollama v0.14.0+. Blank = only Claude models are available — see [Local agent endpoint](#local-agent-endpoint) |
-| **Endpoint API key** | *(empty)* | API key sent to the endpoint. Ollama ignores the value but requires the header — leave blank to send `ollama` automatically |
-
-### Settings → Synapse → Tools
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Tools approval** | Ask | `Allow` (auto) or `Ask` (confirm each call) |
-
-### Chat panel toolbar (per-session, not in Settings)
-
-These are configured from the config toolbar inside the chat panel itself, not from **Settings → Synapse**:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Reasoning effort** | *(unset)* | Low / Medium / High / XHigh — when supported by the model |
-| **Search mode** | Basic | `Basic` (quick) or `Advanced` (full agent/model/skills/tools config) |
-
-Core settings reference: [Configuration](wiki/Configuration.md).
-
----
-
-## Using your vault with Claude Code or VS Code
-
-`_synapse/` is Synapse's vault-local customization folder. Synapse registers it with the
-Claude Agent SDK for its own sessions; it does **not** configure Claude Code, VS Code, or other
-developer tools. Configure those tools through their own documented project settings rather than
-symlinking `_synapse/` to `.github/`.
-
----
+Synapse began as an adaptation of **[obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick)** by
+[Alexandre Vieira](https://github.com/vieiraae), an Obsidian assistant built on the GitHub Copilot
+SDK. Synapse rebuilt it on the Claude Agent SDK, and it has grown in its own direction since, but
+the idea and the foundations came from Sidekick. Thank you, Alex.
 
 ## Contributing
 
-Working on the codebase (human or AI agent)? Start with [`specs/ARCHITECTURE.md`](specs/ARCHITECTURE.md)
-for a system overview and the module map, then the matching `specs/<module>.md` for the module
-you're changing. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev workflow.
+Working on the code, as a person or an AI agent? Start with
+[`specs/ARCHITECTURE.md`](specs/ARCHITECTURE.md), then read [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Feedback
 
-Found a bug or missing a feature? [Open an issue](https://github.com/NunoMotaRicardo/obsidian-synapse/issues) — all feedback is welcome.
+Found a bug or have an idea? [Open an issue](https://github.com/NunoMotaRicardo/obsidian-synapse/issues).
+All feedback is welcome.

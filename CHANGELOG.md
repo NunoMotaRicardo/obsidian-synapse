@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Starter kit:** `_synapse/` is now seeded with a working starter kit — the **Writer** agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills. Installed automatically on first run (when `_synapse/` doesn't exist) and by **Settings → Capabilities → Initialize**; existing files are never overwritten. Ask Synapse to "set up writing styles" to build styles from your own documents.
+
+### Changed
+
+- The self-improve hint now points the agent at the `synapse-config` skill.
+- The **Vision** feature agent defaults to **Auto**, and the Feature Map lists only agents found in `_synapse/agents/`.
+- README rewritten as a short introduction; detailed usage moved to the wiki, with new screenshots and banners.
+- **Attribution:** credited [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) by Alexandre Vieira, the Copilot SDK plugin Synapse was adapted from. `LICENSE.md` now covers the Apache-2.0 portions, with a new `NOTICE` file and a copy of the license in `LICENSES/Apache-2.0.txt`.
+
+### Removed
+
+- The sample agents (General, Vision, Zettelkasten, PARA, LYT), the `ascii-art` sample skill, and the `improve-synapse` skill that was seeded on every startup. Existing copies in your vault are left untouched.
+
 ## [1.6.0] - 2026-09-09
 
 A unified model-execution architecture: all models (Claude and local endpoints) now route through the Claude Agent SDK via the Anthropic Messages API. The legacy hand-rolled ReAct loop, the OpenAI-compatible provider matrix, and the batch-loop feature have been removed in favor of native Agent SDK capabilities.

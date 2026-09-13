@@ -18,11 +18,11 @@ OpenAI-compatible-only endpoints are not supported directly. See [Local models w
 
 ## Feature Map & Agents
 
-Choose the default agent for the chat panel, inline editor operations, semantic search, Telegram, and image reading. Synapse discovers custom agents in `_synapse/agents/`; their model bindings can also be edited here. See [Customization](Customization.md) for the file formats.
+Choose the default agent for the chat panel, inline editor operations, semantic search, Telegram, and image reading. The list shows the agents in `_synapse/agents/`, such as the starter kit's **Writer**. **Auto** (the default) uses Claude's default agent. Agent model bindings can also be edited here. See [Customization](Customization.md) for the file formats.
 
 ## Capabilities
 
-Use **Initialize** to create `_synapse/` with sample agents and skills. This tab also controls:
+**Initialize** installs the [starter kit](Starter-Kit.md) into `_synapse/`: the Writer agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills. It only adds missing files and never overwrites your changes. This tab also controls:
 
 - automatic working-directory updates as you switch notes;
 - automatically attaching images embedded in the active note and the image limit;
@@ -35,10 +35,11 @@ Use **Initialize** to create `_synapse/` with sample agents and skills. This tab
 
 ## Bots
 
-Configure and connect a Telegram bot with its identifier, token, allowed user IDs, and default agent. The token is stored securely. Only add trusted users: an allowed Telegram user can invoke unattended agent tool calls against the vault.
+Configure and connect a Telegram bot with its identifier, token, allowed user IDs, and default agent. The token is stored securely. Only add trusted users: an allowed Telegram user can invoke unattended agent tool calls against the vault. Setup steps: [Telegram bot](Telegram-Bot.md).
 
 ## Suggested reading
 
+- [Starter kit](Starter-Kit.md) — the bundled agent and skills
 - [Customization](Customization.md) — agents, skills, MCP servers, and vault settings
 - [Local models with Ollama](Local-Models-Ollama.md) — compatible endpoint setup
 - [Claude Code settings](https://code.claude.com/docs/en/settings) — settings supported by the Claude CLI

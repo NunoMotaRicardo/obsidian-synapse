@@ -19,3 +19,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Third-party code
+
+Synapse began as an adaptation of [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick),
+Copyright 2026 Alexandre Vieira, licensed under the Apache License, Version 2.0.
+Portions of Synapse are derived from that work and have since been substantially
+modified, including a migration from the GitHub Copilot SDK to the Claude Agent SDK.
+Those portions remain subject to the Apache License 2.0; a copy is provided in
+[LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt). See [NOTICE](NOTICE) for details.

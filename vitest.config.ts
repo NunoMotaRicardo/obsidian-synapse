@@ -1,6 +1,13 @@
 import {defineConfig} from 'vitest/config';
 
 export default defineConfig({
+	// Mirror esbuild's `.md` text loader so src/starterKit.ts imports resolve to strings.
+	plugins: [{
+		name: 'markdown-as-text',
+		transform(code: string, id: string) {
+			return id.endsWith('.md') ? {code: `export default ${JSON.stringify(code)};`, map: null} : undefined;
+		},
+	}],
 	test: {
 		environment: 'node',
 		include: ['test/**/*.test.ts'],

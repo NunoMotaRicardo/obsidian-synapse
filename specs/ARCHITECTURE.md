@@ -34,7 +34,7 @@ CLI process per query.
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
 | provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button) |
-| config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts` | First-run seeding, tool-approval persistence, display-only artifact scans, vault structure scan |
+| config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts`, `src/starterKit.ts` | Starter-kit install, tool-approval persistence, display-only artifact scans, vault structure scan |
 | chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
