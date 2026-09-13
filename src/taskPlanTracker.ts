@@ -250,7 +250,12 @@ export class TaskPlanTracker {
 		this.pendingTaskCreates = new Map(state.pendingTaskCreates);
 	}
 
-	/** Whether any plan state exists (used by restore logic to decide on a re-render). */
+	/**
+	 * Whether any plan state exists (used by restore logic to decide on a re-render).
+	 * Only checks `taskPlan` and `currentTodos` — a `TaskCreate` that has been stashed in
+	 * `pendingTaskCreates` but not yet matched with its result id is not yet a displayable
+	 * plan, so `hasPlan` stays false until the result arrives and the entry is adopted.
+	 */
 	get hasPlan(): boolean {
 		return this.taskPlan.size > 0 || this.currentTodos !== null;
 	}
