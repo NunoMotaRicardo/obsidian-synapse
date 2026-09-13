@@ -54,7 +54,7 @@ extensions in both wikilink and standard markdown syntaxes, then resolved throug
     their system messages explicitly instruct reading the path first.
   Text actions bind to the utility agent (`featureAgents.inline`, empty by default — no explicit
   `agent` is passed, so the SDK's own default applies), while image actions bind to the vision-capable
-  agent (`featureAgents.vision`, defaulting to `'Vision'`). There is no hard dependency on any
+  agent (`featureAgents.vision`, also empty by default). There is no hard dependency on any
   specific local model (Claude default).
 - The Edit modal offers task/tone/format/length/choices controls and N alternatives.
 

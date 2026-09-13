@@ -128,7 +128,7 @@ export class InputAreaController {
 
 		this.stateNoteEl = this.stateLineEl.createSpan({cls: 'synapse-state-note', text: 'No note'});
 		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
-		this.stateAgentEl = this.stateLineEl.createSpan({cls: 'synapse-state-agent', text: 'General'});
+		this.stateAgentEl = this.stateLineEl.createSpan({cls: 'synapse-state-agent', text: 'Auto'});
 		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
 		this.stateModelEl = this.stateLineEl.createSpan({cls: 'synapse-state-model', text: 'Default model'});
 
@@ -670,7 +670,7 @@ export class InputAreaController {
 		}
 
 		// Agent
-		let agentText = 'General';
+		let agentText = 'Auto';
 		if (this.selectedAgent) {
 			const found = this.view.view.agents.find(a => a.name === this.selectedAgent);
 			agentText = found?.name || this.selectedAgent;

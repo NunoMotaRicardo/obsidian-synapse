@@ -2,10 +2,13 @@
 
 **Getting started**
 - [Installation](Installation.md)
-- [Configuration](Configuration.md)
+- [Using Synapse](Using-Synapse.md)
+- [Starter kit](Starter-Kit.md)
 
-**Customization**
+**Setup**
+- [Configuration](Configuration.md)
 - [Customization](Customization.md)
+- [Telegram bot](Telegram-Bot.md)
 
 **Local models**
 - [Ollama](Local-Models-Ollama.md)

@@ -2,6 +2,7 @@ import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
+import {STARTER_FILES} from './starterKit';
 
 /** Module-level compiled regex for frontmatter detection. */
 export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -313,112 +314,20 @@ export function scanVaultStructure(
 // First-run seeding
 // ---------------------------------------------------------------------------
 
-export const IMPROVE_SYNAPSE_SKILL_NAME = 'improve-synapse';
-export const IMPROVE_SYNAPSE_SKILL_DESC = 'Comprehensive reference and guide for creating and modifying Synapse vault-local customization artifacts (agents and skills) in _synapse/';
-
-export const IMPROVE_SYNAPSE_SKILL_BODY = `# Improve Synapse Skill
-
-Use this skill when the user asks to create, modify, or manage Synapse customization artifacts (agents and skills) in your Obsidian vault.
-
-## Vault Folder Structure
-
-\`\`\`
-_synapse/
-  agents/*.md
-  skills/<name>/SKILL.md
-  .mcp.json
-\`\`\`
-
-## Naming Conventions
-
-- Filenames use **kebab-case** derived from the artifact name.
-  - Example: "Academic Research" becomes \`academic-research.md\` inside \`_synapse/agents/\`.
-- Skills live in a subfolder named after the skill: \`_synapse/skills/<kebab-name>/SKILL.md\`.
-
-## Permission Model
-
-- **Always ask the user for permission** before creating or modifying any artifact file.
-- State clearly what file you plan to create or modify, including its target path and a summary of contents.
-- For **deletion**, ask for explicit extra confirmation.
-
-## Artifact Types & Specifications
-
-### 1. Agents
-File location: \`_synapse/agents/<kebab-name>.md\`
-
-Frontmatter fields:
-- \`description\` (required) — short purpose summary shown in UI dropdowns
-- \`model\` (optional) — model ID or reference
-- \`tools\` (optional) — list of allowed tools (omit for all, empty list \`[]\` for none)
-- \`skills\` (optional) — list of allowed skill names (omit for all, empty list \`[]\` for none)
-
-Body: System instructions defining the agent's persona and behavior.
-
-Example:
-\`\`\`markdown
----
-description: Specialty agent for academic citation and research drafting.
-tools:
-  - Read
-  - Write
----
-
-# Academic Research Agent
-
-You are an expert academic research assistant. Always format citations in APA style and maintain an objective tone.
-\`\`\`
-
-### 2. Skills
-File location: \`_synapse/skills/<kebab-name>/SKILL.md\`
-
-Frontmatter fields:
-- \`name\` (required) — skill identifier (used for slash commands like \`/improve-synapse\`)
-- \`description\` (required) — short description of what this skill teaches the agent
-
-Body: Detailed procedures, reference material, workflows, or prompt instructions.
-
-Example:
-\`\`\`markdown
----
-name: apa-citations
-description: Teaches the agent to format references according to APA 7th edition guidelines.
----
-
-# APA Citation Formatting Skill
-
-When this skill is active or invoked, format all references and in-text citations following APA 7th edition standard rules.
-\`\`\`
-
-### 3. MCP Servers Configuration
-File location: \`_synapse/.mcp.json\`
-
-Contains standard Model Context Protocol (MCP) server configurations.
-
----
-
-## Workflow for Assisting the User
-
-1. **Understand Intent**: Clarify the desired behavior, persona, or capability the user wants to add or adjust.
-2. **Select Artifact Type**:
-   - Create an **Agent** if defining a full persistent persona with specific instruction sets or tool restrictions.
-   - Create a **Skill** if adding specific procedures, domain knowledge, workflows, or slash commands.
-3. **Propose Changes**: Show the proposed frontmatter and content to the user.
-4. **Write Artifact**: Once approved, write the file to the corresponding location under \`_synapse/\`.
-`;
-
 /**
- * Ensure the default `improve-synapse` skill exists in `_synapse/skills/improve-synapse/SKILL.md`.
- * If missing, seeds it using `writeSkill`.
+ * Install the plugin's starter kit (`STARTER_FILES`, `src/starterKit.ts`) into `_synapse/`.
+ * Never overwrites: a file that already exists — including one the user customized — is left
+ * alone, so this is safe to re-run. Returns the vault paths it created.
  */
-export async function ensureImproveSynapseSkill(app: App, synapseFolder = SYNAPSE_FOLDER): Promise<string | null> {
-	const skillPath = normalizePath(`${synapseFolder}/skills/${IMPROVE_SYNAPSE_SKILL_NAME}/SKILL.md`);
-	if (app.vault.getAbstractFileByPath(skillPath)) {
-		return null;
+export async function installStarterKit(app: App, synapseFolder = SYNAPSE_FOLDER): Promise<string[]> {
+	const created: string[] = [];
+	for (const file of STARTER_FILES) {
+		const filePath = normalizePath(`${synapseFolder}/${file.path}`);
+		if (app.vault.getAbstractFileByPath(filePath)) continue;
+		await ensureFolder(app, filePath.slice(0, filePath.lastIndexOf('/')));
+		await lockManager.withLock(filePath, () => app.vault.create(filePath, file.content));
+		created.push(filePath);
 	}
-	return await writeSkill(app, `${synapseFolder}/skills`, {
-		name: IMPROVE_SYNAPSE_SKILL_NAME,
-		description: IMPROVE_SYNAPSE_SKILL_DESC,
-		content: IMPROVE_SYNAPSE_SKILL_BODY,
-	});
+	return created;
 }
 

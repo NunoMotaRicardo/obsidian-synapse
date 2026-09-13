@@ -1,9 +1,8 @@
 import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
-import {scanAgents, ensureImproveSynapseSkill} from "./configWriter";
+import {scanAgents, installStarterKit} from "./configWriter";
 import {testLocalAgentEndpoint} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
-import {SAMPLE_SKILL_CONTENT, SAMPLE_GENERAL_AGENT, SAMPLE_VISION_AGENT, SAMPLE_ZETTELKASTEN_AGENT, SAMPLE_PARA_AGENT, SAMPLE_LYT_AGENT} from "./samples";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
 import {SYNAPSE_FOLDER} from "./vaultPaths";
@@ -150,7 +149,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 		inline: '',
 		search: '',
 		telegram: '',
-		vision: 'Vision',
+		vision: '',
 	},
 
 	reasoningEffort: '',
@@ -507,7 +506,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 			}
 
 			const vaultAgents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
-			const agentNamesSet = new Set<string>(['General', 'Vision', 'Zettelkasten', 'PARA', 'LYT', ...vaultAgents.map(a => a.name)]);
+			const agentNamesSet = new Set<string>(vaultAgents.map(a => a.name));
 			const agentOptions: Record<string, string> = {
 				'': 'Auto'
 			};
@@ -552,7 +551,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 			if (vaultAgents.length === 0) {
 				dynamicContainer.createEl('p', {
-					text: 'No custom agents found in vault. Shipped defaults are active.',
+					text: 'No agents found in the vault. Features use the default agent.',
 					cls: 'setting-item-description',
 				});
 			} else {
@@ -577,42 +576,15 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(panel)
 			.setName('Synapse folder')
-			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/`)
+			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/. Initialize installs the starter kit (Writer agent; synapse-config, obsidian, think, and writing-style skills) without overwriting existing files.`)
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const base = normalizePath(SYNAPSE_FOLDER);
-
-						for (const sub of ['', '/agents', '/skills', '/skills/ascii-art', '/skills/improve-synapse']) {
-							const dir = normalizePath(`${base}${sub}`);
-							if (!this.app.vault.getAbstractFileByPath(dir)) {
-								await this.app.vault.createFolder(dir);
-							}
-						}
-
-						const sampleAgents: Array<{name: string; content: string}> = [
-							{name: 'general.agent.md', content: SAMPLE_GENERAL_AGENT},
-							{name: 'vision.agent.md', content: SAMPLE_VISION_AGENT},
-							{name: 'zettelkasten.agent.md', content: SAMPLE_ZETTELKASTEN_AGENT},
-							{name: 'para.agent.md', content: SAMPLE_PARA_AGENT},
-							{name: 'lyt.agent.md', content: SAMPLE_LYT_AGENT},
-						];
-						for (const ag of sampleAgents) {
-							const p = normalizePath(`${base}/agents/${ag.name}`);
-							if (!this.app.vault.getAbstractFileByPath(p)) {
-								await this.app.vault.create(p, ag.content);
-							}
-						}
-
-						const skillPath = normalizePath(`${base}/skills/ascii-art/SKILL.md`);
-						if (!this.app.vault.getAbstractFileByPath(skillPath)) {
-							await this.app.vault.create(skillPath, SAMPLE_SKILL_CONTENT);
-						}
-
-						await ensureImproveSynapseSkill(this.app, base);
-
-						new Notice('Synapse folder initialized with sample agents and skills.');
+						const created = await installStarterKit(this.app);
+						new Notice(created.length
+							? `Synapse starter kit installed (${created.length} files).`
+							: 'Synapse starter kit is already installed — existing files were left unchanged.');
 					} catch (e) {
 						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}

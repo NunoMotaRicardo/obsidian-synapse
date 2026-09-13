@@ -64,37 +64,43 @@ mcpServers:            # optional: per-agent MCP server overrides
 You are a knowledge synthesis specialist. Your job is to...
 ```
 
-### Shipped default agents
+### Frontmatter fields
 
-When you click **Initialize** in Settings → Capabilities, Synapse seeds five default agents:
+| Field | Required | Description |
+|---|---|---|
+| `name` | Yes | Display name in the agent picker |
+| `description` | Yes | When to use the agent |
+| `model` | No | Preferred model, selected automatically with the agent |
+| `tools` | No | Allowed tools (omit for all) |
+| `disallowedTools` | No | Explicitly blocked tools |
+| `skills` | No | Skills the agent may use (omit for all, `[]` for none) |
+| `mcpServers` | No | Per-agent MCP server overrides |
 
-| File | Role |
-|---|---|
-| `general.md` | General-purpose assistant — default for chat, inline, search |
-| `vision.md` | Vision-capable assistant — default for image/diagram analysis |
-| `zettelkasten.md` | Atomic notes and dense cross-linking methodology |
-| `para.md` | Projects, Areas, Resources, Archives methodology |
-| `lyt.md` | Linking Your Thinking / Maps of Content methodology |
+### Starter agent
+
+The [starter kit](Starter-Kit.md) ships one agent, **Writer** (`writer.agent.md`), which drafts
+finished prose and loads the `writing-style` skill. Use it as a model for your own agents.
 
 ### Feature → Agent map
 
-In **Settings → Feature Map & Agents**, you can map each plugin feature to a named agent:
+In **Settings → Feature Map & Agents**, you can map each plugin feature to an agent from
+`_synapse/agents/`:
 
-| Feature | Default agent | What it does |
-|---|---|---|
-| `chat` | General | Main chat panel sessions |
-| `inline` | General | Editor context-menu text actions |
-| `search` | General | AI vault search |
-| `telegram` | General | Telegram bot sessions |
-| `vision` | Vision | Image extraction, vision actions |
+| Feature | What it does |
+|---|---|
+| `chat` | Main chat panel sessions |
+| `inline` | Editor context-menu text actions |
+| `search` | AI vault search |
+| `telegram` | Telegram bot sessions |
+| `vision` | Image extraction, vision actions |
 
-You can remap any feature to a different agent and bind a specific model to each agent,
-including a local model (e.g. `qwen3:8b` via Ollama).
+Every feature defaults to **Auto**, Claude's default agent. You can remap any feature and bind a
+specific model to each agent, including a local model (e.g. `qwen3:8b` via Ollama).
 
 ### Self-improve: creating agents from chat
 
 If you tell Synapse what kind of assistant behavior you want, it will offer to create or
-modify an agent for you. Example:
+modify an agent for you, using the starter kit's `synapse-config` skill. Example:
 
 > "Act more like a research synthesizer — focus on contrasting sources and flagging gaps"
 > → Synapse offers to update or create a `research.md` agent in `_synapse/agents/`
@@ -124,11 +130,11 @@ When synthesizing sources:
 
 ### Invocation
 
-Skills appear in the toolbar's skill selector. Enable them per session. The SDK passes enabled
-skill names via `Options.skills: string[]`; the CLI loads the matching `SKILL.md` and prepends
-its instructions to the agent's context.
+Every skill in `_synapse/skills/` is available in every session. The agent loads a skill's
+`SKILL.md` when a request matches its `description`, so write descriptions as triggers. An agent's
+`skills` frontmatter field limits which skills it may use.
 
-You can also invoke skills directly in chat with `/name`.
+You can also run a skill directly by typing `/name` in the chat input.
 
 ### Self-improve: creating skills from chat
 
@@ -170,6 +176,26 @@ Secrets go in the `env` block as environment variables — the standard SDK patt
 No UI prompt-based secret resolution.
 
 All configured MCP servers are always available; remove a server from the file to disable it.
+
+### Example: browser use with Playwright
+
+Let Synapse drive a real browser to navigate, click, fill forms, take screenshots, and extract
+content:
+
+1. Install the [Playwright MCP Bridge](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm)
+   extension in a Chromium browser (Edge, Chrome).
+2. Add the server to `_synapse/.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "playwright-extension": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--extension"]
+    }
+  }
+}
+```
 
 ---
 
@@ -297,11 +323,12 @@ Synapse recognizes customization intent and offers to create or modify `_synapse
 5. On confirmation, it writes the artifact using the correct SDK-native format.
 6. The next query picks up the new artifact automatically.
 
-**Starter skill — `improve-synapse`:**
+**Starter skill — `synapse-config`:**
 
-On first install, Synapse seeds `_synapse/skills/improve-synapse/SKILL.md`. Invoking it with
-`/improve-synapse` gives the active agent full context about the `_synapse/` format and its
-write capabilities.
+The [starter kit](Starter-Kit.md#synapse-config) includes `_synapse/skills/synapse-config/`. It
+holds the full `_synapse/` formats, the propose-then-write permission model, and the setup
+workflow that builds writing styles from your own documents. The self-improve hint points the
+agent to it. You can also run it directly with `/synapse-config`.
 
 ---
 
@@ -309,8 +336,10 @@ write capabilities.
 
 ### Initialize button (Settings → Capabilities)
 
-Creates the `_synapse/` folder structure and seeds the five default agents and the
-`improve-synapse` skill. Safe to run on an existing vault — it does not overwrite existing files.
+Installs the [starter kit](Starter-Kit.md): the Writer agent and the `synapse-config`,
+`obsidian`, `think`, and `writing-style` skills. It runs automatically the first time Synapse loads
+in a vault without `_synapse/`. It's safe to run on an existing vault: it only adds missing files
+and never overwrites.
 
 ### Feature → Agent map (Settings → Feature Map & Agents)
 
@@ -340,6 +369,7 @@ configurations between machines.
 
 ## 10. Suggested reading
 
+- [Starter kit](Starter-Kit.md) — the bundled agent and skills, and the setup workflow.
 - [`Local-Models-Ollama.md`](Local-Models-Ollama.md) — guide to configuring a local Ollama endpoint (including Ollama Cloud models and context-window tuning).
 - [`.docs/decisions/2026-06-29-native-sdk-customization-model.md`](../.docs/decisions/2026-06-29-native-sdk-customization-model.md) —
   decision record explaining why this native SDK model replaced the old Copilot-era custom loader.

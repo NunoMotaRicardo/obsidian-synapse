@@ -301,11 +301,10 @@ and built in `buildUI()` via `controller.build(parent)`.
   A compact `[Self-Improve]` detection block is appended to every session's system prompt
   (chat, search, and Telegram bot) via `buildSelfImproveHint()` in `sessionConfig.ts`.
   It teaches the active agent to recognize when the user expresses a customization preference
-  and propose creating or modifying a Synapse artifact (agent, prompt, or skill),
-  always asking permission before writing. The current agent name is delivered separately,
-  per-turn, by `buildCurrentAgentLine()` (see the stable-vs-volatile split above). The whole
-  self-improve hint (static body + current-agent line) is skipped when the user is already
-  using the `improve-synapse` prompt (no double-activation).
+  and propose creating or modifying a Synapse artifact (agent or skill), pointing it at the
+  starter-kit `synapse-config` skill for formats and the setup workflow, always asking
+  permission before writing. The current agent name is delivered separately, per-turn, by
+  `buildCurrentAgentLine()` (see the stable-vs-volatile split above).
   A compact `[Resilience]` block is appended to every session's system prompt (chat, search,
   and Telegram bot) via `buildResilienceHint()` in `sessionConfig.ts` — retry-once-then-ask
   guidance for failed writes/edits and confirm-before-acting guidance for referenced

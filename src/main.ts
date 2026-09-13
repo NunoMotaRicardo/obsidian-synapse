@@ -1,5 +1,5 @@
 import {MarkdownView, Notice, Plugin, addIcon} from 'obsidian';
-import {DEFAULT_SETTINGS, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
+import {DEFAULT_SETTINGS, SYNAPSE_FOLDER, SynapseSettings, SynapseSettingTab, SECURE_FIELDS, loadSecureField, saveSecureField} from "./settings";
 import {AgentService, type ModelInfo} from "./agentService";
 import {releasePluginSetTimeoutShim} from './sdkShims';
 import {fetchEndpointModels} from "./providerModels";
@@ -8,7 +8,7 @@ import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal
 import {TelegramBotService} from './bots';
 import {TASKS} from './tasks';
 import {EditModal} from './modals/editModal';
-import {ensureImproveSynapseSkill} from './configWriter';
+import {installStarterKit} from './configWriter';
 import {debugTrace} from './debug';
 import {getCmView} from './utils';
 import type {EditorView} from '@codemirror/view';
@@ -30,12 +30,12 @@ export default class SynapsePlugin extends Plugin {
 
 		await this.loadSettings();
 
-		// Seed improve-synapse skill on first run if missing
-		try {
-			await ensureImproveSynapseSkill(this.app);
-		} catch (e) {
-			console.error('Synapse: failed to seed improve-synapse skill', e);
-		}
+		// First run: seed `_synapse/` with the starter kit. Deferred to layout-ready so the vault
+		// index is loaded — before that an existing `_synapse/` can look absent.
+		this.app.workspace.onLayoutReady(() => {
+			if (this.app.vault.getAbstractFileByPath(SYNAPSE_FOLDER)) return;
+			installStarterKit(this.app).catch(e => console.error('Synapse: failed to install starter kit', e));
+		});
 
 		this.addSettingTab(new SynapseSettingTab(this.app, this));
 

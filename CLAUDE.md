@@ -1,8 +1,8 @@
 # Synapse (obsidian-synapse)
 
 Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
-triggers, Telegram bot). Forked from the unmaintained obsidian-sidekick; renamed to
-**Synapse** — see `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md`.
+triggers, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
+Claude Agent SDK architecture decision.
 
 ## Stack & build
 

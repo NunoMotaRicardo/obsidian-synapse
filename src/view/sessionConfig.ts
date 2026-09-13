@@ -426,6 +426,7 @@ export function buildSelfImproveHint(): string {
 		' (e.g. "always use APA citations" or "make the assistant more concise"),' +
 		' propose creating or modifying a Synapse customization artifact (agent or skill).' +
 		' Artifacts live in the _synapse/ folder (.md files for agents in _synapse/agents/, and SKILL.md files for skills in _synapse/skills/<name>/SKILL.md).' +
+		' Use the synapse-config skill for the file formats and the setup workflow.' +
 		' State what you would create (type and summary), then ask permission before writing.';
 }
 
@@ -440,8 +441,7 @@ export function buildCurrentAgentLine(agentName: string): string {
 /**
  * Build the per-turn volatile context block appended to the *user message* rather than
  * `systemPrompt.append` (issue #201): Active note, Working directory, the `[Vault Structure]`
- * block, and (when the current agent isn't `improve-synapse`, matching the self-improve hint's
- * own skip) the current agent. Each of these can change between turns of the same resumed
+ * block, and the current agent. Each of these can change between turns of the same resumed
  * conversation (switching notes, a `configDirty` rebuild changing cwd/agent, vault edits), so
  * baking them into the system prompt would invalidate the cached prefix — and everything
  * behind it in the conversation history — on every such change. Delivered here instead, a

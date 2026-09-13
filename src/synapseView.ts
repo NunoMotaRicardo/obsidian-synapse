@@ -486,7 +486,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				|| this.sessionList.find(s => s.sessionId === this.currentSessionId)?.summary;
 			if (raw) {
 				title = stripSessionTypePrefix(raw).trim();
-				// Strip leading agent prefix if present (e.g. "General: ", "improve-synapse: ")
+				// Strip leading agent prefix if present (e.g. "General: ", "Writer: ")
 				title = title.replace(/^[^:]+:\s*/, '').trim();
 			}
 		}
@@ -795,7 +795,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				vaultRoot: vaultBasePath.replace(/\\/g, '/'),
 				activeNotePath: this.app.workspace.getActiveFile()?.path,
 				workingDirectory: this.getWorkingDirectory().replace(/\\/g, '/'),
-				agentName: effectiveAgentName !== 'improve-synapse' ? (effectiveAgentName || 'Auto') : undefined,
+				agentName: effectiveAgentName || 'Auto',
 			});
 
 			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths) + turnContext;
@@ -1362,10 +1362,7 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		const effectiveAgentName = opts.selectedAgentName !== undefined ? opts.selectedAgentName : (this.plugin.settings.featureAgents?.chat || '');
 
-		// Inject self-improve detection hint unless the user is already using the improve-synapse agent
-		if (effectiveAgentName !== 'improve-synapse') {
-			systemContent += buildSelfImproveHint();
-		}
+		systemContent += buildSelfImproveHint();
 
 		const config: SessionConfig = {
 			model: opts.model,
