@@ -1,6 +1,7 @@
 import {execFileSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 const root = resolve(import.meta.dirname, '..');
@@ -28,17 +29,26 @@ describe('release verification', () => {
 	});
 
 	it('records deterministic hashes for the required release assets', () => {
-		const report = JSON.parse(runVerifier(['--tag', releaseVersion])) as {
-			tag: string;
-			sourceCommit: string | null;
-			assets: Array<{name: string; sha256: string; size: number}>;
-		};
-		expect(report.tag).toBe(releaseVersion);
-		expect(report.sourceCommit).toMatch(/^[a-f0-9]{40}$/);
-		expect(report.assets.map(({name}) => name)).toEqual(['main.js', 'manifest.json', 'styles.css']);
-		for (const asset of report.assets) {
-			expect(asset.sha256).toMatch(/^[a-f0-9]{64}$/);
-			expect(asset.size).toBeGreaterThan(0);
+		const assetsDir = mkdtempSync(join(tmpdir(), 'synapse-release-assets-'));
+		try {
+			writeFileSync(join(assetsDir, 'main.js'), 'release fixture\n');
+			copyFileSync(resolve(root, 'manifest.json'), join(assetsDir, 'manifest.json'));
+			copyFileSync(resolve(root, 'styles.css'), join(assetsDir, 'styles.css'));
+
+			const report = JSON.parse(runVerifier(['--tag', releaseVersion, '--assets-dir', assetsDir])) as {
+				tag: string;
+				sourceCommit: string | null;
+				assets: Array<{name: string; sha256: string; size: number}>;
+			};
+			expect(report.tag).toBe(releaseVersion);
+			expect(report.sourceCommit).toMatch(/^[a-f0-9]{40}$/);
+			expect(report.assets.map(({name}) => name)).toEqual(['main.js', 'manifest.json', 'styles.css']);
+			for (const asset of report.assets) {
+				expect(asset.sha256).toMatch(/^[a-f0-9]{64}$/);
+				expect(asset.size).toBeGreaterThan(0);
+			}
+		} finally {
+			rmSync(assetsDir, {recursive: true, force: true});
 		}
 	});
 
