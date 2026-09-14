@@ -1,7 +1,7 @@
 # Telegram bot
 
-Connect a Telegram bot and chat with your Synapse agents from anywhere. Messages you send the bot
-are handled by Synapse on your computer, with your agents, models, skills, and MCP tools, and the
+Connect a Telegram bot and chat with your Claude Synapse agents from anywhere. Messages you send the bot
+are handled by Claude Synapse on your computer, with your agents, models, skills, and MCP tools, and the
 reply comes back to the chat. Obsidian must be running for the bot to answer.
 
 ## 1. Create a bot
@@ -10,9 +10,9 @@ reply comes back to the chat. Obsidian must be running for the bot to answer.
 2. Send `/newbot` and follow the prompts.
 3. Copy the **bot token**.
 
-## 2. Connect it in Synapse
+## 2. Connect it in Claude Synapse
 
-Open **Settings → Synapse → Bots**:
+Open **Settings → Claude Synapse → Bots**:
 
 | Setting | Description |
 |---|---|
@@ -26,8 +26,10 @@ Telegram to start a fresh session.
 
 > [!WARNING]
 > Telegram sessions run **unattended**: nobody is at the keyboard to approve a tool call. Only add
-> user IDs you trust completely, and consider a bot agent whose `tools` list is restricted. See
-> [Customization](Customization.md#2-agents-_synapseagentsmd).
+> user IDs you trust completely, and consider a bot agent whose `tools` list is restricted. Telegram
+> photos and files are downloaded into `_synapse/bot-attachments` inside the vault. They may sync
+> with the vault and are **not automatically deleted**; remove them manually when no longer needed.
+> See [Customization](Customization.md#2-agents-_synapseagentsmd).
 
 ## Suggested reading
 

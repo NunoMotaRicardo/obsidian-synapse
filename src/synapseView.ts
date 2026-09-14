@@ -285,7 +285,7 @@ export class SynapseView extends ItemView implements ViewContext {
 		return SYNAPSE_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return 'Synapse';
+		return 'Claude Synapse';
 	}
 	getIcon(): string {
 		return SYNAPSE_ICON_ID;
@@ -433,7 +433,7 @@ export class SynapseView extends ItemView implements ViewContext {
 
 	buildTabBar(parent: HTMLElement): void {
 		this.tabBarEl = parent.createDiv({cls: 'synapse-tab-bar synapse-masthead'});
-		this.tabBarEl.createSpan({cls: 'synapse-masthead-wordmark', text: 'Synapse'});
+		this.tabBarEl.createSpan({cls: 'synapse-masthead-wordmark', text: 'Claude Synapse'});
 		this.tabBarEl.createSpan({cls: 'synapse-rule-dot'});
 		this.kickerEl = this.tabBarEl.createSpan({cls: 'synapse-masthead-kicker synapse-label-base', text: 'Chat'});
 		this.tabBarEl.createSpan({cls: 'synapse-masthead-spacer'});
@@ -578,7 +578,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			const base = normalizePath(SYNAPSE_FOLDER);
 			if (!filePath.startsWith(base + '/')) return;
 			if (this.configLoading || (Date.now() - this.configLoadedAt < 2_000)) return;
-			debugTrace(`Synapse: config file changed: ${filePath}`);
+			debugTrace(`Claude Synapse: config file changed: ${filePath}`);
 			if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
 			this.configRefreshTimer = window.setTimeout(() => {
 				this.configRefreshTimer = null;
@@ -899,9 +899,9 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		let reason: string | null = null;
 		if (turnLimit > 0 && this.runTurnCount > turnLimit) {
-			reason = `Synapse: run auto-cancelled — reached the turn limit of ${turnLimit.toLocaleString()} (Settings → Capabilities → Turn limit).`;
+			reason = `Claude Synapse: run auto-cancelled — reached the turn limit of ${turnLimit.toLocaleString()} (Settings → Capabilities → Turn limit).`;
 		} else if (tokenLimit > 0 && this.runUsage.totalTokens >= tokenLimit) {
-			reason = `Synapse: run auto-cancelled — reached the token budget of ${tokenLimit.toLocaleString()} tokens (Settings → Capabilities → Token budget).`;
+			reason = `Claude Synapse: run auto-cancelled — reached the token budget of ${tokenLimit.toLocaleString()} tokens (Settings → Capabilities → Token budget).`;
 		}
 		if (!reason) return;
 
@@ -1042,7 +1042,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				const {totalCostUsd} = event.data;
 				if (costThreshold > 0 && totalCostUsd >= costThreshold) {
 					this.renderer.addInfoMessage(
-						`Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
+						`Claude Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
 						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
 					);
 				}

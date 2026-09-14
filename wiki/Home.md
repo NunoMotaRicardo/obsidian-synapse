@@ -1,8 +1,10 @@
-# Synapse wiki
+# Claude Synapse wiki
 
-![Synapse](images/synapse_banner1.png)
+Claude Synapse is an independent Obsidian plugin, not affiliated with, endorsed by, or produced by Anthropic.
 
-**Claude, working inside your vault.** Synapse turns Obsidian into a workspace for the Claude
+![Claude Synapse](images/synapse_banner1.png)
+
+**Claude, working inside your vault.** Claude Synapse turns Obsidian into a workspace for the Claude
 agent. It reads and writes your notes, follows your links, runs tools, remembers every
 conversation, and learns to write in your voice.
 
@@ -16,7 +18,7 @@ models per conversation or bind one to each agent. See
 
 ## What makes it different
 
-- **A real agent, not a chat box.** Synapse is a native Claude Agent SDK plugin. It runs on the
+- **A real agent, not a chat box.** Claude Synapse is a native Claude Agent SDK plugin. It runs on the
   Claude CLI with the same agent loop as Claude Code: sessions, subagents, skills, MCP tools, and
   permission controls.
 - **Your model, your call.** Use your Claude subscription or an API key, Ollama's local or cloud
@@ -30,13 +32,13 @@ models per conversation or bind one to each agent. See
 - **Everywhere you work.** Use the side panel, right-click actions on text, notes, and folders,
   vault search, or a Telegram bot on your phone.
 
-New here? Start with **[Installation](Installation.md)**, then open Synapse and type *"Set up my
+New here? Start with **[Installation](Installation.md)**, then read the [Community directory disclosure](../COMMUNITY_DISCLOSURES.md), open Claude Synapse, and type *"Set up my
 writing styles."*
 
 ## Getting started
 
 - [Installation](Installation.md) — requirements (including the Claude CLI), BRAT or manual install, and first run
-- [Using Synapse](Using-Synapse.md) — the chat panel, search, sessions, and editor and file actions
+- [Using Claude Synapse](Using-Synapse.md) — the chat panel, search, sessions, and editor and file actions
 - [Starter kit](Starter-Kit.md) — the bundled Writer agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills
 
 ## Setup and customization
@@ -51,8 +53,8 @@ writing styles."*
 
 ## Credits
 
-Synapse began as an adaptation of [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) by
-[Alexandre Vieira](https://github.com/vieiraae), built on the GitHub Copilot SDK. Synapse rebuilt
+Claude Synapse began as an adaptation of [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) by
+[Alexandre Vieira](https://github.com/vieiraae), built on the GitHub Copilot SDK. Claude Synapse rebuilt
 it on the Claude Agent SDK.
 
 ## About this wiki

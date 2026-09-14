@@ -66,7 +66,7 @@ export interface ChatAttachment {
 	};
 }
 
-/** Selection info passed when "Chat with Synapse" is invoked on selected text. */
+/** Selection info passed when "Chat with Claude Synapse" is invoked on selected text. */
 export interface SelectionInfo {
 	filePath?: string;
 	fileName: string;

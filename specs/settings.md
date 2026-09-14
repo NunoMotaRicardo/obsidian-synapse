@@ -1,6 +1,6 @@
 # settings
 
-Source: `src/settings.ts` — settings interface, defaults, and the settings tab UI.
+Sources: `src/settings.ts` — settings interface, defaults, and the settings tab UI; `src/identityMigration.ts` — legacy secure local-storage migration.
 
 `SynapseSettingTab.display()` only builds the tab bar/panel scaffolding and dispatches
 to one private `render*Panel(panel: HTMLElement)` method per tab — `renderClaudePanel`,
@@ -8,6 +8,14 @@ to one private `render*Panel(panel: HTMLElement)` method per tab — `renderClau
 Per-tab state (e.g. `renderAuthFields`, the CLI-status renderer) lives as closures local to the
 owning `render*Panel` method, same pattern as `renderBotsPanel`'s `updateConnectButton` — none of
 it is shared across tabs, so nothing needed to become a class-level field.
+
+## Settings search exception
+
+Obsidian 1.13's non-empty `getSettingDefinitions()` replaces `display()` entirely. This tab's
+vault-dependent agent/model lists, asynchronous endpoint probe, and action buttons require the
+stateful multi-panel renderer, so a partial declarative list would hide working controls. The
+narrow `obsidianmd/settings-tab/prefer-setting-definitions` suppression for `src/settings.ts` is
+intentional until the complete UI can be migrated without changing behavior.
 
 ## Groups
 
@@ -70,6 +78,16 @@ it is read-only aside from the single probe request — no `saveSettings()`, no 
   `{type: 'message'}` → `{ok: true, messageId}` → "Endpoint reachable — Messages API responded."
 - **Timeout:** `requestUrl()` has no AbortSignal, so the probe is raced against a 10s
   `window.setTimeout` — a dead-but-accepting host can't hang the button.
+
+## Identity migration
+
+The public manifest ID changes from `synapse` to `claude-synapse`, but secure settings retain
+the same `synapse-secure-` logical keys. Obsidian's `App.loadLocalStorage()` and
+`App.saveLocalStorage()` are vault-scoped, so the migration never enumerates raw browser storage
+or accesses another vault's values. The historical `claude-brain-secure-` prefix is migrated
+through those vault-scoped APIs only. Plugin settings in `data.json` remain compatible when users
+move the old plugin folder to `plugins/claude-synapse/`; `_synapse/`, command IDs, view types,
+and CSS namespaces are stable.
 
 ## Invariants
 

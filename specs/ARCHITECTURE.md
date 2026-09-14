@@ -1,8 +1,11 @@
 # Architecture overview
 
-Synapse (`obsidian-synapse`) is a desktop Obsidian plugin that embeds a Claude-native AI
+Claude Synapse (`claude-synapse`) is a desktop Obsidian plugin that embeds a Claude-native AI
 assistant. It talks to the Claude CLI via `@anthropic-ai/claude-agent-sdk`, spawning a fresh
-CLI process per query.
+CLI process per query. Publication-facing accounts, network destinations, data flows, filesystem
+boundaries, subprocesses, and privacy disclosures are maintained in
+[`COMMUNITY_DISCLOSURES.md`](../COMMUNITY_DISCLOSURES.md); the security threat model is in
+[`SECURITY.md`](../SECURITY.md).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -71,8 +74,18 @@ dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
   that alters behavior.
 - Work items are tracked as GitHub issues on `NunoMotaRicardo/obsidian-synapse` (`gh issue
   list/view/create/edit`); `in-progress` marks active work.
-- Build: `npm run build` (tsc typecheck + esbuild bundle). Deploy/verify: see
-  `.claude/skills/deploy-test/`.
+- Build: `npm run build` (tsc typecheck + esbuild bundle). The tag-triggered release workflow
+  separates a read-only validation/build job (checkout credentials disabled) from a `contents: write`
+  publish job. Validation verifies the exact non-`v` tag against `package.json`, `manifest.json`,
+  `versions.json`, and `CHANGELOG.md`, then transfers only the three generated installer assets,
+  release notes, and SHA-256 report through a workflow artifact. Publication re-verifies that
+  downloaded artifact, creates a draft, compares its downloaded assets, preserves evidence, and
+  publishes. Per-tag concurrency and draft-ID tracking prevent one run from deleting another run's
+  release; a failed pre-publication run removes only the draft it created, never the tag. The
+  workflow resolves and peels the remote tag, compares it with the event and checked-out commits,
+  and requires it to be an ancestor of the fetched origin default branch before building, drafting,
+  or publishing. Maintainers must protect that branch and must never move or reuse release tags.
+  Reports are workflow artifacts, never fourth installer assets. Deploy/verify: see `.claude/skills/deploy-test/`.
 
 ## Testing
 
