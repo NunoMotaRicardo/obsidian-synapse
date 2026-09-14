@@ -92,6 +92,101 @@ Node/Electron use requires `isDesktopOnly: true`. Mobile support is not required
 | H4 | License scanning is ambiguous | `LICENSE.md` combines an MIT grant with a third-party Apache notice. GitHub reports the repository license as `NOASSERTION`/Other, although `NOTICE` and `LICENSES/Apache-2.0.txt` exist. Obsidian's scanner uses GitHub license detection and may warn. | Make the primary project license scanner-friendly without dropping derivative-work notices—for example, a conventional root `LICENSE` for the project license plus the existing `NOTICE` and `LICENSES/`. Confirm the legally correct layout before changing it. |
 | H5 | Default branch and release state were not aligned in the audit checkout | Local files report `0.1.0`; public `main` and release assets report `0.1.1`. | Start publication work from the current default branch and verify that the submitted manifest, tag, source tree, `versions.json`, and release asset are byte-for-byte coherent. |
 
+## Code lineage and similarity audit — 2026-09-14
+
+Two independent, read-only comparisons assessed the current Claude Synapse code against
+[`vieiraae/obsidian-sidekick`](https://github.com/vieiraae/obsidian-sidekick). The comparison used
+Claude Synapse merge commit [`46eb361`](https://github.com/NunoMotaRicardo/obsidian-synapse/commit/46eb361b65a82f9438ac9446f94fbb63cc455ddb)
+(PR #258; its head was `4179438`) and Sidekick commit
+[`256a43b`](https://github.com/vieiraae/obsidian-sidekick/commit/256a43bd08099e90c7ff1c65f1e343af51324a4d).
+Generated bundles, dependencies, lockfiles, binary assets, vendored licenses, and documentation were
+excluded from the quantitative source comparison.
+
+### Method and quantitative result
+
+The comparison inventoried same-path source/configuration files, checked exact Git blob hashes,
+compared ordered nonblank/non-comment line sequences with Python `difflib.SequenceMatcher`, and
+calculated lexical token-set Jaccard similarity. These metrics are heuristic: they describe static
+similarity and cannot by themselves prove authorship, copying, copyright status, or a legal
+relationship.
+
+| Measure | Result |
+|---|---:|
+| Claude Synapse files in scope | 51 |
+| Sidekick files in scope | 38 |
+| Same relative paths | 31 |
+| Same-path overlap, as a share of Claude Synapse scope | 60.8% |
+| Same-path overlap, as a share of Sidekick scope | 81.6% |
+| Overlapping TypeScript source paths | 24 |
+| Matched normalized TypeScript lines | 3,721 of 7,680 Synapse / 6,834 Sidekick lines |
+| Aggregate ordered-line similarity across shared TypeScript files | 51.3% |
+| Aggregate token-set Jaccard across shared TypeScript files | 54.8% |
+| Byte-identical source files | 3 |
+
+The byte-identical files are `src/bots/index.ts`, `src/bots/types.ts`, and `src/debug.ts`. Those
+small files are weak evidence by themselves. Stronger evidence comes from long exact blocks in
+nontrivial product behavior:
+
+| File | Ordered-line similarity | Token Jaccard | Representative overlap |
+|---|---:|---:|---|
+| `src/tasks.ts` | 98.9% | 99.1% | Lines 4–98 match at the compared revisions. |
+| `src/bots/telegramApi.ts` | 92.5% | 85.3% | Synapse lines 5–135 match Sidekick lines 5–135; another large block follows. |
+| `src/modals/vaultScopeModal.ts` | 92.3% | 97.5% | Synapse lines 172–292 match Sidekick lines 168–288. |
+| `src/modals/folderTreeModal.ts` | 88.8% | 98.1% | Multiple exact blocks, including lines 1–27 and 113–143. |
+| `src/modals/elicitationModal.ts` | 88.6% | 95.5% | Multiple exact blocks of interaction logic. |
+| `src/modals/editModal.ts` | 82.5% | 87.2% | Synapse and Sidekick lines 9–74 match. |
+| `src/bots/telegramBot.ts` | 74.6% | 70.4% | Long matching Telegram-processing blocks. |
+| `src/editor/editorMenu.ts` | 56.2% | 66.9% | Long matching editor-action blocks. |
+| `src/main.ts` | 56.4% | 50.7% | Shared lifecycle and feature-wiring blocks remain. |
+
+Common Obsidian tooling can explain high similarity in `tsconfig.json`, `esbuild.config.mjs`, and
+parts of the manifest. It does not explain the near-identical task abstraction or the long matching
+Telegram, modal, vault-scope, folder-tree, and editor-action implementations.
+
+### Repository-history evidence
+
+The earliest substantive Claude Synapse commit,
+[`960a2ac`](https://github.com/NunoMotaRicardo/obsidian-synapse/commit/960a2ace662d2251f9857f2413d3457f2cc61786),
+states that it contains the “Sidekick (obsidian-copilot fork) codebase at the start of the migration
+to the Claude Agent SDK.” Its initial tree contained `src/copilot.ts`, `src/sidekickView.ts`,
+`src/configLoader.ts`, `src/editor/ghostText.ts`, `src/triggerScheduler.ts`, Sidekick-branded starter
+content, and the same distinctive editor, modal, view, Telegram, task, and configuration module
+families.
+
+Commit [`6fef5ee`](https://github.com/NunoMotaRicardo/obsidian-synapse/commit/6fef5eea963d41bec3a303e0d50fb825bbc4cae8)
+then records the deliberate engine replacement: the GitHub Copilot SDK service was rewritten around
+the Claude Agent SDK, with a new session wrapper and changes across the view, bot, search, settings,
+and editor consumers. From the initial snapshot through `46eb361`, the repository records 196
+changed files, 28,243 insertions, and 15,980 deletions.
+
+The current architecture has substantial original divergence, including `src/agentService.ts`,
+`src/runtimeManager.ts`, `src/configWriter.ts`, `src/session.ts`, `src/permissions.ts`,
+`src/providerModels.ts`, `src/sdkShims.ts`, `src/vaultPaths.ts`, `src/taskPlanTracker.ts`, and the
+Claude-specific view/session implementation. Sidekick retains modules that have no same-path
+current Synapse equivalent, including `src/copilot.ts`, `src/configLoader.ts`,
+`src/sidekickView.ts`, `src/editor/ghostText.ts`, `src/triggerScheduler.ts`, and
+`src/view/triggersPanel.ts`.
+
+### Finding
+
+The evidence supports this factual description with high confidence:
+
+> Claude Synapse is a substantially re-engineered adaptation/continuation of Sidekick, rebuilt
+> around the Claude Agent SDK.
+
+The repositories are **not GitHub forks in the platform-metadata or shared-history sense**: both
+report `fork=false`, and the current repositories do not expose shared Git ancestry. However, the
+initial-commit statement, distinctive shared architecture, exact source blocks, and approximately
+51% aggregate shared-TypeScript line similarity contradict a factual claim that the relationship is
+solely conceptual inspiration with no inherited implementation.
+
+This is a technical provenance finding, not a legal conclusion and not by itself a determination of
+how Obsidian will apply its Community-directory fork policy. A more exact file-by-file lineage would
+require the full historical `NunoMotaRicardo/obsidian-copilot` repository referenced by the initial
+commit. Until Obsidian classifies the repository, the safest publication statement is the precise
+one above rather than either “GitHub fork” or “inspired solely by.” Existing Apache attribution must
+remain regardless of policy classification.
+
 ### Recommended quality improvements
 
 | # | Finding | Evidence | Improvement |
