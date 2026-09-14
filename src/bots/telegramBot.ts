@@ -195,7 +195,7 @@ export class TelegramBotService {
 
 		// Handle /start command
 		if (text === '/start') {
-			await this.sendReply(chatId, threadId, `Hello! I'm your Synapse assistant. Send me a message and I'll help you.`);
+			await this.sendReply(chatId, threadId, `Hello! I'm your Claude Synapse assistant. Send me a message and I'll help you.`);
 			return;
 		}
 
@@ -485,13 +485,13 @@ export class TelegramBotService {
 
 				const data = await this.api.downloadFile(fileInfo.file_path);
 
-				// Save to a vault-managed temporary location.
-				const tempDir = normalizePath(`${SYNAPSE_FOLDER}/bot-attachments`);
-				await ensureFolder(this.plugin.app, tempDir);
+				// Save to persistent vault-managed attachment storage; files are not cleaned up automatically.
+				const attachmentDir = normalizePath(`${SYNAPSE_FOLDER}/bot-attachments`);
+				await ensureFolder(this.plugin.app, attachmentDir);
 
 				// Sanitize filename
 				const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-				const filePath = normalizePath(`${tempDir}/${Date.now()}_${safeName}`);
+				const filePath = normalizePath(`${attachmentDir}/${Date.now()}_${safeName}`);
 				await this.plugin.app.vault.createBinary(filePath, data);
 
 				const basePath = this.getVaultBasePath();

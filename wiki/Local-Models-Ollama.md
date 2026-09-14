@@ -1,6 +1,6 @@
-# Using Ollama with Synapse
+# Using Ollama with Claude Synapse
 
-Ollama v0.14.0+ speaks the same **Anthropic Messages API** the Claude CLI itself uses. Synapse
+Ollama v0.14.0+ speaks the same **Anthropic Messages API** the Claude CLI itself uses. Claude Synapse
 points the CLI directly at your local Ollama daemon for local-model queries — the same real
 Claude Agent SDK a Claude session uses, with full skills, subagents, sessions, permission modes,
 and streaming (there is no separate, degraded local-model loop). See [Customization](Customization.md)
@@ -9,10 +9,10 @@ for how agents/skills/`.mcp.json` apply the same way regardless of which model i
 ## Configuring the local agent endpoint
 
 1. Install and run Ollama locally (`ollama serve`), or point at a remote/proxied instance you trust.
-2. Open Obsidian **Settings → Synapse → Claude → Local agent endpoint** and set:
+2. Open Obsidian **Settings → Claude Synapse → Claude → Local agent endpoint** and set:
    - **Endpoint URL** — `http://localhost:11434` (the default).
    - **Endpoint API key** — leave blank; Ollama ignores the value but requires the header, so
-     Synapse sends the literal `ollama` automatically.
+     Claude Synapse sends the literal `ollama` automatically.
 3. Click **Test** to verify the endpoint answers the Messages API. Once configured, Ollama's
    installed models appear automatically in the chat panel's model picker.
 4. Pull models with `ollama pull <model>` as usual — no restart needed, the model list refreshes
@@ -20,11 +20,11 @@ for how agents/skills/`.mcp.json` apply the same way regardless of which model i
 
 ---
 
-## Ollama Cloud Models with Synapse
+## Ollama Cloud Models with Claude Synapse
 
 Ollama offers **Cloud models**, which allow you to run large, high-performance models (such as `deepseek-v3.1:671b-cloud` or `gpt-oss:120b-cloud`) hosted on Ollama's datacenter-grade hardware. 
 
-Instead of adding a new preset or direct cloud API integration to the plugin, Synapse leverages your local Ollama daemon as a gateway. This means you can use both local and cloud-hosted models seamlessly without changing your plugin configuration or managing raw API keys in your settings.
+Instead of adding a new preset or direct cloud API integration to the plugin, Claude Synapse leverages your local Ollama daemon as a gateway. This means you can use both local and cloud-hosted models seamlessly without changing your plugin configuration or managing raw API keys in your settings.
 
 ---
 
@@ -66,8 +66,8 @@ ollama list
 
 You should see your cloud model (e.g., `deepseek-v3.1:671b-cloud`) in the list.
 
-### 4. Configure Synapse
-1. Open Obsidian and go to **Settings** → **Synapse** → **Claude** → **Local agent endpoint**.
+### 4. Configure Claude Synapse
+1. Open Obsidian and go to **Settings** → **Claude Synapse** → **Claude** → **Local agent endpoint**.
 2. Keep the default **Endpoint URL** (`http://localhost:11434`) and leave **Endpoint API key** blank.
 3. Click **Test** to verify the endpoint, then select the cloud model (e.g. `deepseek-v3.1:671b-cloud`) from the chat panel's model picker — it's fetched automatically from your local daemon's catalogue, the same as any other installed model.
 
@@ -81,11 +81,11 @@ You should see your cloud model (e.g., `deepseek-v3.1:671b-cloud`) in the list.
 
 ---
 
-# Configuring Ollama context window for Synapse
+# Configuring Ollama context window for Claude Synapse
 
 ## The problem
 
-The Claude CLI (spawned by `@anthropic-ai/claude-agent-sdk` under Synapse) sends a system prompt and built-in tool definitions with every request, consuming approximately **4,000 tokens** before your message is even included. Ollama defaults to a 4,096-token context window (`num_ctx`), which leaves almost no room for actual conversation.
+The Claude CLI (spawned by `@anthropic-ai/claude-agent-sdk` under Claude Synapse) sends a system prompt and built-in tool definitions with every request, consuming approximately **4,000 tokens** before your message is even included. Ollama defaults to a 4,096-token context window (`num_ctx`), which leaves almost no room for actual conversation.
 
 When the context is exhausted, Ollama returns an empty response or an error, causing the request to fail.
 
@@ -179,10 +179,10 @@ sudo systemctl restart ollama
 
 ## Complementary: SDK-side compaction
 
-Synapse natively leverages the Claude Agent SDK's auto-compaction feature (Infinite Sessions), which automatically compacts the conversation history when context utilization reaches ~80%. You can also configure the context-window tier or enable/disable this feature under the model settings menu in the chat view.
+Claude Synapse natively leverages the Claude Agent SDK's auto-compaction feature (Infinite Sessions), which automatically compacts the conversation history when context utilization reaches ~80%. You can also configure the context-window tier or enable/disable this feature under the model settings menu in the chat view.
 
 ## Troubleshooting
 
 - Verify the override took effect: `ps aux | grep '[l]lama-server' | grep -oE '\-c [0-9]+'` should show the new value.
 - Make sure you restarted the correct Ollama instance (the one in WSL, not the Windows tray app).
-- Start a **new chat** in Synapse (click `+`) — existing sessions cache the old config.
+- Start a **new chat** in Claude Synapse (click `+`) — existing sessions cache the old config.

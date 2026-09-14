@@ -19,7 +19,7 @@ describe('editorial restyle: masthead & composer (#208)', () => {
 	describe('AC-1 & AC-2: Masthead', () => {
 		it('replaces tab bar with .synapse-masthead in styles.css and synapseView.ts', () => {
 			expect(synapseViewSource).toContain('synapse-masthead');
-			expect(synapseViewSource).toContain("synapse-masthead-wordmark', text: 'Synapse'");
+			expect(synapseViewSource).toContain("synapse-masthead-wordmark', text: 'Claude Synapse'");
 			expect(synapseViewSource).toContain('synapse-rule-dot');
 			expect(synapseViewSource).toContain('synapse-masthead-kicker');
 			expect(synapseViewSource).toContain('synapse-masthead-spacer');

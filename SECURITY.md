@@ -1,74 +1,33 @@
 # Security policy
 
-Synapse embeds a Claude-native AI agent, running desktop-side, with access to your vault and to
-whatever the agent's configured tools let it do. That's the point of the plugin, but it means the
-capabilities below are worth understanding before you rely on them — none of them is a bug, and
-all of them are surprising if you find out about them by reading the source instead of here.
+Claude Synapse (`claude-synapse`) is a desktop Obsidian plugin that runs a Claude-native agent locally. It intentionally gives an agent access to a selected working directory and optional tools. Read the complete [Community directory disclosure](COMMUNITY_DISCLOSURES.md) before enabling integrations.
 
 ## Supported versions
 
-Synapse is distributed via BRAT (no plugin-store release yet). Only the latest tagged version
-receives fixes; there is no back-porting to older tags.
+The latest release on the repository's default distribution channels receives security fixes. Older versions are not guaranteed to receive backports. Claude Synapse is intended for Community-directory distribution; manual installation and development builds are also possible. See the [releases](https://github.com/NunoMotaRicardo/obsidian-synapse/releases) page for the current artifacts.
 
 ## Reporting a vulnerability
 
-Please do not open a public GitHub issue for a security vulnerability. Instead, use GitHub's
-private vulnerability reporting for this repository (**Security → Report a vulnerability** on the
-repo, or via [@NunoMotaRicardo](https://github.com/NunoMotaRicardo)'s profile if that flow isn't
-available to you). This lets us discuss and fix the issue before any details are public.
+Please do not open a public GitHub issue for a security vulnerability. Use GitHub's private vulnerability reporting for this repository (**Security → Report a vulnerability**), or contact [@NunoMotaRicardo](https://github.com/NunoMotaRicardo) if that flow is unavailable.
 
 ## Threat model
 
-### 1. The Telegram bot gives unattended, unapproved, full read/write agent access to your vault
+### Agent, CLI, and filesystem access
 
-`connect()` in `src/bots/telegramBot.ts` runs every Telegram-sourced message through the agent
-with `permissionMode: 'bypassPermissions'` and `allowDangerouslySkipPermissions: true`, with the
-agent's working directory set to the vault root. Concretely: **anyone whose numeric Telegram user
-ID is on your allowed-users list can read, create, edit, and delete files anywhere in your vault
-from their phone, with no per-action approval and no one at the keyboard to catch a mistake.**
-There is no scoping to a folder, no dry-run, no confirmation step for that channel.
+The Claude Agent SDK starts the separately installed `claude` CLI as a local subprocess for agent queries. The CLI and enabled tools may autonomously read content from any accessible file in the selected working directory, not only explicitly selected text. The normal directory is the vault, but the user can select another directory; MCP configuration, additional SDK locations, and explicitly selected attachments can grant access outside it. Providers and tools may read content from any of those accessible locations. API keys and bot tokens are kept out of `data.json`, but local-storage-backed values are not necessarily encrypted at rest.
 
-The mitigations are real: connecting requires a non-empty, comma-separated numeric allowlist
-(`TelegramBotService.connect()` refuses to connect otherwise), and the same allowlist is
-re-checked for every incoming message before it's processed (`TelegramBotService.handleMessage()`,
-which silently drops messages from senders not on the list). Keep that list short, keep the bot
-token secret, and treat everyone on the allowlist as someone you'd hand your vault to unsupervised
-— because that's what adding them does.
+### Tool approval and unattended execution
 
-This is a deliberate, standing exception to the **tool approval** setting described in #3 below:
-the Telegram bot does not honour `toolApproval`, on purpose (issue #151). The bot's
-remote-control use case has no equivalent opt-in to recover write access with if the global
-setting were flipped to `'ask'` for an unrelated reason, so it stays unconditionally
-`bypassPermissions`, gated only by the allowlist above.
+Tool approval defaults to **Ask**. **Allow** or a bypass/plan mode removes some or all approval prompts for the applicable desktop feature. The optional Telegram runner intentionally uses bypass permissions: every allowed Telegram user can cause agent reads, writes, command/tool calls, and MCP actions against the vault without someone at the keyboard. Telegram downloads persist under `_synapse/bot-attachments`, may sync with the vault, and are not automatically deleted. Keep the numeric allowlist short and treat its members as trusted operators.
 
-### 2. MCP servers are arbitrary local processes
+### Vault-local MCP configuration
 
-MCP server entries in a vault's `_synapse/.mcp.json` are started by spawning the configured
-command as a local child process (`McpBridge`'s server-start path in `src/mcpBridge.ts`). That's
-the intended MCP integration model, and it's implemented carefully — processes are spawned with
-`shell: false` (no shell-string injection) and killed as a full process tree on Windows via
-`taskkill /t` so nothing is left orphaned on disconnect. But it also means: **if you open a vault
-that was synced or shared from a source you don't trust, and that vault's `_synapse/.mcp.json`
-references an MCP server, Synapse will execute whatever that command is.** Vault-local MCP
-configuration is effectively arbitrary code execution scoped to whoever controls the vault's
-files, not just whoever controls Synapse's own settings.
+`_synapse/.mcp.json` is consumed by the Claude Agent SDK. Stdio entries can start configured local child processes; HTTP/SSE entries can contact their configured remote services. An MCP server is executable configuration, not harmless data: it can read/write outside the vault, run commands, or exfiltrate context. Review synced or shared vault configuration before opening it.
 
-### 3. `toolApproval: 'allow'` removes the approval step everywhere it applies
+### Provider privacy and network exposure
 
-The **tool approval** setting, when set to allow, flips the agent session used by editor actions
-(`src/editor/editorMenu.ts`), the edit modal (`src/modals/editModal.ts`), and the search panel
-(`src/view/searchPanel.ts`) to `bypassPermissions` — the search panel additionally sets
-`allowDangerouslySkipPermissions: true`. In that mode, none of those features stop to ask before
-the agent reads, writes, or deletes a file, or runs a tool. It's the same trade-off as the
-Telegram bot above (speed and flow over a human in the loop) but scoped to the desktop UI, where
-you're the one at the keyboard. Understand what you're turning off before you turn it on.
+Claude Synapse has no maintainer telemetry, analytics, crash reporting, or advertising. Depending on settings, prompts, selected vault context, attachments, tool results, and conversation content may be sent through the Claude CLI to Anthropic, to a user-configured Anthropic Messages API-compatible endpoint (including Ollama), to Telegram, or to an MCP service. Those providers control their own retention, logging, telemetry, and training policies. See [COMMUNITY_DISCLOSURES.md](COMMUNITY_DISCLOSURES.md) for destinations and data-flow details.
 
-## Other things worth knowing
+## Publication and attribution status
 
-- Provider API keys and bot tokens are kept out of `data.json` and stored via Obsidian's
-  local-storage-backed secure fields in `src/settings.ts` — but "secure" here means "not synced in
-  your vault's plaintext settings file," not encrypted at rest on disk.
-- Synapse talks to a system-installed `claude` CLI over JSON-RPC (via
-  `@anthropic-ai/claude-agent-sdk`) and, depending on your configured provider, to that provider's
-  API over the network. There is no other outbound network access from the plugin itself beyond
-  what MCP servers and the Telegram bot introduce as described above.
+The repository is open source and preserves Apache License 2.0 attribution for portions derived from [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) in [NOTICE](NOTICE) and [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt). This policy does not claim upstream or Obsidian approval. Submission is blocked until publicly verifiable written approval from the upstream maintainer is linked, or the documented unreachable/inactive-author policy process is satisfied and its evidence is linked.

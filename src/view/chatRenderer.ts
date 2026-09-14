@@ -118,7 +118,7 @@ export class ChatRendererController {
 
 		// Speaker label
 		const speakerCls = msg.role === 'user' ? 'you' : 'ai';
-		const speakerText = msg.role === 'user' ? 'You' : 'Synapse';
+		const speakerText = msg.role === 'user' ? 'You' : 'Claude Synapse';
 		const speakerId = `synapse-speaker-${msg.id || Date.now()}`;
 		this.view.chatContainer.createDiv({
 			cls: `synapse-speaker synapse-label-base ${speakerCls}`,
@@ -287,7 +287,7 @@ export class ChatRendererController {
 		const speakerId = `synapse-speaker-placeholder-${Date.now()}`;
 		this.view.chatContainer.createDiv({
 			cls: 'synapse-speaker synapse-label-base ai',
-			text: 'Synapse',
+			text: 'Claude Synapse',
 			attr: {id: speakerId},
 		});
 
@@ -804,7 +804,7 @@ export class ChatRendererController {
 		const welcome = this.view.chatContainer.createDiv({cls: 'synapse-welcome'});
 		const icon = welcome.createDiv({cls: 'synapse-welcome-icon'});
 		setIcon(icon, SYNAPSE_ICON_ID);
-		welcome.createEl('h3', {text: 'Synapse'});
+		welcome.createEl('h3', {text: 'Claude Synapse'});
 		welcome.createEl('p', {
 			text: 'Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!',
 			cls: 'synapse-welcome-desc',

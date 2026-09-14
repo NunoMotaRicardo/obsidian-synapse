@@ -14,7 +14,7 @@ import type {TextTask} from '../tasks';
 import type {SelectionInfo} from '../types';
 /** Format an error for display in a Notice. */
 function formatErrorForNotice(error: unknown): string {
-	return `Synapse: error — ${stripErrorPrefix(String(error))}`;
+	return `Claude Synapse: error — ${stripErrorPrefix(String(error))}`;
 }
 
 // Re-export for consumers that still import from editorMenu
@@ -33,7 +33,7 @@ export function registerEditorMenu(plugin: SynapsePlugin): void {
 			if (!cmView) return;
 
 			menu.addItem((item) => {
-				item.setTitle('Synapse')
+				item.setTitle('Claude Synapse')
 					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -80,7 +80,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 			if (abstractFile.extension !== 'md') return;
 
 			menu.addItem((item) => {
-				item.setTitle('Synapse')
+				item.setTitle('Claude Synapse')
 					.setIcon(SYNAPSE_ICON_ID);
 
 				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -105,7 +105,7 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 				submenu.addSeparator();
 
 				submenu.addItem((si) =>
-					si.setTitle('Chat with Synapse')
+					si.setTitle('Chat with Claude Synapse')
 						.setIcon(SYNAPSE_ICON_ID)
 						.onClick(async () => {
 							const leaf = plugin.app.workspace.getLeaf();
@@ -127,7 +127,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 /** Add Synapse submenu items for a folder in the vault tree. */
 function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): void {
 	menu.addItem((item) => {
-		item.setTitle('Synapse')
+		item.setTitle('Claude Synapse')
 			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -156,7 +156,7 @@ function buildFolderMenu(menu: Menu, plugin: SynapsePlugin, folder: TFolder): vo
 				.onClick(() => void openSynapseSearchWithScope(plugin, folder.path)),
 		);
 		submenu.addItem((si) =>
-			si.setTitle('Chat with Synapse')
+			si.setTitle('Chat with Claude Synapse')
 				.setIcon(SYNAPSE_ICON_ID)
 				.onClick(() => void openSynapseViewWithScope(plugin, folder.path)),
 		);
@@ -244,7 +244,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 
 		const newFile = await plugin.app.vault.create(filePath, content);
 		notice.hide();
-		new Notice(`Synapse: created "${basename}".`);
+		new Notice(`Claude Synapse: created "${basename}".`);
 
 		// Open the new note
 		const leaf = plugin.app.workspace.getLeaf();
@@ -327,7 +327,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 			content = JSON.stringify(parsed, null, '\t');
 		} catch (e) {
 			notice.hide();
-			new Notice(`Synapse: invalid canvas format \u2014 ${String(e)}`);
+			new Notice(`Claude Synapse: invalid canvas format \u2014 ${String(e)}`);
 			return;
 		}
 
@@ -338,7 +338,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 
 		const newFile = await plugin.app.vault.create(filePath, content);
 		notice.hide();
-		new Notice(`Synapse: created "${basename}".`);
+		new Notice(`Claude Synapse: created "${basename}".`);
 
 		// Open the new canvas
 		const leaf = plugin.app.workspace.getLeaf();
@@ -397,7 +397,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 
 		const newFile = await plugin.app.vault.create(filePath, result.trim());
 		notice.hide();
-		new Notice(`Synapse: created "${basename}".`);
+		new Notice(`Claude Synapse: created "${basename}".`);
 
 		const leaf = plugin.app.workspace.getLeaf();
 		await leaf.openFile(newFile);
@@ -422,7 +422,7 @@ export async function runSelectionAction(
 		return;
 	}
 
-	const notice = new Notice(`Synapse: ${action.label}…`, 0);
+	const notice = new Notice(`Claude Synapse: ${action.label}…`, 0);
 
 	try {
 		const result = await runActionPrompt(plugin, action, selectedText);
@@ -439,7 +439,7 @@ export async function runSelectionAction(
 			changes: {from: sel.from, to: sel.to, insert: result.trim()},
 		});
 		notice.hide();
-		new Notice(`Synapse: ${action.label} — done.`);
+		new Notice(`Claude Synapse: ${action.label} — done.`);
 	} catch (e) {
 		notice.hide();
 		console.error('Synapse: editor action error', e);
@@ -592,7 +592,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 /** Add Synapse submenu items for an image file in the vault tree. */
 function buildImageMenu(menu: Menu, plugin: SynapsePlugin, file: TFile): void {
 	menu.addItem((item) => {
-		item.setTitle('Synapse')
+		item.setTitle('Claude Synapse')
 			.setIcon(SYNAPSE_ICON_ID);
 
 		const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
@@ -718,7 +718,7 @@ function getActiveEditorAndEmbed(
 
 	const embed = embedHint ?? findImageEmbed(cmView, file);
 	if (!embed) {
-		new Notice(`Synapse: could not find a reference to "${file.name}" in the active note.`);
+		new Notice(`Claude Synapse: could not find a reference to "${file.name}" in the active note.`);
 		return null;
 	}
 	return {cmView, embed};
@@ -924,7 +924,7 @@ async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateT
 
 export {type SelectionInfo} from '../types';
 
-/** "Chat with Synapse" — open the sidebar view, optionally with prompt text and selection. */
+/** "Chat with Claude Synapse" — open the sidebar view, optionally with prompt text and selection. */
 export function openSynapseView(plugin: SynapsePlugin, promptText?: string, selection?: SelectionInfo): void {
 	void (async () => {
 		await plugin.activateView();
@@ -1022,7 +1022,7 @@ export function buildSynapseMenu(menu: Menu, plugin: SynapsePlugin, view: Editor
 	menu.addSeparator();
 
 	menu.addItem((item) =>
-		item.setTitle('Chat with Synapse')
+		item.setTitle('Chat with Claude Synapse')
 			.setIcon(SYNAPSE_ICON_ID)
 			.onClick(() => {
 				if (hasSelection) {

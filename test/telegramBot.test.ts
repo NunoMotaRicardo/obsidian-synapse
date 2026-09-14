@@ -515,7 +515,7 @@ describe('TelegramBotService commands', () => {
 		await flush();
 		expect(h.inlineChatCalls).toHaveLength(0);
 		expect(h.sentMessages).toHaveLength(1);
-		expect(h.sentMessages[0]?.text).toContain("I'm your Synapse assistant");
+		expect(h.sentMessages[0]?.text).toContain("I'm your Claude Synapse assistant");
 	});
 
 	it('/help answers with the canned usage text and never calls inlineChat', async () => {

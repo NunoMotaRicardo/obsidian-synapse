@@ -1,7 +1,7 @@
-# Synapse: AI Customization Guide
+# Claude Synapse: AI Customization Guide
 
-This guide explains the **vault-local customization model** of the Synapse Obsidian plugin.
-Synapse reads your customization artifacts from a `_synapse/` folder in your vault and passes
+This guide explains the **vault-local customization model** of the Claude Synapse Obsidian plugin.
+Claude Synapse reads your customization artifacts from a `_synapse/` folder in your vault and passes
 them to the Claude Agent SDK as a native plugin — so your agents, skills, and MCP tools are
 first-class SDK primitives, not a custom format layered on top.
 
@@ -14,7 +14,7 @@ first-class SDK primitives, not a custom format layered on top.
 
 ## 1. The `_synapse/` folder layout
 
-Synapse reads from a single hardcoded folder in your vault:
+Claude Synapse reads from a single hardcoded folder in your vault:
 
 ```text
 _synapse/                 ← registered as an SDK local plugin on every session
@@ -99,11 +99,11 @@ specific model to each agent, including a local model (e.g. `qwen3:8b` via Ollam
 
 ### Self-improve: creating agents from chat
 
-If you tell Synapse what kind of assistant behavior you want, it will offer to create or
+If you tell Claude Synapse what kind of assistant behavior you want, it will offer to create or
 modify an agent for you, using the starter kit's `synapse-config` skill. Example:
 
 > "Act more like a research synthesizer — focus on contrasting sources and flagging gaps"
-> → Synapse offers to update or create a `research.md` agent in `_synapse/agents/`
+> → Claude Synapse offers to update or create a `research.md` agent in `_synapse/agents/`
 
 After writing the agent file, the next query automatically picks it up — no reload needed.
 
@@ -139,7 +139,7 @@ You can also run a skill directly by typing `/name` in the chat input.
 ### Self-improve: creating skills from chat
 
 > "Always use the Harvard citation format in research notes"
-> → Synapse offers to create a `harvard-citations` skill
+> → Claude Synapse offers to create a `harvard-citations` skill
 
 ---
 
@@ -179,7 +179,7 @@ All configured MCP servers are always available; remove a server from the file t
 
 ### Example: browser use with Playwright
 
-Let Synapse drive a real browser to navigate, click, fill forms, take screenshots, and extract
+Let Claude Synapse drive a real browser to navigate, click, fill forms, take screenshots, and extract
 content:
 
 1. Install the [Playwright MCP Bridge](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm)
@@ -203,7 +203,7 @@ content:
 
 An optional JSON file carrying vault-scoped settings — permission rules, environment values, a
 default model override, and anything else the [Claude Code settings
-schema](https://code.claude.com/docs/en/settings#available-settings) supports. It's Synapse's own
+schema](https://code.claude.com/docs/en/settings#available-settings) supports. It's Claude Synapse's own
 settings layer, distinct from the plugin's own preferences (Settings tab, stored in Obsidian's
 `data.json`): this file follows the **vault**, not any one session's working directory, so it
 applies the same whether you're chatting from the vault root or with the working directory
@@ -228,7 +228,7 @@ Any field from the Claude Code settings schema is accepted — `permissions`, `e
 
 > **Don't put secrets here.** This file is plaintext inside your vault, so it travels with
 > everything that copies the vault — Obsidian Sync, git, a backup, a shared folder. API keys and
-> tokens belong in Synapse's own settings (Settings → **Synapse**), which keeps them out of the
+> tokens belong in Claude Synapse's own settings (Settings → **Claude Synapse**), which keeps them out of the
 > vault. Note also that `permissions.allow` rules in this file grant tools silently, with no
 > approval prompt — treat a vault someone else wrote this file for the same way you'd treat their
 > `.mcp.json`.
@@ -237,22 +237,22 @@ Any field from the Claude Code settings schema is accepted — `permissions`, `e
 
 - Read fresh (and re-parsed) on every query — editing the file takes effect on your very next
   message, no reload needed.
-- Applies to every Synapse-initiated query: the chat panel, editor actions, the edit modal,
+- Applies to every Claude Synapse-initiated query: the chat panel, editor actions, the edit modal,
   vault search, and the Telegram bot — regardless of which one started the
   query or what its working directory is scoped to.
 - **In-conversation tool approvals still work.** If you approve a tool mid-conversation, that
   approval is layered *on top of* this file rather than replacing it — a `permissions.deny` rule
   here still blocks that tool even after an unrelated approval elsewhere in the same chat.
-- **Synapse writes to this file in exactly one place: the tool-approval modal's "Always allow"
-  action** (see below). Outside of that, Synapse never creates or writes it — a vault with none,
+- **Claude Synapse writes to this file in exactly one place: the tool-approval modal's "Always allow"
+  action** (see below). Outside of that, Claude Synapse never creates or writes it — a vault with none,
   and that never clicks "Always allow", behaves exactly as if the feature didn't exist.
-- If the file exists but isn't valid JSON, Synapse shows a one-time notice and proceeds without
+- If the file exists but isn't valid JSON, Claude Synapse shows a one-time notice and proceeds without
   applying any of it — it won't repeatedly warn you on every message for the same broken file,
   and a syntax error here never blocks a query outright.
 
 ### Permanently allowing a tool ("Always allow")
 
-When Synapse's tool-approval modal opens (prompting you to approve a tool call), it offers three
+When Claude Synapse's tool-approval modal opens (prompting you to approve a tool call), it offers three
 actions:
 
 - **Allow** — grants the tool for the current conversation only. Nothing is written to disk; a new
@@ -275,22 +275,22 @@ whole file if you have nothing else in it worth keeping).
 
 This file is separate from — and takes priority over — the settings files the underlying Claude
 CLI itself understands (`~/.claude/settings.json`, a vault-root `.claude/settings.json`,
-`.claude/settings.local.json`). Synapse tells the CLI which of *those* to load:
+`.claude/settings.local.json`). Claude Synapse tells the CLI which of *those* to load:
 
 - Your **global** `~/.claude/settings.json` still applies, same as using the CLI directly.
 - A **vault-root** `.claude/settings.json` (and any vault-root `CLAUDE.md`) still applies too.
 - A **`.claude/settings.local.json`** — the CLI's own local, machine-specific override file,
-  normally meant to be gitignored per-project — is **never read** by Synapse. This closes a leak
+  normally meant to be gitignored per-project — is **never read** by Claude Synapse. This closes a leak
   from an earlier version of the plugin, which briefly wrote stale tool-approval grants into that
   file; those grants no longer apply even if the file still exists in your vault. There's no
-  setting to change this — if you rely on `.claude/settings.local.json` outside Synapse (e.g. with
-  the CLI directly), it still works there, it's just invisible to Synapse-initiated queries.
+  setting to change this — if you rely on `.claude/settings.local.json` outside Claude Synapse (e.g. with
+  the CLI directly), it still works there, it's just invisible to Claude Synapse-initiated queries.
 
 ---
 
 ## 6. How the SDK discovers your customizations
 
-On every chat session or query, Synapse passes `_synapse/` to the Claude Agent SDK as a
+On every chat session or query, Claude Synapse passes `_synapse/` to the Claude Agent SDK as a
 **local plugin**:
 
 ```typescript
@@ -309,14 +309,14 @@ No explicit reload is needed after writing a new artifact — the next query pic
 
 ## 7. The self-improve workflow
 
-The self-improve system lets you teach Synapse how to behave using plain language in chat.
-Synapse recognizes customization intent and offers to create or modify `_synapse/` artifacts.
+The self-improve system lets you teach Claude Synapse how to behave using plain language in chat.
+Claude Synapse recognizes customization intent and offers to create or modify `_synapse/` artifacts.
 
 **How it works:**
 
 1. You express a preference or behavioral wish in chat (e.g. "use Zettelkasten format for
    research notes" or "be more concise in your replies").
-2. Synapse's system prompt includes a `[Self-Improve]` detection block that teaches the
+2. Claude Synapse's system prompt includes a `[Self-Improve]` detection block that teaches the
    active agent to recognize this intent.
 3. The agent proposes creating or modifying an agent or skill artifact.
 4. The agent always asks for confirmation before writing to `_synapse/`.
@@ -337,7 +337,7 @@ agent to it. You can also run it directly with `/synapse-config`.
 ### Initialize button (Settings → Capabilities)
 
 Installs the [starter kit](Starter-Kit.md): the Writer agent and the `synapse-config`,
-`obsidian`, `think`, and `writing-style` skills. It runs automatically the first time Synapse loads
+`obsidian`, `think`, and `writing-style` skills. It runs automatically the first time Claude Synapse loads
 in a vault without `_synapse/`. It's safe to run on an existing vault: it only adds missing files
 and never overwrites.
 

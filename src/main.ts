@@ -11,6 +11,7 @@ import {EditModal} from './modals/editModal';
 import {installStarterKit} from './configWriter';
 import {debugTrace} from './debug';
 import {getCmView} from './utils';
+import {migrateClaudeBrainStorage} from './identityMigration';
 import type {EditorView} from '@codemirror/view';
 
 export const SYNAPSE_ICON_ID = 'synapse-icon';
@@ -43,7 +44,7 @@ export default class SynapsePlugin extends Plugin {
 		this.registerView(SYNAPSE_VIEW_TYPE, (leaf) => new SynapseView(leaf, this));
 
 		// Ribbon icon to open view
-		this.addRibbonIcon(SYNAPSE_ICON_ID, 'Open Synapse', () => void this.activateView());
+		this.addRibbonIcon(SYNAPSE_ICON_ID, 'Open Claude Synapse', () => void this.activateView());
 
 		// Command to open view
 		this.addCommand({
@@ -59,7 +60,7 @@ export default class SynapsePlugin extends Plugin {
 			return getCmView(mdView) ?? null;
 		};
 
-		// Command: Chat with Synapse (send selection or open chat)
+		// Command: Chat with Claude Synapse (send selection or open chat)
 		this.addCommand({
 			id: 'chat-with-synapse',
 			name: 'Chat with selection',
@@ -201,7 +202,7 @@ export default class SynapsePlugin extends Plugin {
 			} : {}),
 			claudeLocation: s.claudeLocation,
 			onVersionInfo: (info) => {
-				debugTrace(`Synapse: Claude CLI v${info.version} at ${info.path}`);
+				debugTrace(`Claude Synapse: Claude CLI v${info.version} at ${info.path}`);
 			},
 		});
 		// Model discovery (#220): when a local agent endpoint is configured, fetch its
@@ -221,47 +222,8 @@ export default class SynapsePlugin extends Plugin {
 		this.notifySidebarModelsChanged(this.agentService.getModels());
 	}
 
-	/**
-	 * Migrate Obsidian vault-scoped localStorage keys from old 'claude-brain-secure-'
-	 * and 'claude-brain-mcp-input-' prefixes to 'synapse-secure-' and 'synapse-mcp-input-'.
-	 */
 	private migrateLocalStorageKeys(): void {
-		const migrations: [string, string][] = [
-			['claude-brain-secure-', 'synapse-secure-'],
-			['claude-brain-mcp-input-', 'synapse-mcp-input-'],
-		];
-		// Obsidian's app.loadLocalStorage/saveLocalStorage adds a vault-specific
-		// prefix internally, so we use those APIs for correct namespacing.
-		for (const [oldPrefix, newPrefix] of migrations) {
-			// Known key suffixes for secure fields
-			const suffixes = oldPrefix.includes('secure')
-				? ['anthropicApiKey', 'telegramBotToken']
-				: [];
-
-			if (oldPrefix.includes('mcp-input')) {
-				for (let i = 0; i < window.localStorage.length; i++) {
-					const fullKey = window.localStorage.key(i);
-					if (fullKey && fullKey.includes(':' + oldPrefix)) {
-						const suffix = fullKey.substring(fullKey.indexOf(':' + oldPrefix) + 1 + oldPrefix.length);
-						if (suffix) {
-							suffixes.push(suffix);
-						}
-					}
-				}
-			}
-
-			for (const suffix of suffixes) {
-				// loadLocalStorage() is typed `any | null` in obsidian.d.ts; narrow to unknown.
-				const oldValue: unknown = this.app.loadLocalStorage(oldPrefix + suffix);
-				if (oldValue != null) {
-					const existing: unknown = this.app.loadLocalStorage(newPrefix + suffix);
-					if (existing == null) {
-						this.app.saveLocalStorage(newPrefix + suffix, oldValue);
-					}
-					this.app.saveLocalStorage(oldPrefix + suffix, null);
-				}
-			}
-		}
+		migrateClaudeBrainStorage(this.app);
 	}
 
 	onunload() {

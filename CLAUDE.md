@@ -1,4 +1,4 @@
-# Synapse (obsidian-synapse)
+# Claude Synapse (claude-synapse)
 
 Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
 triggers, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
@@ -36,7 +36,7 @@ and contributors can find them without digging. Rules:
 - Verify changes with the **deploy-test** skill: build → copy artifacts to
   the test vault (`$env:SYNAPSE_DEV_VAULT` or default
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`) → reload
-  (`obsidian plugin:reload id=synapse`). That vault is the user's real vault — deploy only
+  (`obsidian plugin:reload id=claude-synapse`). That vault is the user's real vault — deploy only
   builds that compile clean.
 - Releases (BRAT): the **release** skill. Tag = `manifest.json` version, no `v` prefix.
 

@@ -787,7 +787,7 @@ interactive accent.
 ### Masthead
 
 The panel header replaces the previous tab bar with an editorial page head:
-- **Serif wordmark:** "Synapse" set in the bundled serif (`--synapse-font-serif`), 19px, font-weight 500, letter-spacing -0.01em.
+- **Serif wordmark:** "Claude Synapse" set in the bundled serif (`--synapse-font-serif`), 19px, font-weight 500, letter-spacing -0.01em.
 - **Accent dot (`.synapse-rule-dot`):** 5px circular block in `var(--interactive-accent)`.
 - **Kicker (`.synapse-masthead-kicker`):** uppercase letterspaced context line (10px, font-weight 500, letter-spacing 0.14em, faint text). Displays current tab name ("Chat" or "Search"), or the active conversation title (with session prefix stripped) once one exists. Updates live via `updateMastheadKicker()`.
 - **Text tabs (`.synapse-masthead-tab`):** uppercase letterspaced text buttons (10.5px, letter-spacing 0.1em) on the right side of the masthead. The active tab is underlined with `--synapse-rule-heavy`.
