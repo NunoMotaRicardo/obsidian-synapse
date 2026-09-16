@@ -8,8 +8,9 @@ discovers agents, skills, and MCP servers natively from the
 **The live self-improve write path is the CLI agent's own `Write`/`Edit` tools operating on
 `_synapse/`** — an agent asked to propose an artifact writes it directly (guided by the
 self-improve hint, see the bottom of this spec). This module does not sit between the agent and
-the vault. Its write surface is `writeSkill` (first-run seeding) and
-`persistToolApprovalRules` (issue #197), both with live in-tree callers.
+the vault. Its live write paths are `installStarterKit` (copies bundled Markdown verbatim)
+and `persistToolApprovalRules`. `writeSkill` is an exported create-only helper with no current
+production caller; it is exercised by unit tests.
 
 ## Plugin registration
 
@@ -24,7 +25,8 @@ The SDK discovers:
 - `_synapse/skills/*/SKILL.md` → SDK skills (invocable via `/name`)
 - `_synapse/.mcp.json` → SDK MCP server configs
 
-No `skipMcpDiscovery` — MCP goes fully native. No custom parsing.
+No `skipMcpDiscovery` is set by the plugin. MCP discovery is SDK-native; the display scans
+use a lightweight YAML-like frontmatter parser, not a complete YAML implementation.
 The CLI spawns fresh per query, re-discovers artifacts each time — no explicit reload needed.
 
 ## Folder layout
@@ -51,9 +53,8 @@ config load.
 
 ## Config writer (`src/configWriter.ts`)
 
-Writes for the module's two live write paths (first-run seeding and tool-approval persistence)
-plus the shared serialization helpers they rest on. All output is
-SDK-native format.
+Starter-kit installation copies the text in `STARTER_FILES`; approval persistence writes JSON.
+The separate `writeSkill` helper serializes frontmatter and creates a new skill file.
 
 ### Functions
 
@@ -67,9 +68,12 @@ SDK-native format.
 
 ### Rules
 
-- Agent files use `.md` extension (not `.agent.md`) — SDK convention.
-- Agent frontmatter: SDK `AgentDefinition` fields only (`description`, `model`, `tools`,
-  `skills`, `disallowedTools`, `mcpServers`). No custom fields.
+- Display scans accept immediate `.md` files, including `.agent.md` (the bundled Writer uses
+  this suffix). An explicit `name` takes precedence; otherwise `.agent` is removed from the basename.
+- Agent scans expose `name`, `description`, `model`, `tools`, `skills`, trimmed body instructions,
+  and `filePath`. Tools/skills accept comma-separated scalars or indented lists; absent fields
+  become `undefined`, explicitly empty fields become `[]`. Other frontmatter fields are not
+  mapped into `AgentConfig`; SDK discovery remains independent of this display scan.
 - `parseFrontmatter()` and `FM_RE` live in this module; `parseFrontmatter` is the reader behind
   the scans (`scanAgents`, `scanSkills`).
 - No MCP config mutation — `.mcp.json` is user-edited.
@@ -89,11 +93,11 @@ literal backslash that sits immediately before an escaped quote; the single alte
 pass consumes each two-character escape token (`\\` or `\"`) atomically, left to right, which is
 the correct inverse of how `serializeFmField` produced it.
 
-Write and read are round-trip inverses for every string value the live writer (`writeSkill`, via
-`serializeFmField`/`buildMarkdown`) produces — a skill's `description` field exercises the same
-quoting/escaping paths (colons, quotes, backslashes, whitespace padding) the round-trip unit
-tests assert. Every write starts from an in-memory value rather than a re-serialized read, so
-an un-escape bug could not compound across cycles.
+The escaping rules are inverse for the supported single-line scalar values written by
+`writeSkill` via `serializeFmField`/`buildMarkdown`. Embedded newlines are quoted but remain
+literal newlines; the line-oriented parser does not provide general multiline YAML round trips.
+Round-trip unit tests exercise single-line descriptions containing colons, quotes,
+backslashes, and whitespace padding. `writeSkill` serializes its supplied in-memory configuration; starter-kit files bypass this serializer.
 
 **Existing on-disk artifacts are not migrated.** A doubled backslash already written by a prior
 code path is indistinguishable from a legitimate single escaped backslash — there is no reliable
@@ -122,17 +126,21 @@ which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent gra
   is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
   via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write here changes
   that mtime, so the next query picks up the change with no separate invalidation.
-- A malformed existing file throws (surfaced by the caller as a `Notice`) rather than being
+- Invalid JSON throws (surfaced by the caller as a `Notice`) rather than being
   silently overwritten; the caller's in-memory, conversation-scoped grant already returned to the
   SDK is unaffected by a persistence failure.
+- Valid JSON that is not an object is treated as an empty settings object; malformed
+  `permissions` containers are replaced and non-string allow entries are filtered out.
 - No removal UI — removing a persisted grant means hand-editing `_synapse/settings.json`'s
   `permissions.allow` list; documented in `wiki/Customization.md`.
 
 ## Vault structure scanner
 
-`scanVaultStructure(app)` scans top-level vault folders (name only, no counts), excluding
-`_synapse`, `.obsidian`, `.trash`, and dot-prefixed folders. Used by `buildVaultContextBlock()`
-in `sessionConfig.ts` for the system prompt.
+`scanVaultStructure(app)` returns alphabetically sorted `{name, fileCount}` entries for top-level
+folders. `fileCount` is the immediate child count (including folders), not a recursive note count.
+It excludes `_synapse`, `app.vault.configDir`, `.trash`, and dot-prefixed folders.
+`buildVaultContextBlock()` in `sessionConfig.ts` uses only the names and sends the resulting
+context in the per-turn user message, not the system prompt.
 
 ## Self-improve hint
 

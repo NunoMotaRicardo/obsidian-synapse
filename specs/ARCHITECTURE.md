@@ -28,7 +28,7 @@ boundaries, subprocesses, and privacy disclosures are maintained in
 
 | Module | Spec | Source | Responsibility |
 |---|---|---|---|
-| main | — | `src/main.ts` | Plugin lifecycle, service wiring, commands, ribbon |
+| main | [main.md](main.md) | `src/main.ts`, `src/tasks.ts`, `src/identityMigration.ts` | Plugin lifecycle, service wiring, commands, ribbon, legacy storage migration |
 | agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, one-shot chat helpers, model layer, delegation MCP server, re-export surface |
 | agent-service (SDK shims) | [agent-service.md](agent-service.md) | `src/sdkShims.ts` | Electron compatibility shims: top-level `setMaxListeners` wrapper + reload-safe refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`abortWithSetTimeoutShim`) |
 | agent-service (permissions) | [agent-service.md](agent-service.md) | `src/permissions.ts` | Session-scoped permission updates, in-memory grant settings, vault settings layer merge |
@@ -64,13 +64,13 @@ dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
 - `@anthropic-ai/claude-agent-sdk` — the plugin's sole SDK dependency. Spawns the `claude` CLI
   per query; no persistent connection.
 - CLI resolution: settings override → global npm → platform-specific paths (see runtime-manager).
-- Session options: `effort`, `model`, `systemPrompt`, `agents`, `agent`, `plugins`, `skills`,
+- Session options: `effort`, `model`, `systemPrompt`, `agent`, `plugins`, `skills`,
   `mcpServers`, `canUseTool`, `onElicitation`.
 - Local SDK type reference: `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`.
 
 ## Process
 
-- Specs in `specs/` describe target behavior per module. Update the spec in the same change
+- Specs in `specs/` describe implemented behavior per module. Update the spec in the same change
   that alters behavior.
 - Work items are tracked as GitHub issues on `NunoMotaRicardo/obsidian-synapse` (`gh issue
   list/view/create/edit`); `in-progress` marks active work.
@@ -85,7 +85,7 @@ dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
   workflow resolves and peels the remote tag, compares it with the event and checked-out commits,
   and requires it to be an ancestor of the fetched origin default branch before building, drafting,
   or publishing. Maintainers must protect that branch and must never move or reuse release tags.
-  Reports are workflow artifacts, never fourth installer assets. Deploy/verify: see `.claude/skills/deploy-test/`.
+  Reports are workflow artifacts, never fourth installer assets. Deploy/verify: see `.claude/skills/synapse-deploy-test/`.
 
 ## Testing
 
@@ -95,4 +95,3 @@ An automated unit test suite is configured using Vitest.
 - Environment: Node.js (via Vitest config)
 - Mocking: Global mock for the Obsidian API is configured in `test/setup.ts` to mock native interfaces not available under Node.
 - Files: Unit tests live in the `test/` directory, named `<module>.test.ts`.
-

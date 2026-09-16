@@ -10,7 +10,10 @@ Source: `src/runtimeManager.ts` — `resolveDefaultCliPath`, `getCliVersion`, `c
   `{path, source}` where `source` is one of `'global-npm' | 'os-links' | 'sdk-fallback'`.
 - `ResolvedCliPath = {path: string; source: CliPathSource; version?: string}`
   where `CliPathSource` also includes `'settings'` (used by `AgentService` when an explicit `claudeLocation` is set).
-- `getCliVersion(binaryPath: string): Promise<{version: string}>` — validates `binaryPath` (absolute, allowlisted extension) then spawns `binaryPath --version` to extract the CLI version.
+- `getCliVersion(binaryPath: string): Promise<{version: string}>` — validates `binaryPath` (absolute, allowlisted extension) then attempts `execFile(binaryPath, ['--version'], {timeout: 5000})` to extract the CLI version.
+  Invalid paths, execution errors, and empty output resolve to `{version: 'unknown'}` rather
+  than rejecting. Absolute extensionless, `.exe`, and `.cmd` paths pass this version-probe
+  validation; auto-resolution does not select `.cmd` wrappers.
 - `cleanEnv(): Record<string, string>` — allowlisted subprocess environment.
 - `BUNDLED_SDK_VERSION: string` — the `@anthropic-ai/claude-agent-sdk` version this build was bundled
   against. Baked in at build time by `esbuild.config.mjs` (reads the installed package's
@@ -67,7 +70,7 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
 
 ## Invariants
 
-- runtime-manager touches only `node:*` builtins and Obsidian APIs — it does **not** import `@anthropic-ai/claude-agent-sdk`. `AgentService` stays the sole SDK consumer and calls into runtime-manager for path resolution.
+- runtime-manager uses `node:*` builtins through `nodeRequire` and dynamic-import fallbacks — it does **not** import `@anthropic-ai/claude-agent-sdk`. `AgentService` stays the sole SDK consumer and calls into runtime-manager for path resolution.
 - Desktop-only: Node builtins are lazy-loaded so the module stays import-safe on mobile.
 
 ## Non-goals

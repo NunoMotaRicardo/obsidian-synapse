@@ -5,14 +5,16 @@
 - `telegramApi.ts`: thin long-polling Bot API client (no webhooks), exposing `TelegramApiLike` —
   the structural seam interface `TelegramBotService` depends on (its constructor takes an adapter
   factory defaulting to the real `TelegramApi`; see Testing below). `telegramBot.ts`: bridge.
-- Allowlist of numeric user ids; messages from others are silently ignored.
+- A non-empty comma-separated user-ID allowlist is required before connecting. Sender IDs
+  are matched as strings against the trimmed entries; unknown or absent senders are silently ignored.
 - One session per chat/topic; `/new` resets, `/help` explains. Reset and disconnect hard-abort an in-flight SDK query through `abortWithSetTimeoutShim()` so Electron's numeric timer handles cannot trigger the SDK's `.unref()` teardown error.
 - Attachments (photo/document/audio/video) are downloaded to `_synapse/bot-attachments/` through
   the Vault API (`ensureFolder()` and `createBinary()`), then their absolute paths are inlined into
   the outgoing prompt text. The Agent SDK's `Options` has no top-level attachments field — a real
   path the model can `Read` itself is the only way the content reaches it, the same mechanism the
   chat view's `buildPrompt()` uses.
-- Uses the default agent from settings; skills and MCP servers are discovered natively via the
+- Uses `featureAgents.telegram` before the legacy `telegramDefaultAgent`, resolves its model
+  binding against available models, and passes non-empty global reasoning effort as `effort`; skills and MCP servers are discovered natively via the
   `_synapse/` plugin registration (passed in session `Options.plugins`).
 - The `[Self-Improve]` detection block (its static body only — `buildSelfImproveHint()`) is
   appended to the bot's system prompt; `buildBotSessionConfig()` keeps only session-stable content
@@ -52,6 +54,6 @@ the one bonus test exercising the default factory runs the real `TelegramApi` ag
 `requestUrl` transport. The suite covers routing (allowlist enforcement, `/start`, `/help`, `/new`
 commands, no-content drops), per-chat/topic queue serialization, reply splitting at the 4096 limit
 plus the "can't parse" retry-as-plain-text path, typing-loop shutdown, attachment download
-(largest-photo selection, filename sanitization, vault-adapter write), session resume identity, and
+(largest-photo selection, filename sanitization, Vault API binary creation), session resume identity, and
 poll-loop backoff. Time-dependent paths (typing interval, poll backoff) run under fake timers.
 

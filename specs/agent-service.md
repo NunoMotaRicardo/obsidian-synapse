@@ -15,7 +15,7 @@ issue #236) — the architecture rule is about the *SDK import surface*, not one
 | `src/agentService.ts` | `AgentService` class, the model layer (`ModelInfo`, `mapSdkModel`, `matchModelTiers`, `FALLBACK_CLAUDE_MODELS`, `INLINE_CHAT_PROFILES`), the delegation MCP server, and the re-export block |
 | `src/sdkShims.ts` | The Electron compatibility shims — the top-level `setMaxListeners` wrapper and refcounted `setTimeout` shim (both installed at module load; `agentService.ts` imports this module statically so load order is unchanged). The timer shim covers view disposal that can precede `Plugin.onunload()` as well as direct Agent SDK query-controller aborts; `Plugin.onunload()` releases its lifecycle reference after the SDK process-cleanup grace window. |
 | `src/permissions.ts` | `sessionScopePermissions`, `permissionRuleToString`, `extractAllowRuleStrings`, `buildInMemoryPermissionSettings`, `mergeVaultSettingsLayer` |
-| `src/session.ts` | The `Session` class, `SessionEvents`/`SessionEvent`/`SessionEventHandler`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`) |
+| `src/session.ts` | The `Session` class and `SessionEvents`/`SessionEvent`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`) |
 | `src/taskPlanTracker.ts` | `TodoItem`, `TaskPlan`, the four plan-parse functions, and the `TaskPlanTracker` class — see `chat-view.md` for the tracker's consumers |
 
 All of these are re-exported from `agentService.ts`, so consumers (and tests) keep importing
@@ -55,8 +55,8 @@ Key query option fields used:
 | `pathToClaudeCodeExecutable` | `resolveCliPath()` → `runtimeManager.resolveDefaultCliPath()` |
 | `env` | `buildEnv()` — allowlisted env via `cleanEnv()`, plus `ANTHROPIC_API_KEY` for API-key auth |
 | `model` | toolbar / agent frontmatter / settings |
-| `reasoningEffort` | settings + toolbar reasoning menu (brain icon), only when the model supports it |
-| `infiniteSessions` | settings `infiniteSessionsEnabled`; omitted when `true` (SDK default) |
+| `effort` | Non-empty `settings.reasoningEffort`, passed by chat and Telegram configuration; chat toolbar validates supported levels |
+| `infiniteSessions` | Not passed by the implementation; `infiniteSessionsEnabled` currently affects only persisted UI state |
 | `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
 | `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: ...}`) |
 | `skills` | enabled skill names array from toolbar |
@@ -68,24 +68,28 @@ Key query option fields used:
 
 `AgentService.resolveCliPath()` returns a `ResolvedCliPath`:
 
-1. If `claudeLocation` is set in settings, use it as-is (`source: 'settings'`).
+1. If `claudeLocation` is non-empty after trimming, use the trimmed path (`source: 'settings'`).
 2. Otherwise, call `resolveDefaultCliPath()` from `runtimeManager.ts` which walks the chain:
    global npm → OS links (WinGet, `~/.claude/bin/`) → SDK fallback.
 
-Either way, `fs.access(resolved.path)` is called (in `ensureConnected()`, ahead of every query) to
-surface a clear "binary not found" error before attempting to spawn.
+`ensureConnected()` checks API-key presence and `fs.access(resolved.path)` before marking the
+service connected. Subsequent calls return immediately while connected; this is not a binary
+existence check on every query or a provider-authentication probe. `createQuery()` assumes
+readiness was established by its caller (normally `createSession()`).
 
-On first resolution, `getCliVersion(resolved.path)` is called fire-and-forget (try/catch — must
+During that readiness check, `getCliVersion(resolved.path)` is called fire-and-forget (try/catch — must
 not block). On success, the `onVersionInfo` constructor callback (`VersionInfoCallback`) is fired
-with `{version, path}`. `main.ts` wires this to a console log; the settings UI
+with `{version, path}`. `main.ts` wires this to a debug-only trace; the settings UI
 reads `getVersionInfo()` to display the resolved binary path, source, and version.
 
 ## Auth model
 
 Dual auth via `buildEnv()`:
 
-- **Subscription (OAuth):** The `claude` CLI manages its own OAuth login. No `ANTHROPIC_API_KEY`
-  is set; the CLI picks up the stored credential automatically.
+- **Subscription (OAuth):** The plugin does not inject a settings API key. `cleanEnv()` still
+  inherits allowlisted environment variables, including `ANTHROPIC_` and `CLAUDE_` prefixes, so
+  existing process credentials or endpoint variables are not explicitly cleared. The CLI
+  manages its own OAuth login.
 - **API key:** `ANTHROPIC_API_KEY` is injected into the subprocess env from `auth.apiKey`.
 
 ## Session-scoped permission updates
@@ -295,9 +299,10 @@ the local agent endpoint is configured.
 Both `chat()` and `inlineChat()` use `sendAndWaitWithAbort(fn, options)`:
 
 - Wraps execution with an `AbortController`.
-- Optional `timeoutMs` — sets a timer that calls `controller.abort()` on expiry.
+- Optional `timeoutMs` — sets a timer that aborts through `abortWithSetTimeoutShim()` on expiry.
+  This is cooperative cancellation, not a `Promise.race` that forcibly ends arbitrary work.
 - Optional external `signal` — forwarded to the controller.
-- On any error (timeout, connection, CLI failure), `controller.abort()` is called before
+- On any error (timeout, connection, CLI failure), the controller is shim-aborted before
   rethrowing. A `timedOut` flag distinguishes timeout aborts from user-initiated ones.
 
 `Session.abort()` is used by `synapseView.ts` to cancel in-flight work when a `session.error`
@@ -470,8 +475,8 @@ keep working. `ModelInfo.capabilities.limits` stays typed as an open
 outright, because `synapseView.ts` reads a `limits['vision'].max_prompt_images` shape that some
 future provider mapping may populate.
 `isVision`/`supportsTools`/`capabilities.supports.vision`/`capabilities.supports.tools` remain part
-of the `ModelInfo` shape (local providers in `providerModels.ts` still populate them from real
-heuristics/`/api/show` capability lists) — `mapSdkModel()` does not set them.
+of the `ModelInfo` shape but neither `mapSdkModel()` nor endpoint discovery sets them.
+`providerModels.ts` maps only catalogue `id` and `name`; there is no `/api/show` capability probe.
 
 `resolvedModel` (the canonical wire id an alias row resolves to, e.g. `'sonnet'` ->
 `'claude-sonnet-5'`) is used as an additional exact-match tier in `matchModelTiers()`
@@ -619,7 +624,7 @@ the `TodoItem` type) normalizes an `input` value into a todo list:
 **`TaskCreate`/`TaskUpdate`** — no single call carries the full plan, so the plan state is
 accumulated in a `TaskPlan` (`Map<string, TodoItem>`, keyed by the server-assigned task id)
 across calls in a turn. Since issue #236 the accumulation lives on the DOM-free
-`TaskPlanTracker` (`src/taskPlanTracker.ts`, re-exported through this module; see
+`TaskPlanTracker` (`src/taskPlanTracker.ts`, imported directly by its consumers; see
 `chat-view.md` for how the foreground and background paths delegate to it) — "the tracker"
 below:
 
@@ -654,7 +659,8 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
 - **`isLocalModel(modelId?: string): boolean`** decides per-model whether a query routes through
   the endpoint. Checked in order: an id `sdkModels` reports as SDK-known → `false`; a
   `/^claude-/i`-shaped id → `false` (protects a genuine Claude id even before a `fetchModels()`
-  call has populated `sdkModels`, since real SDK ids are always `claude-*`); `customModels`
+  call has populated `sdkModels`). SDK aliases such as `sonnet` are protected by SDK
+  catalogue membership after discovery, not by the prefix guard; `customModels`
   membership (populated from `fetchEndpointModels()`'s `/v1/models` catalogue,
   `setCustomModels()`) → `true`; otherwise, when the endpoint is configured, an unknown id also
   → `true` (the CLI surfaces a bad id as a query error) — `false` when no endpoint is configured
@@ -701,16 +707,18 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
 
 ### Wiring `inlineChat()`'s callers
 
-Of `inlineChat()`'s call sites, only two genuinely request tools on the SDK path:
-`searchPanel.ts`'s basic and advanced search (`tools: ['Read', 'Glob', 'Grep']`, `maxTurns: 40`).
-The rest pass no tools deliberately — one-shot generation actions (create note, create canvas,
-edit selection) that have no tools — and are untouched.
+`inlineChat()` passes caller/profile tool options through to the SDK. Search exposes only
+`Read`/`Glob`/`Grep` (20 turns basic, 40 advanced); image reads expose `Read`; Mermaid
+conversion and Telegram retain the default toolset. Text transforms expose no tools.
+There is no generic `app`/`canUseTool` check that strips tools from a query when the callback
+is absent; safety depends on the caller's explicit tool and permission options.
 
 **Named profiles (issue #230, audit rec 5):** the recurring call shapes are named presets in
 `INLINE_CHAT_PROFILES` (`agentService.ts`), passed via `inlineChat()`'s options-bag-only
 `profile?: InlineChatProfileName` field (not part of `SessionConfig`, not part of the SDK's
-`Options`). A profile fills in **only** the fields the caller left unset — a caller's explicit
-value always wins (same convention as `routeQueryOptions()`), so e.g. the editor's
+`Options`). Tools, turn count, and permission mode use nullish fallback to the profile.
+`allowDangerouslySkipPermissions` is combined with logical OR, so an explicit `false` cannot
+override a profile's `true`. Other explicit values win (same convention as `routeQueryOptions()`), so e.g. the editor's
 `permissionMode: toolApproval === 'allow' ? 'bypassPermissions' : 'default'` keeps overriding
 its profile:
 
@@ -816,18 +824,24 @@ free of `obsidian` imports.
 
 ## Public API surface
 
-The `localAgentEndpoint` field is private — consumed only internally by `buildEnv()`. Callers
-that need the local agent endpoint config (e.g. `buildSessionConfig`) receive it directly from
-`main.ts`.
+The `localAgentEndpoint` field is private and supplies environment routing, model
+classification, and delegation catalogue discovery. Callers query
+`isLocalAgentEndpointConfigured()`; chat session configuration does not receive a separate
+endpoint object from `main.ts`.
+
+`stop()` resets connection state to `disconnected`. It does not own a query registry or abort
+in-flight work; query owners must cancel/disconnect their own sessions.
 
 ## Invariants
 
 - No other module imports `@anthropic-ai/claude-agent-sdk` directly (modals import types only
   — keep type-only imports acceptable, but even those should come via `AgentService` re-exports).
 - `AgentService` constructor never throws — errors surface on first query attempt.
-- All public methods that invoke `query()` call `resolveCliPath()` first; a missing binary
-  is surfaced as an error before any SDK interaction.
-- `sendAndWaitWithAbort()` is used for every query — never call `query()` raw.
+- `chat()`, `inlineChat()`, `fetchModels()`, and `createSession()` establish readiness through
+  `ensureConnected()`. `createQuery()` is a synchronous low-level path that assumes readiness.
+- `chat()`, `inlineChat()`, and `Session.send()` use `sendAndWaitWithAbort()`. Model discovery
+  uses `startup()` and closes its query handle separately. Direct `createQuery()` callers
+  are responsible for consuming and cancelling the stream.
 - No fabricated cost estimates: dollar cost is only ever reported when the SDK itself provides
   `total_cost_usd` (the terminal `result` message). No per-turn/per-token cost approximation is
   computed or displayed anywhere in the plugin.

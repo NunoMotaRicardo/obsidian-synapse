@@ -64,7 +64,7 @@ export function getSynapseSettingsPath(app: App): string
 
 ## Integration points
 
-- **`bots/telegramBot.ts`** — `TelegramBot.getVaultBasePath()` (private method) delegates to
+- **`bots/telegramBot.ts`** — `TelegramBotService.getVaultBasePath()` (private method) delegates to
   `getVaultBasePath(this.plugin.app)`; `buildBotSessionConfig()` uses `getSynapsePluginConfig`;
   `SYNAPSE_FOLDER` for the persistent bot-attachments folder and agent/skill scan paths.
 - **`editor/editorMenu.ts`** — `getAbsolutePath` (image context-menu actions) and `getVaultPlugins`
@@ -72,15 +72,15 @@ export function getSynapseSettingsPath(app: App): string
 - **`modals/editModal.ts`** — `plugins` field of its `inlineChat()` call uses
   `getSynapsePluginConfig`.
 - **`synapseView.ts`** — `SynapseView.getVaultBasePath()` (public method, called throughout
-  `view/*` prototype-extension modules) delegates to `getVaultBasePath(this.app)`;
+  `view/*` controllers) delegates to `getVaultBasePath(this.app)`;
   `buildSessionConfig()` uses `getSynapsePluginConfig`; `SYNAPSE_FOLDER` for agent/skill
   scan paths.
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 - **`agentService.ts`** — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
   to locate `_synapse/settings.json`, the sole caller of that function.
 
-**Not touched:** `configWriter.ts`. Its `_synapse` occurrences are seeded skill prose
-(user-facing markdown describing the folder layout to the vault reader), not path derivation.
+`configWriter.ts` imports `SYNAPSE_FOLDER` via the settings re-export for approval persistence,
+folder exclusion, and starter-kit installation.
 Similarly, the self-improve system-prompt text in `view/sessionConfig.ts` describes the folder
 layout to a human/model reader rather than resolving a path.
 
@@ -89,9 +89,8 @@ layout to a human/model reader rather than resolving a path.
 - `getVaultBasePath` never returns `undefined`/`null` — either a non-empty `string`, or it throws.
 - `SYNAPSE_FOLDER` is defined exactly once (`vaultPaths.ts`); every other module imports it
   rather than redefining.
-- No inline `_synapse` string literal or `basePath` cast remains outside `vaultPaths.ts`,
-  `configWriter.ts` (prose only — see Integration points), and prose comments/user-facing copy
-  elsewhere.
+- Shared vault-root and SDK-plugin path derivation belongs here. Vault-relative writes in
+  `configWriter.ts` use `SYNAPSE_FOLDER`; user-facing prose can describe `_synapse/` literally.
 
 `src/vaultPaths.ts` exports `SYNAPSE_FOLDER`, `getVaultBasePath`,
 `getSynapsePluginConfig`, and `getSynapseSettingsPath`. Unit tests in

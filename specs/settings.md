@@ -20,7 +20,7 @@ intentional until the complete UI can be migrated without changing behavior.
 ## Groups
 
 - **Claude** — authentication mode (Claude subscription OAuth or Anthropic API key), API key input (stored securely), CLI location override, resolved binary and version status display, and **Test** button.
-- **Feature Map & Agents** — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), listing the agents discovered in `_synapse/agents/` (plus **Auto**, the empty value = SDK default agent), and per-agent model bindings. Model bindings for vault agents (`.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
+- **Feature Map & Agents** — feature-to-agent map (`featureAgents`: `chat`, `inline`, `search`, `telegram`, `vision`), listing the agents discovered in `_synapse/agents/` (plus **Auto**, the empty value = SDK default agent), and per-agent model bindings. Model bindings for vault agents (`.md`, including `.agent.md`) can be edited directly in Settings, modifying the file frontmatter with zero local availability hard dependency.
 - **Capabilities** — Hardcoded `_synapse/` folder (exported as `SYNAPSE_FOLDER` constant) and **Initialize** button (installs the starter kit via `installStarterKit()` — see `config-writer.md` "Starter kit"; never overwrites). Also includes editor integration toggles (auto-update working directory, auto-include note images, and max note images), and, under "Chat run guardrails", opt-in interactive-loop thresholds: **Turn limit** (`loopTurnThreshold`), **Token budget** (`loopTokenThreshold`), and **Dollar budget (USD)** (`loopCostThresholdUsd`) — all default to `0` (off). See `chat-view.md` "Loop turn/cost thresholds" for enforcement details.
 - **Tools** — tools approval mode (`ask` or `allow`).
 - **Bots** — Telegram bot configuration (bot identifier, token stored via secure storage, allowed user IDs, and default agent picker).
@@ -29,7 +29,9 @@ intentional until the complete UI can be migrated without changing behavior.
 
 The **Feature Map & Agents** tab maps each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent from `_synapse/agents/`. Every feature defaults to empty (**Auto**), which passes no `agent` to the SDK, so nothing depends on a particular agent file existing. The starter kit ships one agent, **Writer**.
 
-Per-agent model bindings: each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the underlying `.agent.md` file in the vault.
+Per-agent model bindings: each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the scanned agent's `filePath` in the vault through
+`updateAgentModelFile()` / `updateAgentModelInContent()`. An empty value removes an existing model
+line from frontmatter; a file without frontmatter receives a new (possibly empty) model field; this Settings write does not use `lockManager`.
 
 ## Local agent endpoint
 
@@ -42,8 +44,10 @@ use, skills, and permission modes.
 
 Model discovery is `fetchEndpointModels({baseUrl, apiKey})` (`src/providerModels.ts`) — ONE
 Obsidian `requestUrl()` GET to `<baseUrl>/v1/models`, with the same base-URL normalization and
-blank-key→`'ollama'` rule as the Test probe below, mapping the OpenAI-shaped
-`{data: [{id, ...}]}` catalogue to `ModelInfo[]`. `main.ts#initAgentService()` calls it whenever
+blank-key→`'ollama'` rule as the Test probe below, mapping `{data: [{id, ...}]}` or a bare array to `ModelInfo[]` with `id` and
+`name` only. HTTP errors return `ok: false`; unparseable or unrecognized non-error
+response shapes currently return `ok: true` with an empty list. No catalogue timeout is
+implemented. Discovery in `main.ts` ignores failures and empty lists. `main.ts#initAgentService()` calls it whenever
 `localAgentEndpointUrl` is set, and a successful result flows through `plugin.setProviderModels()`
 → `AgentService#setCustomModels()` → `plugin.notifySidebarModelsChanged()` →
 `SynapseView#refreshProviderModels()`, populating the toolbar's model `<select>` alongside the
@@ -74,7 +78,7 @@ it is read-only aside from the single probe request — no `saveSettings()`, no 
   carrying the endpoint's own error type/message — not a failure.
 - **Outcome classification**: `requestUrl` rejecting (refused connection, DNS, TLS) →
   `{ok: false, isConnectionError: true}` with a "Could not connect to the endpoint …" message; an
-  HTTP error or 200 in a non-Anthropic shape → `{ok: false}` naming the wrong-shape response; 200 +
+  HTTP error or 200 in a non-Anthropic shape → `{ok: false}` naming the wrong-shape response; any HTTP status +
   `{type: 'message'}` → `{ok: true, messageId}` → "Endpoint reachable — Messages API responded."
 - **Timeout:** `requestUrl()` has no AbortSignal, so the probe is raced against a 10s
   `window.setTimeout` — a dead-but-accepting host can't hang the button.
@@ -91,7 +95,16 @@ and CSS namespaces are stable.
 
 ## Invariants
 
-- Secrets (tokens, password inputs) never land in `data.json`.
+- Secret values live in vault-scoped App local storage (not encrypted by this module).
+  `SECURE_FIELDS` contains `anthropicApiKey`, `telegramBotToken`, and
+  `localAgentEndpointApiKey`; `saveSettings()` writes empty strings for these fields in
+  `data.json`. Loading migrates legacy plaintext values when no non-empty stored value exists.
+- `featureAgents` is merged separately with its defaults. Retired `providerPreset`,
+  `providerBaseUrl`, `providerApiKey`, and `providerBearerToken` fields are explicitly stripped;
+  a non-empty retired base URL causes a one-time migration Notice.
+- `infiniteSessionsEnabled` defaults to `true` and is saved by the toolbar's Infinite sessions
+  menu. It currently changes the badge and marks config dirty but is not consumed by query
+  configuration; disabling it does not disable SDK compaction.
 - `reasoningEffort: ''` means "model default" — never send the empty string to the SDK; the
   field is omitted from the session config instead.
 - `SynapseSettings` has no `reasoningSummary`, `contextTier`, `synapseFolder`,

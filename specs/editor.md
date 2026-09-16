@@ -25,7 +25,7 @@ Source: `src/editor/editorMenu.ts`, `src/modals/editModal.ts`, `src/modals/promp
 
 ## Context-menu actions (`editorMenu.ts`)
 
-Right-click → Synapse. With a selection: Edit (modal), Rewrite, Proofread, Use synonyms,
+Right-click → Claude Synapse. With a selection: Edit (modal), Rewrite, Proofread, Use synonyms,
 Minor/Major revise, Describe, Answer, Explain, Expand, Summarize, Chat with synapse. Without: Edit the note, Structure and refine, Chat.
 File/folder explorer menu: notes get Edit the note/Structure and refine/Chat with Synapse; folders
 get New note/New canvas/New summary note/Semantic search/Chat with Synapse; images get extraction

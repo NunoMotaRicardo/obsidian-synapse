@@ -12,7 +12,7 @@ implementation), `src/toolErrors.ts` (friendly write/edit tool error formatting)
 | `sessionSidebar.ts` | `SessionSidebarController` — session list, restore (cold resume replays transcript via `AgentService.getSessionMessages()`), rename/delete, background sessions |
 | `backgroundSession.ts` | `BackgroundSession` — owns the state of one chat session kept running while another is foreground (see "Background-session state ownership" below) |
 | `searchPanel.ts` | `SearchPanelController` — AI vault search tab (basic/advanced) |
-| `sessionConfig.ts` | Builds `SessionConfig` from selected agent/skills/tools/settings |
+| `sessionConfig.ts` | Pure prompt/context/model/working-directory helpers and attachment materialization/cleanup; session options are assembled in `SynapseView.buildSessionConfig()` |
 
 Modals (`src/modals/*`): tool approval, elicitation forms, user input (ask_user), ask-user-question
 (`AskUserQuestion` tool), edit modal, vault scope, folder tree.
@@ -52,7 +52,9 @@ and built in `buildUI()` via `controller.build(parent)`.
   changed.
 - **Lifecycle:** controller constructors only store the view (no DOM access — they run as
   field initializers before `buildUI()`); `inputArea.destroy()` (selection-poll timer) is
-  called from `onClose()`, and `search.disconnect()` tears down both search sessions there.
+  called from `onClose()`, and `search.disconnect()` clears its legacy session slots. Search
+  requests are one-shot `inlineChat()` calls controlled by `searchAbortController`, not
+  those session slots.
 
 ## Behavior contracts
 
@@ -120,7 +122,7 @@ and built in `buildUI()` via `controller.build(parent)`.
     before any content (reasoning or answer) has arrived.
   - The first `assistant.reasoning_delta` (`appendReasoningDelta` → `startReasoningBlock`) removes
     that placeholder and inserts the `<details class="synapse-reasoning">` block instead, whose own
-    summary reads "Thinking…" with a spinner while open — that is the only place "Thinking" copy
+    summary reads "Thinking…" while reasoning streams — that is the only place "Thinking" copy
     appears, and only while reasoning is actually streaming.
   - `showProcessingIndicator()` reuses the same helper with "Processing" while tool calls run
     mid-turn; `appendDelta()` removes it once answer text starts streaming.
@@ -131,21 +133,18 @@ and built in `buildUI()` via `controller.build(parent)`.
     was already finalized/torn down when a stray reasoning delta arrives) still returns early
     without rendering, but now emits a `debugTrace` so silently-dropped reasoning is diagnosable
     instead of just accumulating invisibly in `streamingReasoning`.
-- Reasoning menu (brain icon) shows only when the selected model reports
+- The reasoning menu offers effort levels when the selected model reports
   `capabilities.supports.reasoningEffort` and a non-empty `supportedReasoningEfforts`; an
   unsupported persisted level resets to `''`.
   - Effort levels are iterated from `supportedReasoningEfforts` and stored as a free string
     (`settings.reasoningEffort`), because models report values beyond the SDK's
     `ReasoningEffort` union (e.g. `max`, `none`). `none` is labelled "Off"; `''` = model
     default. Re-selecting the active level toggles back to `''`.
-  - An **Infinite sessions** toggle in the same model-icon menu controls the SDK's
-    auto-compaction behavior (`settings.infiniteSessionsEnabled`, default `true` — the SDK
-    default). When enabled, the SDK compacts the conversation at ~80% context utilization
-    (background) and blocks at ~95% (buffer exhaustion). When disabled, sessions hit the
-    context limit and stop. The toggle is always shown (even for models that don't support
-    reasoning effort, so the model icon stays interactive), sets a persisted setting, marks
-    config dirty, and is omitted from session config when `true` (matching the SDK default).
-    `infiniteSessions: { enabled: false }` is passed only when the user explicitly disables it.
+  - The **Infinite sessions** toggle is always available in the same menu, even without
+    supported effort levels. It persists `settings.infiniteSessionsEnabled` (default `true`),
+    updates the badge, and marks config dirty. Current `buildSessionConfig()` does not pass
+    this value to the SDK; the toggle has no effect on compaction. No plugin-enforced
+    compaction percentages or disable behavior should be inferred from this UI.
 - **Task/plan tracking panel:** Claude Code surfaces its running plan via a tool
   call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
@@ -193,10 +192,10 @@ and built in `buildUI()` via `controller.build(parent)`.
     view-maintained `taskPlan` map's values for the `TaskCreate`/`TaskUpdate` family) — so there is
     exactly one live `.synapse-task-panel` element per turn (created lazily on the first
     plan-related call, kept as the first child of `toolCallsContainer` so the plan reads above
-    per-tool detail blocks). Each task row shows a status icon (pending/in-progress/completed) and
+    per-tool detail blocks). Each task row shows a text status (`TODO`, `ACTIVE`, `DONE`) and
     its label (the in-progress task shows `activeForm` when present, e.g. "Running tests", instead
-    of the imperative `content`); the in-progress row is visually distinct (bold, accent-colored
-    spinner icon) and completed rows are struck through.
+    of the imperative `content`). Active rows have an accent dot and bold styling; completed
+    rows are struck through.
   - The panel header shows a live elapsed-runtime label reusing the existing per-turn
     `turnStartTime` (`chatRenderer.ts` — the same clock the message-metadata footer's clock badge
     reads). A `window.setInterval` (registered via `registerInterval()`, ticking every second)
@@ -675,7 +674,7 @@ exec tools regardless of the tool-approval setting.
   to the sidebar (skipped when the query aborted without an id).
 
 Both `inlineChat()` calls pass `app: this.app` and `canUseTool: autoApproveReadOnlyTools`
-(`agentService.ts`). `autoApproveReadOnlyTools` is an always-allow `CanUseTool`, safe here
+(`agentService.ts` re-export). `autoApproveReadOnlyTools` allows only Read/Glob/Grep and denies other tool names, safe here
 specifically because both search call sites restrict `tools` to the read-only set (`SEARCH_TOOLS`)
 — see "Wiring `inlineChat()`'s callers" in `agent-service.md` for the full reasoning (parity with
 the SDK path's own auto-approval of read-only tools). This does not open an approval modal per
@@ -797,10 +796,10 @@ The panel header replaces the previous tab bar with an editorial page head:
 
 The input area transforms from a floating card into an editorial ruled footer:
 - **Opening rule:** opened by a heavy rule (`border-top: 1px solid var(--synapse-rule-heavy);`). It is **not** a card: no border radius, no drop shadow, and no inset background panel (`background: transparent; border: none; box-shadow: none;`).
-- **State line (`.synapse-state-line`):** uppercase letterspaced status line (10px, font-weight 500, letter-spacing 0.13em) positioned above the input and chips. Prints the active context as `NOTE / AGENT / MODEL`. The active note/selection is rendered in the accent color (`.synapse-state-note`), separators in subtle rule color, and agent and model in faint text. Updates live via `updateStateLine()` on note switches, selection changes, and agent/model picks.
+- **State line (`.synapse-state-line`):** uppercase letterspaced status line (10px, font-weight 500, letter-spacing 0.13em) positioned above the input and chips. Prints directory/scope/attachment controls followed by the active note or selection. The active note/selection is rendered in the accent color (`.synapse-state-note`); agent/model controls belong to the config toolbar. Updates via `updateStateLine()` as context changes; agent/model selections appear in the toolbar.
 - **Textarea (`.synapse-input`):** set in the bundled serif (`--synapse-font-serif`, 14px, line-height 1.5) with an italic placeholder (`color: var(--text-faint); font-style: italic;`), giving prompt writing the tactile feel of writing a note.
-- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope` and `Attach`, styled with uppercase letterspaced typography (11px, letter-spacing 0.07em) and underlined on hover with the accent color, replacing filled icon buttons.
-- **Send button (`.synapse-send-btn`):** 24px square accent block with 2px border radius and centered icon, aligned on the unified single-row footer directly alongside the debug toggle. Transitions to error color and stop icon when streaming is active.
+- **Composer actions (`.synapse-f-btn`):** text buttons with subtle inline icons for `Scope` and `Attach`, with icon-only folder/paperclip controls in the top state line and accent hover styling.
+- **Send button (`.synapse-send-btn`):** 24px square accent block with 2px border radius and centered icon, aligned at the right of the upper config toolbar; Debug sits in the lower toolbar. Transitions to error color and stop icon when streaming is active.
 - **Editorial chips (`.synapse-input-chips`):** attachment, active-note, and vault-scope chips adopt hairline borders (`--synapse-rule-soft`), rectangular 2px border radius, and muted typography. All chips remain removable via a hoverable `x` button.
 - **Toolbar coexistence decision:** the composer state line focuses strictly on the active note / selection context (`.synapse-state-note`), while the restyled config toolbar below houses the interactive controls (agent, model, reasoning effort, tools, working directory, context gauge, debug), completely eliminating duplicated agent/model readouts across the two surfaces.
 - **Sole model control:** the toolbar's `modelSelect` (`configToolbar.ts`) is the sole model-switching control, changed via the shared `setModel()` method.
@@ -824,6 +823,15 @@ The session sidebar adopts the prototype's starter list pattern (clean unlined c
 - **Empty state (`.synapse-sidebar-empty`):** Rendered as a centered italic serif line in faint text (`font-family: var(--synapse-font-serif); font-style: italic;`), without spinners or card boxes.
 
 ### Search tab
+
+Both modes run a fresh `inlineChat()` per search, with no `resume` option. Basic mode uses
+`featureAgents.search` then legacy `searchAgent`, default permission mode, no local plugin/skill
+options, and 20 read-only turns. Advanced mode uses the toolbar model/agent/skills, the local
+plugin, configured approval mode, and 40 read-only turns. Both pass
+`autoApproveReadOnlyTools`, the vault handle, adaptive timeout, and the search abort controller.
+Advanced results are named and added to the session sidebar for later chat restoration; the
+next search does not resume that conversation. The legacy `searchSession` and
+`basicSearchSession` fields are not populated by either search path.
 
 The vault search tab is restyled to align with the Editorial design language:
 - **Search composer & state line:** The search interface mirrors the chat view's ruled composer layout:

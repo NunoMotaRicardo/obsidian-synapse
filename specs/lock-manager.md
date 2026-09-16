@@ -7,7 +7,7 @@ vault-relative path, so concurrent config writes do not
 interleave `vault.read()`/`vault.modify()` and clobber one another.
 
 Advisory and in-process: the lock only guards writes that go **through the plugin's own code
-paths** (`configWriter.ts`'s locked writers — `writeSkill`, `persistToolApprovalRules`). It does
+paths** (`configWriter.ts`'s locked writers — `writeSkill`, `installStarterKit`, `persistToolApprovalRules`). It does
 **not** — and cannot — guard writes the Claude CLI performs directly via its own file tools during
 an `inlineChat()` run, nor a user's manual edits in the Obsidian editor. Those are outside the
 plugin's write surface. The lock's job is narrow: stop the plugin from racing *itself* when two of
@@ -19,7 +19,7 @@ Source: `src/lockManager.ts`.
 
 A single module-level singleton (`lockManager`), mirroring how other shared helpers are
 exported — this avoids threading a `LockManager` instance through every free function
-in `configWriter.ts` and their many callers (self-improve tool handlers, seeding, etc.).
+in `configWriter.ts` for starter-kit installation, skill creation, and approval persistence.
 
 ```ts
 // Serialize `fn` against other writers of the same normalized path. If the path
@@ -37,33 +37,35 @@ withLock<T>(path: string, fn: () => Promise<T>): Promise<T>
   A bounded wait (`LOCK_TIMEOUT_MS`, 60s) guards against a wedged holder; on timeout the queued
   acquisition rejects with `LockAcquisitionError` so the caller can degrade gracefully instead of
   blocking indefinitely. 60s was chosen to comfortably exceed ordinary `vault.modify()` latency and
-  a slow `inlineChat()`-backed write-back, while still bounding the worst case.
+  file creation, while still bounding the worst case.
 - **Release:** always in a `finally` inside `withLock` — the lock frees whether `fn` resolves,
-  throws, *or* the wait for a turn itself times out (a timed-out waiter still publishes and later
-  releases its own tail, so a caller queued behind a timeout is not permanently wedged). An empty
+  or throws. A timed-out waiter skips `fn` and defers releasing its tail until the previous
+  holder finishes; this prevents later writers from overtaking a still-running holder. An empty
   queue (nobody queued behind the releasing call) deletes the map entry so the map does not grow
   unbounded.
 
 ## Integration points
 
 - **`configWriter.ts`** — every function that mutates a vault file wraps its `vault.create`/
-  `vault.modify` in `withLock(targetPath, …)`: `writeSkill`, `persistToolApprovalRules`.
+  `vault.modify` in `withLock(targetPath, …)`: `writeSkill`, `installStarterKit`,
+  `persistToolApprovalRules`. Starter-file existence checks and folder creation occur outside
+  the file lock; the lock does not make repeated concurrent initialization idempotent.
   Read-only scans (`scanAgents`, etc.) and `ensureFolder` are not locked.
 
 ## Invariants
 
 - The lock is advisory and in-process only — never presented as a guarantee against CLI-side or
   manual-editor writes (see Overview). Document this wherever it is surfaced to users.
-- Locks are keyed by normalized vault-relative path; a lock is released in a `finally` block on
-  every path (success, error, or timeout).
-- Contention on the same path serializes (queues) by default; only a wedged holder (timeout) turns
-  into a graceful failure — and that failure is logged + reported, never swallowed silently.
+- Locks are keyed by normalized vault-relative path. Successful/failed holders release in
+  `finally`; timed-out waiters release only after the preceding tail settles.
+- Contention on the same path serializes by default. Acquisition timeout rejects to the caller;
+  the manager does not log, show Notices, or cancel a running holder.
 - No persistence — the map is rebuilt empty on plugin load; a plugin reload cannot leave a stale
   lock held.
 
 `src/lockManager.ts` exports the `lockManager` singleton (`withLock`) and
-`LockAcquisitionError`; integrated into `configWriter.ts` (`writeSkill`,
-`persistToolApprovalRules`). Unit tests in `test/lockManager.test.ts` cover FIFO
+`LockAcquisitionError` and `LOCK_TIMEOUT_MS`; integrated into `configWriter.ts` (`writeSkill`,
+`installStarterKit`, `persistToolApprovalRules`). Unit tests in `test/lockManager.test.ts` cover FIFO
 serialization, independent-path concurrency, release-on-throw, and the
 timeout/`LockAcquisitionError` path.
 
