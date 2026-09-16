@@ -59,12 +59,6 @@ export interface SynapseSettings {
 	 * `model.supportedReasoningEfforts` at render time.
 	 */
 	reasoningEffort: string;
-	/**
-	 * Whether infinite sessions (automatic context compaction) are enabled.
-	 * true (default) = SDK default behavior (omit from session config).
-	 * false = explicitly disable (`infiniteSessions: { enabled: false }`).
-	 */
-	infiniteSessionsEnabled: boolean;
 	/** Agent name used for semantic search. */
 	searchAgent: string;
 	/** Search mode: 'basic' reuses session with minimal config, 'advanced' allows full agent/model/skills/tools. */
@@ -153,7 +147,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	},
 
 	reasoningEffort: '',
-	infiniteSessionsEnabled: true,
 	searchAgent: '',
 	searchMode: 'basic',
 	autoUpdateWorkingDirectory: true,

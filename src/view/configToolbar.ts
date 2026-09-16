@@ -222,19 +222,6 @@ export class ConfigToolbarController {
 			menu.addItem(item => item.setTitle('Model does not support reasoning effort').setDisabled(true));
 		}
 
-		// Infinite sessions toggle — controls automatic context compaction.
-		menu.addSeparator();
-		menu.addItem(item => {
-			item.setTitle('Infinite sessions')
-				.setChecked(this.view.plugin.settings.infiniteSessionsEnabled)
-				.onClick(() => {
-					this.view.plugin.settings.infiniteSessionsEnabled = !this.view.plugin.settings.infiniteSessionsEnabled;
-					void this.view.plugin.saveSettings();
-					this.view.configDirty = true;
-					this.updateReasoningBadge();
-				});
-		});
-
 		menu.showAtMouseEvent(e);
 	}
 
@@ -251,7 +238,6 @@ export class ConfigToolbarController {
 
 	updateReasoningBadge(): void {
 		const level = this.view.plugin.settings.reasoningEffort;
-		const infiniteSessions = this.view.plugin.settings.infiniteSessionsEnabled;
 		// Text stays sentence case; `.synapse-toolbar-btn`'s CSS `text-transform: uppercase`
 		// handles the visual presentation (#215) — see the same reasoning on `updateCwdButton()`.
 		const setLabel = (effort?: string): void => {
@@ -263,10 +249,7 @@ export class ConfigToolbarController {
 			this.reasoningBtnEl.toggleClass('is-active', active);
 			this.reasoningBtnEl.toggleClass('is-non-interactive', false);
 			setLabel(level !== '' ? effortLabel(level) : undefined);
-			const parts: string[] = [];
-			if (level !== '') parts.push(`effort ${effortLabel(level).toLowerCase()}`);
-			if (!infiniteSessions) parts.push('infinite sessions off');
-			this.reasoningBtnEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context (default model)');
+			this.reasoningBtnEl.setAttribute('title', level !== '' ? `Reasoning — effort ${effortLabel(level).toLowerCase()}` : 'Reasoning (default model)');
 			return;
 		}
 
@@ -279,20 +262,15 @@ export class ConfigToolbarController {
 			void this.view.plugin.saveSettings();
 		}
 		const current = this.view.plugin.settings.reasoningEffort;
-		// The button stays interactive even without reasoning support, because the menu
-		// always offers the infinite-sessions toggle.
 		const active = current !== '' && supportsReasoning;
 		this.reasoningBtnEl.toggleClass('is-active', active);
 		this.reasoningBtnEl.toggleClass('is-non-interactive', false);
 		setLabel(supportsReasoning && current !== '' ? effortLabel(current) : undefined);
-		const parts: string[] = [];
-		if (supportsReasoning && current !== '') parts.push(`effort ${effortLabel(current).toLowerCase()}`);
-		if (!infiniteSessions) parts.push('infinite sessions off');
-		if (!supportsReasoning && infiniteSessions) {
-			this.reasoningBtnEl.setAttribute('title', 'Reasoning & context (model does not support reasoning effort)');
-		} else {
-			this.reasoningBtnEl.setAttribute('title', parts.length > 0 ? `Reasoning & context — ${parts.join(', ')}` : 'Reasoning & context');
-		}
+		this.reasoningBtnEl.setAttribute('title', !supportsReasoning
+			? 'Reasoning (model does not support reasoning effort)'
+			: current !== ''
+				? `Reasoning — effort ${effortLabel(current).toLowerCase()}`
+				: 'Reasoning');
 	}
 
 	private openToolsMenu(e: MouseEvent): void {

@@ -2,7 +2,7 @@ import {describe, it, expect} from 'vitest';
 import {DEFAULT_SETTINGS} from '../src/settings';
 
 // ---------------------------------------------------------------------------
-// Legacy settings-key tolerance (issues #106, #148, #188)
+// Legacy settings-key tolerance (issues #106, #148, #188, #260)
 //
 // `contextTier` and `reasoningSummary` were removed from `SynapseSettings`
 // (they were pre-Agent-SDK no-ops, never wired to the Agent SDK). `synapseFolder`
@@ -10,8 +10,10 @@ import {DEFAULT_SETTINGS} from '../src/settings';
 // declared and defaulted but nothing in `src/` ever read it — the vault folder path
 // comes from the `SYNAPSE_FOLDER` constant (`src/vaultPaths.ts`) throughout, so
 // dropping the setting changes no behaviour. `triggerLastFired` (issue #188) was
-// removed along with the rest of the trigger system — nothing reads or writes it
-// anymore, so it is the same no-op-migration shape as `synapseFolder`. Existing
+// removed along with the rest of the trigger system — nothing reads or writes it.
+// `infiniteSessionsEnabled` (issue #260) was a UI toggle which never affected SDK
+// compaction, so it was removed on the same harmless legacy-key basis. It is the
+// same no-op-migration shape as `synapseFolder`. Existing
 // `data.json` files written by older plugin versions still contain these keys.
 // `SynapsePlugin.loadSettings()` merges persisted data over `DEFAULT_SETTINGS` via
 // `Object.assign({}, DEFAULT_SETTINGS, raw)` — this test exercises that exact merge
@@ -20,7 +22,7 @@ import {DEFAULT_SETTINGS} from '../src/settings';
 // ---------------------------------------------------------------------------
 
 describe('legacy settings key tolerance', () => {
-	/** A `data.json` payload written by a pre-#106/#148/#188 plugin version. */
+	/** A `data.json` payload written by a pre-#106/#148/#188/#260 plugin version. */
 	const legacyRaw = {
 		authType: 'apiKey',
 		reasoningEffort: 'high',
@@ -33,6 +35,8 @@ describe('legacy settings key tolerance', () => {
 		triggerLastFired: {'daily-lint': 1735689600000},
 		// Removed dead setting (Model name box / inlineModel):
 		inlineModel: 'qwen3:8b',
+		// Removed ineffective UI-only setting (#260):
+		infiniteSessionsEnabled: false,
 	};
 
 	it('merging legacy raw data over DEFAULT_SETTINGS does not throw', () => {
@@ -48,7 +52,7 @@ describe('legacy settings key tolerance', () => {
 	it('keeps other DEFAULT_SETTINGS fields intact when raw omits them', () => {
 		const merged = Object.assign({}, DEFAULT_SETTINGS, legacyRaw);
 		expect(merged.toolApproval).toBe(DEFAULT_SETTINGS.toolApproval);
-		expect(merged.infiniteSessionsEnabled).toBe(DEFAULT_SETTINGS.infiniteSessionsEnabled);
+		expect(merged.searchMode).toBe(DEFAULT_SETTINGS.searchMode);
 	});
 
 	it('the removed keys are absent from DEFAULT_SETTINGS (no longer part of the typed shape)', () => {
@@ -57,6 +61,7 @@ describe('legacy settings key tolerance', () => {
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'synapseFolder')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'triggerLastFired')).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'inlineModel')).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, 'infiniteSessionsEnabled')).toBe(false);
 	});
 
 	it('stale legacy keys survive the merge as harmless untyped properties (not stripped, not erroring)', () => {
@@ -66,5 +71,6 @@ describe('legacy settings key tolerance', () => {
 		expect(merged.synapseFolder).toBe('_some_custom_folder');
 		expect(merged.triggerLastFired).toEqual({'daily-lint': 1735689600000});
 		expect(merged.inlineModel).toBe('qwen3:8b');
+		expect(merged.infiniteSessionsEnabled).toBe(false);
 	});
 });

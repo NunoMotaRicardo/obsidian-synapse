@@ -102,13 +102,10 @@ and CSS namespaces are stable.
 - `featureAgents` is merged separately with its defaults. Retired `providerPreset`,
   `providerBaseUrl`, `providerApiKey`, and `providerBearerToken` fields are explicitly stripped;
   a non-empty retired base URL causes a one-time migration Notice.
-- `infiniteSessionsEnabled` defaults to `true` and is saved by the toolbar's Infinite sessions
-  menu. It currently changes the badge and marks config dirty but is not consumed by query
-  configuration; disabling it does not disable SDK compaction.
 - `reasoningEffort: ''` means "model default" — never send the empty string to the SDK; the
   field is omitted from the session config instead.
 - `SynapseSettings` has no `reasoningSummary`, `contextTier`, `synapseFolder`,
-  `triggerLastFired`, or `inlineModel` fields. Old `data.json` files carrying these stale keys
+  `triggerLastFired`, `inlineModel`, or `infiniteSessionsEnabled` fields. Old `data.json` files carrying these stale keys
   still load without error: `main.ts#loadSettings` merges persisted data over `DEFAULT_SETTINGS`
   via `Object.assign({}, DEFAULT_SETTINGS, raw)`, so stale keys ride along as harmless untyped
   properties rather than causing a load failure or wiping unrelated settings.
@@ -120,6 +117,5 @@ and CSS namespaces are stable.
   request) go through `fetchEndpointModels()`/`testLocalAgentEndpoint()` (`src/providerModels.ts`)
   — don't duplicate the `/v1/models`/`/v1/messages` fetch-and-parse logic inline in `settings.ts`
   or `main.ts`.
-
 
 
