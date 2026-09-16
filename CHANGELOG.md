@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the ineffective **Infinite sessions** chat-menu toggle. Conversation compaction is managed by the Claude Agent SDK and Claude CLI.
+
 ## [0.1.2] - 2026-09-14
 
 ### Changed

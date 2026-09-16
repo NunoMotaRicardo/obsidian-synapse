@@ -179,7 +179,7 @@ sudo systemctl restart ollama
 
 ## Complementary: SDK-side compaction
 
-Claude Synapse natively leverages the Claude Agent SDK's auto-compaction feature (Infinite Sessions), which automatically compacts the conversation history when context utilization reaches ~80%. You can also configure the context-window tier or enable/disable this feature under the model settings menu in the chat view.
+Conversation compaction is managed by the Claude Agent SDK and Claude CLI. Claude Synapse does not expose a compaction toggle or context-window tier in the chat view.
 
 ## Troubleshooting
 

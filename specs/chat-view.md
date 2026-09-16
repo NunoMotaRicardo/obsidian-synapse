@@ -140,11 +140,8 @@ and built in `buildUI()` via `controller.build(parent)`.
     (`settings.reasoningEffort`), because models report values beyond the SDK's
     `ReasoningEffort` union (e.g. `max`, `none`). `none` is labelled "Off"; `''` = model
     default. Re-selecting the active level toggles back to `''`.
-  - The **Infinite sessions** toggle is always available in the same menu, even without
-    supported effort levels. It persists `settings.infiniteSessionsEnabled` (default `true`),
-    updates the badge, and marks config dirty. Current `buildSessionConfig()` does not pass
-    this value to the SDK; the toggle has no effect on compaction. No plugin-enforced
-    compaction percentages or disable behavior should be inferred from this UI.
+  - Conversation compaction is managed by the Claude Agent SDK and Claude CLI. The plugin has
+    no compaction toggle or plugin-enforced compaction percentage.
 - **Task/plan tracking panel:** Claude Code surfaces its running plan via a tool
   call rather than a dedicated event — either the legacy `TodoWrite` (one call, full plan) or the
   newer `TaskCreate`/`TaskUpdate` (incremental task graph); see `agent-service.md` for why both
@@ -886,5 +883,4 @@ All plugin modals adopt the Editorial design language so dialogs read as pages f
 - **Vault scope & Folder tree modals (`VaultScopeModal`, `FolderTreeModal`):** Tree containers render within a ruled frame (`border-top: 1px solid var(--synapse-rule-soft); border-bottom: 1px solid var(--synapse-rule-soft)`). Items render as ruled rows; selection is marked by an accent left border (`border-left: 2px solid var(--interactive-accent)`) and accent text, completely eliminating filled hover/active boxes.
 - **Edit modal (`EditModal`):** Serif title with heavy closing rule, uppercase labels, ruled textarea and prompt area, borderless selects with ruled bottom, and results cards (`.synapse-edit-card`) styled as ruled rows with serif body copy.
 - **Behavioral preservation & theme compliance:** Every modal's approval decisions, always-allow persistence, form validation, keyboard navigation, and escape-to-dismiss behavior are preserved exactly. All colors strictly consume Obsidian theme variables with zero raw hex codes across light and dark modes.
-
 
