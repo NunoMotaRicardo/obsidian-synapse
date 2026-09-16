@@ -29,8 +29,8 @@ coverage-output.txt
 .env.*
 !.env.example
 
-# Local project documentation and working notes
-.docs/
+# Local Git worktrees
+.worktrees/
 
 # Obsidian plugin-local settings
 # They contain machine- and vault-specific configuration, including secrets.

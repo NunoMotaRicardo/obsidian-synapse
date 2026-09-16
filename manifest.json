@@ -3,7 +3,7 @@
 	"name": "Claude Synapse",
 	"version": "0.1.3",
 	"minAppVersion": "1.13.0",
-	"description": "Bring Claude Agent SDK-powered assistance into Obsidian with agents, tools, skills, and workflows in your notes.",
+	"description": "Bring Claude Agent SDK-powered assistance with agents, tools, skills, and workflows into your notes.",
 	"author": "Nuno Mota Ricardo",
 	"authorUrl": "https://github.com/NunoMotaRicardo/",
 	"isDesktopOnly": true

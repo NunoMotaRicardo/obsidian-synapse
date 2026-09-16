@@ -22,10 +22,29 @@ vi.mock('node:fs/promises', () => ({
 	access: vi.fn(),
 }));
 
-import {resolveDefaultCliPath} from '../src/runtimeManager';
+import {cleanEnv, resolveDefaultCliPath} from '../src/runtimeManager';
 import * as fsMock from 'node:fs/promises';
 
 const mockedAccess = fsMock.access as unknown as ReturnType<typeof vi.fn<typeof fsMock.access>>;
+
+describe('cleanEnv', () => {
+	it('omits identity variables while preserving runtime paths', () => {
+		vi.stubEnv('USER', 'private-user');
+		vi.stubEnv('USERNAME', 'private-user');
+		vi.stubEnv('LOGNAME', 'private-user');
+		vi.stubEnv('HOSTNAME', 'private-host');
+		vi.stubEnv('USERPROFILE', 'C:\\Users\\runtime');
+		try {
+			const env = cleanEnv();
+			for (const key of ['USER', 'USERNAME', 'LOGNAME', 'HOSTNAME']) {
+				expect(env).not.toHaveProperty(key);
+			}
+			expect(env['USERPROFILE']).toBe('C:\\Users\\runtime');
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+});
 
 describe('resolveDefaultCliPath', () => {
 	const originalEnv = {...process.env};

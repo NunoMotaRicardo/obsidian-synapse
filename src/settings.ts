@@ -1,4 +1,4 @@
-import {App, Notice, PluginSettingTab, Setting, TFile, normalizePath} from "obsidian";
+import {App, Notice, PluginSettingTab, Setting, type SettingDefinitionItem, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
 import {scanAgents, installStarterKit} from "./configWriter";
 import {testLocalAgentEndpoint} from "./providerModels";
@@ -223,8 +223,53 @@ export class SynapseSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const {containerEl} = this;
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const sections = [
+			{
+				id: 'claude', name: 'Claude',
+				desc: 'Authentication, Anthropic API key, Claude CLI location, and local agent endpoint.',
+				aliases: ['authentication', 'Anthropic API key', 'Claude CLI', 'local agent endpoint'],
+			},
+			{
+				id: 'agents', name: 'Feature Map & Agents',
+				desc: 'Feature-to-agent assignments and per-agent model bindings.',
+				aliases: ['feature map', 'agent', 'model binding'],
+			},
+			{
+				id: 'capabilities', name: 'Capabilities',
+				desc: 'Synapse folder initialization, editor options, and chat run guardrails.',
+				aliases: ['initialize', 'editor integration', 'turn limit', 'token budget', 'dollar budget'],
+			},
+			{
+				id: 'tools', name: 'Tools',
+				desc: 'Tool approval mode for agent actions.',
+				aliases: ['tool approval', 'ask', 'allow'],
+			},
+			{
+				id: 'bots', name: 'Bots',
+				desc: 'Telegram bot token, allowed user IDs, and default agent.',
+				aliases: ['Telegram', 'bot token', 'allowed user IDs'],
+			},
+		] as const;
+
+		return sections.map(({id, name, desc, aliases}): SettingDefinitionItem => ({
+			type: 'page' as const,
+			name,
+			desc,
+			// Settings search indexes definitions inside a page, rather than the page
+			// link itself. The one imperative child gives each section's aliases a
+			// searchable entry and routes its result to this page.
+			items: [{
+				name,
+				desc,
+				aliases: [...aliases],
+				render: (setting) => this.renderSettings(setting.settingEl, id),
+			}],
+		}));
+	}
+
+	/** Render the stateful settings interface in the selected declarative settings page. */
+	private renderSettings(containerEl: HTMLElement, selectedTab: 'claude' | 'agents' | 'capabilities' | 'tools' | 'bots'): void {
 
 		containerEl.empty();
 		containerEl.addClass('synapse-settings');
@@ -270,7 +315,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 		for (const id of tabIds) {
 			panels[id] = containerEl.createDiv({cls: `synapse-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
 		}
-		tabButtons['claude']?.addClass('is-active');
+		switchSettingsTab(selectedTab);
 
 		// ══════════════════════════════════════════════════════════
 		// TAB 1: Claude (auth)

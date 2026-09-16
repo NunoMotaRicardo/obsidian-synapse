@@ -75,10 +75,14 @@ dropdowns (display-only). See [config-writer.md](config-writer.md) for details.
 - Work items are tracked as GitHub issues on `NunoMotaRicardo/obsidian-synapse` (`gh issue
   list/view/create/edit`); `in-progress` marks active work.
 - Build: `npm run build` (tsc typecheck + esbuild bundle). The tag-triggered release workflow
-  separates a read-only validation/build job (checkout credentials disabled) from a `contents: write`
+  separates a validation/build job with read-only repository access (checkout credentials disabled) from a `contents: write`
   publish job. Validation verifies the exact non-`v` tag against `package.json`, `manifest.json`,
   `versions.json`, and `CHANGELOG.md`, then transfers only the three generated installer assets,
-  release notes, and SHA-256 report through a workflow artifact. Publication re-verifies that
+  release notes, and SHA-256 report through a workflow artifact. After validation, GitHub records
+  a SLSA build-provenance attestation for the exact `main.js`, `manifest.json`, and `styles.css`
+  installer assets; the attestation is GitHub provenance metadata, never a fourth installer asset.
+  Only validation/build receives `attestations: write` and `id-token: write` for provenance signing.
+  Publication re-verifies that
   downloaded artifact, creates a draft, compares its downloaded assets, preserves evidence, and
   publishes. Per-tag concurrency and draft-ID tracking prevent one run from deleting another run's
   release; a failed pre-publication run removes only the draft it created, never the tag. The

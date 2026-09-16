@@ -14,7 +14,9 @@ Source: `src/runtimeManager.ts` — `resolveDefaultCliPath`, `getCliVersion`, `c
   Invalid paths, execution errors, and empty output resolve to `{version: 'unknown'}` rather
   than rejecting. Absolute extensionless, `.exe`, and `.cmd` paths pass this version-probe
   validation; auto-resolution does not select `.cmd` wrappers.
-- `cleanEnv(): Record<string, string>` — allowlisted subprocess environment.
+- `cleanEnv(): Record<string, string>` — allowlisted subprocess environment. Does not forward
+  `USER`, `USERNAME`, `LOGNAME`, or `HOSTNAME`; home and installation directory variables remain
+  necessary for CLI discovery and authentication storage.
 - `BUNDLED_SDK_VERSION: string` — the `@anthropic-ai/claude-agent-sdk` version this build was bundled
   against. Baked in at build time by `esbuild.config.mjs` (reads the installed package's
   `package.json` and injects it via an esbuild `define`, since node_modules never ships with the
