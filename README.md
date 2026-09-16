@@ -122,10 +122,8 @@ The [wiki](wiki/Home.md) has the details:
 
 ## Credits
 
-Synapse began as an adaptation of **[obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick)** by
-[Alexandre Vieira](https://github.com/vieiraae), an Obsidian assistant built on the GitHub Copilot
-SDK. Synapse rebuilt it on the Claude Agent SDK, and it has grown in its own direction since, but
-the idea and the foundations came from Sidekick. Thank you, Alex.
+Thank you to [Alexandre Vieira](https://github.com/vieiraae) for our joint work on
+[obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) and the ideas we developed together.
 
 ## Contributing
 
