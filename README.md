@@ -122,13 +122,11 @@ The [wiki](wiki/Home.md) has the details:
 
 ## Credits
 
-Thank you to [Alexandre Vieira](https://github.com/vieiraae) for our joint work on
-[obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) and the ideas we developed together.
+Thank you to [Alexandre Vieira](https://github.com/vieiraae), for the work on [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick), a sibling of Synapse. Sidekick is an Obsidian assistant built on the GitHub Copilot SDK.
 
 ## Contributing
 
-Working on the code, as a person or an AI agent? Start with
-[`specs/ARCHITECTURE.md`](specs/ARCHITECTURE.md), then read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Working on the code, as a person or an AI agent? Start with [`specs/ARCHITECTURE.md`](specs/ARCHITECTURE.md), then read [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Feedback
 
