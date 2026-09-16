@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-16
+
+### Changed
+
+- Includes the Claude Synapse identity migration and verified release pipeline prepared for 0.1.2.
+
 ### Removed
 
 - Removed the ineffective **Infinite sessions** chat-menu toggle. Conversation compaction is managed by the Claude Agent SDK and Claude CLI.
