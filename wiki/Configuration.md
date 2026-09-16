@@ -1,13 +1,13 @@
 # Configuration
 
-Open **Settings → Synapse**. The settings screen has five tabs.
+Open **Settings → Claude Synapse**. The settings screen has five tabs.
 
 ## Claude
 
-Choose how Synapse authenticates with Claude:
+Choose how Claude Synapse authenticates with Claude:
 
 - **Claude subscription (OAuth)** — use the Claude CLI login; run `claude login` in a terminal if needed.
-- **Anthropic API key** — enter an API key, which Synapse stores in vault-specific local storage rather than the plugin data file.
+- **Anthropic API key** — enter an API key, which Claude Synapse stores in vault-specific local storage rather than the plugin data file.
 - **Claude CLI location** — optionally set a path to the CLI; leave it blank for automatic discovery. The page shows the resolved CLI and version.
 
 ### Local agent endpoint

@@ -1,6 +1,6 @@
 ---
 name: synapse-config
-description: Synapse artifact authoring — use when the user wants to create, modify, or delete a Synapse agent (persistent persona), skill (procedure/workflow), or MCP server in _synapse/, or set up Synapse for first use, including custom writing styles built from the user's own documents.
+description: Claude Synapse artifact authoring — use when the user wants to create, modify, or delete a Claude Synapse agent (persistent persona), skill (procedure/workflow), or MCP server in _synapse/, or set up Claude Synapse for first use, including custom writing styles built from the user's own documents.
 ---
 
 # Synapse Config

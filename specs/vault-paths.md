@@ -66,7 +66,7 @@ export function getSynapseSettingsPath(app: App): string
 
 - **`bots/telegramBot.ts`** — `TelegramBot.getVaultBasePath()` (private method) delegates to
   `getVaultBasePath(this.plugin.app)`; `buildBotSessionConfig()` uses `getSynapsePluginConfig`;
-  `SYNAPSE_FOLDER` for the bot-attachments temp folder and agent/skill scan paths.
+  `SYNAPSE_FOLDER` for the persistent bot-attachments folder and agent/skill scan paths.
 - **`editor/editorMenu.ts`** — `getAbsolutePath` (image context-menu actions) and `getVaultPlugins`
   (inline-chat plugin discovery) both delegate to `getVaultBasePath`/`getSynapsePluginConfig`.
 - **`modals/editModal.ts`** — `plugins` field of its `inlineChat()` call uses

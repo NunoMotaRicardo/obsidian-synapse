@@ -1,6 +1,5 @@
-import tseslint from 'typescript-eslint';
 import globals from "globals";
-import { globalIgnores } from "eslint/config";
+import { defineConfig, globalIgnores } from "eslint/config";
 import obsidianmd from "eslint-plugin-obsidianmd";
 
 /** Known brand names / acronyms that should NOT be lowercased. */
@@ -69,7 +68,7 @@ function isSentenceCase(text: string): boolean {
 	return true;
 }
 
-export default tseslint.config(
+export default defineConfig(
 	// obsidianmd's recommended config already includes eslint core recommended
 	// and typescript-eslint's type-checked recommended rules, so we don't add
 	// tseslint.configs.recommended separately (per the plugin's README).
@@ -312,6 +311,17 @@ export default tseslint.config(
 		rules: {
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/no-unsafe-assignment': 'off',
+		},
+	},
+	{
+		files: ['src/settings.ts'],
+		rules: {
+			// The settings screen is a stateful, tabbed UI with dynamic vault-agent lists,
+			// connection probes, and async action buttons. In Obsidian 1.13, a non-empty
+			// getSettingDefinitions() bypasses display(), so a partial declarative index
+			// would make the remaining controls unreachable. Keep the complete legacy UI
+			// until it can be migrated as one behavior-preserving change.
+			'obsidianmd/settings-tab/prefer-setting-definitions': 'off',
 		},
 	},
 	{

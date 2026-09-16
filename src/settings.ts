@@ -583,7 +583,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 					try {
 						const created = await installStarterKit(this.app);
 						new Notice(created.length
-							? `Synapse starter kit installed (${created.length} files).`
+							? `Claude Synapse starter kit installed (${created.length} files).`
 							: 'Synapse starter kit is already installed — existing files were left unchanged.');
 					} catch (e) {
 						new Notice(`Failed to initialize synapse folder: ${String(e)}`);

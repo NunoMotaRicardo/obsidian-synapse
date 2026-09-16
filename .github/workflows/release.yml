@@ -11,20 +11,33 @@ on:
         tags:
             - "[0-9]+.[0-9]+.[0-9]+"
 
-permissions:
-    contents: write
+# Serialize publication per tag. A second run waits rather than racing the draft
+# lifecycle of the same immutable tag.
+concurrency:
+    group: release-${{ github.workflow }}-${{ github.ref_name }}
+    cancel-in-progress: false
 
 jobs:
-    release:
+    validate-build:
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
         steps:
             - uses: actions/checkout@v5
+              with:
+                  persist-credentials: false
+                  fetch-depth: 0
 
             - name: Use Node.js
               uses: actions/setup-node@v5
               with:
                   node-version: 22.x
                   cache: "npm"
+
+            - name: Verify immutable tag source identity and branch ancestry
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: node .github/scripts/verify-tag-identity.mjs
 
             - run: npm ci
 
@@ -35,23 +48,156 @@ jobs:
             - run: npm run test
             - run: npm run build
 
-            - name: Verify manifest version matches tag
+            - name: Verify source, version, and generated release assets
               run: |
-                  TAG="${GITHUB_REF_NAME}"
-                  MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
-                  if [ "$TAG" != "$MANIFEST_VERSION" ]; then
-                    echo "Tag $TAG does not match manifest.json version $MANIFEST_VERSION"
-                    exit 1
-                  fi
+                  node .github/scripts/verify-release.mjs \
+                    --tag "${GITHUB_REF_NAME}" \
+                    --expected-commit "${VERIFIED_COMMIT}" \
+                    --write-report release-verification.json
 
             - name: Extract release notes from CHANGELOG.md
               run: node .github/scripts/extract-changelog.mjs "${GITHUB_REF_NAME}" > release-notes.md
 
-            - name: Create GitHub release
+            # This is the only cross-job input to publication: exactly the
+            # installer assets plus their verification evidence and release notes.
+            - name: Preserve verified build and verification evidence
+              uses: actions/upload-artifact@v4
+              with:
+                  name: verified-release-build-${{ github.ref_name }}
+                  path: |
+                      main.js
+                      manifest.json
+                      styles.css
+                      release-verification.json
+                      release-notes.md
+                  if-no-files-found: error
+
+    publish:
+        needs: validate-build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v5
+              with:
+                  persist-credentials: false
+                  fetch-depth: 0
+
+            - name: Re-verify immutable tag source identity and branch ancestry
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: node .github/scripts/verify-tag-identity.mjs
+
+            - name: Download verified build artifact
+              uses: actions/download-artifact@v5
+              with:
+                  name: verified-release-build-${{ github.ref_name }}
+                  path: verified-release-build
+
+            - name: Re-verify downloaded build artifact
+              working-directory: verified-release-build
               run: |
-                  gh release create "${GITHUB_REF_NAME}" \
-                    main.js manifest.json styles.css \
-                    --title "${GITHUB_REF_NAME}" \
-                    --notes-file release-notes.md
+                  node ../.github/scripts/verify-release.mjs \
+                    --tag "${GITHUB_REF_NAME}" \
+                    --source-dir .. \
+                    --assets-dir . \
+                    --expected-commit "${VERIFIED_COMMIT}" \
+                    --expected-report release-verification.json
+
+            - name: Recheck immutable tag and default-branch policy before draft creation
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: node .github/scripts/verify-tag-identity.mjs
+
+            - name: Create and own this run's draft release through the REST API
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              working-directory: verified-release-build
+              run: |
+                  set -euo pipefail
+                  draft_response="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+                    -f tag_name="${GITHUB_REF_NAME}" \
+                    -f target_commitish="${VERIFIED_COMMIT}" \
+                    -f name="${GITHUB_REF_NAME}" \
+                    -F draft=true \
+                    -f body="$(cat release-notes.md)")"
+                  draft_id="$(printf '%s' "$draft_response" | jq -r .id)"
+                  upload_url="$(printf '%s' "$draft_response" | jq -r .upload_url)"
+                  upload_url="${upload_url%%\{*}"
+                  expected_upload_url="https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${draft_id}/assets"
+                  test "$upload_url" = "$expected_upload_url"
+                  echo "CREATED_DRAFT=true" >> "$GITHUB_ENV"
+                  echo "DRAFT_RELEASE_ID=${draft_id}" >> "$GITHUB_ENV"
+                  echo "DRAFT_UPLOAD_URL=${upload_url}" >> "$GITHUB_ENV"
+
+            - name: Upload exact release assets through the captured release ID
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              working-directory: verified-release-build
+              run: |
+                  set -euo pipefail
+                  for asset in main.js manifest.json styles.css; do
+                    case "$asset" in
+                      main.js) content_type='application/javascript' ;;
+                      manifest.json) content_type='application/json' ;;
+                      styles.css) content_type='text/css' ;;
+                    esac
+                    curl --fail-with-body --silent --show-error --proto '=https' \
+                      --request POST \
+                      --url "${DRAFT_UPLOAD_URL}?name=${asset}" \
+                      --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+                      --header "Accept: application/vnd.github+json" \
+                      --header "Content-Type: ${content_type}" \
+                      --data-binary "@${asset}" >/dev/null
+                  done
+
+            - name: Verify uploaded draft assets through the captured release ID
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              working-directory: verified-release-build
+              run: |
+                  set -euo pipefail
+                  mkdir released-assets
+                  for asset in main.js manifest.json styles.css; do
+                    asset_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_RELEASE_ID}/assets" \
+                      --jq ".[] | select(.name == \"${asset}\") | .id")"
+                    test -n "$asset_id"
+                    gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+                      --header "Accept: application/octet-stream" > "released-assets/${asset}"
+                  done
+                  node ../.github/scripts/verify-release.mjs \
+                    --tag "${GITHUB_REF_NAME}" \
+                    --source-dir .. \
+                    --assets-dir released-assets \
+                    --expected-commit "${VERIFIED_COMMIT}" \
+                    --expected-report release-verification.json
+
+            # Evidence is retained before a draft becomes public. On a failed
+            # verification, the build-job artifact is still available as evidence.
+            - name: Preserve publication verification evidence
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: release-publication-verification-${{ github.ref_name }}
+                  path: |
+                      verified-release-build/release-verification.json
+                      verified-release-build/released-assets
+                  if-no-files-found: warn
+
+            - name: Recheck immutable tag and default-branch policy before publish
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: node .github/scripts/verify-tag-identity.mjs
+
+            - name: Publish this captured verified release through the REST API
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_RELEASE_ID}" -F draft=false >/dev/null
+
+            # The captured ID exists only after this run's POST succeeds. Never
+            # resolve by tag here: tags and releases owned by another run survive.
+            - name: Clean up this run's unverified draft by captured ID
+              if: ${{ failure() && env.CREATED_DRAFT == 'true' }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_RELEASE_ID}" >/dev/null

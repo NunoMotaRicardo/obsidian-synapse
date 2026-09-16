@@ -1,17 +1,17 @@
 # Starter kit
 
-Synapse ships with one agent and four skills. They're general by design: useful the first time
+Claude Synapse ships with one agent and four skills. They're general by design: useful the first time
 you open the panel, and meant to be customized. They're plain Markdown in your vault's
 `_synapse/` folder, so you can read and edit every line.
 
 The kit is installed on first run in a vault without `_synapse/`, and again by **Settings →
-Synapse → Capabilities → Initialize**, which only adds missing files. Your edits are never
+Claude Synapse → Capabilities → Initialize**, which only adds missing files. Your edits are never
 overwritten. Plugin updates don't change files you already have. To get a newer starter file,
 delete or rename your copy and click **Initialize**.
 
 | Artifact | Type | Use it when |
 |---|---|---|
-| [`synapse-config`](#synapse-config) | Skill | You want to change how Synapse behaves, or set it up for the first time |
+| [`synapse-config`](#synapse-config) | Skill | You want to change how Claude Synapse behaves, or set it up for the first time |
 | [Writer](#writer-agent) | Agent | You want a finished piece of writing |
 | [`writing-style`](#writing-style) | Skill | Anything is being drafted, rewritten, or edited |
 | [`think`](#think) | Skill | You want to think something through before anything is produced |
@@ -26,21 +26,21 @@ in its frontmatter.
 
 ## synapse-config
 
-**Customize Synapse by talking to it.** This skill knows the formats of everything in
+**Customize Claude Synapse by talking to it.** This skill knows the formats of everything in
 `_synapse/`: agents, skills, and MCP servers. Describe what you want:
 
 - *"Create an agent that turns meeting notes into decisions and action items."*
 - *"Add a skill with our team's release-notes format."*
 - *"Connect a GitHub MCP server."*
 
-Synapse proposes the exact file (path, frontmatter, and body) and writes it only after you approve.
+Claude Synapse proposes the exact file (path, frontmatter, and body) and writes it only after you approve.
 Deleting an artifact needs a second confirmation. New and changed files apply on your next message,
 with no reload.
 
 Its reference files load only when needed: `agents.md` and `skills.md` hold the formats and a
 guide to writing skills that behave predictably. `setup.md` holds the setup workflow.
 
-Synapse also nudges you toward it. When you state a lasting preference in any conversation
+Claude Synapse also nudges you toward it. When you state a lasting preference in any conversation
 ("always use APA citations"), the assistant offers to turn it into an agent or skill.
 
 ### The setup workflow: writing styles from your own documents
@@ -72,7 +72,7 @@ From then on, `writing-style` loads your style automatically whenever the writin
 ## Writer agent
 
 **Finished writing, not outlines.** Select **Writer** in the agent picker, or map it to a feature
-under **Settings → Synapse → Feature Map & Agents**. The Writer:
+under **Settings → Claude Synapse → Feature Map & Agents**. The Writer:
 
 1. **Names the output type**: essay or personal post, document (report, proposal, spec, email),
    speech, or article.
@@ -98,13 +98,13 @@ The Writer owns **structure**. It always loads `writing-style` for **voice**.
 - **Keeps it honest.** It never invents statistics, quotes, or personal stories. Unsupported claims
   are flagged, and missing stories become `[YOUR STORY HERE: …]` placeholders.
 
-It works in any conversation, not just with the Writer. Ask Synapse to rewrite an email or tighten
+It works in any conversation, not just with the Writer. Ask Claude Synapse to rewrite an email or tighten
 a paragraph and the same voice rules apply.
 
 ## think
 
 **Think before writing.** Say *"think this through with me"* or *"interview me about this plan"*
-and Synapse asks **one question at a time**, each with a recommended answer you can accept or
+and Claude Synapse asks **one question at a time**, each with a recommended answer you can accept or
 change. It checks the active note, linked notes, and the topic's folder before asking, so it
 doesn't ask what's already written down. It stops only when every open point has an answer you've
 confirmed, then summarizes what was agreed before producing anything.
@@ -129,4 +129,4 @@ result through the CLI when Obsidian is running.
 ## Suggested reading
 
 - [Customization](Customization.md): agent, skill, and MCP file formats in full
-- [Using Synapse](Using-Synapse.md): where to pick agents and toggle skills
+- [Using Claude Synapse](Using-Synapse.md): where to pick agents and toggle skills

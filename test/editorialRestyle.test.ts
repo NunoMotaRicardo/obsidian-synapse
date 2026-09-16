@@ -112,7 +112,7 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 			const chatRendererSource = readFileSync(chatRendererPath, 'utf8');
 
 			expect(chatRendererSource).toContain("'You'");
-			expect(chatRendererSource).toContain("'Synapse'");
+			expect(chatRendererSource).toContain("'Claude Synapse'");
 			expect(chatRendererSource).toContain('synapse-speaker');
 			expect(chatRendererSource).toContain("'aria-labelledby': speakerId");
 		});

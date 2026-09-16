@@ -1,10 +1,10 @@
-# Using Synapse
+# Using Claude Synapse
 
-Synapse is available in three places: the **Synapse panel** in the right sidebar, the **context
+Claude Synapse is available in three places: the **Claude Synapse panel** in the right sidebar, the **context
 menus** in the editor and file explorer, and an optional [Telegram bot](Telegram-Bot.md). All of
 them use the same agents, skills, and MCP tools from `_synapse/`.
 
-Open the panel from the Synapse ribbon icon or the command **Open chat**.
+Open the panel from the Claude Synapse ribbon icon or the command **Open chat**.
 
 ## The panel
 
@@ -53,7 +53,7 @@ Describe what you're looking for in plain language and an agent searches the vau
 is quick. **Advanced** mode lets you choose the agent, model, and tool approval for the search.
 Click a result to open the note.
 
-![The Synapse panel in search mode](images/search-panel.png)
+![The Claude Synapse panel in search mode](images/search-panel.png)
 
 ### Sessions
 
@@ -70,9 +70,9 @@ that is still streaming, and search runs appear as their own session type.
 
 ### In a note
 
-Right-click in the editor and open **Synapse**.
+Right-click in the editor and open **Claude Synapse**.
 
-![Synapse actions in the editor context menu](images/editor-menu.png)
+![Claude Synapse actions in the editor context menu](images/editor-menu.png)
 
 **With text selected:**
 
@@ -86,33 +86,33 @@ Right-click in the editor and open **Synapse**.
 | **Describe** / **Explain** | Describes what the text conveys, or explains it simply |
 | **Answer** | Answers a question in the selection |
 | **Expand** / **Summarize** | Adds depth, or condenses |
-| **Chat with Synapse** | Opens the chat with the selection as context |
+| **Chat with Claude Synapse** | Opens the chat with the selection as context |
 
 Quick actions replace the selection in place. **Without a selection**, the menu offers **Edit the
-note**, **Structure and refine** (restructures the whole note), and **Chat with Synapse**.
+note**, **Structure and refine** (restructures the whole note), and **Chat with Claude Synapse**.
 
 ### In the file explorer
 
-Right-click a note or folder and open **Synapse**.
+Right-click a note or folder and open **Claude Synapse**.
 
 <p>
-  <img src="images/file-menu.png" alt="Synapse actions for a note in the file explorer" width="48%">
-  <img src="images/folder-menu.png" alt="Synapse actions for a folder in the file explorer" width="48%">
+  <img src="images/file-menu.png" alt="Claude Synapse actions for a note in the file explorer" width="48%">
+  <img src="images/folder-menu.png" alt="Claude Synapse actions for a folder in the file explorer" width="48%">
 </p>
 
-- **Notes:** **Edit the note**, **Structure and refine**, **Chat with Synapse**.
+- **Notes:** **Edit the note**, **Structure and refine**, **Chat with Claude Synapse**.
 - **Folders:** **New note** and **New canvas** (generated from your description), **New summary
   note** (summarizes every note in the folder), **Semantic search** (scoped to the folder), and
-  **Chat with Synapse**.
+  **Chat with Claude Synapse**.
 - **Images:** extract the image's text below it or in its place, or convert it into a Mermaid
-  diagram. These actions use the agent mapped to **Vision** in **Settings → Synapse → Feature Map &
+  diagram. These actions use the agent mapped to **Vision** in **Settings → Claude Synapse → Feature Map &
   Agents**.
 
 The note and selection actions are also commands in the command palette, so you can assign hotkeys.
 
 ## Choosing agents per feature
 
-In **Settings → Synapse → Feature Map & Agents**, pick the default agent for the chat panel,
+In **Settings → Claude Synapse → Feature Map & Agents**, pick the default agent for the chat panel,
 editor actions, search, Telegram, and image actions. **Auto** uses Claude's default agent. For
 example, map editor actions to the starter kit's **Writer** so rewrites follow your
 [writing styles](Starter-Kit.md#writing-style).
