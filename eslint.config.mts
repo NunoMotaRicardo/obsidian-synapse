@@ -374,5 +374,6 @@ export default defineConfig(
 		// `npm run lint` fail on the HTML reporter's own bundled JS. CI never saw it:
 		// it lints on a fresh checkout and collects coverage in a separate job.
 		"coverage",
+		".worktrees",
 	]),
 );
