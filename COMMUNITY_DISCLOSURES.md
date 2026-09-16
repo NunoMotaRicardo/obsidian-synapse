@@ -37,7 +37,7 @@ Tool approval defaults to **Ask**. **Allow**, plan/bypass modes, Telegram, a per
 
 Claude Synapse is an independent, open-source project. It has no in-plugin advertising and no maintainer telemetry. Provider-side processing, provider telemetry, third-party MCP behavior, Telegram retention, and Ollama Cloud processing are governed by those services' policies, not by Claude Synapse.
 
-Source code is available in this repository under the MIT License for new Claude Synapse code. The repository also contains portions derived from **obsidian-sidekick**, preserved with Apache License 2.0 attribution in [NOTICE](NOTICE) and [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt). This documentation does not assert that Obsidian or the upstream maintainer approved the adaptation. Submission is blocked until publicly verifiable written approval from the upstream maintainer is linked, or the documented unreachable/inactive-author policy process is satisfied and its evidence is linked.
+Source code is available in this repository under the MIT License for new Claude Synapse code.
 
 - [Security policy and reporting](SECURITY.md)
 - [Architecture](specs/ARCHITECTURE.md)
