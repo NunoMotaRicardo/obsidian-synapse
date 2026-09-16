@@ -17,7 +17,6 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Build, TypeScript, lint, and test output
-main.js
 *.map
 *.tsbuildinfo
 .eslintcache
@@ -29,8 +28,8 @@ coverage-output.txt
 .env.*
 !.env.example
 
-# Local project documentation and working notes
-.docs/
+# Local Git worktrees
+.worktrees/
 
 # Obsidian plugin-local settings
 # They contain machine- and vault-specific configuration, including secrets.

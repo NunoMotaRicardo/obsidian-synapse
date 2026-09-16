@@ -115,7 +115,7 @@ export class AskUserQuestionModal extends Modal {
 		this.promise = new Promise<PermissionResult>((res) => {
 			this.resolve = res;
 		});
-		for (const _q of input.questions) {
+		for (let i = 0; i < input.questions.length; i++) {
 			this.states.push({selectedLabels: new Set(), otherSelected: false, otherText: ''});
 		}
 	}

@@ -708,6 +708,7 @@ export class ChatRendererController {
 		let wasOpen = true;
 		if (!this.view.view.taskPanelEl || !this.view.view.taskPanelEl.isConnected) {
 			this.view.view.taskPanelEl = this.view.view.toolCallsContainer.createEl('details', {cls: 'synapse-task-panel synapse-findings'});
+			this.view.view.toolCallsContainer.addClass('synapse-tool-calls-has-task-panel');
 			(this.view.view.taskPanelEl as HTMLDetailsElement).open = true;
 			// Keep the panel first among tool blocks — the plan is the headline, tool calls are detail.
 			this.view.view.toolCallsContainer.prepend(this.view.view.taskPanelEl);

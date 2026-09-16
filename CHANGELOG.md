@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Added GitHub build-provenance attestations for the verified release installer assets.
+- Addressed community-directory audit findings in the manifest, settings search, SDK timer compatibility, and scoped UI styles.
+- Stopped forwarding username and hostname variables in the filtered CLI environment and documented required desktop-agent capabilities.
+
 ## [0.1.3] - 2026-09-16
 
 ### Changed

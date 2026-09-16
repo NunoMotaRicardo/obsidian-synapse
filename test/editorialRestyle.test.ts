@@ -293,7 +293,7 @@ function render() {}`;
 				/\.synapse-hide-debug\s+\.synapse-tool-call,[\s\S]*?\.synapse-hide-debug\s+\.synapse-compaction-block,[\s\S]*?\.synapse-hide-debug\s+\.synapse-msg-metadata\s*\{[^}]*display:\s*none/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-hide-debug\s+\.synapse-tool-calls:not\(:has\(\.synapse-task-panel\)\)\s*\{[^}]*display:\s*none/
+				/\.synapse-hide-debug\s+\.synapse-tool-calls:not\(\.synapse-tool-calls-has-task-panel\)\s*\{[^}]*display:\s*none/
 			);
 		});
 	});

@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {DEFAULT_SETTINGS} from '../src/settings';
+import {DEFAULT_SETTINGS, SynapseSettingTab} from '../src/settings';
 
 // ---------------------------------------------------------------------------
 // Legacy settings-key tolerance (issues #106, #148, #188, #260)
@@ -72,5 +72,20 @@ describe('legacy settings key tolerance', () => {
 		expect(merged.triggerLastFired).toEqual({'daily-lint': 1735689600000});
 		expect(merged.inlineModel).toBe('qwen3:8b');
 		expect(merged.infiniteSessionsEnabled).toBe(false);
+	});
+});
+
+describe('settings search definitions', () => {
+	it('places searchable section aliases in page children, which Settings search indexes', () => {
+		const tab = new SynapseSettingTab({} as never, {} as never);
+		const definitions = tab.getSettingDefinitions();
+		const botsPage = definitions.find((definition) => 'type' in definition && definition.type === 'page' && definition.name === 'Bots');
+
+		expect(botsPage).toBeDefined();
+		if (!botsPage || !('items' in botsPage)) throw new Error('Bots settings page is missing');
+		const [searchEntry] = botsPage.items ?? [];
+		if (!searchEntry || !('aliases' in searchEntry)) throw new Error('Bots search entry is missing');
+		expect(searchEntry.name).toBe('Bots');
+		expect(searchEntry.aliases).toContain('Telegram');
 	});
 });

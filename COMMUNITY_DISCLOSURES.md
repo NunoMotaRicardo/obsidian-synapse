@@ -35,6 +35,30 @@ Tool approval defaults to **Ask**. **Allow**, plan/bypass modes, Telegram, a per
 
 ## Privacy, advertising, and source
 
+### Automated behavior audit findings
+
+The distribution bundle includes the Claude Agent SDK, so static checks cover both plugin code
+and dependency code. The following capabilities remain necessary for the desktop agent:
+
+- **Environment and identity:** CLI discovery reads home and OS installation directory variables;
+  the subprocess environment retains runtime paths, authentication, proxy, and tool configuration.
+  The plugin's filtered environment omits `USER`, `USERNAME`, `LOGNAME`, and `HOSTNAME`.
+  It does not call `os.hostname()`, `os.userInfo()`, or `os.networkInterfaces()` in plugin-owned code.
+  Directory paths can still contain a username; this is not a machine-fingerprinting feature.
+- **Direct filesystem access:** the plugin checks the CLI binary, reads vault-local SDK settings,
+  and writes/cleans temporary blob attachments. The SDK also accesses CLI authentication and
+  session storage outside the vault. These cannot all use the vault API.
+- **Subprocess execution:** the plugin probes the CLI version with `execFile`; the SDK starts
+  the CLI and configured MCP processes. Agent shell tools run under the selected permission mode.
+- **Vault enumeration:** adaptive request timeouts count vault files (or files under the selected
+  scope); vault structure context lists top-level folder names. Counting paths does not itself
+  read or send every file's contents. Agent tools can subsequently read files as described above.
+- **Clipboard:** paste handlers consume the user's paste event, and copy buttons write the text
+  the user selected to copy. Plugin-owned code does not poll or automatically read the clipboard.
+- **Dynamic code:** plugin-owned TypeScript contains no `eval()` or `new Function()` calls.
+  The bundled SDK's schema-validation dependency uses `new Function()` for validation compilation
+  and feature detection. This dependency behavior still limits complete static analysis of the bundle.
+
 Claude Synapse is an independent, open-source project. It has no in-plugin advertising and no maintainer telemetry. Provider-side processing, provider telemetry, third-party MCP behavior, Telegram retention, and Ollama Cloud processing are governed by those services' policies, not by Claude Synapse.
 
 Source code is available in this repository under the MIT License for new Claude Synapse code.

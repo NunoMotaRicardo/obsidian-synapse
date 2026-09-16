@@ -72,6 +72,8 @@ describe('release verification', () => {
 		expect(publishJob).toBeGreaterThan(validationJob);
 		expect(validation).toContain('contents: read');
 		expect(validation).not.toContain('contents: write');
+		expect(validation).toContain('attestations: write');
+		expect(validation).toContain('id-token: write');
 		expect(validation).toContain('persist-credentials: false');
 		expect(publish).toContain('contents: write');
 		expect(publish).toContain('persist-credentials: false');
@@ -83,6 +85,17 @@ describe('release verification', () => {
 		expect(workflow).toContain('concurrency:');
 		expect(workflow).toContain('group: release-${{ github.workflow }}-${{ github.ref_name }}');
 		expect(workflow).toContain('cancel-in-progress: false');
+	});
+
+	it('attests every verified installer asset before transferring the build to publication', () => {
+		const workflow = readFileSync(releaseWorkflow, 'utf8');
+		const verification = workflow.indexOf('Verify source, version, and generated release assets');
+		const attestation = workflow.indexOf('Attest verified installer asset provenance');
+		const transfer = workflow.indexOf('Preserve verified build and verification evidence');
+		expect(attestation).toBeGreaterThan(verification);
+		expect(transfer).toBeGreaterThan(attestation);
+		expect(workflow).toContain('uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2');
+		expect(workflow).toContain('subject-path: |\n                      main.js\n                      manifest.json\n                      styles.css');
 	});
 
 	it('publishes only verified exact assets and cleans up only its own failed draft', () => {

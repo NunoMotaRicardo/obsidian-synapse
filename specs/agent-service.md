@@ -574,7 +574,9 @@ callback).
    grace window for each hard abort. It wraps numeric timer ids in `Number` objects with no-op
    `unref`/`ref`, while preserving `clearTimeout()` coercion via `valueOf()`. The 8-second window
    exceeds the SDK's ~7-second worst-case escalation sequence. `sendAndWaitWithAbort()` uses the
-   same helper for timeout, external-signal, and error cleanup aborts; Telegram session
+   same helper for timeout, external-signal, and error cleanup aborts; its shared state and timer
+   replacement live on `window`, so Electron renderer reloads share the refcount while popout-window
+   selection cannot redirect an SDK process-cleanup timer. Telegram session
    reset/disconnect also uses it. `Plugin.onunload()` releases the lifecycle reference after its
    cleanup grace window, while a global refcount preserves the shim across rapid plugin reloads
    and prevents overlapping aborts from restoring early.

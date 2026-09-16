@@ -62,17 +62,21 @@ try {
 // original `setTimeout` while another abort is still relying on the shim.
 interface SetTimeoutShimState {
 	refCount: number;
-	original: typeof globalThis.setTimeout | null;
+	original: typeof window.setTimeout | null;
 }
 
 const SET_TIMEOUT_SHIM_STATE = Symbol.for('synapse.setTimeoutShimState');
 
 function getSetTimeoutShimState(): SetTimeoutShimState {
-	const globals = globalThis as typeof globalThis & Record<symbol, SetTimeoutShimState | undefined>;
-	let state = globals[SET_TIMEOUT_SHIM_STATE];
+	// Keep this state on the Electron renderer window. The Agent SDK runs in that
+	// renderer and its process-cleanup timers must use the same timer API that we
+	// patch below. `activeWindow` would be wrong here: an SDK query is not owned by
+	// whichever popout happens to be active when it is aborted.
+	const rendererWindow = window as typeof window & Record<symbol, SetTimeoutShimState | undefined>;
+	let state = rendererWindow[SET_TIMEOUT_SHIM_STATE];
 	if (!state) {
 		state = {refCount: 0, original: null};
-		globals[SET_TIMEOUT_SHIM_STATE] = state;
+		rendererWindow[SET_TIMEOUT_SHIM_STATE] = state;
 	}
 	return state;
 }
@@ -82,10 +86,14 @@ export function installSetTimeoutShim(): void {
 	state.refCount++;
 	if (state.refCount > 1) return;
 	try {
-		state.original = globalThis.setTimeout;
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- retained for exact restoration after the final renderer-shim reference releases
+		state.original = window.setTimeout;
 		if (typeof state.original !== 'function') return;
-		const original = state.original;
-		globalThis.setTimeout = ((...args: Parameters<typeof original>) => {
+		// Chromium's timer is a Window method. Bind it before extracting it so the
+		// wrapper retains its renderer receiver while preserving the original for
+		// restoration when the final shim reference is released.
+		const original = state.original.bind(window);
+		window.setTimeout = ((...args: Parameters<typeof original>) => {
 			const id: unknown = original(...args);
 			if (id === null || (typeof id !== 'number' && typeof id !== 'bigint')) return id;
 			// `Object(id)` still coerces to the same numeric id via `valueOf()` for
@@ -106,7 +114,7 @@ export function uninstallSetTimeoutShim(): void {
 	const state = getSetTimeoutShimState();
 	state.refCount = Math.max(0, state.refCount - 1);
 	if (state.refCount === 0 && state.original) {
-		globalThis.setTimeout = state.original;
+		window.setTimeout = state.original;
 		state.original = null;
 	}
 }

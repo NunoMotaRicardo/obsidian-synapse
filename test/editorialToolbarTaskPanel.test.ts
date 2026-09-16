@@ -67,14 +67,14 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 			);
 		});
 
-		it('styles .synapse-config-toolbar .synapse-select without rectangular dropdown borders or backgrounds', () => {
+		it('styles the config toolbar select without rectangular dropdown borders or backgrounds', () => {
 			// Scoped under `.synapse-config-toolbar` (#215) — the search tab reuses the bare
 			// `.synapse-select` class and keeps its own bordered dropdown appearance.
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*background:\s*transparent/
+				/\.synapse-root \.synapse-config-toolbar select\.synapse-select\s*\{[^}]*background:\s*transparent/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\s*\{[^}]*border:\s*none/
+				/\.synapse-root \.synapse-config-toolbar select\.synapse-select\s*\{[^}]*border:\s*none/
 			);
 			// Typography lives in the shared toolbar-row label family rule (#217).
 			expect(stylesContent).toMatch(
@@ -84,13 +84,13 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 				/\.synapse-config-toolbar \.synapse-select,[\s\S]*?\{[^}]*letter-spacing:\s*0\.13em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
+				/\.synapse-root \.synapse-config-toolbar select\.synapse-select:hover\s*\{[^}]*border-bottom-color:\s*var\(--interactive-accent\)/
 			);
 		});
 
 		it('gives keyboard focus a visible indicator on .synapse-select and .synapse-toolbar-btn', () => {
 			expect(stylesContent).toMatch(
-				/\.synapse-select:focus-visible,\s*\n?\s*\.synapse-toolbar-btn:focus-visible\s*\{[^}]*outline:\s*1px solid var\(--interactive-accent\)/
+				/\.synapse-root select\.synapse-select:focus-visible,\s*\n?\s*\.synapse-root button\.synapse-toolbar-btn:focus-visible\s*\{[^}]*outline:\s*1px solid var\(--interactive-accent\)/
 			);
 		});
 
@@ -140,20 +140,19 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 		});
 
 		it('normalizes control colors: faint when default/unselected and accent when active', () => {
-			// The `!important` faint color is asserted separately from the shared toolbar-row
-			// typography rule, since Obsidian's native <select>/<button> styling needs it to
-			// win (#217).
+			// Element selectors scoped below `.synapse-root` outrank Obsidian's native
+			// <select>/<button> styling without using `!important`.
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select,[\s\S]*?\{[^}]*color:\s*var\(--text-faint\)\s*!important/
+				/\.synapse-root \.synapse-config-toolbar select\.synapse-select,[\s\S]*?\{[^}]*color:\s*var\(--text-faint\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-config-toolbar \.synapse-select\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)\s*!important/
+				/\.synapse-root \.synapse-config-toolbar select\.synapse-select\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar-btn\s*\{[^}]*color:\s*var\(--text-faint\)\s*!important/
+				/\.synapse-root button\.synapse-toolbar-btn\s*\{[^}]*color:\s*var\(--text-faint\)/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-toolbar-btn\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)\s*!important/
+				/\.synapse-root button\.synapse-toolbar-btn\.is-active\s*\{[^}]*color:\s*var\(--interactive-accent\)/
 			);
 			expect(configToolbarSource).toContain("this.agentSelect.toggleClass('is-active', this.selectedAgent !== '')");
 			expect(configToolbarSource).toContain("this.modelSelect.toggleClass('is-active', this.selectedModel !== '')");
@@ -240,6 +239,7 @@ describe('editorial restyle: config toolbar, gauge & task panel (#210)', () => {
 	describe('AC-5: Task/plan panel ruled definition list', () => {
 		it('renders task panel reusing synapse-findings primitive', () => {
 			expect(chatRendererSource).toContain("cls: 'synapse-task-panel synapse-findings'");
+			expect(chatRendererSource).toContain("addClass('synapse-tool-calls-has-task-panel')");
 			expect(chatRendererSource).toContain('synapse-finding-key');
 			expect(chatRendererSource).toContain('synapse-finding-val');
 		});

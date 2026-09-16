@@ -189,7 +189,9 @@ and built in `buildUI()` via `controller.build(parent)`.
     view-maintained `taskPlan` map's values for the `TaskCreate`/`TaskUpdate` family) — so there is
     exactly one live `.synapse-task-panel` element per turn (created lazily on the first
     plan-related call, kept as the first child of `toolCallsContainer` so the plan reads above
-    per-tool detail blocks). Each task row shows a text status (`TODO`, `ACTIVE`, `DONE`) and
+    per-tool detail blocks). Its container receives `.synapse-tool-calls-has-task-panel` when the
+    panel is created, which lets the debug-hide rule preserve completed plan containers without a
+    relational CSS selector. Each task row shows a text status (`TODO`, `ACTIVE`, `DONE`) and
     its label (the in-progress task shows `activeForm` when present, e.g. "Running tests", instead
     of the imperative `content`). Active rows have an accent dot and bold styling; completed
     rows are struck through.
@@ -883,4 +885,3 @@ All plugin modals adopt the Editorial design language so dialogs read as pages f
 - **Vault scope & Folder tree modals (`VaultScopeModal`, `FolderTreeModal`):** Tree containers render within a ruled frame (`border-top: 1px solid var(--synapse-rule-soft); border-bottom: 1px solid var(--synapse-rule-soft)`). Items render as ruled rows; selection is marked by an accent left border (`border-left: 2px solid var(--interactive-accent)`) and accent text, completely eliminating filled hover/active boxes.
 - **Edit modal (`EditModal`):** Serif title with heavy closing rule, uppercase labels, ruled textarea and prompt area, borderless selects with ruled bottom, and results cards (`.synapse-edit-card`) styled as ruled rows with serif body copy.
 - **Behavioral preservation & theme compliance:** Every modal's approval decisions, always-allow persistence, form validation, keyboard navigation, and escape-to-dismiss behavior are preserved exactly. All colors strictly consume Obsidian theme variables with zero raw hex codes across light and dark modes.
-
