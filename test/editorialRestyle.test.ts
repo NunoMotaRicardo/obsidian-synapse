@@ -156,7 +156,7 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 	});
 
 	describe('AC-6: Reasoning blocks', () => {
-		it('styles.css styles reasoning blocks with hairline rule, uppercase label, live pulse, and serif body', () => {
+		it('styles.css styles reasoning blocks with hairline rule, uppercase label, live pulse, and compact interface-font body', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-reasoning\s*\{[^}]*border-left:\s*1px solid var\(--synapse-rule\)/
 			);
@@ -166,7 +166,11 @@ describe('editorial restyle: foundations & transcript (#207)', () => {
 				/\.synapse-label-base,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-reasoning-body\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
+				/\.synapse-reasoning-body\s*\{[^}]*font-family:\s*var\(--font-interface\)/
+			);
+			// Compact secondary text (#273): smaller than the 14.5px serif reply body.
+			expect(stylesContent).toMatch(
+				/\.synapse-reasoning-body\s*\{[^}]*font-size:\s*12px/
 			);
 			expect(stylesContent).toContain('.synapse-reasoning.is-live > summary');
 		});
