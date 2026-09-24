@@ -89,6 +89,30 @@ export function resolveResumeSessionId(sessionId: string, configResume: string |
 }
 
 /**
+ * Turn an SDK `result` message's `total_cost_usd` into this run's own cost (issue #264
+ * AC-3), given `prevCumulativeUsd` — the last `total_cost_usd` this `Session` has seen (or
+ * was seeded with on a `configDirty` rebuild, `undefined` if none).
+ *
+ * CLI >= 2.1.277 reports `total_cost_usd` as the whole resumed/forked session's cumulative
+ * total rather than this run's own cost. Since `Session.send()` spawns a fresh CLI process
+ * per call (seeded with `resume`), every result would otherwise report the whole
+ * conversation's cost once it's past a budget threshold. An old CLI reports a genuine
+ * per-run value on every call instead.
+ *
+ * Heuristic (there is no explicit "old vs new CLI" signal to key off): treat `total` as
+ * cumulative — and return the delta since `prevCumulativeUsd` — only when it hasn't dropped
+ * below that baseline; a per-run value from an old CLI will typically fall below the
+ * previous run's total and is returned as-is. This can misfire in one specific case: an old
+ * CLI whose *next* run happens to cost more than or equal to the previous run's own cost,
+ * which would be read as a (usually near-zero, understated) delta instead of that run's full
+ * cost — accepted as a known limitation (see specs/agent-service.md "Run cost reporting")
+ * since there's no cheaper way to disambiguate the two CLI behaviors from this field alone.
+ */
+export function computeRunCostDelta(total: number, prevCumulativeUsd: number | undefined): number {
+	return (prevCumulativeUsd !== undefined && total >= prevCumulativeUsd) ? total - prevCumulativeUsd : total;
+}
+
+/**
  * Cached, one-turn-stale snapshot of the three `Query` control-request answers a live
  * per-turn `Query` handle can serve (issue #130): context-window usage, the CLI's actual
  * slash-command list, and its actual subagent list. See
@@ -294,16 +318,37 @@ export class Session {
 	 * See specs/agent-service.md "Partial message streaming".
 	 */
 	private readonly partialMessagesEnabled: boolean;
+	/**
+	 * Last-seen `total_cost_usd` from a `result` message, used to turn a cumulative total
+	 * (CLI >= 2.1.277, on a resumed/forked session) into a per-run delta — see
+	 * `convertToSessionEvent()`'s `'result'` case and specs/agent-service.md "Run cost
+	 * reporting". `undefined` until the first `result` this `Session` instance has seen,
+	 * unless seeded via the constructor's `initialCumulativeCostUsd` (issue #264 AC-4).
+	 */
+	private lastCumulativeCostUsd: number | undefined;
 
-	constructor(service: AgentService, config: Options, onEvent?: (event: SessionEvent) => void) {
+	constructor(service: AgentService, config: Options, onEvent?: (event: SessionEvent) => void, initialCumulativeCostUsd?: number) {
 		this.service = service;
 		this.config = config;
 		this.onEventCallback = onEvent ?? null;
 		this.partialMessagesEnabled = config.includePartialMessages === true;
+		this.lastCumulativeCostUsd = initialCumulativeCostUsd;
 	}
 
 	get sessionId(): string {
 		return this._sessionId;
+	}
+
+	/**
+	 * This session's last-seen `total_cost_usd` (raw, not a delta) — read by
+	 * `ensureSession()`/`SynapseView` before tearing down a `Session` on a `configDirty`
+	 * rebuild, and passed as the rebuilt `Session`'s `initialCumulativeCostUsd` seed so the
+	 * first run reported after the rebuild is still a per-run delta rather than the whole
+	 * conversation's cumulative total (issue #264 AC-4). `undefined` if no `result` has
+	 * arrived yet.
+	 */
+	get cumulativeCostUsd(): number | undefined {
+		return this.lastCumulativeCostUsd;
 	}
 
 	/**
@@ -636,7 +681,14 @@ export class Session {
 				// Dispatched for both success and error results, since a failed/aborted
 				// run can still have accrued cost.
 				if (typeof resultMsg.total_cost_usd === 'number') {
-					this.dispatch('assistant.run_result', {totalCostUsd: resultMsg.total_cost_usd, numTurns: resultMsg.num_turns});
+					const total = resultMsg.total_cost_usd;
+					// See computeRunCostDelta()'s doc comment for the cumulative-vs-per-run
+					// heuristic (issue #264 AC-3). `lastCumulativeCostUsd` is always advanced
+					// to `total` afterward so the next result (old or new CLI) diffs against
+					// the right baseline.
+					const runCostUsd = computeRunCostDelta(total, this.lastCumulativeCostUsd);
+					this.lastCumulativeCostUsd = total;
+					this.dispatch('assistant.run_result', {totalCostUsd: runCostUsd, numTurns: resultMsg.num_turns});
 				}
 				if (resultMsg.is_error) {
 					const raw = (resultMsg as {result?: string}).result;

@@ -262,6 +262,40 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
 /**
+ * Plan/task-tracking tool names (issue #264) — `TodoWrite` (legacy, one call carries the whole
+ * plan) and the `TaskCreate`/`TaskGet`/`TaskUpdate`/`TaskList` family (incremental task graph).
+ * CLI 2.1.268 made these default tools only on Claude 3.x, Opus 4.0-4.7, Sonnet 4.0-4.6 and
+ * Haiku 4.5 — on every other model (e.g. Opus 5.x, Sonnet 5) they must be explicitly listed in
+ * `tools`/`allowedTools` or the plan panel (`taskPlanTracker.ts`) never receives a tool call to
+ * parse. Listed in `allowedTools` rather than `tools` so the rest of the default Claude Code
+ * toolset isn't replaced — see `mergeAllowedTools()` and specs/agent-service.md
+ * "Plan/task tracking".
+ */
+export const PLAN_TRACKING_TOOLS: string[] = ['TodoWrite', 'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList'];
+
+/**
+ * Merge one or more tool-name lists into a deduplicated `allowedTools` array, preserving first
+ * occurrence order. `allowedTools` only *auto-allows* the listed tools (and, since CLI 2.1.268,
+ * makes the model-gated default tools in `PLAN_TRACKING_TOOLS` available at all) — it never
+ * narrows or replaces the base toolset the way `tools` would, so merging extra names into
+ * whatever a caller already passed is always additive and safe (AC-2).
+ */
+export function mergeAllowedTools(...lists: (string[] | undefined)[]): string[] {
+	const seen = new Set<string>();
+	const merged: string[] = [];
+	for (const list of lists) {
+		if (!list) continue;
+		for (const name of list) {
+			if (!seen.has(name)) {
+				seen.add(name);
+				merged.push(name);
+			}
+		}
+	}
+	return merged;
+}
+
+/**
  * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
  * audit rec 5). The editor's call sites were previously kept consistent only by convention
  * comments ("pure text transform → `tools: []` + `maxTurns: 1`"); the convention now lives in
@@ -350,6 +384,7 @@ import {
 	Session,
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
+	computeRunCostDelta,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 } from './session';
@@ -365,6 +400,7 @@ import {
 export {
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
+	computeRunCostDelta,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 };
@@ -1101,9 +1137,18 @@ export class AgentService {
 	 * compatible with the chat panel's expectations. Each send() call creates
 	 * a new query() under the hood, using resume to continue the conversation.
 	 */
-	async createSession(config: Options, onEvent?: (event: SessionEvent) => void): Promise<Session> {
+	/**
+	 * `initialCumulativeCostUsd` seeds the new `Session`'s cost-delta baseline (issue #264
+	 * AC-4) — pass the outgoing `Session.cumulativeCostUsd` when rebuilding a session that
+	 * already had a conversation (e.g. `ensureSession()`'s `configDirty` rebuild) so the
+	 * first result the rebuilt session reports is still a per-run delta, not the whole
+	 * conversation's cumulative total. Omit it for a genuinely new session, or when no
+	 * cheap baseline is available (e.g. resuming a session cold from disk with no live
+	 * `Session` to read a baseline from — see specs/agent-service.md "Run cost reporting").
+	 */
+	async createSession(config: Options, onEvent?: (event: SessionEvent) => void, initialCumulativeCostUsd?: number): Promise<Session> {
 		await this.ensureConnected();
-		return new Session(this, config, onEvent);
+		return new Session(this, config, onEvent, initialCumulativeCostUsd);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────

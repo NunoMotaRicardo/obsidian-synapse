@@ -791,6 +791,13 @@ export class SessionSidebarController {
 			});
 
 			this.view.view.earlyEventBuffer = [];
+			// No `initialCumulativeCostUsd` seed here (issue #264 AC-4 limitation, documented
+			// in specs/agent-service.md "Run cost reporting"): this is a cold resume from a
+			// persisted session on disk, not a live `Session` this process already held, so
+			// there's no cheap in-memory baseline to carry forward. On CLI >= 2.1.277 the
+			// first `assistant.run_result` after switching to an old conversation from the
+			// sidebar will therefore report that conversation's whole cumulative cost as if
+			// it were this one run's cost; every result after that is a correct per-run delta.
 			const session = await this.view.plugin.agentService!.createSession({
 				...sessionConfig,
 				resume: sessionId,
