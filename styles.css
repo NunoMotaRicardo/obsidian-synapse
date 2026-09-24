@@ -1303,17 +1303,17 @@
 }
 
 .synapse-reasoning-body {
-	font-family: var(--synapse-font-serif);
-	font-size: 14.5px;
-	line-height: 1.6;
+	font-family: var(--font-interface);
+	font-size: 12px;
+	line-height: 1.45;
 	color: var(--text-muted);
-	max-height: 300px;
+	max-height: 240px;
 	overflow-y: auto;
-	padding: 4px 0;
+	padding: 2px 0;
 }
 
 .synapse-reasoning-body p {
-	margin: 0 0 4px;
+	margin: 0 0 3px;
 }
 
 /* ── Bottom panel ─────────────────────────────────────────────── */
