@@ -128,6 +128,45 @@ export function computeRunCostDelta(total: number, prevCumulativeUsd: number | u
 }
 
 /**
+ * Cap on `SynapseSettings.sessionCostBaselines` (issue #269 AC-1) — the persisted map of
+ * last-seen cumulative `total_cost_usd` per session id, used to seed a cold-resumed session's
+ * cost-delta baseline (see `upsertSessionCostBaseline()` below). Keeps the settings file from
+ * growing unbounded across a long-lived vault's session history.
+ */
+export const MAX_SESSION_COST_BASELINES = 50;
+
+/**
+ * Pure map-update helper for `SynapseSettings.sessionCostBaselines` (issue #269 AC-1). Returns a
+ * **new** record with `sessionId`'s baseline set to `cumulativeCostUsd`, evicting the
+ * least-recently-touched entries once the map exceeds `maxEntries`.
+ *
+ * Recency is tracked via insertion order: a `Record`'s string keys iterate in insertion order,
+ * so re-touching an existing session id (`delete` then re-`set`) moves it to the end, and pruning
+ * removes from the front — the oldest-touched sessions, not the numerically-smallest cost. This
+ * function only computes the next map; persisting it (and calling it in the first place) is the
+ * caller's job — `Session`/`session.ts` never reads or writes settings/storage directly, per the
+ * architecture rule that SDK/session plumbing stays UI-agnostic (`synapseView.ts` calls this from
+ * its `assistant.run_result` handler, using `Session.cumulativeCostUsd` for the raw value).
+ */
+export function upsertSessionCostBaseline(
+	baselines: Record<string, number> | undefined,
+	sessionId: string,
+	cumulativeCostUsd: number,
+	maxEntries: number = MAX_SESSION_COST_BASELINES,
+): Record<string, number> {
+	const next: Record<string, number> = {...baselines};
+	delete next[sessionId];
+	next[sessionId] = cumulativeCostUsd;
+	const keys = Object.keys(next);
+	if (keys.length > maxEntries) {
+		for (const key of keys.slice(0, keys.length - maxEntries)) {
+			delete next[key];
+		}
+	}
+	return next;
+}
+
+/**
  * Cached, one-turn-stale snapshot of the three `Query` control-request answers a live
  * per-turn `Query` handle can serve (issue #130): context-window usage, the CLI's actual
  * slash-command list, and its actual subagent list. See

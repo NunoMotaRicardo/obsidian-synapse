@@ -53,6 +53,16 @@ export interface SynapseSettings {
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
 	/**
+	 * Last-seen cumulative `total_cost_usd` per SDK session id (issue #269 AC-1), used to seed
+	 * `AgentService.createSession()`'s `initialCumulativeCostUsd` when a conversation is cold-resumed
+	 * from the sidebar (`sessionSidebar.ts` — no live `Session` object exists yet to read a baseline
+	 * from). Not a secret, so it lives here rather than in `SECURE_FIELDS`'s local-storage path.
+	 * Bounded to the most recently touched `MAX_SESSION_COST_BASELINES` sessions
+	 * (`upsertSessionCostBaseline()` in `session.ts`) and pruned entry-by-entry when a session is
+	 * deleted from the sidebar — see `SessionSidebarController.deleteSessionById()`.
+	 */
+	sessionCostBaselines?: Record<string, number>;
+	/**
 	 * Reasoning effort level for model inference. '' = model default.
 	 * Stored as a free string because models report values beyond the SDK's
 	 * `ReasoningEffort` union (e.g. 'max', 'none'); validity is enforced against

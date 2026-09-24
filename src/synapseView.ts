@@ -17,7 +17,7 @@ import type {
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
-import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS} from './agentService';
+import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS, upsertSessionCostBaseline} from './agentService';
 import {TaskPlanTracker} from './taskPlanTracker';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
@@ -293,6 +293,20 @@ export class SynapseView extends ItemView implements ViewContext {
 
 	saveSessionNames(): void {
 		this.plugin.settings.sessionNames = {...this.sessionNames};
+		void this.plugin.saveSettings();
+	}
+
+	/**
+	 * Persist `sessionId`'s last-seen cumulative `total_cost_usd` (issue #269 AC-1), so a later
+	 * cold resume of this same conversation from the sidebar (`sessionSidebar.ts`) can seed
+	 * `createSession()`'s `initialCumulativeCostUsd` instead of starting with no baseline at all.
+	 * Called from the `assistant.run_result` handler below with `Session.cumulativeCostUsd` (the
+	 * raw last-seen total, not the per-run delta already reported in that event).
+	 */
+	saveSessionCostBaseline(sessionId: string, cumulativeCostUsd: number): void {
+		this.plugin.settings.sessionCostBaselines = upsertSessionCostBaseline(
+			this.plugin.settings.sessionCostBaselines, sessionId, cumulativeCostUsd,
+		);
 		void this.plugin.saveSettings();
 	}
 
@@ -1050,6 +1064,14 @@ export class SynapseView extends ItemView implements ViewContext {
 						`Claude Synapse: this run cost $${totalCostUsd.toFixed(4)}, over your $${costThreshold.toFixed(2)} budget. ` +
 						`Cost is only known once a run finishes, so it couldn't be stopped in-flight — use the turn or token limit in Settings for real-time auto-cancellation.`
 					);
+				}
+				// Persist this session's raw cumulative cost baseline (issue #269 AC-1) so a
+				// future cold resume from the sidebar can seed `initialCumulativeCostUsd`
+				// instead of starting with no baseline — see `saveSessionCostBaseline()`.
+				// `totalCostUsd` above is already the per-run delta; the raw cumulative value
+				// (what CLI >= 2.1.277 actually reports) lives on the Session itself.
+				if (this.currentSessionId && typeof this.currentSession?.cumulativeCostUsd === 'number') {
+					this.saveSessionCostBaseline(this.currentSessionId, this.currentSession.cumulativeCostUsd);
 				}
 				break;
 			}

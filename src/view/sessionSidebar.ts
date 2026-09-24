@@ -791,17 +791,22 @@ export class SessionSidebarController {
 			});
 
 			this.view.view.earlyEventBuffer = [];
-			// No `initialCumulativeCostUsd` seed here (issue #264 AC-4 limitation, documented
-			// in specs/agent-service.md "Run cost reporting"): this is a cold resume from a
-			// persisted session on disk, not a live `Session` this process already held, so
-			// there's no cheap in-memory baseline to carry forward. On CLI >= 2.1.277 the
-			// first `assistant.run_result` after switching to an old conversation from the
-			// sidebar will therefore report that conversation's whole cumulative cost as if
-			// it were this one run's cost; every result after that is a correct per-run delta.
+			// Seed the cost-delta baseline from the persisted map (issue #269 AC-1): this is a
+			// cold resume from a session on disk, not a live `Session` this process already
+			// held, so there's no in-memory baseline to carry forward the way `ensureSession()`
+			// does — but `saveSessionCostBaseline()` (called from the foreground
+			// `assistant.run_result` handler on every run of every session, including a prior
+			// visit to this same one) persists the last-seen cumulative total per session id, so
+			// it's available here even across a plugin reload. `undefined` when this session has
+			// never reported a result before (including a first-ever cold resume, or one whose
+			// baseline aged out of the bounded map) — `createSession()` then behaves exactly as
+			// before this fix: the first `assistant.run_result` reports the whole conversation's
+			// cost on CLI >= 2.1.277.
+			const initialCumulativeCostUsd = this.view.plugin.settings?.sessionCostBaselines?.[sessionId];
 			const session = await this.view.plugin.agentService!.createSession({
 				...sessionConfig,
 				resume: sessionId,
-			});
+			}, undefined, initialCumulativeCostUsd);
 
 			if (this.selectionToken !== token) {
 				try { void session.disconnect(); } catch { /* ignore */ }
@@ -1002,6 +1007,12 @@ export class SessionSidebarController {
 
 		delete this.view.view.sessionNames[sessionId];
 		this.view.view.saveSessionNames();
+		// Drop the persisted cost baseline too (issue #269 AC-1) — a deleted session id will
+		// never be cold-resumed again, so there's nothing left for it to seed.
+		if (this.view.plugin.settings?.sessionCostBaselines) {
+			delete this.view.plugin.settings.sessionCostBaselines[sessionId];
+			void this.view.plugin.saveSettings();
+		}
 		this.view.view.sessionList = this.view.view.sessionList.filter(s => s.sessionId !== sessionId);
 
 		if (this.view.view.currentSessionId === sessionId) {
