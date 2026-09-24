@@ -330,6 +330,51 @@ threshold as informational-only, checked once `assistant.run_result` arrives. Fa
 per-turn cost estimate to enable "real-time" dollar cancellation was deliberately avoided —
 see the invariant below.
 
+**Cumulative vs. per-run `total_cost_usd` (issue #264):** `Session.send()` spawns a fresh CLI
+process per call, resuming the prior conversation via `resume`. Through CLI 2.1.276,
+`total_cost_usd` on a resumed/forked session's `result` message was itself per-run — each call
+reported only that run's own cost, matching `loopCostThresholdUsd`'s "per single run" contract
+(`settings.ts`). CLI 2.1.277 fixed a bug that made it start at zero on a resume/fork, which as a
+side effect turned it into the *whole conversation's* cumulative cost — every `send()` on an
+already-resumed session now reports the running total, not that call's own cost. Left
+unhandled, this made the "over budget" notice (`synapseView.ts`'s `assistant.run_result`
+handler) fire on every turn once a conversation, rather than any single run, crossed the
+threshold.
+
+`Session` tracks `lastCumulativeCostUsd` (the last `total_cost_usd` it has seen) and reports
+`computeRunCostDelta(total, lastCumulativeCostUsd)` instead of the raw value. There is no
+explicit signal distinguishing an old CLI's per-run value from a new CLI's cumulative one, so
+the heuristic treats `total` as cumulative only when it hasn't dropped below the previous
+baseline — an old CLI's fresh per-run value will typically fall below the prior run's total and
+is returned as-is; a new CLI's cumulative total only grows. `lastCumulativeCostUsd` is then
+always advanced to `total`, whichever branch fired, so the next result has the right baseline
+regardless of CLI version. **Known limitation:** an old CLI whose next run happens to cost more
+than or equal to the previous run's own cost is misread as cumulative, understating that run's
+reported cost (usually toward zero) — accepted since CLI version can't be cheaply distinguished
+from this field alone, and the failure mode is "budget notice fires a little late," not "budget
+notice never fires" or a crash.
+
+**Surviving a `configDirty` rebuild (AC-4):** `ensureSession()` (`synapseView.ts`) tears down and
+rebuilds the live `Session` on a config change (model/agent/reasoning/etc.), the same rebuild
+that seeds `resume` via `resolveResumeSessionId()`. Without carrying the cost baseline across
+that rebuild too, the freshly constructed `Session`'s `lastCumulativeCostUsd` would start
+`undefined`, and its first result — on a CLI new enough to report cumulative totals — would be
+read as this run's own cost when it's actually the whole resumed conversation's cost so far.
+`Session` exposes its current baseline via the `cumulativeCostUsd` getter; `ensureSession()`
+reads it from the outgoing session before tearing it down and passes it to
+`AgentService.createSession()`'s optional `initialCumulativeCostUsd` parameter, which seeds the
+new `Session`'s constructor.
+
+**Where the baseline isn't cheaply available:** `sessionSidebar.ts`'s cold resume path (picking
+an old conversation from the sidebar that isn't already a live `activeSessions` entry) calls
+`createSession()` with `resume` but no `initialCumulativeCostUsd` — there is no live `Session`
+object to read a baseline from, only a session id and transcript on disk, and parsing the
+transcript's own accumulated cost is not treated as "cheaply available." This is a deliberate,
+documented gap rather than a fix: the first `assistant.run_result` after a cold sidebar resume
+can report that conversation's whole prior cumulative cost as if it were the new run's own cost
+(CLI >= 2.1.277 only); every result after that is a correct per-run delta once
+`lastCumulativeCostUsd` has a baseline from within the same `Session` instance.
+
 ## Compaction event mapping
 
 `Session.convertToSessionEvent()` converts SDK `compact_boundary` system messages
@@ -608,6 +653,43 @@ CLI compatibility per the SDK's declared type. Rather than adding a new
 `SessionEvent` variant for either, the view branches on `toolName` in the existing
 `tool.execution_start`/`tool.execution_complete` handlers; `AgentService` stays the sole
 SDK-access point by owning the *parsing*, not a new event type.
+
+**Enabling the tools themselves (issue #264):** none of this parsing gets a tool call to work
+with unless the CLI actually offers `TodoWrite`/`TaskCreate`/`TaskGet`/`TaskUpdate`/`TaskList`
+to the model in the first place. CLI 2.1.268 changed these into default tools only on Claude
+3.x, Opus 4.0-4.7, Sonnet 4.0-4.6 and Haiku 4.5; on every other model (Opus 5.x, Sonnet 5, …)
+they're absent from the `system/init` tool list entirely — verified against CLI 2.1.270/2.1.281
+with `--model claude-sonnet-5`: the plain init tool list contains only `Task`/`TaskOutput`/
+`TaskStop`, no `TodoWrite`/`TaskCreate`/`TaskGet`/`TaskUpdate`/`TaskList` — unless they're listed
+in `tools` or `allowedTools`.
+
+`agentService.ts` exports `PLAN_TRACKING_TOOLS` (the five tool names above) and
+`mergeAllowedTools(...lists)` (dedup, first-occurrence order, skips `undefined` lists).
+`SynapseView.buildSessionConfig()` sets `allowedTools: mergeAllowedTools(PLAN_TRACKING_TOOLS)` —
+used by both a live chat session and `sessionSidebar.ts`'s cold resume path, since both go
+through `buildSessionConfig()`. `allowedTools` was chosen over `tools` deliberately: per the
+SDK's own doc comment, `tools` replaces the base toolset entirely (`[]` disables all built-in
+tools), while `allowedTools` only auto-allows/enables tools without narrowing anything else —
+confirmed empirically (CLI 2.1.281, `--allowedTools TodoWrite,TaskCreate,TaskGet,TaskUpdate,
+TaskList`): the full default toolset (`Bash`, `Edit`, `Read`, …) is still present in `init`
+alongside the four task tools that actually registered (`TodoWrite` itself didn't appear in
+this environment's tool list either way — it's the SDK's own registration, unrelated to this
+fix). `mergeAllowedTools()` exists so a future `allowedTools` source at this call site is merged
+in, not clobbered, even though today `PLAN_TRACKING_TOOLS` is the only list passed.
+
+The Telegram bot (`telegramBot.ts`'s `buildBotSessionConfig()`) does **not** get this treatment:
+it has no plan-tracking UI at all — `taskPlanTracker.ts`/`TaskPlanTracker` is only constructed
+and consumed by `synapseView.ts`, and `telegramBot.ts` only ever renders plain-text replies —
+so there is nothing for the extra tools to feed and adding them would just be dead allowance.
+
+**Does enabling these tools bypass a vault agent's own `tools:` restriction (AC-2)?** No —
+verified empirically (CLI 2.1.281): a subagent-style agent defined with `tools: Read, Grep`
+selected via `--agent <name>` reports `"tools":["Read","Grep"]` in `init` even when
+`--allowedTools TodoWrite,TaskCreate,TaskGet,TaskUpdate,TaskList` is also passed. This matches
+the SDK's own doc comment for `Options.agent` ("the agent's system prompt, tool restrictions,
+and model will be applied to the main conversation") — the named agent's tool list is applied on
+top of whatever the session's base toolset would otherwise be, not merged with it, so
+`allowedTools` additions never leak through a narrower agent's restriction.
 
 **`TodoWrite`** — `parseTodoWritePayload(input: unknown): TodoItem[] | null` (exported alongside
 the `TodoItem` type) normalizes an `input` value into a todo list:
