@@ -384,6 +384,8 @@ export class ChatRendererController {
 	}
 
 	appendReasoningDelta(delta: string): void {
+		// Omitted-display thinking arrives as empty deltas — don't open an empty box for it.
+		if (!delta) return;
 		if (!this.view.view.reasoningEl) {
 			this.startReasoningBlock();
 		}
