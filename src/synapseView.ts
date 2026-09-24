@@ -1347,6 +1347,11 @@ export class SynapseView extends ItemView implements ViewContext {
 		};
 
 		const reasoningEffort = this.plugin.settings.reasoningEffort;
+		// Newer models default thinking display to 'omitted' — thinking blocks then arrive with
+		// empty text and the reasoning box has nothing to show. Ask for summarized thinking
+		// unless reasoning is off or the model is known not to support adaptive thinking.
+		const modelInfo = this.models.find(m => m.id === (opts.model ?? ''));
+		const showThinking = reasoningEffort !== 'none' && modelInfo?.supportsAdaptiveThinking !== false;
 
 		// Build workspace path info for the system prompt — session-stable content only
 		// (issue #201). Active note, working directory, the vault-structure block, and the
@@ -1382,6 +1387,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			// behavior) and the model stops using tools or reading files.
 			systemPrompt: {type: 'preset', preset: 'claude_code', append: systemContent},
 			...(reasoningEffort !== '' ? {effort: reasoningEffort as ReasoningEffort} : {}),
+			...(showThinking ? {thinking: {type: 'adaptive', display: 'summarized'} as const} : {}),
 			...(opts.resume ? {resume: opts.resume} : {}),
 			// Seed a (re)built session with whatever grants this conversation already
 			// accumulated (issue #193 round 2) — survives a configDirty rebuild the same way

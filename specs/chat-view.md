@@ -123,7 +123,8 @@ and built in `buildUI()` via `controller.build(parent)`.
   - The first `assistant.reasoning_delta` (`appendReasoningDelta` → `startReasoningBlock`) removes
     that placeholder and inserts the `<details class="synapse-reasoning">` block instead, whose own
     summary reads "Thinking…" while reasoning streams — that is the only place "Thinking" copy
-    appears, and only while reasoning is actually streaming.
+    appears, and only while reasoning is actually streaming. Empty deltas (thinking with
+    `display: 'omitted'`) are ignored so they never open an empty block.
   - `showProcessingIndicator()` reuses the same helper with "Processing" while tool calls run
     mid-turn; `appendDelta()` removes it once answer text starts streaming.
   - `finalizeReasoning()` (called once a reasoning block completes) re-shows the "Waiting for

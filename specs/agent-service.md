@@ -56,6 +56,7 @@ Key query option fields used:
 | `env` | `buildEnv()` — allowlisted env via `cleanEnv()`, plus `ANTHROPIC_API_KEY` for API-key auth |
 | `model` | toolbar / agent frontmatter / settings |
 | `effort` | Non-empty `settings.reasoningEffort`, passed by chat and Telegram configuration; chat toolbar validates supported levels |
+| `thinking` | Chat panel only: `{type: 'adaptive', display: 'summarized'}` unless effort is `none` or the model reports `supportsAdaptiveThinking: false`. Newer models default display to `omitted` (empty thinking text), which would leave the reasoning block blank |
 | `systemPrompt` | `{type: 'preset', preset: 'claude_code', append: ...}` for agentic sessions (chat, search, bots); plain strings only for pure text transforms. A plain string **replaces** Claude Code's entire default system prompt, and the model stops using tools — never pass one where tool use is expected. |
 | `plugins` | `_synapse/` vault folder registered as local SDK plugin (`{type: 'local', path: ...}`) |
 | `skills` | enabled skill names array from toolbar |
