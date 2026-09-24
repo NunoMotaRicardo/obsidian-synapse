@@ -9,6 +9,60 @@ export interface ToolApprovalRequest {
 	description?: string;
 	suggestions?: PermissionUpdate[];
 	toolUseID: string;
+	/**
+	 * CLI/SDK 0.3.281 hint (issue #268): "the ask must not be approvable by a single stray
+	 * keystroke" — the modal must open with **Deny** focused and must not give **Allow** the
+	 * default-button (`mod-cta`) styling, so Enter/Space right after the modal opens denies
+	 * rather than approves.
+	 */
+	defaultToNo?: boolean;
+	/**
+	 * CLI/SDK 0.3.281 hint (issue #268): "the rule it would write grants more than this ask's
+	 * own action" — the modal must not offer a persistent "don't ask again" choice at all. Both
+	 * the **Always allow** button/rule-preview and `updatedPermissions` on a plain **Allow**
+	 * (which would otherwise widen this one approval into a `'session'`-scope rule via
+	 * `sessionScopePermissions()`) are suppressed; only a single-call `{behavior: 'allow',
+	 * updatedInput}` is offered.
+	 */
+	suppressAlwaysAllowRule?: boolean;
+}
+
+/**
+ * Pure hint → presentation mapping for `ToolApprovalModal` (issue #268) — kept DOM-free so it's
+ * unit-testable without Obsidian (see `test/toolApprovalModal.test.ts`), mirroring
+ * `buildAskUserQuestionAnswers()`'s pattern in `askUserQuestionModal.ts`.
+ */
+export interface ToolApprovalPresentation {
+	/**
+	 * Whether to render the **Always allow** button and the rule-preview block at all. False
+	 * when `suppressAlwaysAllowRule` is set — the CLI has already ruled out a permanent rule for
+	 * this ask.
+	 */
+	showAlwaysAllow: boolean;
+	/** Sentence-case note shown in place of the rule preview when `showAlwaysAllow` is false. */
+	suppressedNote?: string;
+	/**
+	 * Whether **Allow** (and **Always allow**, when shown) should attach `updatedPermissions` —
+	 * a `'session'`-scope rule broader than this single call. False when `suppressAlwaysAllowRule`
+	 * is set, so **Allow** approves only the one call in front of the user.
+	 */
+	allowUpdatedPermissions: boolean;
+	/** Which button should receive initial keyboard focus when the modal opens. */
+	focusButton: 'allow' | 'deny';
+	/** Whether **Allow** gets the `mod-cta` default-button styling. */
+	allowIsDefaultCta: boolean;
+}
+
+export function resolveToolApprovalPresentation(hints: {defaultToNo?: boolean; suppressAlwaysAllowRule?: boolean}): ToolApprovalPresentation {
+	const suppressAlwaysAllow = hints.suppressAlwaysAllowRule === true;
+	const defaultToNo = hints.defaultToNo === true;
+	return {
+		showAlwaysAllow: !suppressAlwaysAllow,
+		suppressedNote: suppressAlwaysAllow ? "Claude Code doesn't allow a permanent rule for this action." : undefined,
+		allowUpdatedPermissions: !suppressAlwaysAllow,
+		focusButton: defaultToNo ? 'deny' : 'allow',
+		allowIsDefaultCta: !defaultToNo,
+	};
 }
 
 /**
@@ -81,6 +135,7 @@ export class ToolApprovalModal extends Modal {
 		}
 
 		const rules = this.persistRuleStrings();
+		const presentation = resolveToolApprovalPresentation(this.request);
 
 		// Show the literal rule string(s) an "Always allow" click would persist, before the user
 		// can click it (issue #197) -- the CLI's own suggestion for an out-of-vault read can be a
@@ -90,42 +145,59 @@ export class ToolApprovalModal extends Modal {
 		const allowRow = scopeInfo.createDiv({cls: 'synapse-approval-row'});
 		allowRow.createEl('strong', {text: 'Allow'});
 		allowRow.appendText(' grants this tool for the current conversation only, and writes nothing to disk.');
-		const alwaysRow = scopeInfo.createDiv({cls: 'synapse-approval-row'});
-		alwaysRow.createEl('strong', {text: 'Always allow'});
-		alwaysRow.appendText(' permanently grants, by writing to _synapse/settings.json in this vault:');
-		const rulesPre = scopeInfo.createEl('pre', {cls: 'synapse-approval-details synapse-ledger'});
-		rulesPre.createEl('code', {text: rules.join('\n')});
+		if (presentation.showAlwaysAllow) {
+			const alwaysRow = scopeInfo.createDiv({cls: 'synapse-approval-row'});
+			alwaysRow.createEl('strong', {text: 'Always allow'});
+			alwaysRow.appendText(' permanently grants, by writing to _synapse/settings.json in this vault:');
+			const rulesPre = scopeInfo.createEl('pre', {cls: 'synapse-approval-details synapse-ledger'});
+			rulesPre.createEl('code', {text: rules.join('\n')});
+		} else if (presentation.suppressedNote) {
+			// suppressAlwaysAllowRule (issue #268): the CLI has ruled out a permanent rule for this
+			// ask (it would grant more than this ask's own action) -- no Always allow button, no
+			// rule preview, just a short explanation.
+			scopeInfo.createDiv({cls: 'synapse-approval-row', text: presentation.suppressedNote});
+		}
 
 		const btnRow = contentEl.createDiv({cls: 'synapse-approval-buttons'});
 
-		const allowBtn = btnRow.createEl('button', {cls: 'mod-cta', text: 'Allow'});
+		const allowBtn = btnRow.createEl('button', {text: 'Allow'});
+		if (presentation.allowIsDefaultCta) allowBtn.addClass('mod-cta');
 		allowBtn.addEventListener('click', () => {
 			this.finish({
 				result: {
 					behavior: 'allow',
 					updatedInput: this.request.input,
-					...(this.request.suggestions ? {updatedPermissions: sessionScopePermissions(this.request.suggestions)} : {}),
+					...(presentation.allowUpdatedPermissions && this.request.suggestions
+						? {updatedPermissions: sessionScopePermissions(this.request.suggestions)}
+						: {}),
 				},
 				persistRules: [],
 			});
 		});
 
-		const alwaysAllowBtn = btnRow.createEl('button', {text: 'Always allow'});
-		alwaysAllowBtn.addEventListener('click', () => {
-			this.finish({
-				result: {
-					behavior: 'allow',
-					updatedInput: this.request.input,
-					...(this.request.suggestions ? {updatedPermissions: sessionScopePermissions(this.request.suggestions)} : {}),
-				},
-				persistRules: rules,
+		if (presentation.showAlwaysAllow) {
+			const alwaysAllowBtn = btnRow.createEl('button', {text: 'Always allow'});
+			alwaysAllowBtn.addEventListener('click', () => {
+				this.finish({
+					result: {
+						behavior: 'allow',
+						updatedInput: this.request.input,
+						...(this.request.suggestions ? {updatedPermissions: sessionScopePermissions(this.request.suggestions)} : {}),
+					},
+					persistRules: rules,
+				});
 			});
-		});
+		}
 
 		const denyBtn = btnRow.createEl('button', {text: 'Deny'});
 		denyBtn.addEventListener('click', () => {
 			this.finish({result: {behavior: 'deny', message: 'Denied by user'}, persistRules: []});
 		});
+
+		// defaultToNo (issue #268): "must not be approvable by a single stray keystroke" -- focus
+		// Deny instead of the browser's default first-focusable-element behavior, so a stray
+		// Enter/Space right after the modal opens denies rather than approves.
+		(presentation.focusButton === 'deny' ? denyBtn : allowBtn).focus();
 	}
 
 	private finish(outcome: ToolApprovalOutcome): void {

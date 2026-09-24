@@ -112,6 +112,11 @@ re-entering them.
 allow** action writes to disk (the modal itself never touches the filesystem — it only returns
 which rule strings to persist; see `chat-view.md`'s "A deliberate, permanent grant is back").
 
+This function is never invoked at all for an ask the CLI marks `suppressAlwaysAllowRule`
+(issue #268) — the modal hides **Always allow** for that ask entirely, so `persistRules` from
+`ToolApprovalModal`'s promise is always empty in that case. See `chat-view.md`'s "Risk hints
+suppress Always allow and default-approve".
+
 - `ruleStrings` are already in the CLI's `Settings.permissions.allow` rule-string syntax
   (`toolName` or `toolName(ruleContent)`) — produced by `permissionRuleToString()`/
   `extractAllowRuleStrings()` in `agentService.ts`, never re-derived here.

@@ -162,6 +162,19 @@ string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive 
 `_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
 The vault settings layer (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
+**`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.281's `CanUseTool`
+options carry two risk hints the CLI attaches to individual asks: `defaultToNo` (must not be
+approvable by a single stray keystroke) and `suppressAlwaysAllowRule` (the rule this ask's
+suggestions would produce grants more than the ask's own action — e.g. a dangerous-`rm` check).
+Both are re-exported unchanged as part of `PermissionHandler`'s options (no new type needed here —
+`CanUseTool`'s own fields already carry them through this module's re-export). When
+`suppressAlwaysAllowRule` is set, `ToolApprovalModal` neither shows **Always allow** nor attaches
+`updatedPermissions` to a plain **Allow** — see `resolveToolApprovalPresentation()`'s doc comment
+in `toolApprovalModal.ts` for the full hint → presentation mapping, unit-tested in
+`test/toolApprovalModal.test.ts`. `SynapseView.buildSessionConfig()`'s `permissionHandler` also
+skips the in-memory `sessionToolGrants` accumulation described below for the same ask, so nothing
+downstream re-derives a broader rule than the CLI itself ruled unsafe to persist.
+
 ### In-memory tool-approval grants across the per-`send()` respawn
 
 `destination: 'session'` above only covers the **current CLI process**. The Agent SDK spawns a
