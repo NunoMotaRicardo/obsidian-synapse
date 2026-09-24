@@ -369,6 +369,7 @@ import {
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
 	computeRunCostDelta,
+	upsertSessionCostBaseline,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 } from './session';
@@ -385,6 +386,7 @@ export {
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
 	computeRunCostDelta,
+	upsertSessionCostBaseline,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 };

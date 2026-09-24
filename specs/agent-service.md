@@ -15,7 +15,7 @@ issue #236) — the architecture rule is about the *SDK import surface*, not one
 | `src/agentService.ts` | `AgentService` class, the model layer (`ModelInfo`, `mapSdkModel`, `matchModelTiers`, `FALLBACK_CLAUDE_MODELS`, `INLINE_CHAT_PROFILES`), the delegation MCP server, and the re-export block |
 | `src/sdkShims.ts` | The Electron compatibility shims — the top-level `setMaxListeners` wrapper and refcounted `setTimeout` shim (both installed at module load; `agentService.ts` imports this module statically so load order is unchanged). The timer shim covers view disposal that can precede `Plugin.onunload()` as well as direct Agent SDK query-controller aborts; `Plugin.onunload()` releases its lifecycle reference after the SDK process-cleanup grace window. |
 | `src/permissions.ts` | `sessionScopePermissions`, `permissionRuleToString`, `extractAllowRuleStrings`, `buildInMemoryPermissionSettings`, `mergeVaultSettingsLayer` |
-| `src/session.ts` | The `Session` class and `SessionEvents`/`SessionEvent`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`) |
+| `src/session.ts` | The `Session` class and `SessionEvents`/`SessionEvent`, `QueryMetadataCache` + `refreshQueryMetadataCache`, `resolveResumeSessionId`, `sendAndWaitWithAbort`, `autoApproveReadOnlyTools` (+ `READ_ONLY_TOOL_NAMES`), `computeRunCostDelta`, `upsertSessionCostBaseline` (+ `MAX_SESSION_COST_BASELINES`) |
 | `src/taskPlanTracker.ts` | `TodoItem`, `TaskPlan`, the four plan-parse functions, and the `TaskPlanTracker` class — see `chat-view.md` for the tracker's consumers |
 
 All of these are re-exported from `agentService.ts`, so consumers (and tests) keep importing
@@ -436,15 +436,44 @@ reads it from the outgoing session before tearing it down and passes it to
 `AgentService.createSession()`'s optional `initialCumulativeCostUsd` parameter, which seeds the
 new `Session`'s constructor.
 
-**Where the baseline isn't cheaply available:** `sessionSidebar.ts`'s cold resume path (picking
-an old conversation from the sidebar that isn't already a live `activeSessions` entry) calls
-`createSession()` with `resume` but no `initialCumulativeCostUsd` — there is no live `Session`
-object to read a baseline from, only a session id and transcript on disk, and parsing the
-transcript's own accumulated cost is not treated as "cheaply available." This is a deliberate,
-documented gap rather than a fix: the first `assistant.run_result` after a cold sidebar resume
-can report that conversation's whole prior cumulative cost as if it were the new run's own cost
-(CLI >= 2.1.277 only); every result after that is a correct per-run delta once
-`lastCumulativeCostUsd` has a baseline from within the same `Session` instance.
+**Cold resume from the sidebar (issue #269 AC-1):** `sessionSidebar.ts`'s cold resume path
+(picking an old conversation from the sidebar that isn't already a live `activeSessions` entry)
+has no live `Session` object to read a baseline from — only a session id and transcript on disk.
+Rather than parsing the transcript's own accumulated cost (not cheap: it means walking the whole
+JSONL history), the baseline is persisted separately, per session id, every time it's known:
+
+- `SynapseView`'s `assistant.run_result` handler (`handleSessionEvent()`) calls
+  `saveSessionCostBaseline(sessionId, cumulativeCostUsd)` after every run of the *foreground*
+  session, using `Session.cumulativeCostUsd` (the raw last-seen `total_cost_usd`, not the
+  per-run delta already reported in that event's own payload). This keeps `session.ts` itself
+  free of any storage concern — `Session` only exposes the value via its existing
+  `cumulativeCostUsd` getter (see "Surviving a `configDirty` rebuild" above); the view layer
+  decides when and where to persist it.
+- `saveSessionCostBaseline()` writes into `SynapseSettings.sessionCostBaselines` (`settings.ts`)
+  — plain plugin data, not a secret, so it follows the `sessionNames` persistence pattern
+  (`data.json`, not `SECURE_FIELDS`'s local-storage path) rather than the auth/token fields.
+  `upsertSessionCostBaseline(baselines, sessionId, cost, maxEntries?)` (`session.ts`, re-exported
+  from `agentService.ts`) is the pure map-update: it re-inserts the touched session id at the end
+  (insertion order tracks recency) and evicts the least-recently-touched entries once the map
+  exceeds `MAX_SESSION_COST_BASELINES` (50), so the settings file doesn't grow unbounded across a
+  long-lived vault's session history. Deleting a session from the sidebar
+  (`SessionSidebarController.deleteSessionById()`) also drops its entry, since a deleted session
+  id can never be cold-resumed again.
+- `sessionSidebar.ts`'s cold-resume `createSession()` call reads
+  `plugin.settings.sessionCostBaselines?.[sessionId]` and passes it as `initialCumulativeCostUsd`.
+  `undefined` when the session has never reported a result before (a session that was cold-resumed
+  without ever being sent a message in *this* process, or whose entry aged out of the bounded
+  map) — in that case the first `assistant.run_result` after the resume still reports the whole
+  conversation's cumulative cost as if it were the new run's own cost (CLI >= 2.1.277 only), same
+  as before this fix; every result after that is a correct per-run delta once `lastCumulativeCostUsd`
+  has a baseline from within the same `Session` instance.
+
+**Not covered: a session still running in the background.** `BackgroundSession.attach()`
+(`view/backgroundSession.ts`) deliberately does not subscribe to `assistant.run_result` (see
+"Session event map" below), so a run that completes while its session is hidden in the
+background does not update the persisted baseline until that session is brought back to the
+foreground and completes another run there. This mirrors the background session's existing
+"no cost-threshold UI while hidden" scope rather than being a new gap this fix introduces.
 
 ## Compaction event mapping
 
