@@ -94,12 +94,21 @@ export interface SynapseSettings {
 	/** Max cumulative tokens (input+output+cache) per chat run before auto-cancelling. 0 = off. */
 	loopTokenThreshold: number;
 	/**
-	 * Max cumulative dollar cost per chat run. 0 = off. Unlike the turn/token
-	 * thresholds, this cannot drive true in-flight cancellation — the SDK only
-	 * reports `total_cost_usd` on the terminal `result` message, after the run
-	 * has already finished (see specs/agent-service.md). When set, an exceeded
-	 * run surfaces an informational "over budget" chat message after the fact
+	 * Max dollar cost of a single chat run (not the whole conversation). 0 = off.
+	 * Unlike the turn/token thresholds, this cannot drive true in-flight
+	 * cancellation — the SDK only reports `total_cost_usd` on the terminal
+	 * `result` message, after the run has already finished (see
+	 * specs/agent-service.md "Run cost reporting"). When set, an exceeded run
+	 * surfaces an informational "over budget" chat message after the fact
 	 * rather than a false "cancelled" claim.
+	 *
+	 * Compared against `assistant.run_result.totalCostUsd`, which `Session`
+	 * (`session.ts`) always normalizes to a per-run figure before dispatching it
+	 * — including on a CLI (>= 2.1.277) that reports a resumed/forked session's
+	 * `total_cost_usd` as a cumulative total rather than a per-run one. Without
+	 * that normalization this threshold would compare a per-run budget against a
+	 * whole-conversation total and fire on every turn once the conversation, not
+	 * just one run, crossed it.
 	 */
 	loopCostThresholdUsd: number;
 }

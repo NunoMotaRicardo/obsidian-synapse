@@ -17,7 +17,7 @@ import type {
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
-import {extractAllowRuleStrings, buildInMemoryPermissionSettings} from './agentService';
+import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS} from './agentService';
 import {TaskPlanTracker} from './taskPlanTracker';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
@@ -922,6 +922,11 @@ export class SynapseView extends ItemView implements ViewContext {
 		// so send() silently omits `resume` and the conversation is lost on every config
 		// change (issue #104).
 		const resumeSessionId = this.currentSession?.sessionId || undefined;
+		// Carry the outgoing session's cost-delta baseline across the rebuild too (issue
+		// #264 AC-4) — without this, the rebuilt Session's first `result` would have no
+		// `lastCumulativeCostUsd` to diff against and would report the whole resumed
+		// conversation's cumulative cost as if it were this one run's cost.
+		const initialCumulativeCostUsd = this.currentSession?.cumulativeCostUsd;
 
 		// Tear down existing session
 		if (this.currentSession) {
@@ -944,7 +949,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				(this.earlyEventBuffer as SessionEvent[]).push(event);
 			}
 		};
-		this.currentSession = await this.plugin.agentService!.createSession(sessionConfig, onEvent);
+		this.currentSession = await this.plugin.agentService!.createSession(sessionConfig, onEvent, initialCumulativeCostUsd);
 		// For a brand-new session the id is unknown until the first send() streams a
 		// message; 'session.init' delivers it (handled in handleSessionEvent).
 		this.currentSessionId = this.currentSession.sessionId || null;
@@ -1382,6 +1387,15 @@ export class SynapseView extends ItemView implements ViewContext {
 			plugins: getSynapsePluginConfig(this.app),
 			skills: Array.from(this.enabledSkills),
 			agent: effectiveAgentName || undefined,
+			// Explicitly enable the plan/task-tracking tools (issue #264) — CLI 2.1.268 made
+			// them default only on a specific model list; on other models (Opus 5.x, Sonnet 5)
+			// they're unavailable unless listed here. `allowedTools` only auto-allows/enables —
+			// it doesn't replace or narrow the default toolset (`tools` would) — so this can't
+			// widen a vault agent's `tools:` restriction (AC-2); that restriction is enforced by
+			// the CLI itself from the agent's own definition file, a separate mechanism from this
+			// top-level session's toolset. Copied (rather than assigned directly) so nothing here
+			// can mutate the shared constant.
+			allowedTools: [...PLAN_TRACKING_TOOLS],
 			// Append to the Claude Code preset rather than replacing it — a plain
 			// string here would wipe the default system prompt (tool usage, agentic
 			// behavior) and the model stops using tools or reading files.

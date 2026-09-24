@@ -262,6 +262,17 @@ export const FALLBACK_CLAUDE_MODELS: ModelInfo[] = [
 export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 
 /**
+ * Plan/task-tracking tool names (issue #264) — `TodoWrite` (legacy, one call carries the whole
+ * plan) and the `TaskCreate`/`TaskGet`/`TaskUpdate`/`TaskList` family (incremental task graph).
+ * CLI 2.1.268 made these default tools only on Claude 3.x, Opus 4.0-4.7, Sonnet 4.0-4.6 and
+ * Haiku 4.5 — on every other model (e.g. Opus 5.x, Sonnet 5) they must be explicitly listed in
+ * `tools`/`allowedTools` or the plan panel (`taskPlanTracker.ts`) never receives a tool call to
+ * parse. Listed in `allowedTools` rather than `tools` so the rest of the default Claude Code
+ * toolset isn't replaced — see specs/agent-service.md "Plan/task tracking".
+ */
+export const PLAN_TRACKING_TOOLS: string[] = ['TodoWrite', 'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList'];
+
+/**
  * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
  * audit rec 5). The editor's call sites were previously kept consistent only by convention
  * comments ("pure text transform → `tools: []` + `maxTurns: 1`"); the convention now lives in
@@ -350,6 +361,7 @@ import {
 	Session,
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
+	computeRunCostDelta,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 } from './session';
@@ -365,6 +377,7 @@ import {
 export {
 	sendAndWaitWithAbort,
 	resolveResumeSessionId,
+	computeRunCostDelta,
 	refreshQueryMetadataCache,
 	autoApproveReadOnlyTools,
 };
@@ -550,6 +563,20 @@ export class AgentService {
 		const v = await getCliVersion(resolved.path);
 		resolved.version = v.version;
 		return resolved;
+	}
+
+	/**
+	 * The resolved CLI's version, if already known — from `ensureConnected()`'s
+	 * fire-and-forget check or a prior `getVersionInfo()` call — or `undefined`
+	 * if no version check has completed yet. Synchronous and never triggers a
+	 * version check itself (issue #264): `Session` reads this once per `result`
+	 * message to decide whether `total_cost_usd` is cumulative (CLI >= 2.1.277)
+	 * without blocking `send()` on a subprocess spawn every turn. Before the
+	 * first check completes (e.g. very early in a session's life) this returns
+	 * `undefined`, and callers should treat that the same as "unknown."
+	 */
+	get cachedCliVersion(): string | undefined {
+		return this.resolvedCli?.version;
 	}
 
 	setCustomModels(models: ModelInfo[]): void {
@@ -1101,9 +1128,18 @@ export class AgentService {
 	 * compatible with the chat panel's expectations. Each send() call creates
 	 * a new query() under the hood, using resume to continue the conversation.
 	 */
-	async createSession(config: Options, onEvent?: (event: SessionEvent) => void): Promise<Session> {
+	/**
+	 * `initialCumulativeCostUsd` seeds the new `Session`'s cost-delta baseline (issue #264
+	 * AC-4) — pass the outgoing `Session.cumulativeCostUsd` when rebuilding a session that
+	 * already had a conversation (e.g. `ensureSession()`'s `configDirty` rebuild) so the
+	 * first result the rebuilt session reports is still a per-run delta, not the whole
+	 * conversation's cumulative total. Omit it for a genuinely new session, or when no
+	 * cheap baseline is available (e.g. resuming a session cold from disk with no live
+	 * `Session` to read a baseline from — see specs/agent-service.md "Run cost reporting").
+	 */
+	async createSession(config: Options, onEvent?: (event: SessionEvent) => void, initialCumulativeCostUsd?: number): Promise<Session> {
 		await this.ensureConnected();
-		return new Session(this, config, onEvent);
+		return new Session(this, config, onEvent, initialCumulativeCostUsd);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────
