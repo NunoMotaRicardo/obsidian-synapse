@@ -42,12 +42,15 @@ and contributors can find them without digging. Rules:
 
 ## Dev workflow: agents & skills
 
-The dev workflow lives in `.claude/` (canonical, Claude-first). Only one bespoke **agent**
-remains; the rest are **skills** run in the main thread (warm context, no cold-start re-derivation):
+The dev workflow lives in `.claude/` (canonical, Claude-first). There are no bespoke **agents**:
+the workflow roles are **skills** run in the main thread (warm context, no cold-start re-derivation),
+plus one delegated role:
 
-- **synapse-coder** (`.claude/agents/synapse-coder.md`) — the one spawned agent. Implements one issue
-  (full mode) or one description (lite mode) in small, verified increments (build + lint +
-  deploy-test), on a `claude/<slug>` branch. Isolated because implementation is long and noisy.
+- **Coder** (a general-purpose subagent on Sonnet, briefed by
+  [`.claude/skills/synapse-build/coder-brief.md`](.claude/skills/synapse-build/coder-brief.md)):
+  implements one issue (full mode) or one description (lite mode) in small, verified increments
+  (build + lint + test + deploy-test), on a `claude/<slug>` branch. Delegated because
+  implementation is long and noisy; review rounds resume the same subagent with `SendMessage`.
 - **synapse-technical-planner** (skill) — audits `specs/`/`src/` against a request, creates/scopes a
   GitHub issue, splits oversized work. Owns `specs/<module>.md`. Heavy audits → spawn a generic
   `Explore` agent for the read-only sweep.
@@ -56,8 +59,8 @@ remains; the rest are **skills** run in the main thread (warm context, no cold-s
 - **synapse-analyst** (skill) — synthesizes `grill-me`/`brainstorm` sessions and librarian work into
   `.docs/decisions/` (decision records) and `wiki/` (guides). Hands functional intent to the planner.
 
-Orchestrated by `/synapse-build` (planner skill → synapse-coder agent → reviewer skill loop → PR) and
-`/synapse-lite` (coder agent only, draft PR). Live elicitation runs in the main thread; use the
+Orchestrated by `/synapse-build` (planner skill → coder subagent → reviewer skill loop → PR) and
+`/synapse-lite` (coder subagent only, draft PR). Live elicitation runs in the main thread; use the
 `synapse-analyst` skill afterward to write it up.
 
 **Gemini support (Claude-first):** Gemini reads `GEMINI.md` (which `@`-imports this `CLAUDE.md`)
