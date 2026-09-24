@@ -1309,6 +1309,8 @@ export class SynapseView extends ItemView implements ViewContext {
 				description: options.description,
 				suggestions: options.suggestions,
 				toolUseID: options.toolUseID,
+				defaultToNo: options.defaultToNo,
+				suppressAlwaysAllowRule: options.suppressAlwaysAllowRule,
 			});
 			modal.open();
 			const {result, persistRules} = await modal.promise;
@@ -1316,8 +1318,11 @@ export class SynapseView extends ItemView implements ViewContext {
 			// Accumulate the approval in memory (issue #193 round 2) so it survives the Agent
 			// SDK's per-send() process respawn — destination: 'session' (sessionScopePermissions())
 			// only covers the current CLI process. Only addRules/'allow' suggestions translate;
-			// see extractAllowRuleStrings()'s doc comment for what's skipped and why.
-			if (result.behavior === 'allow' && options.suggestions && options.suggestions.length > 0) {
+			// see extractAllowRuleStrings()'s doc comment for what's skipped and why. Skipped
+			// entirely when the CLI set suppressAlwaysAllowRule (issue #268) — that hint means the
+			// rule this ask's suggestions would produce grants more than this single approved call,
+			// so nothing beyond the one-off `result.behavior === 'allow'` above may widen it.
+			if (result.behavior === 'allow' && !options.suppressAlwaysAllowRule && options.suggestions && options.suggestions.length > 0) {
 				const newRules = extractAllowRuleStrings(options.suggestions);
 				if (newRules.length > 0) {
 					for (const rule of newRules) this.sessionToolGrants.add(rule);
