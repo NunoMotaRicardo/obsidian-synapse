@@ -111,6 +111,26 @@ the option is simply omitted, keeping the safe `'argv'` default. The gate lives 
 `routeQueryOptions()` rather than at each of the several `query()` call sites so there is exactly
 one place that knows the minimum version.
 
+**Plugin load diagnostics (issue #269 AC-3).** `pluginDelivery: 'initialize'` moves plugin loading
+off the command line, but a plugin the CLI silently fails to load under that mode would otherwise
+show up to the user only as missing skills/agents with no error and no clue why. `createQuery()` —
+the only call site that both routes through this gate and hands its raw `Query` handle back to a
+caller (the chat panel, via `Session.send()`) — checks for that failure once the query has
+started: when `routedOptions.pluginDelivery === 'initialize'`, it calls the returned `Query`'s
+`initializationResult()` and, if `plugins_applied === false`, logs it through `debugTrace()`. This
+is fire-and-forget (`void stream.initializationResult().then(...).catch(...)`, never awaited) so it
+cannot block or slow the stream the caller is about to consume; any rejection (an older CLI, a
+query that closed before the check resolved, etc.) is swallowed the same way, logging through
+`debugTrace()` rather than throwing.
+
+`chat()` and `inlineChat()` route through the same `routeQueryOptions()` gate but don't expose
+their raw `Query`/stream handle to their own caller the way `createQuery()` does — adding the same
+check there would mean plumbing a new return value or callback through both methods' public
+signatures for a condition neither currently triggers (neither passes a non-empty `plugins` array
+today, since neither is used to run a vault-scoped `_synapse/` plugin). The check is therefore
+scoped to `createQuery()` only; if either helper ever gains a `plugins`-passing caller, this is the
+first place to revisit.
+
 **Decisions not adopted (issue #265 AC-4):**
 
 - **`verbatimPrompts`**: not adopted. It also strips CLAUDE.md, rules, skill and tool listings

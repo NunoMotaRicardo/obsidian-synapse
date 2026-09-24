@@ -986,17 +986,42 @@ export class AgentService {
 		/** Vault handle for the `_synapse/settings.json` layer (issue #194) — see `routeQueryOptions()`. */
 		app?: App;
 	}): Query {
-		return query({
+		const routedOptions = this.routeQueryOptions({
+			...options.queryOptions,
+			env: {
+				...this.buildEnv(options.queryOptions.model),
+				...options.queryOptions.env,
+			},
+			pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
+		}, options.app);
+		const stream = query({
 			prompt: options.prompt,
-			options: this.routeQueryOptions({
-				...options.queryOptions,
-				env: {
-					...this.buildEnv(options.queryOptions.model),
-					...options.queryOptions.env,
-				},
-				pathToClaudeCodeExecutable: options.queryOptions.pathToClaudeCodeExecutable ?? this.resolvedCli?.path,
-			}, options.app),
+			options: routedOptions,
 		});
+		// Plugin load diagnostics (issue #269 AC-3): `routeQueryOptions()` only sets
+		// `pluginDelivery: 'initialize'` when the outgoing options carry a non-empty `plugins`
+		// array (see its doc comment) — i.e. exactly the case where a vault-local `_synapse/`
+		// plugin was supposed to load. `initializationResult().plugins_applied === false` means
+		// the CLI silently dropped it rather than erroring, which would otherwise show up to the
+		// user only as missing skills/agents with no clue why. Fire-and-forget: this must never
+		// block or slow the stream `send()`/the chat panel is about to consume, so the promise
+		// is not awaited here and any rejection (older CLI, closed query, etc.) is swallowed.
+		// Only checked at this one call site — `chat()`/`inlineChat()` route through the same
+		// `routeQueryOptions()` gate but don't expose their raw `Query` handle to a caller the
+		// way `createQuery()` does, and neither passes a `plugins` array today, so there is
+		// nothing to check on those paths yet.
+		if (routedOptions.pluginDelivery === 'initialize') {
+			void stream.initializationResult()
+				.then((result) => {
+					if (result.plugins_applied === false) {
+						debugTrace('[synapse] plugin load failed: initializationResult().plugins_applied === false (pluginDelivery: "initialize") — a _synapse/ vault plugin did not load');
+					}
+				})
+				.catch((e) => {
+					debugTrace(`[synapse] plugin load diagnostics check failed: ${e instanceof Error ? e.message : String(e)}`);
+				});
+		}
+		return stream;
 	}
 
 	/**
