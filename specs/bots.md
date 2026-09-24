@@ -41,6 +41,26 @@
   no policy machinery to opt out of. The bot's actual safety
   control is the numeric allowlist gating who can reach it at all (`connect()`/`handleMessage()`)
   — see [SECURITY.md](../SECURITY.md) #1.
+- **Dangerous-`rm` check under `bypassPermissions` (issue #269 AC-2, verified against CLI
+  2.1.281).** CLI 2.1.281 added a static-analysis safety check that flags an `rm` whose target
+  can't be resolved before the command runs (e.g. a `$(...)` command substitution) and denies it
+  outright as `decision_reason_type: "safetyCheck"` — this fires even under
+  `bypassPermissions`/`allowDangerouslySkipPermissions: true`, and does **not** go through
+  `canUseTool` (the bot has none wired), since the SDK only passes
+  `--permission-prompt-tool stdio` when `canUseTool` is set at all. Verified directly against the
+  real CLI in an isolated empty temp directory (never the repo or vault):
+  `claude -p "Run exactly this Bash command and nothing else: rm -rf \"$(echo
+  /nonexistent-synapse-rm-probe-269)\"" --permission-mode bypassPermissions --output-format
+  stream-json --verbose --max-turns 2 --model claude-haiku-4-5-20251001` — the target path doesn't
+  exist, so the command is harmless even if it had run. Result: the `Bash` tool call was **denied
+  immediately** (`system`/`permission_denied` message, reason "Dangerous rm operation on
+  statically-unresolvable target: command substitution output"), with **no ~2-minute stall** —
+  the whole two-turn run (including the model's own follow-up turn after the denial) completed in
+  14 seconds. This CLI version/config does not reproduce the "asks and waits up to 2 minutes,
+  then denies" behavior the issue was concerned about, so no `canUseTool`/env-var fix
+  (`CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT`) was added to the bot — there is nothing here for
+  either to fix. If a future CLI version reintroduces a real stall, re-run this same probe first
+  to confirm before adding a workaround.
 
 ## Testing
 
