@@ -82,6 +82,51 @@ not block). On success, the `onVersionInfo` constructor callback (`VersionInfoCa
 with `{version, path}`. `main.ts` wires this to a debug-only trace; the settings UI
 reads `getVersionInfo()` to display the resolved binary path, source, and version.
 
+## Plugin delivery (issue #265)
+
+`@anthropic-ai/claude-agent-sdk` is pinned to `0.3.281`. That release adds
+`Options.pluginDelivery?: 'argv' | 'initialize'`, controlling how the `plugins` list (the
+`_synapse/` vault folder registered as a local SDK plugin) reaches the `claude` CLI process:
+
+- `'argv'` (the SDK default, used when the option is omitted): one `--plugin-dir` flag per
+  plugin on the spawned process's command line. Works with any CLI version, but the command
+  line grows with the plugin count and Windows refuses to start a process whose command line
+  exceeds 32,767 characters.
+- `'initialize'`: the plugin list is sent over stdin in the initialize request instead, and the
+  CLI is started with `--await-initialize`, so the command line no longer depends on the plugin
+  count. Requires Claude Code **2.1.261 or newer** — an older CLI exits at startup with an
+  unknown-option error if given this option at all.
+
+`routeQueryOptions()` (the single choke point every real SDK query passes through — `chat()`,
+`inlineChat()`, and `createQuery()`/`Session.send()` all route through it) sets
+`pluginDelivery: 'initialize'` only when both hold:
+
+1. the outgoing options carry a non-empty `plugins` array, and
+2. `isCliVersionAtLeast(this.cachedCliVersion, '2.1.261')` is `true`.
+
+`cachedCliVersion` can be `undefined` early in a session's life (before `ensureConnected()`'s
+fire-and-forget version check has resolved) — `isCliVersionAtLeast()` returns `undefined` in that
+case (and for any unparseable version), which this gate treats the same as "known to be older":
+the option is simply omitted, keeping the safe `'argv'` default. The gate lives in
+`routeQueryOptions()` rather than at each of the several `query()` call sites so there is exactly
+one place that knows the minimum version.
+
+**Decisions not adopted (issue #265 AC-4):**
+
+- **`verbatimPrompts`**: not adopted. It also strips CLAUDE.md, rules, skill and tool listings
+  from the prompt, which would weaken the Telegram bot in particular — its `/start`, `/new`, and
+  `/help` commands are handled before the SDK ever sees the message, and its safety control is
+  the numeric user allowlist (`telegramBot.ts`), not prompt content. Losing tool/skill listings
+  for every other caller (chat panel, editor actions) is not worth it for a feature none of them
+  need.
+- **`permissionPrompts: 'none'`**: not adopted. The bot and other unattended runs already use
+  `bypassPermissions` (`unattendedBypass`), so there are no prompts left for this option to deny
+  in the first place — it would be a no-op for the paths that need it and an unnecessary behavior
+  change for attended ones.
+- **Plan-mode `canUseTool` change (0.3.269: writes always go through `canUseTool` in plan mode)**:
+  no effect on this plugin. All plan-mode calls here pass `tools: []`, so there are no write tools
+  in scope for the new behavior to intercept.
+
 ## Auth model
 
 Dual auth via `buildEnv()`:
