@@ -60,7 +60,7 @@ import type {
 // lint-only fix. Follow-up: add zod as an explicit devDependency/dependency (#115).
 // eslint-disable-next-line import/no-extraneous-dependencies -- see comment above
 import {z} from 'zod';
-import {resolveDefaultCliPath, getCliVersion, cleanEnv} from './runtimeManager';
+import {resolveDefaultCliPath, getCliVersion, cleanEnv, isCliVersionAtLeast} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
@@ -171,6 +171,13 @@ export interface ModelInfo {
  * (lower-cased) target — in escalation order, cheapest family first.
  */
 const MODEL_KEYWORDS = ['haiku', 'sonnet', 'opus', 'flash', 'pro'] as const;
+
+/**
+ * Minimum Claude Code CLI version that accepts `pluginDelivery: 'initialize'` (issue #265). An
+ * older CLI exits at startup with an unknown-option error when given the option at all, so
+ * `routeQueryOptions()` only sets it when the resolved CLI is known to meet this bar.
+ */
+const PLUGIN_DELIVERY_INITIALIZE_CLI_VERSION = '2.1.261';
 
 /**
  * The shared three-tier model matcher (audit rec 4 — owned here, one implementation):
@@ -1083,6 +1090,15 @@ export class AgentService {
 		const vaultSettings = app ? this.loadVaultSettings(app) : undefined;
 		if (vaultSettings) {
 			opts.settings = mergeVaultSettingsLayer(vaultSettings, opts.settings);
+		}
+		// Send plugins over stdin (`--await-initialize`) instead of one `--plugin-dir` argv flag
+		// per plugin (issue #265) — avoids Windows' 32,767-character command-line limit once a
+		// vault has enough `_synapse/` plugins. Only safe on a CLI known to be >= 2.1.261; an
+		// older (or not-yet-checked) binary exits at startup with an unknown-option error, so
+		// `isCliVersionAtLeast()`'s `undefined` ("don't know") is treated the same as "too old"
+		// and the option is simply omitted, keeping the `'argv'` default.
+		if (opts.plugins && opts.plugins.length > 0 && isCliVersionAtLeast(this.cachedCliVersion, PLUGIN_DELIVERY_INITIALIZE_CLI_VERSION)) {
+			opts.pluginDelivery = 'initialize';
 		}
 		return opts;
 	}
