@@ -354,6 +354,23 @@ and built in `buildUI()` via `controller.build(parent)`.
     not revoke the in-memory grant already returned to the SDK for the current conversation.
   - There is no in-app UI to remove a persisted grant — `wiki/Customization.md` documents
     editing `_synapse/settings.json`'s `permissions.allow` list directly.
+- **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.281 attaches two
+  hints to `canUseTool`'s options for asks the CLI itself flags as unsafe to hand a blanket rule
+  or a careless keystroke — `defaultToNo` and `suppressAlwaysAllowRule` (e.g. a dangerous-`rm`
+  check). `buildSessionConfig()`'s `permissionHandler` forwards both straight through to
+  `ToolApprovalModal`, which maps them to presentation via the pure, DOM-free
+  `resolveToolApprovalPresentation()` (unit-tested in `test/toolApprovalModal.test.ts`, no live
+  CLI or Obsidian needed):
+  - `suppressAlwaysAllowRule` hides the **Always allow** button and its rule-preview block
+    entirely (replaced with a one-line note) and stops a plain **Allow** click from attaching
+    `updatedPermissions` — the ask is approved for this one call only, nothing wider is offered.
+    The permission handler also skips the `sessionToolGrants` in-memory accumulation (below) for
+    the same ask, so no other code path re-derives a broader rule the CLI already ruled unsafe.
+  - `defaultToNo` opens the modal with **Deny** focused instead of **Allow**, and **Allow** does
+    not get the `mod-cta` default-button styling — a stray Enter/Space right after the modal
+    opens denies rather than approves.
+  - With neither hint set the modal behaves exactly as before (#193/#197): **Allow** focused and
+    styled as the default action, **Always allow** shown with its rule preview.
 - **In-memory tool-approval grants.** `SynapseView.sessionToolGrants` (a `Set<string>` of CLI
   rule strings, e.g. `Read(C:\path\**)`) accumulates approved grants for the life of the
   conversation and re-injects them into every query via `Options.settings` — see
