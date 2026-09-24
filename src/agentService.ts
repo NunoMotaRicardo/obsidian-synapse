@@ -268,32 +268,9 @@ export const DEFAULT_AGENTIC_MAX_TURNS = 50;
  * Haiku 4.5 — on every other model (e.g. Opus 5.x, Sonnet 5) they must be explicitly listed in
  * `tools`/`allowedTools` or the plan panel (`taskPlanTracker.ts`) never receives a tool call to
  * parse. Listed in `allowedTools` rather than `tools` so the rest of the default Claude Code
- * toolset isn't replaced — see `mergeAllowedTools()` and specs/agent-service.md
- * "Plan/task tracking".
+ * toolset isn't replaced — see specs/agent-service.md "Plan/task tracking".
  */
 export const PLAN_TRACKING_TOOLS: string[] = ['TodoWrite', 'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList'];
-
-/**
- * Merge one or more tool-name lists into a deduplicated `allowedTools` array, preserving first
- * occurrence order. `allowedTools` only *auto-allows* the listed tools (and, since CLI 2.1.268,
- * makes the model-gated default tools in `PLAN_TRACKING_TOOLS` available at all) — it never
- * narrows or replaces the base toolset the way `tools` would, so merging extra names into
- * whatever a caller already passed is always additive and safe (AC-2).
- */
-export function mergeAllowedTools(...lists: (string[] | undefined)[]): string[] {
-	const seen = new Set<string>();
-	const merged: string[] = [];
-	for (const list of lists) {
-		if (!list) continue;
-		for (const name of list) {
-			if (!seen.has(name)) {
-				seen.add(name);
-				merged.push(name);
-			}
-		}
-	}
-	return merged;
-}
 
 /**
  * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
@@ -586,6 +563,20 @@ export class AgentService {
 		const v = await getCliVersion(resolved.path);
 		resolved.version = v.version;
 		return resolved;
+	}
+
+	/**
+	 * The resolved CLI's version, if already known — from `ensureConnected()`'s
+	 * fire-and-forget check or a prior `getVersionInfo()` call — or `undefined`
+	 * if no version check has completed yet. Synchronous and never triggers a
+	 * version check itself (issue #264): `Session` reads this once per `result`
+	 * message to decide whether `total_cost_usd` is cumulative (CLI >= 2.1.277)
+	 * without blocking `send()` on a subprocess spawn every turn. Before the
+	 * first check completes (e.g. very early in a session's life) this returns
+	 * `undefined`, and callers should treat that the same as "unknown."
+	 */
+	get cachedCliVersion(): string | undefined {
+		return this.resolvedCli?.version;
 	}
 
 	setCustomModels(models: ModelInfo[]): void {

@@ -342,17 +342,30 @@ handler) fire on every turn once a conversation, rather than any single run, cro
 threshold.
 
 `Session` tracks `lastCumulativeCostUsd` (the last `total_cost_usd` it has seen) and reports
-`computeRunCostDelta(total, lastCumulativeCostUsd)` instead of the raw value. There is no
-explicit signal distinguishing an old CLI's per-run value from a new CLI's cumulative one, so
-the heuristic treats `total` as cumulative only when it hasn't dropped below the previous
-baseline — an old CLI's fresh per-run value will typically fall below the prior run's total and
-is returned as-is; a new CLI's cumulative total only grows. `lastCumulativeCostUsd` is then
-always advanced to `total`, whichever branch fired, so the next result has the right baseline
-regardless of CLI version. **Known limitation:** an old CLI whose next run happens to cost more
-than or equal to the previous run's own cost is misread as cumulative, understating that run's
-reported cost (usually toward zero) — accepted since CLI version can't be cheaply distinguished
-from this field alone, and the failure mode is "budget notice fires a little late," not "budget
-notice never fires" or a crash.
+`computeRunCostDelta(total, lastCumulativeCostUsd, cliVersion)` instead of the raw value,
+gated on the resolved CLI's version rather than a value-shape heuristic (round 2 review of
+issue #264 — an earlier version compared `total` against the previous baseline and treated it
+as cumulative whenever it hadn't dropped, which misread an old CLI's next run as cumulative
+whenever that run happened to cost more than or equal to the previous one, e.g. run 1 = $0.10,
+run 2 = $0.15 understated as a $0.05 delta instead of the real $0.15):
+
+- `runtimeManager.ts` exports `isCliVersionAtLeast(version, minVersion)`, a small pure
+  dotted-version comparison (missing trailing components treated as `0`) returning `true`,
+  `false`, or `undefined` when either string can't be parsed (e.g. `'unknown'`).
+- `AgentService.cachedCliVersion` is a synchronous getter over the version `ensureConnected()`'s
+  fire-and-forget `getCliVersion()` check has already resolved (or `undefined` before that
+  completes) — reading it never triggers a version check or blocks `send()`, satisfying "don't
+  do a blocking check on every send."
+- `computeRunCostDelta(total, prevCumulativeUsd, cliVersion)`: `prevCumulativeUsd === undefined`
+  (this `Session`'s first result) always returns `total` as-is, regardless of version — nothing
+  to diff against yet either way. Otherwise `isCliVersionAtLeast(cliVersion, '2.1.277')` decides
+  directly: `true` -> `Math.max(0, total - prevCumulativeUsd)` (cumulative, clamped so a
+  same-process rounding blip can't go negative); `false` -> `total` unchanged (known-old CLI,
+  genuinely per-run); `undefined` (version not yet known, or unparseable) -> falls back to the
+  old "total >= previous" heuristic, since there's no better signal available in that case.
+
+`lastCumulativeCostUsd` is always advanced to `total` afterward, whichever branch fired, so the
+next result has the right baseline regardless of CLI version.
 
 **Surviving a `configDirty` rebuild (AC-4):** `ensureSession()` (`synapseView.ts`) tears down and
 rebuilds the live `Session` on a config change (model/agent/reasoning/etc.), the same rebuild
@@ -663,19 +676,18 @@ with `--model claude-sonnet-5`: the plain init tool list contains only `Task`/`T
 `TaskStop`, no `TodoWrite`/`TaskCreate`/`TaskGet`/`TaskUpdate`/`TaskList` — unless they're listed
 in `tools` or `allowedTools`.
 
-`agentService.ts` exports `PLAN_TRACKING_TOOLS` (the five tool names above) and
-`mergeAllowedTools(...lists)` (dedup, first-occurrence order, skips `undefined` lists).
-`SynapseView.buildSessionConfig()` sets `allowedTools: mergeAllowedTools(PLAN_TRACKING_TOOLS)` —
-used by both a live chat session and `sessionSidebar.ts`'s cold resume path, since both go
-through `buildSessionConfig()`. `allowedTools` was chosen over `tools` deliberately: per the
-SDK's own doc comment, `tools` replaces the base toolset entirely (`[]` disables all built-in
-tools), while `allowedTools` only auto-allows/enables tools without narrowing anything else —
-confirmed empirically (CLI 2.1.281, `--allowedTools TodoWrite,TaskCreate,TaskGet,TaskUpdate,
-TaskList`): the full default toolset (`Bash`, `Edit`, `Read`, …) is still present in `init`
-alongside the four task tools that actually registered (`TodoWrite` itself didn't appear in
-this environment's tool list either way — it's the SDK's own registration, unrelated to this
-fix). `mergeAllowedTools()` exists so a future `allowedTools` source at this call site is merged
-in, not clobbered, even though today `PLAN_TRACKING_TOOLS` is the only list passed.
+`agentService.ts` exports `PLAN_TRACKING_TOOLS` (the five tool names above).
+`SynapseView.buildSessionConfig()` sets `allowedTools: [...PLAN_TRACKING_TOOLS]` — used by both
+a live chat session and `sessionSidebar.ts`'s cold resume path, since both go through
+`buildSessionConfig()`. `allowedTools` was chosen over `tools` deliberately: per the SDK's own
+doc comment, `tools` replaces the base toolset entirely (`[]` disables all built-in tools),
+while `allowedTools` only auto-allows/enables tools without narrowing anything else — confirmed
+empirically (CLI 2.1.281, `--allowedTools TodoWrite,TaskCreate,TaskGet,TaskUpdate,TaskList`):
+the full default toolset (`Bash`, `Edit`, `Read`, …) is still present in `init` alongside the
+four task tools that actually registered (`TodoWrite` itself didn't appear in this
+environment's tool list either way — it's the SDK's own registration, unrelated to this fix).
+This is the only `allowedTools` source at this call site today, so no merge helper is needed —
+a future second source can `[...a, ...b]` or dedupe inline if one is ever added.
 
 The Telegram bot (`telegramBot.ts`'s `buildBotSessionConfig()`) does **not** get this treatment:
 it has no plan-tracking UI at all — `taskPlanTracker.ts`/`TaskPlanTracker` is only constructed

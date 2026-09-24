@@ -24,6 +24,14 @@ import type {AgentService} from './agentService';
 import {debugTrace} from './debug';
 import {abortWithSetTimeoutShim} from './sdkShims';
 import {buildInMemoryPermissionSettings} from './permissions';
+import {isCliVersionAtLeast} from './runtimeManager';
+
+/**
+ * The CLI version (issue #264 AC-3) at and above which a resumed/forked session's
+ * `total_cost_usd` on the terminal `result` message became cumulative (the whole
+ * conversation's cost) instead of per-run — see `computeRunCostDelta()`.
+ */
+const CUMULATIVE_COST_CLI_VERSION = '2.1.277';
 
 /**
  * Executes a query/stream operation with active cancellation and optional timeout.
@@ -91,25 +99,32 @@ export function resolveResumeSessionId(sessionId: string, configResume: string |
 /**
  * Turn an SDK `result` message's `total_cost_usd` into this run's own cost (issue #264
  * AC-3), given `prevCumulativeUsd` — the last `total_cost_usd` this `Session` has seen (or
- * was seeded with on a `configDirty` rebuild, `undefined` if none).
+ * was seeded with on a `configDirty` rebuild, `undefined` if none) — and `cliVersion`, the
+ * resolved CLI's version string if already known (`AgentService.cachedCliVersion`).
  *
  * CLI >= 2.1.277 reports `total_cost_usd` as the whole resumed/forked session's cumulative
  * total rather than this run's own cost. Since `Session.send()` spawns a fresh CLI process
  * per call (seeded with `resume`), every result would otherwise report the whole
- * conversation's cost once it's past a budget threshold. An old CLI reports a genuine
- * per-run value on every call instead.
+ * conversation's cost once it's past a budget threshold. A CLI older than 2.1.277 reports a
+ * genuine per-run value on every call instead — passed through unchanged.
  *
- * Heuristic (there is no explicit "old vs new CLI" signal to key off): treat `total` as
- * cumulative — and return the delta since `prevCumulativeUsd` — only when it hasn't dropped
- * below that baseline; a per-run value from an old CLI will typically fall below the
- * previous run's total and is returned as-is. This can misfire in one specific case: an old
- * CLI whose *next* run happens to cost more than or equal to the previous run's own cost,
- * which would be read as a (usually near-zero, understated) delta instead of that run's full
- * cost — accepted as a known limitation (see specs/agent-service.md "Run cost reporting")
- * since there's no cheaper way to disambiguate the two CLI behaviors from this field alone.
+ * There's no version-agnostic first run: `prevCumulativeUsd === undefined` always returns
+ * `total` as-is regardless of CLI version, since there's nothing yet to diff against either
+ * way. Otherwise the CLI version decides the behavior directly — no heuristic based on
+ * whether `total` looks bigger or smaller than the previous run, which used to misread an
+ * old CLI's next run as cumulative whenever it happened to cost more than or equal to the
+ * previous run (e.g. run 1 costs $0.10, run 2 costs $0.15 — the old heuristic reported
+ * $0.05 instead of $0.15). `isCliVersionAtLeast()`'s `undefined` result (version not yet
+ * known, or unparseable) is the one case that still falls back to that same heuristic,
+ * since there's no better signal available at all in that case.
  */
-export function computeRunCostDelta(total: number, prevCumulativeUsd: number | undefined): number {
-	return (prevCumulativeUsd !== undefined && total >= prevCumulativeUsd) ? total - prevCumulativeUsd : total;
+export function computeRunCostDelta(total: number, prevCumulativeUsd: number | undefined, cliVersion: string | undefined): number {
+	if (prevCumulativeUsd === undefined) return total;
+	const isCumulative = isCliVersionAtLeast(cliVersion, CUMULATIVE_COST_CLI_VERSION);
+	if (isCumulative === true) return Math.max(0, total - prevCumulativeUsd);
+	if (isCumulative === false) return total;
+	// Unknown/unparseable CLI version — fall back to the pre-version-gate heuristic.
+	return total >= prevCumulativeUsd ? total - prevCumulativeUsd : total;
 }
 
 /**
@@ -682,11 +697,13 @@ export class Session {
 				// run can still have accrued cost.
 				if (typeof resultMsg.total_cost_usd === 'number') {
 					const total = resultMsg.total_cost_usd;
-					// See computeRunCostDelta()'s doc comment for the cumulative-vs-per-run
-					// heuristic (issue #264 AC-3). `lastCumulativeCostUsd` is always advanced
-					// to `total` afterward so the next result (old or new CLI) diffs against
-					// the right baseline.
-					const runCostUsd = computeRunCostDelta(total, this.lastCumulativeCostUsd);
+					// See computeRunCostDelta()'s doc comment for the version-gated
+					// cumulative-vs-per-run logic (issue #264 AC-3). `service.cachedCliVersion`
+					// is a synchronous read of whatever ensureConnected()'s version check has
+					// already resolved — never a blocking version check on the send() path.
+					// `lastCumulativeCostUsd` is always advanced to `total` afterward so the
+					// next result diffs against the right baseline.
+					const runCostUsd = computeRunCostDelta(total, this.lastCumulativeCostUsd, this.service.cachedCliVersion);
 					this.lastCumulativeCostUsd = total;
 					this.dispatch('assistant.run_result', {totalCostUsd: runCostUsd, numTurns: resultMsg.num_turns});
 				}

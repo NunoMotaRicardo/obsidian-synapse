@@ -17,7 +17,7 @@ import type {
 	SlashCommand,
 	AgentInfo,
 } from './agentService';
-import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS, mergeAllowedTools} from './agentService';
+import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS} from './agentService';
 import {TaskPlanTracker} from './taskPlanTracker';
 import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
@@ -1393,10 +1393,9 @@ export class SynapseView extends ItemView implements ViewContext {
 			// it doesn't replace or narrow the default toolset (`tools` would) — so this can't
 			// widen a vault agent's `tools:` restriction (AC-2); that restriction is enforced by
 			// the CLI itself from the agent's own definition file, a separate mechanism from this
-			// top-level session's toolset. `mergeAllowedTools()` is used (rather than assigning
-			// the constant directly) so any `allowedTools` this config gains in the future is
-			// merged in, not clobbered.
-			allowedTools: mergeAllowedTools(PLAN_TRACKING_TOOLS),
+			// top-level session's toolset. Copied (rather than assigned directly) so nothing here
+			// can mutate the shared constant.
+			allowedTools: [...PLAN_TRACKING_TOOLS],
 			// Append to the Claude Code preset rather than replacing it — a plain
 			// string here would wipe the default system prompt (tool usage, agentic
 			// behavior) and the model stops using tools or reading files.

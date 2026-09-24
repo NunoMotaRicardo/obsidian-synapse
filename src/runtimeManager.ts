@@ -67,6 +67,43 @@ function trailingBuildNumber(version: string): number | null {
 }
 
 /**
+ * Parse a dotted version string (e.g. "2.1.277") into its numeric components,
+ * or `null` if any component isn't a plain non-negative integer (covers
+ * `'unknown'`, empty strings, and anything else that isn't a clean
+ * `major.minor.patch`-style version).
+ */
+function parseVersionParts(version: string): number[] | null {
+	const parts = version.trim().split('.');
+	if (parts.length === 0) return null;
+	const nums = parts.map(p => Number.parseInt(p, 10));
+	if (nums.some(n => !Number.isFinite(n) || n < 0)) return null;
+	return nums;
+}
+
+/**
+ * Whether `version` is at least `minVersion`, comparing dotted version strings
+ * component-by-component (missing trailing components treated as `0`, so
+ * `"2.1"` >= `"2.1.0"`). Returns `undefined` — rather than `false` — when
+ * either string can't be parsed (e.g. `'unknown'`, a CLI version check that
+ * failed) so callers can distinguish "known to be older" from "don't know,"
+ * which matters when the two cases need different fallback behavior (see
+ * `computeRunCostDelta()` in `session.ts`, issue #264).
+ */
+export function isCliVersionAtLeast(version: string | undefined, minVersion: string): boolean | undefined {
+	if (!version) return undefined;
+	const v = parseVersionParts(version);
+	const min = parseVersionParts(minVersion);
+	if (!v || !min) return undefined;
+	const len = Math.max(v.length, min.length);
+	for (let i = 0; i < len; i++) {
+		const a = v[i] ?? 0;
+		const b = min[i] ?? 0;
+		if (a !== b) return a > b;
+	}
+	return true; // equal
+}
+
+/**
  * Compare the resolved CLI's version against the bundled SDK version and
  * return a non-blocking, human-readable skew warning, or `null` when they're
  * in sync (or a version couldn't be parsed). A newer CLI is normal — the
