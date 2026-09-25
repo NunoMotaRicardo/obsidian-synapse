@@ -1347,6 +1347,12 @@
 	border: none;
 }
 
+/* Free-standing descriptions (not inside a setting row) line up with the rows' text. */
+.synapse-settings-panel > .setting-item-description,
+.synapse-settings-panel > div:not(.setting-item) > .setting-item-description {
+	padding-inline: var(--setting-items-padding-x, var(--size-4-4));
+}
+
 .synapse-settings-warning {
 	background: var(--background-modifier-error);
 	color: var(--text-on-accent);
