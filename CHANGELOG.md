@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-25
+
+### Added
+
+- The chat thinking box now shows Claude's reasoning text, in a smaller, compact sans-serif style.
+- Debug logging when a vault-local `_synapse/` plugin fails to load.
+
+### Changed
+
+- Upgraded the Claude Agent SDK to 0.3.281. On Claude CLI 2.1.261+, vault plugins are sent during initialization, including on the first message after startup.
+- The tool approval modal honors the SDK's `suppressAlwaysAllowRule` and `defaultToNo` hints.
+- The cost budget now applies per run on Claude CLI 2.1.277+.
+
+### Fixed
+
+- Restored the plan panel on Opus 5 and Sonnet 5 models.
+- Resuming a conversation from the sidebar no longer reports the whole conversation's cost as the cost of the next run.
+- Runs that finish while their conversation is in the background now save their cost total.
+
 ## [0.1.4] - 2026-09-16
 
 ### Changed

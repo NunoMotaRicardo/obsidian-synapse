@@ -1,7 +1,7 @@
 {
 	"id": "claude-synapse",
 	"name": "Claude Synapse",
-	"version": "0.1.4",
+	"version": "0.2.0",
 	"minAppVersion": "1.13.0",
 	"description": "Bring Claude Agent SDK-powered assistance with agents, tools, skills, and workflows into your notes.",
 	"author": "Nuno Mota Ricardo",
