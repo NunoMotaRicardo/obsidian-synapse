@@ -77,10 +77,14 @@ service connected. Subsequent calls return immediately while connected; this is 
 existence check on every query or a provider-authentication probe. `createQuery()` assumes
 readiness was established by its caller (normally `createSession()`).
 
-During that readiness check, `getCliVersion(resolved.path)` is called fire-and-forget (try/catch — must
-not block). On success, the `onVersionInfo` constructor callback (`VersionInfoCallback`) is fired
-with `{version, path}`. `main.ts` wires this to a debug-only trace; the settings UI
-reads `getVersionInfo()` to display the resolved binary path, source, and version.
+During that readiness check, `getCliVersion(resolved.path)` is kicked off and, on the very first
+`ensureConnected()` call only, awaited with a short cap (see "The first plugin-bearing query still
+gets `'initialize'`" under "Plugin delivery" below) rather than left purely fire-and-forget — it
+still can't block startup indefinitely (`withTimeout()` guarantees that), just gets a bounded
+chance to finish before the first query goes out. On success, the `onVersionInfo` constructor
+callback (`VersionInfoCallback`) is fired with `{version, path}`. `main.ts` wires this to a
+debug-only trace; the settings UI reads `getVersionInfo()` to display the resolved binary path,
+source, and version.
 
 ## Plugin delivery (issue #265)
 
@@ -105,11 +109,29 @@ reads `getVersionInfo()` to display the resolved binary path, source, and versio
 2. `isCliVersionAtLeast(this.cachedCliVersion, '2.1.261')` is `true`.
 
 `cachedCliVersion` can be `undefined` early in a session's life (before `ensureConnected()`'s
-fire-and-forget version check has resolved) — `isCliVersionAtLeast()` returns `undefined` in that
-case (and for any unparseable version), which this gate treats the same as "known to be older":
-the option is simply omitted, keeping the safe `'argv'` default. The gate lives in
-`routeQueryOptions()` rather than at each of the several `query()` call sites so there is exactly
-one place that knows the minimum version.
+version check has resolved) — `isCliVersionAtLeast()` returns `undefined` in that case (and for
+any unparseable version), which this gate treats the same as "known to be older": the option is
+simply omitted, keeping the safe `'argv'` default. The gate lives in `routeQueryOptions()` rather
+than at each of the several `query()` call sites so there is exactly one place that knows the
+minimum version.
+
+**The first plugin-bearing query still gets `'initialize'` (issue #266 follow-up).**
+`ensureConnected()` used to kick off `getCliVersion()` purely fire-and-forget and return
+immediately, so `cachedCliVersion` was reliably still `undefined` when the very first
+`routeQueryOptions()` call of the plugin's life ran — that first query (often the first message
+of the first chat session after startup) always fell back to `'argv'` even on a CLI new enough for
+`'initialize'`. `ensureConnected()` now awaits that same version-check promise, capped at
+`CLI_VERSION_CHECK_TIMEOUT_MS` (1.5s) via the pure `withTimeout()` helper (`runtimeManager.ts`,
+unit-tested in `test/runtimeManager.test.ts` — never rejects; a timeout or an inner rejection both
+resolve to `undefined`, and the `.then()`/`.catch()` side effects that populate `resolved.version`
+and fire `onVersionInfo` still run whenever the check eventually settles, win or lose the race).
+This only affects the very first `ensureConnected()` call in the plugin's life: every later call
+short-circuits at the top of the method (`if (this.state === 'connected') return;`) before reaching
+the version check at all, so no per-query latency is added past that first one. `createQuery()`
+stays fully synchronous — the least invasive fix, since `Session.send()` calls it directly inside
+an already-`async` callback and making `createQuery()` itself `async` would ripple into every
+caller's control flow for no benefit, given `ensureConnected()` is already awaited before any
+`Session` is constructed (`createSession()`) or any one-shot `chat()`/`inlineChat()` query runs.
 
 **Plugin load diagnostics (issue #269 AC-3).** `pluginDelivery: 'initialize'` moves plugin loading
 off the command line, but a plugin the CLI silently fails to load under that mode would otherwise

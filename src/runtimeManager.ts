@@ -104,6 +104,26 @@ export function isCliVersionAtLeast(version: string | undefined, minVersion: str
 }
 
 /**
+ * Race `promise` against a `timeoutMs` timer, resolving to `undefined` (never rejecting) if the
+ * timer wins — used by `AgentService.ensureConnected()` (issue #266 follow-up) to let the very
+ * first query of the plugin's life wait a bounded amount of time for the fire-and-forget CLI
+ * version check, so `routeQueryOptions()` can set `pluginDelivery: 'initialize'` on that first
+ * query instead of always falling back to `'argv'` before the check completes. Pure and
+ * side-effect-free (no timers left running matter here — `setTimeout` firing after `promise`
+ * already resolved is harmless since only the first settled `Promise.race()` branch is observed),
+ * so it's unit-testable without faking the CLI subprocess itself.
+ */
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+	return new Promise((resolve) => {
+		const timer = window.setTimeout(() => resolve(undefined), timeoutMs);
+		promise.then(
+			(value) => { window.clearTimeout(timer); resolve(value); },
+			() => { window.clearTimeout(timer); resolve(undefined); },
+		);
+	});
+}
+
+/**
  * Compare the resolved CLI's version against the bundled SDK version and
  * return a non-blocking, human-readable skew warning, or `null` when they're
  * in sync (or a version couldn't be parsed). A newer CLI is normal — the

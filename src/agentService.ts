@@ -60,7 +60,7 @@ import type {
 // lint-only fix. Follow-up: add zod as an explicit devDependency/dependency (#115).
 // eslint-disable-next-line import/no-extraneous-dependencies -- see comment above
 import {z} from 'zod';
-import {resolveDefaultCliPath, getCliVersion, cleanEnv, isCliVersionAtLeast} from './runtimeManager';
+import {resolveDefaultCliPath, getCliVersion, cleanEnv, isCliVersionAtLeast, withTimeout} from './runtimeManager';
 import type {ResolvedCliPath, CliPathSource} from './runtimeManager';
 import {fetchEndpointModels} from './providerModels';
 import {debugTrace} from './debug';
@@ -178,6 +178,15 @@ const MODEL_KEYWORDS = ['haiku', 'sonnet', 'opus', 'flash', 'pro'] as const;
  * `routeQueryOptions()` only sets it when the resolved CLI is known to meet this bar.
  */
 const PLUGIN_DELIVERY_INITIALIZE_CLI_VERSION = '2.1.261';
+
+/**
+ * Cap on how long `ensureConnected()`'s first call will wait for the fire-and-forget CLI version
+ * check before giving up on it (issue #266 follow-up). Bounds the one-time latency this adds to
+ * the very first query of the plugin's life; a check that hasn't resolved by then leaves
+ * `cachedCliVersion` `undefined`, and `routeQueryOptions()` falls back to `'argv'` plugin delivery
+ * exactly as it did before this fix.
+ */
+const CLI_VERSION_CHECK_TIMEOUT_MS = 1500;
 
 /**
  * The shared three-tier model matcher (audit rec 4 — owned here, one implementation):
@@ -532,8 +541,17 @@ export class AgentService {
 				throw new Error(`Claude CLI not found at "${resolved.path}". Install with npm install -g @anthropic-ai/claude-code and restart the plugin.`);
 			}
 
-			// Fire-and-forget version check to populate version info and trigger callback
-			void getCliVersion(resolved.path).then(v => {
+			// Version check, populating version info and triggering the callback once it lands.
+			// Bounded-wait below (issue #266 follow-up): the very first `ensureConnected()` call
+			// in the plugin's life — and only that call, since every later call short-circuits at
+			// the top of this method once `state === 'connected'` — awaits this promise (capped
+			// at `CLI_VERSION_CHECK_TIMEOUT_MS`) so `cachedCliVersion` has a real chance of being
+			// populated before the first `routeQueryOptions()` call decides plugin delivery,
+			// instead of always missing that window and falling back to `'argv'` on the first
+			// query. `withTimeout()` never rejects, so a slow/erroring check can't block startup
+			// past the cap; the `.then()`/`.catch()` side effects below still run whenever the
+			// check does eventually settle, timeout or not.
+			const versionCheckPromise = getCliVersion(resolved.path).then(v => {
 				resolved.version = v.version;
 				if (this.onVersionInfo) {
 					this.onVersionInfo({
@@ -542,6 +560,7 @@ export class AgentService {
 					});
 				}
 			}).catch(() => { /* ignore version check errors */ });
+			await withTimeout(versionCheckPromise, CLI_VERSION_CHECK_TIMEOUT_MS);
 
 			this.state = 'connected';
 		} catch (e) {

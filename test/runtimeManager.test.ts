@@ -22,7 +22,7 @@ vi.mock('node:fs/promises', () => ({
 	access: vi.fn(),
 }));
 
-import {cleanEnv, resolveDefaultCliPath} from '../src/runtimeManager';
+import {cleanEnv, resolveDefaultCliPath, withTimeout} from '../src/runtimeManager';
 import * as fsMock from 'node:fs/promises';
 
 const mockedAccess = fsMock.access as unknown as ReturnType<typeof vi.fn<typeof fsMock.access>>;
@@ -104,5 +104,42 @@ describe('resolveDefaultCliPath', () => {
 		const result = await resolveDefaultCliPath();
 
 		expect(result.path).toContain(process.arch);
+	});
+});
+
+describe('withTimeout', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('resolves with the promise value when it settles before the timeout', async () => {
+		const promise = withTimeout(Promise.resolve('done'), 1000);
+		await vi.advanceTimersByTimeAsync(0);
+		await expect(promise).resolves.toBe('done');
+	});
+
+	it('resolves with undefined when the timeout elapses first', async () => {
+		const never = new Promise<string>(() => { /* never settles */ });
+		const promise = withTimeout(never, 1000);
+		await vi.advanceTimersByTimeAsync(1000);
+		await expect(promise).resolves.toBeUndefined();
+	});
+
+	it('resolves with undefined (not a rejection) if the inner promise rejects', async () => {
+		const promise = withTimeout(Promise.reject(new Error('boom')), 1000);
+		await vi.advanceTimersByTimeAsync(0);
+		await expect(promise).resolves.toBeUndefined();
+	});
+
+	it('does not fire the timeout after the promise already resolved', async () => {
+		const promise = withTimeout(Promise.resolve('fast'), 1000);
+		const result = await promise;
+		// Advancing past the timeout afterward must not throw or change anything.
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(result).toBe('fast');
 	});
 });
