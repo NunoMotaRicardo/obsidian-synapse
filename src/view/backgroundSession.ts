@@ -42,6 +42,14 @@ export interface BackgroundSessionCallbacks {
 	onIdle(): void;
 	/** The hidden session errored — sidebar should drop the active dot. */
 	onError(): void;
+	/**
+	 * A run finished while this session was hidden (`assistant.run_result`) — sidebar should
+	 * persist `cumulativeCostUsd` as this session's cost baseline (issue #269 AC-1) through
+	 * `SynapseView.saveSessionCostBaseline()`, the same path the foreground handler uses. No
+	 * cost UI or budget notice while hidden — only persistence, so a reload before the user
+	 * switches back doesn't lose this run's contribution to the baseline.
+	 */
+	onRunResult(cumulativeCostUsd: number): void;
 }
 
 export interface BackgroundSessionInit {
@@ -130,6 +138,13 @@ export class BackgroundSession {
 					this.turnUsage.inputTokens += data.inputTokens;
 					this.turnUsage.outputTokens += data.outputTokens;
 					if (data.model) this.turnUsage.model = data.model;
+				}
+			}),
+			on('assistant.run_result', () => {
+				// Raw cumulative total, not the per-run delta already in this event — same
+				// value the foreground `assistant.run_result` handler persists (synapseView.ts).
+				if (typeof session.cumulativeCostUsd === 'number') {
+					callbacks.onRunResult(session.cumulativeCostUsd);
 				}
 			}),
 			on('session.idle', () => {

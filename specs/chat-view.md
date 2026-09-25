@@ -354,7 +354,7 @@ and built in `buildUI()` via `controller.build(parent)`.
     not revoke the in-memory grant already returned to the SDK for the current conversation.
   - There is no in-app UI to remove a persisted grant — `wiki/Customization.md` documents
     editing `_synapse/settings.json`'s `permissions.allow` list directly.
-- **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.281 attaches two
+- **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.268 attaches two
   hints to `canUseTool`'s options for asks the CLI itself flags as unsafe to hand a blanket rule
   or a careless keystroke — `defaultToNo` and `suppressAlwaysAllowRule` (e.g. a dangerous-`rm`
   check). `buildSessionConfig()`'s `permissionHandler` forwards both straight through to
@@ -517,6 +517,16 @@ physically moved live DOM nodes out of the chat container and back in).
   model's own fields directly (no `bg.` struct indirection) and call back into
   `BackgroundSessionCallbacks.onIdle()`/`onError()` so the sidebar can refresh its list without
   the model needing to know about sidebar DOM. `detach()` unsubscribes; both are idempotent.
+  A third callback, `onRunResult(cumulativeCostUsd)`, fires on `assistant.run_result` — issue
+  #271 follow-up: a run that finishes while its session is hidden previously left the persisted
+  cost baseline (`SynapseSettings.sessionCostBaselines`, see "Run cost reporting" in
+  `agent-service.md`) stale until the session was brought back to the foreground, so a plugin
+  reload in between overstated the next cold resume. `BackgroundSession` reads
+  `Session.cumulativeCostUsd` itself and only calls back with the raw value; it does not touch
+  settings directly. `SessionSidebarController.saveCurrentToBackground()` wires that callback to
+  `SynapseView.saveSessionCostBaseline(bg.sessionId, cumulativeCostUsd)` — the same persistence
+  path the foreground handler uses. No cost-threshold notice or other UI runs while hidden;
+  this is persistence only.
 - **`SessionSidebarController.saveCurrentToBackground()`** empties `chatContainer` (no more
   fragment capture), constructs a `new BackgroundSession({...})` from the view's current
   plain-data state, copies the foreground `taskPlanTracker`'s `snapshot()` into the new

@@ -77,10 +77,14 @@ service connected. Subsequent calls return immediately while connected; this is 
 existence check on every query or a provider-authentication probe. `createQuery()` assumes
 readiness was established by its caller (normally `createSession()`).
 
-During that readiness check, `getCliVersion(resolved.path)` is called fire-and-forget (try/catch — must
-not block). On success, the `onVersionInfo` constructor callback (`VersionInfoCallback`) is fired
-with `{version, path}`. `main.ts` wires this to a debug-only trace; the settings UI
-reads `getVersionInfo()` to display the resolved binary path, source, and version.
+During that readiness check, `getCliVersion(resolved.path)` is kicked off and, on the very first
+`ensureConnected()` call only, awaited with a short cap (see "The first plugin-bearing query still
+gets `'initialize'`" under "Plugin delivery" below) rather than left purely fire-and-forget — it
+still can't block startup indefinitely (`withTimeout()` guarantees that), just gets a bounded
+chance to finish before the first query goes out. On success, the `onVersionInfo` constructor
+callback (`VersionInfoCallback`) is fired with `{version, path}`. `main.ts` wires this to a
+debug-only trace; the settings UI reads `getVersionInfo()` to display the resolved binary path,
+source, and version.
 
 ## Plugin delivery (issue #265)
 
@@ -105,11 +109,29 @@ reads `getVersionInfo()` to display the resolved binary path, source, and versio
 2. `isCliVersionAtLeast(this.cachedCliVersion, '2.1.261')` is `true`.
 
 `cachedCliVersion` can be `undefined` early in a session's life (before `ensureConnected()`'s
-fire-and-forget version check has resolved) — `isCliVersionAtLeast()` returns `undefined` in that
-case (and for any unparseable version), which this gate treats the same as "known to be older":
-the option is simply omitted, keeping the safe `'argv'` default. The gate lives in
-`routeQueryOptions()` rather than at each of the several `query()` call sites so there is exactly
-one place that knows the minimum version.
+version check has resolved) — `isCliVersionAtLeast()` returns `undefined` in that case (and for
+any unparseable version), which this gate treats the same as "known to be older": the option is
+simply omitted, keeping the safe `'argv'` default. The gate lives in `routeQueryOptions()` rather
+than at each of the several `query()` call sites so there is exactly one place that knows the
+minimum version.
+
+**The first plugin-bearing query still gets `'initialize'` (issue #266 follow-up).**
+`ensureConnected()` used to kick off `getCliVersion()` purely fire-and-forget and return
+immediately, so `cachedCliVersion` was reliably still `undefined` when the very first
+`routeQueryOptions()` call of the plugin's life ran — that first query (often the first message
+of the first chat session after startup) always fell back to `'argv'` even on a CLI new enough for
+`'initialize'`. `ensureConnected()` now awaits that same version-check promise, capped at
+`CLI_VERSION_CHECK_TIMEOUT_MS` (1.5s) via the pure `withTimeout()` helper (`runtimeManager.ts`,
+unit-tested in `test/runtimeManager.test.ts` — never rejects; a timeout or an inner rejection both
+resolve to `undefined`, and the `.then()`/`.catch()` side effects that populate `resolved.version`
+and fire `onVersionInfo` still run whenever the check eventually settles, win or lose the race).
+This only affects the very first `ensureConnected()` call in the plugin's life: every later call
+short-circuits at the top of the method (`if (this.state === 'connected') return;`) before reaching
+the version check at all, so no per-query latency is added past that first one. `createQuery()`
+stays fully synchronous — the least invasive fix, since `Session.send()` calls it directly inside
+an already-`async` callback and making `createQuery()` itself `async` would ripple into every
+caller's control flow for no benefit, given `ensureConnected()` is already awaited before any
+`Session` is constructed (`createSession()`) or any one-shot `chat()`/`inlineChat()` query runs.
 
 **Plugin load diagnostics (issue #269 AC-3).** `pluginDelivery: 'initialize'` moves plugin loading
 off the command line, but a plugin the CLI silently fails to load under that mode would otherwise
@@ -182,7 +204,7 @@ string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive 
 `_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
 The vault settings layer (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
-**`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.281's `CanUseTool`
+**`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.268's `CanUseTool`
 options carry two risk hints the CLI attaches to individual asks: `defaultToNo` (must not be
 approvable by a single stray keystroke) and `suppressAlwaysAllowRule` (the rule this ask's
 suggestions would produce grants more than the ask's own action — e.g. a dangerous-`rm` check).
@@ -488,12 +510,19 @@ JSONL history), the baseline is persisted separately, per session id, every time
   as before this fix; every result after that is a correct per-run delta once `lastCumulativeCostUsd`
   has a baseline from within the same `Session` instance.
 
-**Not covered: a session still running in the background.** `BackgroundSession.attach()`
-(`view/backgroundSession.ts`) deliberately does not subscribe to `assistant.run_result` (see
-"Session event map" below), so a run that completes while its session is hidden in the
-background does not update the persisted baseline until that session is brought back to the
-foreground and completes another run there. This mirrors the background session's existing
-"no cost-threshold UI while hidden" scope rather than being a new gap this fix introduces.
+**A session still running in the background (issue #271 follow-up):** `BackgroundSession.attach()`
+(`view/backgroundSession.ts`) does subscribe to `assistant.run_result`, but only to persist the
+baseline — it never renders the "over budget" notice or any other cost UI while hidden, since it
+owns no DOM (see "Background-session state ownership" in `chat-view.md`). On that event it reads
+`Session.cumulativeCostUsd` (the same raw last-seen `total_cost_usd` the foreground path uses,
+not the per-run delta already in the event payload) and, if it's known, calls
+`BackgroundSessionCallbacks.onRunResult(cumulativeCostUsd)`. `SessionSidebarController` supplies
+that callback when it attaches a backgrounded session, forwarding straight to
+`SynapseView.saveSessionCostBaseline(bg.sessionId, cumulativeCostUsd)` — the same persistence
+path (and the same `upsertSessionCostBaseline()` map update) the foreground `assistant.run_result`
+handler uses. This keeps `BackgroundSession` itself free of any settings/storage concern (it only
+calls a callback, same pattern as `onIdle`/`onError`) while ensuring a run that finishes hidden
+still updates the baseline before a plugin reload, rather than overstating the next cold resume.
 
 ## Compaction event mapping
 
@@ -565,10 +594,12 @@ doc comment in `agentService.ts` for the full list.
 
 **Partial registration is intentional, not a gap to close.** `SessionEvents` describes every
 event a `Session` can dispatch; a given `session.on(...)` call site is free to subscribe to a
-subset (`BackgroundSession.attach()` deliberately omits `session.init`, `assistant.run_result`,
-`session.compaction_complete`, and `session.metadata` — see "Query metadata cache" below for how
-`session.metadata`'s omission there is compensated). `on()` is not exhaustiveness-checked against
-`SessionEvents`, and should not become so.
+subset (`BackgroundSession.attach()` deliberately omits `session.init`, `session.compaction_complete`,
+and `session.metadata` — see "Query metadata cache" below for how `session.metadata`'s omission
+there is compensated. It does subscribe to `assistant.run_result`, but only to persist the cost
+baseline via `BackgroundSessionCallbacks.onRunResult()` — see "Run cost reporting" above — not to
+drive any hidden-session UI). `on()` is not exhaustiveness-checked against `SessionEvents`, and
+should not become so.
 
 The wrapped `{type, data}` shape (still exported as `SessionEvent`, now a discriminated union
 over `SessionEvents`) survives only where a single callback must handle every event

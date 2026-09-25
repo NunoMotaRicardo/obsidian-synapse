@@ -565,6 +565,9 @@ export class SessionSidebarController {
 				onError: () => {
 					this.renderSessionList();
 				},
+				onRunResult: (cumulativeCostUsd) => {
+					this.view.view.saveSessionCostBaseline(bg.sessionId, cumulativeCostUsd);
+				},
 			});
 		}
 
