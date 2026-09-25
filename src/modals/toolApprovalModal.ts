@@ -10,14 +10,14 @@ export interface ToolApprovalRequest {
 	suggestions?: PermissionUpdate[];
 	toolUseID: string;
 	/**
-	 * CLI/SDK 0.3.281 hint (issue #268): "the ask must not be approvable by a single stray
+	 * CLI/SDK 0.3.268 hint (issue #268): "the ask must not be approvable by a single stray
 	 * keystroke" — the modal must open with **Deny** focused and must not give **Allow** the
 	 * default-button (`mod-cta`) styling, so Enter/Space right after the modal opens denies
 	 * rather than approves.
 	 */
 	defaultToNo?: boolean;
 	/**
-	 * CLI/SDK 0.3.281 hint (issue #268): "the rule it would write grants more than this ask's
+	 * CLI/SDK 0.3.268 hint (issue #268): "the rule it would write grants more than this ask's
 	 * own action" — the modal must not offer a persistent "don't ask again" choice at all. Both
 	 * the **Always allow** button/rule-preview and `updatedPermissions` on a plain **Allow**
 	 * (which would otherwise widen this one approval into a `'session'`-scope rule via

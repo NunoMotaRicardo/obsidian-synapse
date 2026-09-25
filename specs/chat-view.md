@@ -354,7 +354,7 @@ and built in `buildUI()` via `controller.build(parent)`.
     not revoke the in-memory grant already returned to the SDK for the current conversation.
   - There is no in-app UI to remove a persisted grant — `wiki/Customization.md` documents
     editing `_synapse/settings.json`'s `permissions.allow` list directly.
-- **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.281 attaches two
+- **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.268 attaches two
   hints to `canUseTool`'s options for asks the CLI itself flags as unsafe to hand a blanket rule
   or a careless keystroke — `defaultToNo` and `suppressAlwaysAllowRule` (e.g. a dangerous-`rm`
   check). `buildSessionConfig()`'s `permissionHandler` forwards both straight through to

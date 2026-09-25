@@ -182,7 +182,7 @@ string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive 
 `_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
 The vault settings layer (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
-**`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.281's `CanUseTool`
+**`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.268's `CanUseTool`
 options carry two risk hints the CLI attaches to individual asks: `defaultToNo` (must not be
 approvable by a single stray keystroke) and `suppressAlwaysAllowRule` (the rule this ask's
 suggestions would produce grants more than the ask's own action — e.g. a dangerous-`rm` check).
