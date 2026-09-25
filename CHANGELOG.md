@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-25
+
+### Fixed
+
+- Fixed the settings page layout. Each settings page now shows only its own section, stacked at full width, instead of a duplicate tab bar beside the content that overflowed the dialog. Explanatory text lines up with the setting rows.
+
 ## [0.2.0] - 2026-09-25
 
 ### Added
