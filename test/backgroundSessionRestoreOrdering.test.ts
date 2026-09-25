@@ -306,7 +306,7 @@ describe('concurrent session selection — behavioral regression tests', () => {
 		});
 
 		// Attach so we can check if detach() is called
-		bg.attach({onIdle: () => {}, onError: () => {}});
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: () => {}});
 		const detachSpy = vi.spyOn(bg, 'detach');
 
 		return {bg, mockSession, detachSpy, unsubSpy};

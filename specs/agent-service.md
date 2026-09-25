@@ -488,12 +488,19 @@ JSONL history), the baseline is persisted separately, per session id, every time
   as before this fix; every result after that is a correct per-run delta once `lastCumulativeCostUsd`
   has a baseline from within the same `Session` instance.
 
-**Not covered: a session still running in the background.** `BackgroundSession.attach()`
-(`view/backgroundSession.ts`) deliberately does not subscribe to `assistant.run_result` (see
-"Session event map" below), so a run that completes while its session is hidden in the
-background does not update the persisted baseline until that session is brought back to the
-foreground and completes another run there. This mirrors the background session's existing
-"no cost-threshold UI while hidden" scope rather than being a new gap this fix introduces.
+**A session still running in the background (issue #271 follow-up):** `BackgroundSession.attach()`
+(`view/backgroundSession.ts`) does subscribe to `assistant.run_result`, but only to persist the
+baseline — it never renders the "over budget" notice or any other cost UI while hidden, since it
+owns no DOM (see "Background-session state ownership" in `chat-view.md`). On that event it reads
+`Session.cumulativeCostUsd` (the same raw last-seen `total_cost_usd` the foreground path uses,
+not the per-run delta already in the event payload) and, if it's known, calls
+`BackgroundSessionCallbacks.onRunResult(cumulativeCostUsd)`. `SessionSidebarController` supplies
+that callback when it attaches a backgrounded session, forwarding straight to
+`SynapseView.saveSessionCostBaseline(bg.sessionId, cumulativeCostUsd)` — the same persistence
+path (and the same `upsertSessionCostBaseline()` map update) the foreground `assistant.run_result`
+handler uses. This keeps `BackgroundSession` itself free of any settings/storage concern (it only
+calls a callback, same pattern as `onIdle`/`onError`) while ensuring a run that finishes hidden
+still updates the baseline before a plugin reload, rather than overstating the next cold resume.
 
 ## Compaction event mapping
 
@@ -565,10 +572,12 @@ doc comment in `agentService.ts` for the full list.
 
 **Partial registration is intentional, not a gap to close.** `SessionEvents` describes every
 event a `Session` can dispatch; a given `session.on(...)` call site is free to subscribe to a
-subset (`BackgroundSession.attach()` deliberately omits `session.init`, `assistant.run_result`,
-`session.compaction_complete`, and `session.metadata` — see "Query metadata cache" below for how
-`session.metadata`'s omission there is compensated). `on()` is not exhaustiveness-checked against
-`SessionEvents`, and should not become so.
+subset (`BackgroundSession.attach()` deliberately omits `session.init`, `session.compaction_complete`,
+and `session.metadata` — see "Query metadata cache" below for how `session.metadata`'s omission
+there is compensated. It does subscribe to `assistant.run_result`, but only to persist the cost
+baseline via `BackgroundSessionCallbacks.onRunResult()` — see "Run cost reporting" above — not to
+drive any hidden-session UI). `on()` is not exhaustiveness-checked against `SessionEvents`, and
+should not become so.
 
 The wrapped `{type, data}` shape (still exported as `SessionEvent`, now a discriminated union
 over `SessionEvents`) survives only where a single callback must handle every event

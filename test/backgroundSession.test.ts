@@ -13,9 +13,10 @@ import type {Session, SessionEvents} from '../src/agentService';
 // ---------------------------------------------------------------------------
 
 /** A fake `Session` that records handlers per event and lets tests fire them directly. */
-function fakeSession() {
+function fakeSession(initialCumulativeCostUsd?: number) {
 	type StoredHandler = (data: unknown) => void;
 	const handlers = new Map<keyof SessionEvents, StoredHandler[]>();
+	let cumulativeCostUsd = initialCumulativeCostUsd;
 	const session = {
 		on<K extends keyof SessionEvents>(type: K, handler: (data: SessionEvents[K]) => void) {
 			const storedHandler: StoredHandler = handler;
@@ -27,11 +28,19 @@ function fakeSession() {
 				if (idx >= 0) list.splice(idx, 1);
 			};
 		},
+		get cumulativeCostUsd() {
+			return cumulativeCostUsd;
+		},
 	};
 	const fire = <K extends keyof SessionEvents>(type: K, data: SessionEvents[K]) => {
 		for (const handler of handlers.get(type) ?? []) handler(data);
 	};
-	return {session: session as unknown as Session, fire, handlerCount: (type: keyof SessionEvents) => (handlers.get(type) ?? []).length};
+	return {
+		session: session as unknown as Session,
+		fire,
+		handlerCount: (type: keyof SessionEvents) => (handlers.get(type) ?? []).length,
+		setCumulativeCostUsd: (value: number) => { cumulativeCostUsd = value; },
+	};
 }
 
 function makeBackgroundSession(session: Session, overrides?: Partial<ConstructorParameters<typeof BackgroundSession>[0]>) {
@@ -68,7 +77,7 @@ describe('BackgroundSession — streaming accumulation while hidden', () => {
 	it('accumulates message/reasoning deltas and usage without touching DOM', () => {
 		const {session, fire} = fakeSession();
 		const bg = makeBackgroundSession(session);
-		bg.attach({onIdle: () => {}, onError: () => {}});
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: () => {}});
 
 		fire('assistant.turn_start', {});
 		fire('assistant.message_delta', {content: 'Hel', deltaContent: 'Hel'});
@@ -86,7 +95,7 @@ describe('BackgroundSession — streaming accumulation while hidden', () => {
 		const {session, fire} = fakeSession();
 		let idleCalls = 0;
 		const bg = makeBackgroundSession(session);
-		bg.attach({onIdle: () => { idleCalls++; }, onError: () => {}});
+		bg.attach({onIdle: () => { idleCalls++; }, onError: () => {}, onRunResult: () => {}});
 
 		fire('assistant.message_delta', {content: 'Done', deltaContent: 'Done'});
 		fire('assistant.reasoning_delta', {content: 'reason', deltaContent: 'reason'});
@@ -104,7 +113,7 @@ describe('BackgroundSession — streaming accumulation while hidden', () => {
 		const {session, fire} = fakeSession();
 		let errorCalls = 0;
 		const bg = makeBackgroundSession(session);
-		bg.attach({onIdle: () => {}, onError: () => { errorCalls++; }});
+		bg.attach({onIdle: () => {}, onError: () => { errorCalls++; }, onRunResult: () => {}});
 
 		fire('assistant.message_delta', {content: 'partial', deltaContent: 'partial'});
 		fire('session.error', {error: 'boom'});
@@ -118,7 +127,7 @@ describe('BackgroundSession — streaming accumulation while hidden', () => {
 	it('routes tool.execution_start/complete through its own TaskPlanTracker (TodoWrite)', () => {
 		const {session, fire} = fakeSession();
 		const bg = makeBackgroundSession(session);
-		bg.attach({onIdle: () => {}, onError: () => {}});
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: () => {}});
 
 		fire('tool.execution_start', {
 			toolName: 'TodoWrite',
@@ -131,12 +140,37 @@ describe('BackgroundSession — streaming accumulation while hidden', () => {
 	});
 });
 
+describe('BackgroundSession — cost baseline persistence while hidden (issue #271 follow-up)', () => {
+	it('reports the raw cumulative cost via onRunResult when assistant.run_result fires while hidden', () => {
+		const {session, fire, setCumulativeCostUsd} = fakeSession();
+		const bg = makeBackgroundSession(session);
+		const reported: number[] = [];
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: (cumulativeCostUsd) => { reported.push(cumulativeCostUsd); }});
+
+		setCumulativeCostUsd(1.2345);
+		fire('assistant.run_result', {totalCostUsd: 0.05, numTurns: 3});
+
+		expect(reported).toEqual([1.2345]);
+	});
+
+	it('does not call onRunResult if cumulativeCostUsd is still unknown', () => {
+		const {session, fire} = fakeSession(); // no cumulative cost set
+		const bg = makeBackgroundSession(session);
+		const reported: number[] = [];
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: (cumulativeCostUsd) => { reported.push(cumulativeCostUsd); }});
+
+		fire('assistant.run_result', {totalCostUsd: 0.05, numTurns: 3});
+
+		expect(reported).toEqual([]);
+	});
+});
+
 describe('BackgroundSession — attach/detach idempotence', () => {
 	it('attach() is a no-op if already attached, and detach() unsubscribes all handlers', () => {
 		const {session, fire, handlerCount} = fakeSession();
 		const bg = makeBackgroundSession(session);
-		bg.attach({onIdle: () => {}, onError: () => {}});
-		bg.attach({onIdle: () => {}, onError: () => {}}); // second attach must not double-register
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: () => {}});
+		bg.attach({onIdle: () => {}, onError: () => {}, onRunResult: () => {}}); // second attach must not double-register
 		expect(handlerCount('assistant.message_delta')).toBe(1);
 
 		bg.detach();
