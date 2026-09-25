@@ -3,21 +3,25 @@
 Sources: `src/settings.ts` — settings interface, defaults, and the settings tab UI; `src/identityMigration.ts` — legacy secure local-storage migration.
 
 `SynapseSettingTab.getSettingDefinitions()` registers a searchable settings page for each
-top-level section. Each page's renderer builds the tab bar/panel scaffolding, opens the matching
-tab, and dispatches
-to one private `render*Panel(panel: HTMLElement)` method per tab — `renderClaudePanel`,
-`renderAgentsPanel`, `renderCapabilitiesPanel`, `renderToolsPanel`, `renderBotsPanel`.
-Per-tab state (e.g. `renderAuthFields`, the CLI-status renderer) lives as closures local to the
+top-level section (**Claude**, **Feature Map & Agents**, **Capabilities**, **Tools**, **Bots**).
+Obsidian's page navigation is the only section switcher — there is no in-page tab bar. Each page
+holds one `render` item whose `renderSettings(settingEl, section)` renders only that section: it
+adds the `synapse-settings` class to the row (the stylesheet turns the row, a horizontal flex
+`.setting-item` by default, into a full-width block), shows the uninitialized-folder warning when
+needed, and dispatches to one private `render*Panel(panel: HTMLElement)` method —
+`renderClaudePanel`, `renderAgentsPanel`, `renderCapabilitiesPanel`, `renderToolsPanel`,
+`renderBotsPanel`.
+Per-section state (e.g. `renderAuthFields`, the CLI-status renderer) lives as closures local to the
 owning `render*Panel` method, same pattern as `renderBotsPanel`'s `updateConnectButton` — none of
-it is shared across tabs, so nothing needed to become a class-level field.
+it is shared across sections, so nothing needed to become a class-level field.
 
 ## Settings search
 
 Obsidian 1.13 renders a non-empty `getSettingDefinitions()` instead of calling `display()`.
 The tab registers a `SettingDefinitionPage` for each top-level section, containing one imperative
 child definition with the section's searchable name, description, and aliases. Settings search
-indexes those child definitions, so opening a matching result loads the stateful multi-panel
-renderer with the matching tab active; that renderer owns the
+indexes those child definitions, so opening a matching result opens that section's page, whose
+stateful renderer owns the
 vault-dependent agent/model lists, asynchronous endpoint probe, and action buttons, so switching
 to the supported settings API does not hide any controls.
 

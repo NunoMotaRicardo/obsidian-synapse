@@ -287,80 +287,32 @@ export class SynapseSettingTab extends PluginSettingTab {
 		}));
 	}
 
-	/** Render the stateful settings interface in the selected declarative settings page. */
-	private renderSettings(containerEl: HTMLElement, selectedTab: 'claude' | 'agents' | 'capabilities' | 'tools' | 'bots'): void {
-
+	/**
+	 * Render one section into its declarative settings page. Obsidian's page navigation
+	 * replaces the old in-page tab bar, so each page renders only its own section.
+	 */
+	private renderSettings(containerEl: HTMLElement, section: 'claude' | 'agents' | 'capabilities' | 'tools' | 'bots'): void {
 		containerEl.empty();
+		// The render item's row is a horizontal flex `.setting-item`; the stylesheet turns
+		// it into a plain full-width block for this class.
 		containerEl.addClass('synapse-settings');
 
-		// ── Tab bar ──────────────────────────────────────────────
-		const tabBar = containerEl.createDiv({cls: 'synapse-settings-tab-bar'});
-		const panels: Record<string, HTMLElement> = {};
-		const tabButtons: Record<string, HTMLElement> = {};
-		const tabIds = ['claude', 'agents', 'capabilities', 'tools', 'bots'] as const;
-		const tabLabels: Record<string, string> = {
-			claude: 'Claude',
-			agents: 'Feature Map & Agents',
-			capabilities: 'Capabilities',
-			tools: 'Tools',
-			bots: 'Bots',
-		};
-
-		const switchSettingsTab = (id: string) => {
-			for (const tid of tabIds) {
-				panels[tid]?.toggleClass('is-hidden', tid !== id);
-				tabButtons[tid]?.toggleClass('is-active', tid === id);
-			}
-		};
-
-		for (const id of tabIds) {
-			const btn = tabBar.createEl('button', {
-				cls: 'synapse-settings-tab',
-				text: tabLabels[id],
-			});
-			btn.addEventListener('click', () => switchSettingsTab(id));
-			tabButtons[id] = btn;
-		}
-
-		// ── Panels ───────────────────────────────────────────────
 		const agentsFolder = normalizePath(`${SYNAPSE_FOLDER}/agents`);
 		if (!this.app.vault.getAbstractFileByPath(agentsFolder)) {
 			const warning = containerEl.createDiv({cls: 'synapse-settings-warning'});
 			warning.createEl('p', {
-				text: 'Synapse folder is not initialized. Use the capabilities tab to set it up.',
+				text: 'Synapse folder is not initialized. Use the capabilities page to set it up.',
 			});
 		}
 
-		for (const id of tabIds) {
-			panels[id] = containerEl.createDiv({cls: `synapse-settings-panel${id === 'claude' ? '' : ' is-hidden'}`});
+		const panel = containerEl.createDiv({cls: 'synapse-settings-panel'});
+		switch (section) {
+			case 'claude': this.renderClaudePanel(panel); break;
+			case 'agents': this.renderAgentsPanel(panel); break;
+			case 'capabilities': this.renderCapabilitiesPanel(panel); break;
+			case 'tools': this.renderToolsPanel(panel); break;
+			case 'bots': this.renderBotsPanel(panel); break;
 		}
-		switchSettingsTab(selectedTab);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 1: Claude (auth)
-		// ══════════════════════════════════════════════════════════
-		this.renderClaudePanel(panels['claude']!);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 2: Feature Map & Agents
-		// ══════════════════════════════════════════════════════════
-		this.renderAgentsPanel(panels['agents']!);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 3: Capabilities
-		// ══════════════════════════════════════════════════════════
-		this.renderCapabilitiesPanel(panels['capabilities']!);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 4: Tools
-		// ══════════════════════════════════════════════════════════
-		this.renderToolsPanel(panels['tools']!);
-
-		// ══════════════════════════════════════════════════════════
-		// TAB 5: Bots
-		// ══════════════════════════════════════════════════════════
-		const botsPanel = panels['bots']!;
-		this.renderBotsPanel(botsPanel);
 	}
 
 	/** Render the Claude tab (auth, CLI location, local & custom BYOK provider). */
@@ -770,7 +722,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 		new Setting(panel)
 			.setName('Tools approval')
-			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs, while "allow" runs them without asking. The bot in the bots tab always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
+			.setDesc('Whether tool invocations require manual approval or are allowed automatically. For editor actions, the edit modal, and search, "ask" prompts you before a tool runs, while "allow" runs them without asking. The bot on the bots page always runs unattended tool calls without asking, regardless of this setting — see the security policy in the repository.')
 			.addDropdown(dropdown => dropdown
 				.addOptions({allow: 'Allow (auto-approve)', ask: 'Ask (require approval)'})
 				.setValue(this.plugin.settings.toolApproval)

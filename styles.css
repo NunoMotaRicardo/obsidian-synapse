@@ -1337,34 +1337,14 @@
 	gap: 4px;
 }
 
-/* ── Settings tab bar ─────────────────────────────────────────── */
+/* ── Settings pages ───────────────────────────────────────────── */
 
-.synapse-settings-tab-bar {
-	display: flex;
-	gap: 4px;
-	border-bottom: 1px solid var(--background-modifier-border);
-	margin-bottom: 12px;
-}
-
-.synapse-settings-tab {
-	padding: 6px 16px;
+/* Each section renders into one declarative setting row, which Obsidian lays out
+   as a horizontal flex `.setting-item`. Stack the section's content instead. */
+.setting-item.synapse-settings {
+	display: block;
+	padding: 0;
 	border: none;
-	background: none;
-	cursor: pointer;
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-	border-bottom: 2px solid transparent;
-	border-radius: 0;
-	transition: color 0.15s, border-color 0.15s;
-}
-
-.synapse-settings-tab:hover {
-	color: var(--text-normal);
-}
-
-.synapse-settings-tab.is-active {
-	color: var(--text-accent);
-	border-bottom-color: var(--text-accent);
 }
 
 .synapse-settings-warning {

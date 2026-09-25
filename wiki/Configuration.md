@@ -1,6 +1,6 @@
 # Configuration
 
-Open **Settings → Claude Synapse**. The settings screen has five tabs.
+Open **Settings → Claude Synapse**. The settings screen has five pages; select one to open it.
 
 ## Claude
 
@@ -22,7 +22,7 @@ Choose the default agent for the chat panel, inline editor operations, semantic 
 
 ## Capabilities
 
-**Initialize** installs the [starter kit](Starter-Kit.md) into `_synapse/`: the Writer agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills. It only adds missing files and never overwrites your changes. This tab also controls:
+**Initialize** installs the [starter kit](Starter-Kit.md) into `_synapse/`: the Writer agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills. It only adds missing files and never overwrites your changes. This page also controls:
 
 - automatic working-directory updates as you switch notes;
 - automatically attaching images embedded in the active note and the image limit;
