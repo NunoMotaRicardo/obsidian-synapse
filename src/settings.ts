@@ -6,6 +6,8 @@ import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
 import {SYNAPSE_FOLDER} from "./vaultPaths";
+
+const COMPANION_THEME_URL = 'https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme';
 export {SYNAPSE_FOLDER};
 
 /** Helper to update a secure field in both runtime settings and local storage. */
@@ -256,8 +258,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 			},
 			{
 				id: 'capabilities', name: 'Capabilities',
-				desc: 'Synapse folder initialization, editor options, and chat run guardrails.',
-				aliases: ['initialize', 'editor integration', 'turn limit', 'token budget', 'dollar budget'],
+				desc: 'Synapse folder initialization, companion theme, editor options, and chat run guardrails.',
+				aliases: ['initialize', 'companion theme','editor integration', 'turn limit', 'token budget', 'dollar budget'],
 			},
 			{
 				id: 'tools', name: 'Tools',
@@ -599,7 +601,14 @@ export class SynapseSettingTab extends PluginSettingTab {
 					}
 				}));
 
-
+		new Setting(panel)
+			.setName('Companion theme')
+			.setDesc('A matching Claude Synapse theme with warm light and dark variants, available in the Community themes browser.')
+			.addButton(button => button
+				.setButtonText('View on GitHub')
+				.onClick(() => {
+					window.open(COMPANION_THEME_URL);
+				}));
 
 		new Setting(panel)
 			.setName('Auto-update working directory')
