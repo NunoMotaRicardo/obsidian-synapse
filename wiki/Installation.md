@@ -80,6 +80,14 @@ Click the Claude Synapse icon in the ribbon, or run **Open chat** from the comma
 
 > Set up my writing styles.
 
+## Optional: the companion theme
+
+[Claude Synapse theme](https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme) is an Obsidian theme designed alongside the plugin, with warm
+parchment (light) and charcoal (dark) variants and a terracotta accent. It works in any vault and
+isn't required. To install it, go to **Settings → Appearance → Themes → Manage**, search for
+**Claude Synapse**, and select **Install and use**. **Settings → Claude Synapse → Capabilities** also
+links to it.
+
 ## Troubleshooting
 
 - **No models, or "CLI not found".** Check **Settings → Claude Synapse → Claude** for the resolved CLI

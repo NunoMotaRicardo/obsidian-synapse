@@ -4,6 +4,7 @@
 - [Installation](Installation.md)
 - [Using Synapse](Using-Synapse.md)
 - [Starter kit](Starter-Kit.md)
+- [Companion theme](https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme)
 
 **Setup**
 - [Configuration](Configuration.md)

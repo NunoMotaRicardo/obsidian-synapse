@@ -112,6 +112,10 @@ instruction, turn it into an agent or skill in a single message.
 
 Full walkthrough, including local models: **[Installation](wiki/Installation.md)**.
 
+**Optional: the companion theme.** [Claude Synapse theme](https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme) is a matching Obsidian theme
+with warm parchment and charcoal variants and a terracotta accent. Install it from
+**Settings → Appearance → Themes → Manage** by searching for **Claude Synapse**.
+
 > [!CAUTION]
 > **With great power comes great responsibility.** Claude Synapse can run tools, execute commands, and
 > modify files on your behalf. Keep tool approval on **Ask** until you trust your setup. This
