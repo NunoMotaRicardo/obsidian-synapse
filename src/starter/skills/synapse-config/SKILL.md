@@ -1,6 +1,6 @@
 ---
 name: synapse-config
-description: Claude Synapse artifact authoring — use when the user wants to create, modify, or delete a Claude Synapse agent (persistent persona), skill (procedure/workflow), or MCP server in _synapse/, or set up Claude Synapse for first use, including custom writing styles built from the user's own documents.
+description: Claude Synapse artifact authoring — use when the user wants to create, modify, or delete a Claude Synapse agent (persistent persona), skill (procedure/workflow), or MCP server in _synapse/, change tool permissions (allow/deny rules in _synapse/settings.json), or set up Claude Synapse for first use, including custom writing styles built from the user's own documents.
 ---
 
 # Synapse Config
@@ -12,6 +12,7 @@ _synapse/
   agents/*.md
   skills/<name>/SKILL.md
   .mcp.json
+  settings.json
 ```
 
 ## Naming Conventions
@@ -31,6 +32,8 @@ _synapse/
 - **Agent** — a persistent persona with its own instructions and tool restrictions. Spec + example: [agents.md](_synapse/skills/synapse-config/agents.md).
 - **Skill** — a procedure, workflow, or reference the agent consults. Spec + example: [skills.md](_synapse/skills/synapse-config/skills.md).
 - **MCP servers** — configured in `_synapse/.mcp.json`, standard Model Context Protocol server definitions.
+
+- **Permissions** — tool allow/ask/deny rules in `_synapse/settings.json` (never `.claude/settings*.json`). Format + workflow: [settings.md](_synapse/skills/synapse-config/settings.md).
 
 ## Setup
 
