@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-29
+
+### Added
+
+- Synapse now creates a default `_synapse/settings.json` allowing `Read`, so a new vault can read files without prompting. An existing file is never overwritten.
+- The `synapse-config` skill documents the `_synapse/settings.json` permission format, so asking Claude to change permissions edits that file instead of `.claude/settings.json`.
+- A link to the companion Claude Synapse theme in settings, the README and the wiki.
+
+### Fixed
+
+- **Always allow** could fail to save a rule when `_synapse/settings.json` existed on disk but Obsidian had not indexed it yet. It now saves, and shows a notice confirming where.
+
 ## [0.2.1] - 2026-09-25
 
 ### Fixed
