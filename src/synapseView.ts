@@ -1362,6 +1362,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			if (persistRules.length > 0) {
 				try {
 					await persistToolApprovalRules(this.app, persistRules);
+					new Notice(`Synapse: saved to _synapse/settings.json — ${persistRules.join(', ')}`);
 				} catch (e) {
 					debugTrace('[synapse] Failed to persist tool-approval rule:', e);
 					new Notice(e instanceof Error ? e.message : '[synapse] Failed to persist tool-approval rule.');

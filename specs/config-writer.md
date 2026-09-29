@@ -126,8 +126,11 @@ suppress Always allow and default-approve".
 - Creates `_synapse/settings.json` (and `_synapse/` itself) if absent, otherwise reads it via
   `vault.read`, parses as JSON, and writes back **every top-level key untouched** except
   `permissions.allow`, which is unioned (deduplicated, never clobbered) with `ruleStrings`.
-- Uses the Vault API (not `node:fs` or `vault.adapter`): `getAbstractFileByPath()` determines
-  whether the file exists before `vault.read`, `vault.create`, or `vault.modify`. `_synapse/settings.json`
+- Uses the Vault API: `getAbstractFileByPath()` determines
+  whether the file exists before `vault.read`, `vault.create`, or `vault.modify`. If the file is on
+  disk but not yet in Obsidian's cache (e.g. written by the agent's own Write tool), an
+  `adapter.exists()` check routes the read/write through `vault.adapter` instead, so `vault.create`
+  never fails with "already exists" and drops the grant. `_synapse/settings.json`
   is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
   via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write here changes
   that mtime, so the next query picks up the change with no separate invalidation.
@@ -150,7 +153,8 @@ context in the per-turn user message, not the system prompt.
 ## Self-improve hint
 
 `buildSelfImproveHint()` in `sessionConfig.ts` teaches agents to recognize customization intent.
-Mentions "agent" and "skill" as artifact types and names the `synapse-config` skill. Session-stable and takes no arguments — the
+Mentions "agent" and "skill" as artifact types, states that tool permissions live in
+`_synapse/settings.json` (never `.claude/settings*.json`), and names the `synapse-config` skill. Session-stable and takes no arguments — the
 volatile "Current agent" line is delivered per-turn by `buildCurrentAgentLine(agentName)`
 instead, so this static hint doesn't invalidate the cached system-prompt prefix when the selected
 agent changes.
@@ -163,9 +167,14 @@ returns the vault paths it created. The kit's content lives as plain Markdown un
 esbuild's `.md` loader (`vitest.config.ts` mirrors that loader for tests); `src/starterKit.ts`
 lists the files in `STARTER_FILES`:
 
+- `settings.json` — default vault permissions, minimal: `permissions.allow: ["Read"]` (read
+  files; a path-scoped `Read(./**)` did not match in practice). Defined inline as `DEFAULT_VAULT_SETTINGS` in `starterKit.ts`. Seeded only
+  when absent, so an existing file (with the user's grants) is never touched.
 - `agents/writer.agent.md` — **Writer** agent (structure of essays, documents, speeches, articles).
-- `skills/synapse-config/` — authoring agents, skills, and MCP servers; `setup.md` builds
-  custom writing styles from the user's own documents.
+- `skills/synapse-config/` — authoring agents, skills, and MCP servers; `settings.md` documents
+  the `_synapse/settings.json` permission format and workflow (so the agent edits that file rather
+  than `.claude/settings*.json`); `setup.md` builds custom writing styles from the user's own
+  documents.
 - `skills/obsidian/` — Obsidian Flavored Markdown, Bases, and the `obsidian` CLI.
 - `skills/think/` — one-question-at-a-time interview before producing output.
 - `skills/writing-style/` — voice selection (custom styles in `styles/` or built-in defaults)

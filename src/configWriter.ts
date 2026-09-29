@@ -1,4 +1,4 @@
-import {App, normalizePath, TFile, TFolder} from 'obsidian';
+import {App, DataAdapter, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
@@ -255,9 +255,14 @@ export async function persistToolApprovalRules(app: App, ruleStrings: string[]):
 		await ensureFolder(app, SYNAPSE_FOLDER);
 
 		const existingFile = app.vault.getAbstractFileByPath(path);
+		// The file can be on disk before Obsidian's cache knows it (a seeded/agent-written
+		// settings.json, or an external sync): `vault.create` would then throw "already exists"
+		// and the grant would silently never land. Fall back to the raw adapter in that case.
+		const adapter = app.vault.adapter as Partial<DataAdapter> | undefined;
+		const onDiskOnly = !(existingFile instanceof TFile) && typeof adapter?.exists === 'function' && await adapter.exists(path);
 		let settings: Record<string, unknown> = {};
-		if (existingFile instanceof TFile) {
-			const raw = await app.vault.read(existingFile);
+		if (existingFile instanceof TFile || onDiskOnly) {
+			const raw = existingFile instanceof TFile ? await app.vault.read(existingFile) : await app.vault.adapter.read(path);
 			try {
 				const parsed: unknown = JSON.parse(raw);
 				settings = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed as Record<string, unknown> : {};
@@ -278,6 +283,8 @@ export async function persistToolApprovalRules(app: App, ruleStrings: string[]):
 		const content = `${JSON.stringify(settings, null, 2)}\n`;
 		if (existingFile instanceof TFile) {
 			await app.vault.modify(existingFile, content);
+		} else if (onDiskOnly) {
+			await app.vault.adapter.write(path, content);
 		} else {
 			await app.vault.create(path, content);
 		}

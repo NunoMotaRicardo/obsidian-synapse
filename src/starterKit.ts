@@ -15,6 +15,7 @@ import obsidianCli from './starter/skills/obsidian/cli.md';
 import obsidianMarkdown from './starter/skills/obsidian/markdown.md';
 import synapseConfigSkill from './starter/skills/synapse-config/SKILL.md';
 import synapseConfigAgents from './starter/skills/synapse-config/agents.md';
+import synapseConfigSettings from './starter/skills/synapse-config/settings.md';
 import synapseConfigSetup from './starter/skills/synapse-config/setup.md';
 import synapseConfigSkills from './starter/skills/synapse-config/skills.md';
 import thinkSkill from './starter/skills/think/SKILL.md';
@@ -29,9 +30,17 @@ export interface StarterFile {
 /** Name of the skill that sets up and customizes Synapse (the self-improve target). */
 export const SYNAPSE_CONFIG_SKILL_NAME = 'synapse-config';
 
+/**
+ * Default `_synapse/settings.json`: the minimal permission set — read files, nothing else. A bare
+ * `Read` rule is used because a path-scoped `Read(./**)` did not match in practice. Everything broader is granted by the user via **Always allow** or the synapse-config skill.
+ */
+const DEFAULT_VAULT_SETTINGS = `${JSON.stringify({permissions: {allow: ['Read']}}, null, 2)}\n`;
+
 export const STARTER_FILES: readonly StarterFile[] = [
+	{path: 'settings.json', content: DEFAULT_VAULT_SETTINGS},
 	{path: 'agents/writer.agent.md', content: writerAgent},
 	{path: 'skills/synapse-config/SKILL.md', content: synapseConfigSkill},
+	{path: 'skills/synapse-config/settings.md', content: synapseConfigSettings},
 	{path: 'skills/synapse-config/agents.md', content: synapseConfigAgents},
 	{path: 'skills/synapse-config/skills.md', content: synapseConfigSkills},
 	{path: 'skills/synapse-config/setup.md', content: synapseConfigSetup},

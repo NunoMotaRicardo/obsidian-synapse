@@ -426,7 +426,8 @@ export function buildSelfImproveHint(): string {
 		' (e.g. "always use APA citations" or "make the assistant more concise"),' +
 		' propose creating or modifying a Synapse customization artifact (agent or skill).' +
 		' Artifacts live in the _synapse/ folder (.md files for agents in _synapse/agents/, and SKILL.md files for skills in _synapse/skills/<name>/SKILL.md).' +
-		' Use the synapse-config skill for the file formats and the setup workflow.' +
+		' Tool permissions (allow/deny rules) live in _synapse/settings.json, never in .claude/settings*.json.' +
+		' Use the synapse-config skill for the file formats, the permissions format, and the setup workflow.' +
 		' State what you would create (type and summary), then ask permission before writing.';
 }
 
