@@ -31,10 +31,10 @@ export interface StarterFile {
 export const SYNAPSE_CONFIG_SKILL_NAME = 'synapse-config';
 
 /**
- * Default `_synapse/settings.json`: the minimal permission set — read files in the vault, nothing
- * else. Everything broader is granted by the user via **Always allow** or the synapse-config skill.
+ * Default `_synapse/settings.json`: the minimal permission set — read files, nothing else. A bare
+ * `Read` rule is used because a path-scoped `Read(./**)` did not match in practice. Everything broader is granted by the user via **Always allow** or the synapse-config skill.
  */
-const DEFAULT_VAULT_SETTINGS = `${JSON.stringify({permissions: {allow: ['Read(./**)']}}, null, 2)}\n`;
+const DEFAULT_VAULT_SETTINGS = `${JSON.stringify({permissions: {allow: ['Read']}}, null, 2)}\n`;
 
 export const STARTER_FILES: readonly StarterFile[] = [
 	{path: 'settings.json', content: DEFAULT_VAULT_SETTINGS},

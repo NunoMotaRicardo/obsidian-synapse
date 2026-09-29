@@ -167,8 +167,8 @@ returns the vault paths it created. The kit's content lives as plain Markdown un
 esbuild's `.md` loader (`vitest.config.ts` mirrors that loader for tests); `src/starterKit.ts`
 lists the files in `STARTER_FILES`:
 
-- `settings.json` — default vault permissions, minimal: `permissions.allow: ["Read(./**)"]` (read
-  files in the vault). Defined inline as `DEFAULT_VAULT_SETTINGS` in `starterKit.ts`. Seeded only
+- `settings.json` — default vault permissions, minimal: `permissions.allow: ["Read"]` (read
+  files; a path-scoped `Read(./**)` did not match in practice). Defined inline as `DEFAULT_VAULT_SETTINGS` in `starterKit.ts`. Seeded only
   when absent, so an existing file (with the user's grants) is never touched.
 - `agents/writer.agent.md` — **Writer** agent (structure of essays, documents, speeches, articles).
 - `skills/synapse-config/` — authoring agents, skills, and MCP servers; `settings.md` documents

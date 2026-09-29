@@ -2,12 +2,12 @@
 
 `_synapse/settings.json` is this vault's own Claude settings layer. Synapse reads it on every query and merges it beneath the user's other Claude settings. It is the **only** place to grant or restrict tools for Synapse chats — do not create or edit `.claude/settings.json`, `.claude/settings.local.json`, or `~/.claude/settings.json` for this.
 
-Synapse ships it with a minimal default: read files in the vault, nothing else.
+Synapse ships it with a minimal default: read files, nothing else.
 
 ```json
 {
   "permissions": {
-    "allow": ["Read(./**)"]
+    "allow": ["Read"]
   }
 }
 ```
@@ -24,7 +24,7 @@ Only `permissions` matters here. Each list holds rule strings, `Tool` or `Tool(p
 
 Rule examples (paths are relative to the vault root):
 
-- `Read(./**)` — read any file in the vault
+- `Read` — read any file (the default; a path-scoped `Read(./**)` did not match in practice)
 - `Write(./Notes/**)` / `Edit(./Notes/**)` — modify files under `Notes/`
 - `Write` / `Edit` — modify any file, including outside the vault (broad — say so when proposing it)
 - `Bash(git status)` — one exact command; `Bash(git diff:*)` — a command prefix
