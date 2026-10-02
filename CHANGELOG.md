@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-02
+
+### Added
+
+- `/model` now runs inside Synapse. With no argument it shows the current model and the concrete model each alias (Default, Sonnet, Opus, …) resolves to; `/model <name>` switches the model picker.
+
+### Fixed
+
+- Slash commands and skills typed in the chat (such as `/model`) failed with `Model '…' not found` because Synapse appended the attached note, cursor position and workspace context to them. They are now sent exactly as typed, and their errors show as short messages.
+
+### Changed
+
+- Updated the Claude Agent SDK and other dependencies.
+
 ## [0.2.2] - 2026-09-29
 
 ### Added
