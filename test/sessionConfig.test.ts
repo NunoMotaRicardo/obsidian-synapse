@@ -466,3 +466,61 @@ describe('mergeLiveSkills with namespaced commands', () => {
 		expect(merged.filter(s => allowed.has(s.name))).toHaveLength(1);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Slash commands (issue #279)
+// ---------------------------------------------------------------------------
+
+import {isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg} from '../src/view/sessionConfig';
+
+describe('isSlashCommandInput', () => {
+	const known = ['compact', 'my-skill'];
+	it('matches model and known commands/skills, case-insensitively', () => {
+		expect(isSlashCommandInput('/model', known)).toBe(true);
+		expect(isSlashCommandInput('/Compact now', known)).toBe(true);
+		expect(isSlashCommandInput('  /my-skill arg', known)).toBe(true);
+	});
+	it('rejects path-like, unknown, and plain text', () => {
+		expect(isSlashCommandInput('/tmp/foo is broken', known)).toBe(false);
+		expect(isSlashCommandInput('/unknown', known)).toBe(false);
+		expect(isSlashCommandInput('hello /model', known)).toBe(false);
+		expect(isSlashCommandInput('/', known)).toBe(false);
+	});
+});
+
+describe('parseModelCommand', () => {
+	it('parses argument or empty', () => {
+		expect(parseModelCommand('/model')).toBe('');
+		expect(parseModelCommand('/model  opus ')).toBe('opus');
+	});
+	it('ignores other input', () => {
+		expect(parseModelCommand('/models')).toBeUndefined();
+		expect(parseModelCommand('/modelx opus')).toBeUndefined();
+		expect(parseModelCommand('hi')).toBeUndefined();
+	});
+});
+
+describe('formatModelStatus / resolveModelCommandArg', () => {
+	const models = [
+		{id: '', name: 'Default', resolvedModel: 'claude-opus-5'},
+		{id: 'sonnet', name: 'Sonnet', resolvedModel: 'claude-sonnet-5'},
+		{id: 'opus', name: 'Opus', resolvedModel: 'claude-opus-5'},
+	] as ModelInfo[];
+	it('shows Auto and resolution', () => {
+		const t = formatModelStatus('', models);
+		expect(t).toContain('Auto (default) → claude-opus-5');
+		expect(t).toContain('sonnet → claude-sonnet-5');
+	});
+	it('shows explicit selection', () => {
+		expect(formatModelStatus('sonnet', models)).toContain('Sonnet (sonnet → claude-sonnet-5)');
+	});
+	it('handles unloaded list', () => {
+		expect(formatModelStatus('', [])).toContain('not loaded');
+	});
+	it('resolves args', () => {
+		expect(resolveModelCommandArg('Sonnet', models)).toEqual({id: 'sonnet', name: 'Sonnet'});
+		expect(resolveModelCommandArg('auto', models)?.id).toBe('');
+		expect(resolveModelCommandArg('zzz', models)).toBeUndefined();
+		expect(resolveModelCommandArg('', models)).toBeUndefined();
+	});
+});

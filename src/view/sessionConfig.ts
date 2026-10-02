@@ -622,3 +622,75 @@ export function mergeLiveSkills(live: SlashCommand[], scanned: SkillInfo[]): Ski
 		return s.qualifiedName ? {...match, qualifiedName: s.qualifiedName} : match;
 	});
 }
+
+// ── Slash commands (issue #279) ─────────────────────────────────────────
+
+/** Name of the native `/model` command handled by the chat view without a CLI round-trip. */
+export const NATIVE_MODEL_COMMAND = 'model';
+
+/** The first-token command name of a slash input (`/model foo` → `model`), or undefined. */
+function slashCommandName(input: string): string | undefined {
+	const m = /^\/(\S+)/.exec(input.trim());
+	return m ? m[1]!.toLowerCase() : undefined;
+}
+
+/**
+ * True when `input` is a slash command or skill invocation the CLI should receive verbatim:
+ * the first token matches `^/\S+` and its name is `model` or one of `knownCommandNames`
+ * (CLI commands + skills, case-insensitive). A path-like message such as `/tmp/foo is broken`
+ * is not a command and keeps the normal per-turn context.
+ */
+export function isSlashCommandInput(input: string, knownCommandNames: Iterable<string>): boolean {
+	const name = slashCommandName(input);
+	if (!name) return false;
+	if (name === NATIVE_MODEL_COMMAND) return true;
+	for (const known of knownCommandNames) {
+		if (known.replace(/^\//, '').toLowerCase() === name) return true;
+	}
+	return false;
+}
+
+/** Parses a native `/model` input. Returns the (possibly empty) argument, or undefined when not `/model`. */
+export function parseModelCommand(input: string): string | undefined {
+	const m = /^\/model(?:\s+([\s\S]*))?$/i.exec(input.trim());
+	return m ? (m[1] ?? '').trim() : undefined;
+}
+
+function modelLabel(m: ModelInfo): string {
+	return m.resolvedModel && m.resolvedModel !== m.id ? `${m.name} (${m.id} → ${m.resolvedModel})` : `${m.name} (${m.id})`;
+}
+
+/** Info-message text for `/model` with no argument: the active selection and what it resolves to. */
+export function formatModelStatus(selectedModel: string, models: ModelInfo[]): string {
+	if (models.length === 0) {
+		return selectedModel
+			? `Current model: ${selectedModel}. The model list has not loaded yet.`
+			: 'Current model: Auto (default). The model list has not loaded yet.';
+	}
+	const active = selectedModel ? models.find(m => m.id === selectedModel) : models.find(m => m.id === '');
+	let head: string;
+	if (!selectedModel) {
+		head = `Current model: Auto (default)${active?.resolvedModel ? ` → ${active.resolvedModel}` : ''}.`;
+	} else {
+		head = `Current model: ${active ? modelLabel(active) : selectedModel}.`;
+	}
+	// Compact: alias rows (those resolving to a different concrete model) first; other ids only
+	// when there are no aliases at all (e.g. a local-only list).
+	const rows = models.filter(m => m.id !== '');
+	const aliases = rows.filter(m => m.resolvedModel && m.resolvedModel !== m.id);
+	const others = (aliases.length > 0 ? aliases : rows).map(m => `${m.id}${m.resolvedModel && m.resolvedModel !== m.id ? ` → ${m.resolvedModel}` : ''}`);
+	return others.length > 0 ? `${head} Available: ${others.join(', ')}. Use /model <name> to switch.` : head;
+}
+
+/**
+ * Resolves the argument of `/model <name>`: `default`/`auto` → `{id: ''}`, otherwise the shared
+ * `matchModelTiers` matcher. Returns undefined when nothing matches.
+ */
+export function resolveModelCommandArg(arg: string, models: ModelInfo[]): {id: string; name: string} | undefined {
+	const needle = arg.trim().toLowerCase();
+	if (!needle) return undefined;
+	if (needle === 'default' || needle === 'auto') return {id: '', name: 'Auto (default)'};
+	// The Default row has id '' which would substring-match anything; `default`/`auto` covers it above.
+	const match = matchModelTiers(needle, models.filter(m => m.id !== ''));
+	return match ? {id: match.id, name: match.name} : undefined;
+}
