@@ -628,6 +628,27 @@ for the `Session`-side mechanism and its one-turn-stale/timing caveats.
     entry's `folderPath` is `''` — never read for those entries, since nothing in the popup or
     picker resolves a folder path for display.
 
+## Slash commands in the send path
+
+`handleSend()` (`synapseView.ts`) classifies the trimmed input with `isSlashCommandInput(input,
+names)` (`view/sessionConfig.ts`): the first token must match `^/\S+` and its name must be
+`model`, a `lastSupportedCommands` name, or a `skills` name (case-insensitive) — so
+`/tmp/foo is broken` is a normal message. For a slash command the CLI parses everything after the
+name as its argument, so the prompt is sent **verbatim**: no auto-attached active note/selection,
+no note-embedded images, no cursor-position line, no `buildTurnContextBlock()` output. Rule for
+explicit input: manual attachments and vault scope are not sent with a slash command (and not
+shown on its user bubble); they stay staged for the next normal message. Non-slash messages are
+unchanged.
+
+`/model` is handled natively before any session work (no CLI round-trip, no streaming):
+`parseModelCommand()` extracts the argument. No argument → info message from `formatModelStatus()`
+(current selection, `Auto (default)` when `''`, plus alias rows' `resolvedModel` from the SDK list;
+a clear "not loaded yet" message when `models` is empty). `/model <name>` →
+`resolveModelCommandArg()` (`default`/`auto` → `''`, else the shared `matchModelTiers()`, ignoring
+the `''` Default row) → `configToolbar.setModel()` + `configDirty = true` + confirmation; an
+unknown name shows a short error. All slash-command feedback uses `renderer.addInfoMessage()`;
+the raw prompt/context is never echoed.
+
 ## Loop turn/cost thresholds
 
 Opt-in, settings-backed guardrails for interactive Tier-1 chat runs — distinct from the SDK's
