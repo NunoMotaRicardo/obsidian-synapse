@@ -685,6 +685,11 @@ already coincidentally caught most such cases. The substring and keyword-list
 ever set on SDK-sourced (Claude) rows — local-provider rows from `customModels` never have it,
 and the keyword tier still does useful work for non-Claude/partial-name matches.
 
+The chat view's native `/model` command (see `chat-view.md`, "Slash commands in the send path")
+reads this list: `resolvedModel` is how it shows what an alias row (`sonnet`, `opus`, the
+`''` Default row) currently resolves to, and `/model <name>` selects through `matchModelTiers()`
+(excluding the `''` Default row, whose empty id would substring-match any input).
+
 ## Tool execution events
 
 `Session.convertToSessionEvent()` dispatches `tool.execution_start` from `tool_use` content

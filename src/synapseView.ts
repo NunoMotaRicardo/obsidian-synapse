@@ -35,7 +35,7 @@ import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/backgroundSession';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg} from './view/sessionConfig';
 import {friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
 
@@ -688,10 +688,27 @@ export class SynapseView extends ItemView implements ViewContext {
 		const prompt = rawInput;
 		const displayPrompt = rawInput;
 
+		// Native `/model` (issue #279): no session work, no CLI round-trip.
+		const modelArg = parseModelCommand(rawInput);
+		if (modelArg !== undefined) {
+			this.handleModelCommand(rawInput, modelArg);
+			return;
+		}
+
+		// Slash commands/skills reach the CLI verbatim (issue #279): the CLI treats everything
+		// after `/name` as the command argument, so per-turn context must not be appended.
+		const knownCommands = [
+			...(this.lastSupportedCommands ?? []).map(c => c.name),
+			...this.skills.map(s => s.name),
+		];
+		const isSlashCommand = isSlashCommandInput(rawInput, knownCommands);
+
 		// Snapshot attachments and scope
-		const currentAttachments = [...this.attachments];
-		// Auto-include live editor selection or active note
-		if (this.activeSelection && !currentAttachments.some(a => a.type === 'selection' && a.path === this.activeSelection!.filePath && !a.absolutePath)) {
+		// Manual attachments/scope are not sent with slash commands (the raw text only), so they
+		// are neither shown nor consumed; they stay staged for the next normal message.
+		const currentAttachments = isSlashCommand ? [] : [...this.attachments];
+		// Auto-include live editor selection or active note (not for slash commands)
+		if (!isSlashCommand && this.activeSelection && !currentAttachments.some(a => a.type === 'selection' && a.path === this.activeSelection!.filePath && !a.absolutePath)) {
 			const sel = this.activeSelection;
 			const displayName = sel.startLine === sel.endLine
 				? `${sel.fileName}:${sel.startLine}`
@@ -708,13 +725,13 @@ export class SynapseView extends ItemView implements ViewContext {
 					endChar: sel.endChar,
 				},
 			});
-		} else if (this.activeNotePath && !currentAttachments.some(a => (a.type === 'file' || a.type === 'selection') && a.path === this.activeNotePath && !a.absolutePath)) {
+		} else if (!isSlashCommand && this.activeNotePath && !currentAttachments.some(a => (a.type === 'file' || a.type === 'selection') && a.path === this.activeNotePath && !a.absolutePath)) {
 			const name = this.activeNotePath.split('/').pop() || this.activeNotePath;
 			currentAttachments.push({type: 'file', name, path: this.activeNotePath});
 		}
 
 		// Auto-include note-embedded images (AC-1 through AC-8)
-		if (this.plugin.settings.autoIncludeNoteImages && this.activeNotePath) {
+		if (!isSlashCommand && this.plugin.settings.autoIncludeNoteImages && this.activeNotePath) {
 			try {
 				const noteFile = this.app.vault.getAbstractFileByPath(this.activeNotePath);
 				if (noteFile instanceof TFile) {
@@ -753,7 +770,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			}
 		}
 
-		const currentScopePaths = [...this.scopePaths];
+		const currentScopePaths = isSlashCommand ? [] : [...this.scopePaths];
 
 		const sendPrompt = prompt;
 
@@ -761,8 +778,10 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.renderer.addUserMessage(displayPrompt, currentAttachments, currentScopePaths);
 		this.inputEl.value = '';
 		this.inputEl.setCssProps({'--input-height': 'auto'});
-		this.attachments = [];
-		this.inputArea.renderAttachments();
+		if (!isSlashCommand) {
+			this.attachments = [];
+			this.inputArea.renderAttachments();
+		}
 
 		// Begin streaming
 		this.isStreaming = true;
@@ -804,7 +823,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			// a change here only costs this turn's own tokens instead of invalidating the
 			// cached prefix and everything behind it.
 			const effectiveAgentName = this.selectedAgent;
-			const turnContext = buildTurnContextBlock({
+			const turnContext = isSlashCommand ? '' : buildTurnContextBlock({
 				app: this.app,
 				vaultRoot: vaultBasePath.replace(/\\/g, '/'),
 				activeNotePath: this.app.workspace.getActiveFile()?.path,
@@ -812,7 +831,9 @@ export class SynapseView extends ItemView implements ViewContext {
 				agentName: effectiveAgentName || 'Auto',
 			});
 
-			const fullPrompt = buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths) + turnContext;
+			const fullPrompt = isSlashCommand
+				? sendPrompt
+				: buildPrompt(sendPrompt, currentAttachments, this.cursorPosition, this.activeSelection, vaultBasePath, blobPaths, currentScopePaths) + turnContext;
 			const additionalDirectories = computeAdditionalDirectories({
 				attachments: currentAttachments,
 				blobPaths,
@@ -867,6 +888,27 @@ export class SynapseView extends ItemView implements ViewContext {
 				this.renderer.addInfoMessage(this.formatErrorForChat(String(e)));
 			}
 		}
+	}
+
+	/** Native `/model [name]` (issue #279): show or change the footer model selection. */
+	private handleModelCommand(rawInput: string, arg: string): void {
+		this.renderer.addUserMessage(rawInput, [], []);
+		this.inputEl.value = '';
+		this.inputEl.setCssProps({'--input-height': 'auto'});
+		if (!arg) {
+			this.renderer.addInfoMessage(formatModelStatus(this.selectedModel, this.models));
+			return;
+		}
+		const match = resolveModelCommandArg(arg, this.models);
+		if (!match) {
+			this.renderer.addInfoMessage(this.models.length === 0
+				? 'The model list has not loaded yet. Try again in a moment.'
+				: 'Unknown model. Type /model to see the available models.');
+			return;
+		}
+		this.configToolbar.setModel(match.id);
+		this.configDirty = true;
+		this.renderer.addInfoMessage(`Model set to ${match.name}.`);
 	}
 
 	async handleAbort(): Promise<void> {
