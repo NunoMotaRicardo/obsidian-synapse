@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-03
+
+### Fixed
+
+- Search no longer fails when Claude narrates before or after its answer; the JSON result is now extracted from the reply.
+- Search now matches file names as well as file contents.
+- Dependency advisories for `moment` and `yaml` are resolved.
+
 ## [0.2.3] - 2026-10-02
 
 ### Added
