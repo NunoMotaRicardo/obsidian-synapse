@@ -23,6 +23,47 @@ function buildSearchPrompt(query: string): string {
 		'No markdown fences, no extra text.\n\nQuery: ' + query;
 }
 
+/**
+ * Pull the JSON result out of a model reply. The reply may be bare JSON, fenced, or preceded by
+ * narration from earlier agent turns ("Grep was swamped…") — in that case use the last balanced
+ * top-level `[...]` that parses.
+ */
+function extractJson(content: string): unknown {
+	const text = content.trim();
+	const fenced = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+	try {
+		return JSON.parse(fenced);
+	} catch { /* fall through to scanning */ }
+
+	let found: unknown;
+	let i = text.indexOf('[');
+	while (i !== -1) {
+		let depth = 0;
+		let inStr = false;
+		let end = -1;
+		for (let j = i; j < text.length; j++) {
+			const ch = text[j];
+			if (inStr) {
+				if (ch === '\\') j++;
+				else if (ch === '"') inStr = false;
+			} else if (ch === '"') inStr = true;
+			else if (ch === '[') depth++;
+			else if (ch === ']' && --depth === 0) { end = j; break; }
+		}
+		if (end === -1) break;
+		try {
+			const parsed: unknown = JSON.parse(text.slice(i, end + 1));
+			if (Array.isArray(parsed) && parsed.every(p => p && typeof p === 'object')) {
+				found = parsed;
+				i = text.indexOf('[', end + 1);
+				continue;
+			}
+		} catch { /* not JSON; try next bracket */ }
+		i = text.indexOf('[', i + 1);
+	}
+	return found;
+}
+
 /** Highlight query terms in result text using .synapse-search-highlight (accent color, no yellow fill). */
 function highlightQueryTerms(container: HTMLElement, text: string, query?: string): void {
 	if (!query) {
@@ -573,9 +614,8 @@ export class SearchPanelController {
 		// Try to parse JSON array from the response
 		let results: Array<{file?: string; path?: string; folder: string; reason: string}> = [];
 		try {
-			// Strip markdown fences if present
-			const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-			const parsed: unknown = JSON.parse(cleaned);
+			const parsed = extractJson(content);
+			if (parsed === undefined) throw new Error('no JSON found');
 			// Handle both single object and array responses
 			results = (Array.isArray(parsed) ? parsed : [parsed]) as typeof results;
 		} catch {
