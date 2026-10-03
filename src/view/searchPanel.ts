@@ -16,7 +16,9 @@ const CWD_LABEL_MAX_CHARS = 14;
 /** Shared search prompt: instructs tool-driven exploration + strict JSON output. */
 function buildSearchPrompt(query: string): string {
 	return 'Search the vault (your working directory) for files matching the query below. ' +
-		'Use your Glob/Grep/Read tools to explore file names and contents. ' +
+		'Use your Glob/Grep/Read tools to explore BOTH file names (case-insensitive Glob such as **/*term*, any file type) ' +
+		'and file contents (markdown only; skip the .obsidian/plugins folders). ' +
+		'A file whose name matches the query counts as a match. ' +
 		'Then return ONLY a JSON array of objects, each with "file" (vault-relative path), ' +
 		'"folder" (parent folder path), and "reason" (brief description why it matches). ' +
 		'Sort by relevance (best match first). Return [] if nothing matches. ' +
