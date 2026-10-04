@@ -14,10 +14,10 @@ const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
 const CWD_LABEL_MAX_CHARS = 14;
 
 /** Shared search prompt: instructs tool-driven exploration + strict JSON output. */
-function buildSearchPrompt(query: string): string {
+function buildSearchPrompt(query: string, configDir: string): string {
 	return 'Search the vault (your working directory) for files matching the query below. ' +
 		'Use your Glob/Grep/Read tools to explore BOTH file names (case-insensitive Glob such as **/*term*, any file type) ' +
-		'and file contents (markdown only; skip the .obsidian/plugins folders). ' +
+		'and file contents (markdown only; skip the ' + configDir + '/plugins folders). ' +
 		'A file whose name matches the query counts as a match. ' +
 		'Then return ONLY a JSON array of objects, each with "file" (vault-relative path), ' +
 		'"folder" (parent folder path), and "reason" (brief description why it matches). ' +
@@ -541,7 +541,7 @@ export class SearchPanelController {
 	}
 
 	private async handleBasicSearch(query: string): Promise<void> {
-		const searchPrompt = buildSearchPrompt(query);
+		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir);
 
 		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
@@ -570,7 +570,7 @@ export class SearchPanelController {
 		const sessionConfig = this.buildSearchSessionConfig();
 		// Current agent moved out of the (session-stable) self-improve hint in
 		// `buildSearchSessionConfig()` — deliver it per-turn in the prompt instead (issue #201).
-		const searchPrompt = buildSearchPrompt(query) + buildCurrentAgentLine(this.searchAgent || 'Auto');
+		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir) + buildCurrentAgentLine(this.searchAgent || 'Auto');
 
 		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
