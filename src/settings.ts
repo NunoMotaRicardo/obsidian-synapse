@@ -1,6 +1,8 @@
 import {App, Notice, PluginSettingTab, Setting, type SettingDefinitionItem, TFile, normalizePath} from "obsidian";
 import SynapsePlugin from "./main";
-import {scanAgents, installStarterKit} from "./configWriter";
+import {scanAgents, installStarterKit, findInstalledStarterUnits} from "./configWriter";
+import {SEARCH_AGENT_NAME} from "./starterKit";
+import {ConfirmModal} from "./modals";
 import {testLocalAgentEndpoint} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
@@ -162,13 +164,13 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	featureAgents: {
 		chat: '',
 		inline: '',
-		search: '',
+		search: SEARCH_AGENT_NAME,
 		telegram: '',
 		vision: '',
 	},
 
 	reasoningEffort: '',
-	searchAgent: '',
+	searchAgent: SEARCH_AGENT_NAME,
 	searchMode: 'basic',
 	autoUpdateWorkingDirectory: true,
 	autoIncludeNoteImages: true,
@@ -516,6 +518,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 				dynamicContainer = panel.createDiv({attr: {id: dynamicContainerId}});
 			}
 
+			this.renderInitializeSetting(dynamicContainer);
+
 			const vaultAgents = await scanAgents(this.app, normalizePath(`${SYNAPSE_FOLDER}/agents`));
 			const agentNamesSet = new Set<string>(vaultAgents.map(a => a.name));
 			const agentOptions: Record<string, string> = {
@@ -582,24 +586,59 @@ export class SynapseSettingTab extends PluginSettingTab {
 		void renderAgentsPanel();
 	}
 
-	/** Render the Capabilities tab. */
-	private renderCapabilitiesPanel(panel: HTMLElement): void {
+	/** Point Semantic search at the Search agent unless the user already chose an agent for it. */
+	private async applyDefaultSearchAgent(): Promise<void> {
+		const settings = this.plugin.settings;
+		if (settings.featureAgents?.search || settings.searchAgent) return;
+		settings.featureAgents = {...DEFAULT_SETTINGS.featureAgents, ...settings.featureAgents, search: SEARCH_AGENT_NAME};
+		settings.searchAgent = SEARCH_AGENT_NAME;
+		await this.plugin.saveSettings();
+	}
 
+	/**
+	 * The always-visible **Initialize** row (shown on the Feature Map & Agents and Capabilities
+	 * pages). First run installs the starter kit; afterwards it asks before replacing the default
+	 * agents (Writer, Search) and skills (obsidian, synapse-config) with their bundled versions, one
+	 * confirmation per item. Everything else is never overwritten.
+	 */
+	private renderInitializeSetting(panel: HTMLElement): void {
 		new Setting(panel)
 			.setName('Synapse folder')
-			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/. Initialize installs the starter kit (Writer agent; synapse-config, obsidian, think, and writing-style skills) without overwriting existing files.`)
+			.setDesc(`Vault folder for agents and skills: ${SYNAPSE_FOLDER}/. Initialize installs the starter kit (Writer and Search agents; synapse-config, obsidian, think, and writing-style skills). The default Writer and Search agents and the obsidian and synapse-config skills are replaced only if you confirm each one individually — everything else (your other agents and skills, writing-style, think, settings) is never overwritten.`)
 			.addButton(button => button
 				.setButtonText('Initialize')
 				.onClick(async () => {
 					try {
-						const created = await installStarterKit(this.app);
-						new Notice(created.length
-							? `Claude Synapse starter kit installed (${created.length} files).`
-							: 'Synapse starter kit is already installed — existing files were left unchanged.');
+						// Default agents and skills are usually customized after setup, so each installed
+						// one is confirmed on its own; declining keeps it exactly as it is.
+						const replace: string[] = [];
+						for (const unit of findInstalledStarterUnits(this.app)) {
+							const confirmed = await ConfirmModal.ask(
+								this.app,
+								`Replace the ${unit.label}?`,
+								[
+									'This resets it to its original version and discards any changes you made to its files, including a bound model.',
+									'Your other agents and skills and your settings are not touched.',
+								],
+								'Replace',
+							);
+							if (confirmed) replace.push(...unit.paths);
+						}
+						const written = await installStarterKit(this.app, SYNAPSE_FOLDER, {replace});
+						await this.applyDefaultSearchAgent();
+						new Notice(written.length
+							? `Claude Synapse starter kit installed (${written.length} files).`
+							: 'Nothing to install — your existing files were left unchanged.');
 					} catch (e) {
 						new Notice(`Failed to initialize synapse folder: ${String(e)}`);
 					}
 				}));
+	}
+
+	/** Render the Capabilities tab. */
+	private renderCapabilitiesPanel(panel: HTMLElement): void {
+
+		this.renderInitializeSetting(panel);
 
 		new Setting(panel)
 			.setName('Companion theme')

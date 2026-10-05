@@ -5,24 +5,31 @@ import type {AgentConfig} from '../types';
 import {FolderTreeModal} from '../modals';
 import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAdaptiveTimeout} from './sessionConfig';
 import {getSynapsePluginConfig} from '../vaultPaths';
+import {SEARCH_AGENT_INSTRUCTIONS, SEARCH_AGENT_NAME} from '../starterKit';
 import type {ViewContext} from './types';
 
 /** Read-only file tools for vault search — no write/exec access needed. */
 const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
 
+/** Tooltips for the mode toggle: what the current mode does, then what clicking switches to. */
+const SEARCH_MODE_TOOLTIPS = {
+	basic: 'Basic search (current): each search runs on its own and is not saved. ' +
+		'Fast, with no agent or model choice. Click to switch to Advanced.',
+	advanced: 'Advanced search (current): choose the agent, model, and tools. ' +
+		'Searches keep their context and appear in the session list. Click to switch to Basic.',
+} as const;
+
 /** Max characters shown for the working-directory folder name before truncating with an ellipsis (#215). */
 const CWD_LABEL_MAX_CHARS = 14;
 
-/** Shared search prompt: instructs tool-driven exploration + strict JSON output. */
-function buildSearchPrompt(query: string, configDir: string): string {
-	return 'Search the vault (your working directory) for files matching the query below. ' +
-		'Use your Glob/Grep/Read tools to explore BOTH file names (case-insensitive Glob such as **/*term*, any file type) ' +
-		'and file contents (markdown only; skip the ' + configDir + '/plugins folders). ' +
-		'A file whose name matches the query counts as a match. ' +
-		'Then return ONLY a JSON array of objects, each with "file" (vault-relative path), ' +
-		'"folder" (parent folder path), and "reason" (brief description why it matches). ' +
-		'Sort by relevance (best match first). Return [] if nothing matches. ' +
-		'No markdown fences, no extra text.\n\nQuery: ' + query;
+/**
+ * Search prompt. The exploration + JSON-output instructions live in the starter **Search** agent
+ * (`src/starter/agents/search.agent.md`); when another agent (or none) runs the search they are
+ * prepended here so the results stay parseable.
+ */
+function buildSearchPrompt(query: string, configDir: string, agentCarriesInstructions: boolean): string {
+	const request = 'Vault config folder: ' + configDir + '\nQuery: ' + query;
+	return agentCarriesInstructions ? request : SEARCH_AGENT_INSTRUCTIONS + '\n\n' + request;
 }
 
 /**
@@ -189,7 +196,7 @@ export class SearchPanelController {
 		// Mode toggle (basic / advanced)
 		this.searchModeToggleEl = toolbar.createEl('button', {
 			cls: 'synapse-toolbar-btn synapse-search-mode-btn',
-			attr: {title: 'Toggle basic/advanced mode', type: 'button'},
+			attr: {title: SEARCH_MODE_TOOLTIPS.basic, type: 'button'},
 		});
 		this.searchModeToggleEl.addEventListener('click', () => this.toggleSearchMode());
 		this.updateSearchModeToggle();
@@ -306,11 +313,11 @@ export class SearchPanelController {
 		this.searchModeToggleEl.empty();
 		if (this.searchMode === 'basic') {
 			this.searchModeToggleEl.setText('Basic');
-			this.searchModeToggleEl.title = 'Basic mode (fast) — click for advanced';
+			this.searchModeToggleEl.title = SEARCH_MODE_TOOLTIPS.basic;
 			this.searchModeToggleEl.toggleClass('is-active', false);
 		} else {
 			this.searchModeToggleEl.setText('Advanced');
-			this.searchModeToggleEl.title = 'Advanced mode — click for basic (fast)';
+			this.searchModeToggleEl.title = SEARCH_MODE_TOOLTIPS.advanced;
 			this.searchModeToggleEl.toggleClass('is-active', true);
 		}
 	}
@@ -460,6 +467,19 @@ export class SearchPanelController {
 		this.searchCwdBtnEl.setText(truncated ? truncated : 'Dir');
 	}
 
+	/**
+	 * Agent that runs a search: the one picked in the toolbar, else the feature/legacy setting,
+	 * else the starter **Search** agent when it is installed (undefined = SDK default agent).
+	 */
+	private resolveSearchAgent(picked = ''): string | undefined {
+		const settings = this.view.plugin.settings;
+		const searchInstalled = this.view.view.agents.some(a => a.name === SEARCH_AGENT_NAME);
+		const configured = picked || settings.featureAgents?.search || settings.searchAgent;
+		// The default points at Search even before it is installed — treat that as Auto.
+		if (configured === SEARCH_AGENT_NAME && !searchInstalled) return undefined;
+		return configured || (searchInstalled ? SEARCH_AGENT_NAME : undefined);
+	}
+
 	buildSearchSessionConfig(): SessionConfig {
 		// Self-improve detection hint (static body — issue #201) + resilience hint for
 		// search sessions. The "Current agent" line moved out of this hint's return value
@@ -470,7 +490,7 @@ export class SearchPanelController {
 
 		return {
 			model: this.searchModel || undefined,
-			agent: this.searchAgent || this.view.plugin.settings.featureAgents?.search || undefined,
+			agent: this.resolveSearchAgent(this.searchAgent),
 			permissionMode: this.view.plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' as const : 'default' as const,
 			...(this.view.plugin.settings.toolApproval === 'allow' ? {allowDangerouslySkipPermissions: true} : {}),
 			cwd: this.getSearchWorkingDirectory(),
@@ -541,7 +561,8 @@ export class SearchPanelController {
 	}
 
 	private async handleBasicSearch(query: string): Promise<void> {
-		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir);
+		const agent = this.resolveSearchAgent();
+		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir, agent === SEARCH_AGENT_NAME);
 
 		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
@@ -553,7 +574,7 @@ export class SearchPanelController {
 		// always-allow handler is safe here specifically (tools is restricted to SEARCH_TOOLS).
 		const {content} = await this.view.plugin.agentService!.inlineChat({
 			prompt: searchPrompt,
-			agent: this.view.plugin.settings.featureAgents?.search || this.view.plugin.settings.searchAgent || undefined,
+			agent,
 			cwd: this.getSearchWorkingDirectory(),
 			permissionMode: 'default',
 			tools: SEARCH_TOOLS,
@@ -570,7 +591,7 @@ export class SearchPanelController {
 		const sessionConfig = this.buildSearchSessionConfig();
 		// Current agent moved out of the (session-stable) self-improve hint in
 		// `buildSearchSessionConfig()` — deliver it per-turn in the prompt instead (issue #201).
-		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir) + buildCurrentAgentLine(this.searchAgent || 'Auto');
+		const searchPrompt = buildSearchPrompt(query, this.view.app.vault.configDir, sessionConfig.agent === SEARCH_AGENT_NAME) + buildCurrentAgentLine(this.searchAgent || 'Auto');
 
 		const timeoutMs = getAdaptiveTimeout(this.view.app, this.getSearchWorkingDirectory(), this.view.plugin.settings.providerRequestTimeout);
 
