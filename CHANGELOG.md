@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-05
+
+### Added
+
+- A **Search** agent in the starter kit now carries the vault-search instructions and is the default agent for Semantic search. Run **Initialize** to install it; if another agent runs a search, the instructions are added to the prompt so results still render.
+- **Initialize** is now shown on both the Feature Map & Agents and Capabilities settings pages. It can reset the Writer and Search agents and the `obsidian` and `synapse-config` skills to their bundled versions, asking for confirmation on each one separately. Your own agents and skills, `writing-style`, `think`, and `settings.json` are never overwritten.
+
+### Changed
+
+- The Basic/Advanced search toggle tooltips now explain what each mode does and what clicking switches to.
+
+### Fixed
+
+- The search prompt uses the vault's configured config folder instead of a hardcoded `.obsidian`.
+
 ## [0.2.4] - 2026-10-03
 
 ### Fixed
