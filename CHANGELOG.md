@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-05
+
+### Fixed
+
+- The local agent endpoint **Test** button now lists the endpoint's models and reports how many are available, instead of failing with a "model not found" error when a specific model isn't installed.
+- The **Replace** button in the Initialize confirmation dialog uses Obsidian's current destructive button style.
+
 ## [0.3.0] - 2026-10-05
 
 ### Added
