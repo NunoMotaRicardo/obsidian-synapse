@@ -30,7 +30,7 @@ export class ConfirmModal extends Modal {
 			.addButton(button => button.setButtonText('Keep mine').onClick(() => this.close()))
 			.addButton(button => button
 				.setButtonText(this.confirmLabel)
-				.setWarning()
+				.setDestructive()
 				.onClick(() => {
 					this.confirmed = true;
 					this.close();
