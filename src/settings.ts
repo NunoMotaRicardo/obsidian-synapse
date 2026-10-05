@@ -3,7 +3,7 @@ import SynapsePlugin from "./main";
 import {scanAgents, installStarterKit, findInstalledStarterUnits} from "./configWriter";
 import {SEARCH_AGENT_NAME} from "./starterKit";
 import {ConfirmModal} from "./modals";
-import {testLocalAgentEndpoint} from "./providerModels";
+import {fetchEndpointModels} from "./providerModels";
 import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
@@ -459,23 +459,16 @@ export class SynapseSettingTab extends PluginSettingTab {
 					button.setDisabled(true);
 					button.setButtonText('Testing…');
 					try {
-						const res = await testLocalAgentEndpoint({
+						const res = await fetchEndpointModels({
 							baseUrl: this.plugin.settings.localAgentEndpointUrl,
 							apiKey: this.plugin.settings.localAgentEndpointApiKey,
 						});
 						if (res.ok) {
-							if (res.messageId !== undefined) {
-								new Notice('Endpoint reachable — Messages API responded.');
-							} else {
-								// The Messages API answered with an Anthropic-shaped error
-								// (e.g. probe model not installed on that endpoint) — the
-								// endpoint itself is proven reachable and API-shaped.
-								new Notice(`Endpoint reachable — Messages API answered${res.note ? `: ${res.note}` : '.'}`);
-							}
+							const count = res.models.length;
+							new Notice(count === 0
+								? 'Endpoint reachable — no models available. Pull or load a model on the endpoint first.'
+								: `Endpoint reachable — ${count} model${count === 1 ? '' : 's'} available.`);
 						} else {
-							// Connection-vs-shape distinction is baked into `error` itself
-							// (`isConnectionError`'s message names the unreachable-endpoint
-							// fix; the wrong-shape messages name the response shape).
 							new Notice(`Test failed: ${res.error}`);
 						}
 					} finally {
