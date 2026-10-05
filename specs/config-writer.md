@@ -171,6 +171,8 @@ lists the files in `STARTER_FILES`:
   files; a path-scoped `Read(./**)` did not match in practice). Defined inline as `DEFAULT_VAULT_SETTINGS` in `starterKit.ts`. Seeded only
   when absent, so an existing file (with the user's grants) is never touched.
 - `agents/writer.agent.md` — **Writer** agent (structure of essays, documents, speeches, articles).
+- `agents/search.agent.md` — **Search** agent: vault-search instructions (explore names + contents,
+  answer with a JSON array). Default agent for the Search tab; `SEARCH_AGENT_INSTRUCTIONS` exports its body.
 - `skills/synapse-config/` — authoring agents, skills, and MCP servers; `settings.md` documents
   the `_synapse/settings.json` permission format and workflow (so the agent edits that file rather
   than `.claude/settings*.json`); `setup.md` builds custom writing styles from the user's own
@@ -180,7 +182,14 @@ lists the files in `STARTER_FILES`:
 - `skills/writing-style/` — voice selection (custom styles in `styles/` or built-in defaults)
   and AI-tell removal.
 
-Never overwrites: an existing file is skipped, so re-running only restores missing files.
+Never overwrites by default: an existing file is skipped, so re-running only restores missing files.
+The one exception is the `replace` option (vault paths of starter files to reset to their bundled
+content). The replaceable units are `REPLACEABLE_STARTER_UNITS` — the Writer and Search agents and the
+`obsidian` and `synapse-config` skills; **Initialize** asks for a separate confirmation per
+already-installed unit (`ConfirmModal.ask`) and passes only the confirmed units' files. `think`,
+`writing-style`, `settings.json`, the user's own agents/skills, and extra files inside a replaced
+skill folder are never overwritten or deleted. The button is shown on the Feature Map & Agents and
+Capabilities pages, and sets Semantic search to the Search agent when the user hasn't chosen one.
 Called from two places:
 
 - **First run** — `main.ts` `onload()` registers an `onLayoutReady` callback (so the vault index

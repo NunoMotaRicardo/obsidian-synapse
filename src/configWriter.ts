@@ -2,7 +2,7 @@ import {App, DataAdapter, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
-import {STARTER_FILES} from './starterKit';
+import {REPLACEABLE_STARTER_UNITS, STARTER_FILES} from './starterKit';
 
 /** Module-level compiled regex for frontmatter detection. */
 export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -321,20 +321,53 @@ export function scanVaultStructure(
 // First-run seeding
 // ---------------------------------------------------------------------------
 
+/** A default agent or skill that is already installed: what a replace would overwrite. */
+export interface InstalledStarterUnit {
+	label: string;
+	/** Vault paths of the unit's existing starter files. */
+	paths: string[];
+}
+
+/** The replaceable starter units (`REPLACEABLE_STARTER_UNITS`) that have at least one file in the vault. */
+export function findInstalledStarterUnits(app: App, synapseFolder = SYNAPSE_FOLDER): InstalledStarterUnit[] {
+	return REPLACEABLE_STARTER_UNITS
+		.map(({label, prefix}) => ({
+			label,
+			paths: STARTER_FILES
+				.filter(file => file.path.startsWith(prefix))
+				.map(file => normalizePath(`${synapseFolder}/${file.path}`))
+				.filter(filePath => app.vault.getAbstractFileByPath(filePath) instanceof TFile),
+		}))
+		.filter(unit => unit.paths.length > 0);
+}
+
 /**
  * Install the plugin's starter kit (`STARTER_FILES`, `src/starterKit.ts`) into `_synapse/`.
- * Never overwrites: a file that already exists — including one the user customized — is left
- * alone, so this is safe to re-run. Returns the vault paths it created.
+ * Existing files — including ones the user customized — are left alone, so this is safe to
+ * re-run. The one exception is `replace`: vault paths (from `findInstalledStarterUnits`, each unit
+ * confirmed by the caller) to rewrite back to their bundled content. Files not in the starter
+ * kit — the user's own agents, skills, and extra files — are never touched. Returns the vault
+ * paths it created or replaced.
  */
-export async function installStarterKit(app: App, synapseFolder = SYNAPSE_FOLDER): Promise<string[]> {
-	const created: string[] = [];
+export async function installStarterKit(
+	app: App,
+	synapseFolder = SYNAPSE_FOLDER,
+	{replace = []}: {replace?: readonly string[]} = {},
+): Promise<string[]> {
+	const written: string[] = [];
 	for (const file of STARTER_FILES) {
 		const filePath = normalizePath(`${synapseFolder}/${file.path}`);
-		if (app.vault.getAbstractFileByPath(filePath)) continue;
+		const existing = app.vault.getAbstractFileByPath(filePath);
+		if (existing) {
+			if (!(replace.includes(filePath) && existing instanceof TFile)) continue;
+			await lockManager.withLock(filePath, () => app.vault.modify(existing, file.content));
+			written.push(filePath);
+			continue;
+		}
 		await ensureFolder(app, filePath.slice(0, filePath.lastIndexOf('/')));
 		await lockManager.withLock(filePath, () => app.vault.create(filePath, file.content));
-		created.push(filePath);
+		written.push(filePath);
 	}
-	return created;
+	return written;
 }
 

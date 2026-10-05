@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import type {App} from 'obsidian';
+import type {App, TFile} from 'obsidian';
 import {
 	parseFrontmatter,
 	ensureFolder,
@@ -7,6 +7,7 @@ import {
 	scanVaultStructure,
 	scanAgents,
 	installStarterKit,
+	findInstalledStarterUnits,
 	persistToolApprovalRules,
 } from '../src/configWriter';
 import {STARTER_FILES, SYNAPSE_CONFIG_SKILL_NAME} from '../src/starterKit';
@@ -430,5 +431,38 @@ describe('installStarterKit', () => {
 		expect(created).not.toContain(custom);
 		expect(await readVaultFile(app, custom)).toBe('customized');
 		expect(await installStarterKit(app)).toEqual([]);
+	});
+
+	it('replace resets only the chosen default agents/skills, never other skills, settings, or user files', async () => {
+		const app = createMockApp() as unknown as App;
+		await installStarterKit(app);
+		const search = '_synapse/agents/search.agent.md';
+		const writer = '_synapse/agents/writer.agent.md';
+		const obsidian = '_synapse/skills/obsidian/SKILL.md';
+		const config = '_synapse/skills/synapse-config/SKILL.md';
+		const style = '_synapse/skills/writing-style/SKILL.md';
+		const mine = '_synapse/agents/mine.md';
+		const extra = '_synapse/skills/obsidian/my-notes.md';
+		seedFile(app, mine, 'my agent');
+		seedFile(app, extra, 'my extra file');
+		for (const path of [search, writer, obsidian, config, style]) {
+			await app.vault.modify(app.vault.getAbstractFileByPath(path) as TFile, 'customized');
+		}
+
+		expect(findInstalledStarterUnits(app).map(u => u.label)).toEqual(
+			['Writer agent', 'Search agent', 'obsidian skill', 'synapse-config skill']);
+		const obsidianUnit = findInstalledStarterUnits(app).find(u => u.label === 'obsidian skill');
+		const written = await installStarterKit(app, undefined, {replace: [search, ...(obsidianUnit?.paths ?? [])]});
+
+		expect(written).toContain(search);
+		expect(written).toContain(obsidian);
+		expect(await readVaultFile(app, search)).toBe(STARTER_FILES.find(f => f.path === 'agents/search.agent.md')?.content);
+		expect(await readVaultFile(app, obsidian)).toBe(STARTER_FILES.find(f => f.path === 'skills/obsidian/SKILL.md')?.content);
+		// declined units, other skills, and user files stay exactly as they were
+		expect(await readVaultFile(app, writer)).toBe('customized');
+		expect(await readVaultFile(app, config)).toBe('customized');
+		expect(await readVaultFile(app, style)).toBe('customized');
+		expect(await readVaultFile(app, mine)).toBe('my agent');
+		expect(await readVaultFile(app, extra)).toBe('my extra file');
 	});
 });

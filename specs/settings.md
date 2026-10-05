@@ -35,7 +35,7 @@ to the supported settings API does not hide any controls.
 
 ## Feature Map & Agents
 
-The **Feature Map & Agents** tab maps each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent from `_synapse/agents/`. Every feature defaults to empty (**Auto**), which passes no `agent` to the SDK, so nothing depends on a particular agent file existing. The starter kit ships one agent, **Writer**.
+The **Feature Map & Agents** tab maps each core feature (`chat`, `inline`, `search`, `telegram`, `vision`) to a named agent from `_synapse/agents/`. Every feature defaults to empty (**Auto**), which passes no `agent` to the SDK, so nothing depends on a particular agent file existing. The starter kit ships two agents, **Writer** and **Search** (the Search tab falls back to it when no agent is chosen).
 
 Per-agent model bindings: each vault agent's bound model (`model:` frontmatter property) is editable directly within the Settings tab. Changes immediately modify the scanned agent's `filePath` in the vault through
 `updateAgentModelFile()` / `updateAgentModelInContent()`. An empty value removes an existing model

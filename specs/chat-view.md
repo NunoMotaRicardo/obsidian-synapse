@@ -705,9 +705,16 @@ why, via `addInfoMessage()` (not a generic error). All three thresholds default 
 
 ## Search panel
 
-Both modes send a shared prompt (`buildSearchPrompt()`) that instructs tool-driven exploration
-(Glob/Grep/Read) and strict JSON-array output (`file`/`folder`/`reason`), rendered by
-`renderSearchResults()` (clickable file rows; raw text fallback when the response isn't JSON).
+The exploration (Glob/Grep/Read over file names and contents) and strict JSON-array output
+(`file`/`folder`/`reason`) instructions live in the starter **Search** agent
+(`src/starter/agents/search.agent.md`). Both modes run it by default: the agent is the toolbar pick,
+else `featureAgents.search`/legacy `searchAgent`, else `Search` when installed
+(`resolveSearchAgent()`). The per-search prompt (`buildSearchPrompt()`) is just the query plus the
+vault config folder; when the agent is not `Search` (another agent, or none installed) the Search
+agent's body (`SEARCH_AGENT_INSTRUCTIONS`, exported from `starterKit.ts`) is prepended so output stays
+parseable. Results are rendered by `renderSearchResults()` (clickable file rows; raw text fallback
+when the response isn't JSON). The mode toggle's tooltip (`SEARCH_MODE_TOOLTIPS`) describes the
+current mode and what clicking switches to.
 Both modes are **read-only**: `tools: ['Read', 'Glob', 'Grep']` (`SEARCH_TOOLS`) — no write or
 exec tools regardless of the tool-approval setting.
 
