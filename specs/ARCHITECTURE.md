@@ -36,7 +36,7 @@ boundaries, subprocesses, and privacy disclosures are maintained in
 | task-plan tracker | [chat-view.md](chat-view.md) | `src/taskPlanTracker.ts` | `TaskPlanTracker` — the single TodoWrite/TaskCreate/TaskUpdate plan-state owner for foreground + background paths (DOM-free), plus the plan payload parse functions |
 | runtime-manager | [runtime-manager.md](runtime-manager.md) | `src/runtimeManager.ts` | CLI binary resolution, version/protocol check, install guidance |
 | settings | [settings.md](settings.md) | `src/settings.ts` | Settings tab, provider/model config, persisted options |
-| provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint discovery — `fetchEndpointModels()` (`/v1/models` catalogue) and `testLocalAgentEndpoint()` (Settings Test button) |
+| provider-models | [agent-service.md](agent-service.md) | `src/providerModels.ts` | Local agent endpoint discovery — `fetchEndpointModels()` (`/v1/models` catalogue, also behind the Settings Test button) |
 | config-writer | [config-writer.md](config-writer.md) | `src/configWriter.ts`, `src/starterKit.ts` | Starter-kit install, tool-approval persistence, display-only artifact scans, vault structure scan |
 | chat-view | [chat-view.md](chat-view.md) | `src/synapseView.ts`, `src/view/*` | Panel UI: toolbar, input, chat renderer, session sidebar, search |
 | modals | [chat-view.md](chat-view.md) | `src/modals/*` | Tool approval, elicitation, user input, edit, vault scope |

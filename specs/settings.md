@@ -63,33 +63,21 @@ Claude models.
 
 ### Local agent endpoint Test button
 
-The **Endpoint URL** setting has its own **Test** button, verifying the endpoint actually speaks
-the Anthropic Messages API. A **blank endpoint URL** shows the guiding Notice "Endpoint URL is
-empty — enter one above (default for Ollama: localhost:11434)." before the disable/`'Testing…'`
-dance, performing no network request at all.
+The **Endpoint URL** setting has its own **Test** button, which lists the endpoint's models. A
+**blank endpoint URL** shows the guiding Notice "Endpoint URL is empty — enter one above (default
+for Ollama: localhost:11434)." before the disable/`'Testing…'` dance, performing no network request.
 
-The probe itself is `testLocalAgentEndpoint({baseUrl, apiKey})` (`src/providerModels.ts`, next to
-`fetchEndpointModels()`) — ONE Obsidian `requestUrl` POST to `<baseUrl>/v1/messages` with
-Anthropic-protocol headers (`x-api-key`, `anthropic-version: 2023-06-01`) and a minimal 1-turn
-user message with `max_tokens: 16`. It does not spawn the CLI and does not call `fetchModels()`;
-it is read-only aside from the single probe request — no `saveSettings()`, no `initAgentService()`.
+The Test button calls `fetchEndpointModels({baseUrl, apiKey})` (`src/providerModels.ts`) — ONE
+Obsidian `requestUrl` GET to `<baseUrl>/v1/models`, the same catalogue the model picker uses. It
+does not spawn the CLI and is read-only: no `saveSettings()`, no `initAgentService()`. It never
+depends on a particular model being installed.
 
-- **Base URL normalization**: trailing slashes and a trailing `/v1` are stripped before appending
-  `/v1/messages` (or `/v1/models` for `fetchEndpointModels()`), so a pasted
-  `http://localhost:11434/v1` probes the same path the agent path hits.
-- **Credentials** use `buildEnv()`'s exact rule — a blank API key falls back to the literal
-  `'ollama'` — so the probe validates the exact credentials the agent path will send.
-- **Model independence:** the probe sends a fixed well-known model id and must **not** depend on
-  it being installed. An endpoint that answers with an Anthropic error envelope
-  (`{type: 'error', error: {...}}` — e.g. a 404 "model not found") has still proven the Messages
-  API itself answered: that's `{ok: true, note}` — "Endpoint reachable — Messages API answered: …"
-  carrying the endpoint's own error type/message — not a failure.
-- **Outcome classification**: `requestUrl` rejecting (refused connection, DNS, TLS) →
-  `{ok: false, isConnectionError: true}` with a "Could not connect to the endpoint …" message; an
-  HTTP error or 200 in a non-Anthropic shape → `{ok: false}` naming the wrong-shape response; any HTTP status +
-  `{type: 'message'}` → `{ok: true, messageId}` → "Endpoint reachable — Messages API responded."
-- **Timeout:** `requestUrl()` has no AbortSignal, so the probe is raced against a 10s
-  `window.setTimeout` — a dead-but-accepting host can't hang the button.
+- **Success** → "Endpoint reachable — N models available." (singular for 1). An empty catalogue →
+  "Endpoint reachable — no models available. Pull or load a model on the endpoint first."
+- **Failure** → "Test failed: …" with the unreachable-endpoint message (connection refused, DNS,
+  TLS), `HTTP <status>`, or the wrong-shape error from `fetchEndpointModels()`.
+- **Base URL normalization** and **credentials** are `fetchEndpointModels()`'s: trailing slashes and
+  a trailing `/v1` are stripped; a blank API key falls back to the literal `'ollama'`.
 
 ## Identity migration
 
@@ -122,6 +110,6 @@ and CSS namespaces are stable.
 - Settings changes that affect an active session mark the session config dirty; a new or
   reconfigured session picks them up.
 - All local agent endpoint HTTP calls (the Test button, `main.ts#initAgentService()`'s discovery
-  request) go through `fetchEndpointModels()`/`testLocalAgentEndpoint()` (`src/providerModels.ts`)
-  — don't duplicate the `/v1/models`/`/v1/messages` fetch-and-parse logic inline in `settings.ts`
+  request) go through `fetchEndpointModels()` (`src/providerModels.ts`)
+  — don't duplicate the `/v1/models` fetch-and-parse logic inline in `settings.ts`
   or `main.ts`.

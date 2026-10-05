@@ -928,10 +928,10 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
   (`resolveEndpointDefaultModel()`, cached per `baseUrl` and invalidated by
   `clearDelegationCache()`) and run through `AgentService.chat()`, same as everything else —
   there is no separate local-provider execution path for them to fall back to.
-- **Settings-side verification**: the settings section has a **Test** button that
-  probes `<baseUrl>/v1/messages` directly with `testLocalAgentEndpoint()` (`providerModels.ts`)
-  — no CLI spawn — so an endpoint that doesn't speak the Messages API is caught at configuration
-  time; see [settings.md](settings.md)'s "Local agent endpoint Test button".
+- **Settings-side verification**: the settings section has a **Test** button that lists
+  `<baseUrl>/v1/models` with `fetchEndpointModels()` (`providerModels.ts`) — no CLI spawn — and
+  reports how many models are available; see [settings.md](settings.md)'s "Local agent endpoint
+  Test button".
 - **Continuity and images**: since every model runs through the CLI with `resume` and the
   agentic `Read` tool, the Agent SDK path alone owns conversation continuity and image delivery
   for all models.
