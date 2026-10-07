@@ -10,16 +10,39 @@ import {SYNAPSE_VIEW_TYPE, SynapseView, registerInlineSession} from '../synapseV
 import {stripErrorPrefix} from '../toolErrors';
 import type {SelectionInfo} from '../types';
 
-/** Format an error for display in a Notice. */
-function formatErrorForNotice(error: unknown): string {
+/** Plain-language explanations for the API safety filter's reason codes. */
+const FILTER_REASONS: Record<string, string> = {
+	reasoning_extraction: 'the content looks like an AI model’s internal reasoning (for example a copied “Thinking…” panel)',
+};
+
+/**
+ * Explain an API safety-filter block (the raw error is a wall of text). Names the model and
+ * the filter's reason code when present, says why a harmless request can still be blocked,
+ * and lists what to try. Returns null when the error is not a filter block.
+ */
+function describeFilterBlock(message: string): string | null {
+	if (!/safeguards flagged|safety classifier/i.test(message)) return null;
+	const model = /API Error: (.+?)’?'?s safeguards/.exec(message)?.[1];
+	const code = /Details: `?\[([a-z_]+)\]/i.exec(message)?.[1];
+	const reason = code ? (FILTER_REASONS[code] ?? code.replace(/_/g, ' ')) : undefined;
+	return `Claude Synapse: ${model ? `${model}’s` : 'the model’s'} safety filter blocked this request` +
+		(reason ? ` because ${reason}.` : '.') +
+		'\n\nThe filter checks everything Synapse sends, and Edit/Insert sends the whole note, ' +
+		'so a harmless instruction can still be blocked by content elsewhere in the note. Nothing was changed.' +
+		'\n\nTry: remove or shorten that content, select a smaller passage, or choose another agent for ' +
+		'“Inline editor operations” in Settings → Claude Synapse.';
+}
+
+/** Show an error Notice; filter blocks get a longer, explanatory message. */
+function showErrorNotice(error: unknown): void {
 	const message = String(error);
-	// The API's safety filter can block ordinary requests (e.g. text that discusses a model's
-	// reasoning); the raw error is a wall of text, so summarize it.
-	if (/safeguards flagged|safety classifier/i.test(message)) {
-		return 'Claude Synapse: the model’s safety filter blocked this request. ' +
-			'Try rephrasing it, or pick another model for the inline agent in settings.';
+	const filterBlock = describeFilterBlock(message);
+	if (filterBlock) {
+		console.warn('Synapse: request blocked by the API safety filter', message);
+		new Notice(filterBlock, 20000);
+		return;
 	}
-	return `Claude Synapse: error — ${stripErrorPrefix(message)}`;
+	new Notice(`Claude Synapse: error — ${stripErrorPrefix(message)}`);
 }
 
 /**
@@ -219,7 +242,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -313,7 +336,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -371,7 +394,7 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -489,7 +512,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 		new Notice('Synapse: response inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -650,7 +673,7 @@ async function extractAndInsertBelow(plugin: SynapsePlugin, file: TFile, embedHi
 		new Notice('Synapse: extracted content inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -672,7 +695,7 @@ async function extractAndReplace(plugin: SynapsePlugin, file: TFile): Promise<vo
 		new Notice('Synapse: image replaced with extracted content.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -732,7 +755,7 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 		new Notice('Synapse: Mermaid diagram inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -871,7 +894,7 @@ async function runEditOrInsert(
 	} catch (e) {
 		notice.hide();
 		console.error('Synapse: edit/insert error', e);
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 export {type SelectionInfo} from '../types';
