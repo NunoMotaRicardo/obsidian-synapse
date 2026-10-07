@@ -1,6 +1,6 @@
 # main
 
-Sources: `src/main.ts`, `src/tasks.ts`, `src/identityMigration.ts`.
+Sources: `src/main.ts`, `src/identityMigration.ts`.
 
 ## Startup
 
@@ -30,10 +30,9 @@ catalogue callback uses the plugin's current service rather than retaining the o
 
 ## Commands and view activation
 
-Registered command IDs are `open-chat`, `chat-with-synapse`, `edit-note`,
-`structure-and-refine`, `edit-selection`, and one `text-action-<slug>` per `TASKS` entry.
-Slugs are lowercased task labels with whitespace replaced by hyphens. Selection commands
-use the active CM6 editor; text actions require a non-empty selection.
+Registered command IDs are `open-chat`, `chat-with-synapse`, and `edit-or-insert`
+("Edit or insert with Synapse"; an editor command that opens the edit modal when text is
+selected and the insert modal otherwise). Editor commands use the active CM6 editor.
 
 `activateView()` reveals the first existing Synapse leaf, or creates the view in the right
 sidebar. Selection chat includes file and line/character context. Editor action behavior

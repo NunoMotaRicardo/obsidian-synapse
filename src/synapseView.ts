@@ -45,8 +45,7 @@ const EMPTY_EVENT_BUFFER: readonly SessionEvent[] = Object.freeze([]);
 
 /**
  * Register an inline session in the SynapseView session list — the shared free-function
- * registrar used by the editor's one-shot actions (`editorMenu.ts`) and the edit modal
- * (`modals/editModal.ts`) (audit rec 4 — one implementation, previously duplicated in both).
+ * registrar used by the editor's one-shot actions (`editorMenu.ts`).
  * Stores the session name with an `[inline]` prefix so the sidebar filter can distinguish
  * inline sessions from chat sessions, persists it into `plugin.settings.sessionNames`, then
  * hands off to the view's own `SynapseView#registerInlineSession` method (the view-side entry

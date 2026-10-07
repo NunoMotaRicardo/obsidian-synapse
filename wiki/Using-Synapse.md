@@ -74,22 +74,21 @@ Right-click in the editor and open **Claude Synapse**.
 
 ![Claude Synapse actions in the editor context menu](images/editor-menu.png)
 
-**With text selected:**
+The menu has a single item: **Edit with Synapse** when text is selected, **Insert with Synapse** when
+nothing is selected. It opens a small dialog where you describe what you want (Enter submits,
+Shift+Enter adds a new line).
 
-| Action | What happens |
-|---|---|
-| **Edit** | Opens the Edit dialog with task, tone, format, and length controls, and can generate several alternatives |
-| **Rewrite** | Improves clarity and readability |
-| **Proofread** | Fixes grammar, spelling, and punctuation |
-| **Use synonyms** | Varies word choice |
-| **Minor revise** / **Major revise** | Polishes lightly, or reworks structure and flow |
-| **Describe** / **Explain** | Describes what the text conveys, or explains it simply |
-| **Answer** | Answers a question in the selection |
-| **Expand** / **Summarize** | Adds depth, or condenses |
-| **Chat with Claude Synapse** | Opens the chat with the selection as context |
+- **Edit with Synapse** rewrites the selected text following your instructions, for example "make
+  it more concise".
+- **Insert with Synapse** writes new text at the cursor, for example "add a summary table of the
+  points above".
 
-Quick actions replace the selection in place. **Without a selection**, the menu offers **Edit the
-note**, **Structure and refine** (restructures the whole note), and **Chat with Claude Synapse**.
+Synapse reads the whole note for context and applies the result directly. Press Ctrl+Z to undo.
+If the note changes while Synapse is working, the result is copied to your clipboard instead.
+You can also run **Edit or insert with Synapse** from the command palette.
+
+When the cursor is on an image embed, an extra **Claude Synapse** submenu offers the image actions
+(**Extract text below**, **Convert to Mermaid below**, **Ask about image**).
 
 ### In the file explorer
 
@@ -100,7 +99,7 @@ Right-click a note or folder and open **Claude Synapse**.
   <img src="images/folder-menu.png" alt="Claude Synapse actions for a folder in the file explorer" width="48%">
 </p>
 
-- **Notes:** **Edit the note**, **Structure and refine**, **Chat with Claude Synapse**.
+- **Notes:** a single **Chat with Claude Synapse** item.
 - **Folders:** **New note** and **New canvas** (generated from your description), **New summary
   note** (summarizes every note in the folder), **Semantic search** (scoped to the folder), and
   **Chat with Claude Synapse**.

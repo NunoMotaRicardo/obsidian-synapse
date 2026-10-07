@@ -1,4 +1,4 @@
-import {App, Modal, Notice, TextComponent} from 'obsidian';
+import {App, Modal, Notice, TextAreaComponent, TextComponent} from 'obsidian';
 
 /** Options for `promptModal` — one labelled text input plus go/cancel buttons. */
 export interface PromptModalOptions {
@@ -17,6 +17,11 @@ export interface PromptModalOptions {
 	 * the modal stays open, matching the required-prompt modals' behaviour.
 	 */
 	requiredNotice?: string;
+	/**
+	 * Use a multi-line textarea instead of a single-line input. Enter submits,
+	 * Shift+Enter inserts a newline.
+	 */
+	multiline?: boolean;
 	/** Focus the text input after opening (default true). */
 	focusInput?: boolean;
 	/** Called with the trimmed input after the modal closes. */
@@ -24,8 +29,8 @@ export interface PromptModalOptions {
 }
 
 /**
- * Build and open the text-prompt modal shared by the editor menu's five modals —
- * new note, new canvas, ask about image, edit the note, structure and refine
+ * Build and open the text-prompt modal shared by the editor menu's modals —
+ * new note, new canvas, ask about image, and edit/insert with Synapse
  * (issue #238). Keeps the shared CSS classes (`.synapse-menu-modal-desc`,
  * `.synapse-modal-text-input`, `.modal-button-container`, `.mod-cta`), wires
  * Enter via `modal.scope.register` to the primary button, and focuses the input
@@ -45,8 +50,14 @@ export function promptModal(app: App, options: PromptModalOptions): Modal {
 		modal.contentEl.createEl('label', {text: options.inputLabel.text, cls: options.inputLabel.cls});
 	}
 
-	const tc = new TextComponent(modal.contentEl);
+	const tc: TextComponent | TextAreaComponent = options.multiline
+		? new TextAreaComponent(modal.contentEl)
+		: new TextComponent(modal.contentEl);
 	tc.inputEl.classList.add('synapse-modal-text-input');
+	if (options.multiline) {
+		(tc.inputEl as HTMLTextAreaElement).rows = 4;
+		tc.inputEl.classList.add('synapse-modal-textarea');
+	}
 	tc.setPlaceholder(options.placeholder);
 
 	const btnRow = modal.contentEl.createDiv({cls: 'modal-button-container'});
@@ -66,6 +77,7 @@ export function promptModal(app: App, options: PromptModalOptions): Modal {
 	cancelBtn.addEventListener('click', () => modal.close());
 
 	modal.scope.register([], 'Enter', () => { goBtn.click(); return false; });
+	// Shift+Enter falls through to the textarea's default newline (the scope only binds bare Enter).
 
 	modal.open();
 	if (options.focusInput !== false) tc.inputEl.focus();

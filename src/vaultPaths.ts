@@ -8,7 +8,7 @@
  * `basePath` cast and the `_synapse/`-plugin-config object shape were each
  * independently copy-pasted across several call sites
  * (`bots/telegramBot.ts`, `editor/editorMenu.ts`,
- * `modals/editModal.ts`, `synapseView.ts`, `view/searchPanel.ts`) — see
+ * `synapseView.ts`, `view/searchPanel.ts`) — see
  * issue #153. Model: the now-removed `src/budget.ts` (#74's extraction for
  * the same reason, one level down; deleted as dead code in #221 once its
  * only consumer, `batchLoopExecutor.ts`, was removed).

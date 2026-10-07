@@ -28,7 +28,7 @@ boundaries, subprocesses, and privacy disclosures are maintained in
 
 | Module | Spec | Source | Responsibility |
 |---|---|---|---|
-| main | [main.md](main.md) | `src/main.ts`, `src/tasks.ts`, `src/identityMigration.ts` | Plugin lifecycle, service wiring, commands, ribbon, legacy storage migration |
+| main | [main.md](main.md) | `src/main.ts`, `src/identityMigration.ts` | Plugin lifecycle, service wiring, commands, ribbon, legacy storage migration |
 | agent-service | [agent-service.md](agent-service.md) | `src/agentService.ts` | SDK query lifecycle, one-shot chat helpers, model layer, delegation MCP server, re-export surface |
 | agent-service (SDK shims) | [agent-service.md](agent-service.md) | `src/sdkShims.ts` | Electron compatibility shims: top-level `setMaxListeners` wrapper + reload-safe refcounted `setTimeout` shim (`installSetTimeoutShim`/`uninstallSetTimeoutShim`/`abortWithSetTimeoutShim`) |
 | agent-service (permissions) | [agent-service.md](agent-service.md) | `src/permissions.ts` | Session-scoped permission updates, in-memory grant settings, vault settings layer merge |
