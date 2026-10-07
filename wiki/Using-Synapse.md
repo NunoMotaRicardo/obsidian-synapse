@@ -83,6 +83,10 @@ Shift+Enter adds a new line).
 - **Insert with Synapse** writes new text at the cursor, for example "add a summary table of the
   points above".
 
+You can ask Synapse to use one of your skills, which is the way to rewrite text in your own
+writing style, for example "rewrite this using my writing-style skill". Synapse loads the skill
+before writing; it can read files but never changes them itself.
+
 Synapse reads the whole note for context and applies the result directly. Press Ctrl+Z to undo.
 If the note changes while Synapse is working, the result is copied to your clipboard instead.
 You can also run **Edit or insert with Synapse** from the command palette.

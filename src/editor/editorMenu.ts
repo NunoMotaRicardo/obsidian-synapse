@@ -1,7 +1,7 @@
 import {Editor, EventRef, MarkdownView, Menu, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
-import type {SdkPluginConfig} from '../agentService';
+import type {PermissionHandler, SdkPluginConfig} from '../agentService';
 import {getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 import {getCmView} from '../utils';
 import {promptModal} from '../modals/promptModal';
@@ -738,7 +738,15 @@ const CURSOR_MARKER = '<<<CURSOR>>>';
 const EDIT_INSERT_SYSTEM_MESSAGE =
 	'You are an inline writing assistant embedded in a note editor. Return ONLY the requested text. ' +
 	'Do not include explanations, introductory text, markdown code fences, surrounding quotes, ' +
-	'or any of the <<<...>>> markers.';
+	'or any of the <<<...>>> markers. If the instruction names a skill (for example a writing style), ' +
+	'load it with the Skill tool first and follow it; any text before your final answer is discarded.';
+
+/** Permission gate for edit/insert: only skill loading and file reading, never prompt. */
+const allowSkillAndRead: PermissionHandler = (toolName, input) => Promise.resolve(
+	toolName === 'Skill' || toolName === 'Read'
+		? {behavior: 'allow', updatedInput: input}
+		: {behavior: 'deny', message: 'Only the Skill and Read tools are available here.'},
+);
 
 /** Remove any marker strings the model may have echoed back. */
 function stripMarkers(text: string): string {
@@ -761,11 +769,12 @@ export function showEditOrInsertModal(plugin: SynapsePlugin, view: EditorView): 
 
 	promptModal(plugin.app, {
 		title: mode === 'edit' ? 'Edit with Synapse' : 'Insert with Synapse',
-		description: mode === 'edit'
-			? 'Describe how the selected text should be changed:'
-			: 'Describe what should be inserted at the cursor:',
+		description: (mode === 'edit'
+			? 'Describe how the selected text should be changed.'
+			: 'Describe what should be inserted at the cursor.') +
+			' You can name a skill to use, for example your writing style.',
 		placeholder: mode === 'edit'
-			? 'Ex: make it more concise'
+			? 'Ex: make it more concise, using my writing-style skill'
 			: 'Ex: add a summary table of the points above',
 		goLabel: mode === 'edit' ? 'Edit' : 'Insert',
 		requiredNotice: 'Please enter instructions.',
@@ -805,17 +814,27 @@ async function runEditOrInsert(
 
 	const notice = new Notice(mode === 'edit' ? 'Synapse: editing…' : 'Synapse: inserting…', 0);
 	try {
+		// With skills the model may talk before its answer (e.g. "Loading the skill…");
+		// inlineChat() concatenates every turn's text, so prefer the final result message.
+		let finalResult: string | undefined;
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			app: plugin.app,
 			prompt,
 			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
 			systemMessage: EDIT_INSERT_SYSTEM_MESSAGE,
-			profile: 'textTransform',
+			profile: 'skillAware',
+			canUseTool: allowSkillAndRead,
+			onEvent: (msg) => {
+				if (msg.type === 'result' && 'result' in msg && typeof msg.result === 'string' && msg.result) {
+					finalResult = msg.result;
+				}
+			},
 		});
 		registerInlineSession(plugin, sessionId, `${mode === 'edit' ? 'Edit' : 'Insert'}: ${instructions.slice(0, 30)}`);
 
-		const cleaned = result ? stripMarkers(result).trim() : '';
+		const text = finalResult ?? result;
+		const cleaned = text ? stripMarkers(text).trim() : '';
 		if (!cleaned) { notice.hide(); new Notice('Synapse: no response.'); return; }
 
 		// Only apply when the target range is still valid.

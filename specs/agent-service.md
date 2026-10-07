@@ -963,7 +963,8 @@ its profile:
 
 | Profile | Presets | Used by |
 |---|---|---|
-| `textTransform` | `tools: []`, `maxTurns: 1` | editor text actions, note edit/structure, new note/canvas/summary, edit modal |
+| `textTransform` | `tools: []`, `maxTurns: 1` | new note/canvas/summary |
+| `skillAware` | `tools: ['Skill', 'Read']`, `maxTurns: 6` | edit/insert with Synapse (caller adds a Skill/Read-only `canUseTool`) |
 | `readOnly` | `tools: ['Read']`, `maxTurns: 10` | `askAboutImage`, `extractImageContent` |
 | `attended` | `maxTurns: 10` (full default toolset, including Write/Edit — "attended" means a human is present to answer its approval prompts, **not** that the tools are restricted) | `convertToMermaidBelow` |
 | `unattendedBypass` | `permissionMode: 'bypassPermissions'`, `allowDangerouslySkipPermissions: true` | Telegram bot |

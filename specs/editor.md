@@ -52,8 +52,13 @@ extensions in both wikilink and standard markdown syntaxes, then resolved throug
 
 - Quick actions route through handler agents via `AgentService.inlineChat()`, naming their call
   shape with the `profile:` option (issue #230 — `INLINE_CHAT_PROFILES` in `agentService.ts`;
-  see "Wiring `inlineChat()`'s callers" in `agent-service.md`). Two profiles here:
-  - **Text transforms** (edit/insert with Synapse, new note/canvas, folder summary): content is inlined in the prompt, so
+  see "Wiring `inlineChat()`'s callers" in `agent-service.md`). Three profiles here:
+  - **Edit/insert with Synapse** → `profile: 'skillAware'` (`tools: ['Skill', 'Read']`,
+    `maxTurns: 6`) plus a `canUseTool` gate that allows only those two tools without prompting, so
+    instructions can name a skill (e.g. a writing style) for the model to load first. The modal
+    description tells the user they can name a skill. Because `inlineChat()` concatenates every
+    turn's text, the call site prefers the final `result` message (captured via `onEvent`).
+  - **Text transforms** (new note/canvas, folder summary): content is inlined in the prompt, so
     they pass `profile: 'textTransform'` (`tools: []`, `maxTurns: 1`) — deterministic, fast, and
     immune to the model wandering off into tool use.
     The plugin applies the result itself (editor dispatch / `vault.create`).
@@ -68,6 +73,8 @@ extensions in both wikilink and standard markdown syntaxes, then resolved throug
 
 ## Constraints
 
+- Edit/insert (`skillAware`) is read-only: it may load skills and read files but never writes;
+  the plugin applies the result.
 - Text-transform paths (`profile: 'textTransform'` → `tools: []` + `maxTurns: 1`) must stay fast:
   no usable skills or MCP
   servers (nothing is permitted to call them), minimal system prompt. This does not apply to the
