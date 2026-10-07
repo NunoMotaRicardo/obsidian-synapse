@@ -12,7 +12,14 @@ import type {SelectionInfo} from '../types';
 
 /** Format an error for display in a Notice. */
 function formatErrorForNotice(error: unknown): string {
-	return `Claude Synapse: error — ${stripErrorPrefix(String(error))}`;
+	const message = String(error);
+	// The API's safety filter can block ordinary requests (e.g. text that discusses a model's
+	// reasoning); the raw error is a wall of text, so summarize it.
+	if (/safeguards flagged|safety classifier/i.test(message)) {
+		return 'Claude Synapse: the model’s safety filter blocked this request. ' +
+			'Try rephrasing it, or pick another model for the inline agent in settings.';
+	}
+	return `Claude Synapse: error — ${stripErrorPrefix(message)}`;
 }
 
 /**
@@ -739,7 +746,7 @@ const EDIT_INSERT_SYSTEM_MESSAGE =
 	'You are an inline writing assistant embedded in a note editor. Return ONLY the requested text. ' +
 	'Do not include explanations, introductory text, markdown code fences, surrounding quotes, ' +
 	'or any of the <<<...>>> markers. If the instruction names a skill (for example a writing style), ' +
-	'load it with the Skill tool first and follow it; any text before your final answer is discarded.';
+	'load it with the Skill tool first and follow it.';
 
 /** Permission gate for edit/insert: only skill loading and file reading, never prompt. */
 const allowSkillAndRead: PermissionHandler = (toolName, input) => Promise.resolve(
