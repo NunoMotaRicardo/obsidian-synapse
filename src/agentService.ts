@@ -299,7 +299,7 @@ export const PLAN_TRACKING_TOOLS: string[] = ['TodoWrite', 'TaskCreate', 'TaskGe
  * Profiles carry no behavior of their own beyond these option defaults; anything a caller
  * passes explicitly (`permissionMode`, `canUseTool`, …) keeps winning over the preset.
  */
-export type InlineChatProfileName = 'textTransform' | 'readOnly' | 'attended' | 'unattendedBypass';
+export type InlineChatProfileName = 'textTransform' | 'skillAware' | 'readOnly' | 'attended' | 'unattendedBypass';
 
 /** Option defaults one named profile fills in — every field optional, every field skippable. */
 export interface InlineChatProfile {
@@ -312,6 +312,11 @@ export interface InlineChatProfile {
 export const INLINE_CHAT_PROFILES: Record<InlineChatProfileName, InlineChatProfile> = {
 	/** Pure text transform — no tools, exactly one model turn. */
 	textTransform: {tools: [], maxTurns: 1},
+	/**
+	 * Text transform that may load vault/user skills first (e.g. a writing-style skill) —
+	 * read-only: only Skill + Read, short loop. The caller applies the result itself.
+	 */
+	skillAware: {tools: ['Skill', 'Read'], maxTurns: 6},
 	/** Single read-only tool, small loop (image reading/analysis). */
 	readOnly: {tools: ['Read'], maxTurns: 10},
 	/**

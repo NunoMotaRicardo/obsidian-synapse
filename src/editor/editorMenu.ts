@@ -1,30 +1,54 @@
 import {Editor, EventRef, MarkdownView, Menu, Notice, TFile, TFolder, normalizePath} from 'obsidian';
 import type {EditorView} from '@codemirror/view';
 import SynapsePlugin, {SYNAPSE_ICON_ID} from '../main';
-import type {SdkPluginConfig} from '../agentService';
+import type {PermissionHandler, SdkPluginConfig} from '../agentService';
 import {getVaultBasePath, getSynapsePluginConfig} from '../vaultPaths';
 import {getCmView} from '../utils';
 import {promptModal} from '../modals/promptModal';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView, registerInlineSession} from '../synapseView';
 import {stripErrorPrefix} from '../toolErrors';
-import {EditModal} from '../modals/editModal';
-import {TASKS, TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
-import type {TextTask} from '../tasks';
 import type {SelectionInfo} from '../types';
-/** Format an error for display in a Notice. */
-function formatErrorForNotice(error: unknown): string {
-	return `Claude Synapse: error — ${stripErrorPrefix(String(error))}`;
-}
 
-// Re-export for consumers that still import from editorMenu
-export {TEXT_ACTION_SYSTEM_MESSAGE} from '../tasks';
-export type {TextTask as TextAction} from '../tasks';
+/** Plain-language explanations for the API safety filter's reason codes. */
+const FILTER_REASONS: Record<string, string> = {
+	reasoning_extraction: 'the content looks like an AI model’s internal reasoning (for example a copied “Thinking…” panel)',
+};
 
 /**
- * Register a "Synapse" submenu on the editor right-click context menu.
- * Shows selection-level actions when text is selected, or note-level
- * actions when nothing is selected.
+ * Explain an API safety-filter block (the raw error is a wall of text). Names the model and
+ * the filter's reason code when present, says why a harmless request can still be blocked,
+ * and lists what to try. Returns null when the error is not a filter block.
+ */
+function describeFilterBlock(message: string): string | null {
+	if (!/safeguards flagged|safety classifier/i.test(message)) return null;
+	const model = /API Error: (.+?)’?'?s safeguards/.exec(message)?.[1];
+	const code = /Details: `?\[([a-z_]+)\]/i.exec(message)?.[1];
+	const reason = code ? (FILTER_REASONS[code] ?? code.replace(/_/g, ' ')) : undefined;
+	return `Claude Synapse: ${model ? `${model}’s` : 'the model’s'} safety filter blocked this request` +
+		(reason ? ` because ${reason}.` : '.') +
+		'\n\nThe filter checks everything Synapse sends, and Edit/Insert sends the whole note, ' +
+		'so a harmless instruction can still be blocked by content elsewhere in the note. Nothing was changed.' +
+		'\n\nTry: remove or shorten that content, select a smaller passage, or choose another agent for ' +
+		'“Inline editor operations” in Settings → Claude Synapse.';
+}
+
+/** Show an error Notice; filter blocks get a longer, explanatory message. */
+function showErrorNotice(error: unknown): void {
+	const message = String(error);
+	const filterBlock = describeFilterBlock(message);
+	if (filterBlock) {
+		console.warn('Synapse: request blocked by the API safety filter', message);
+		new Notice(filterBlock, 20000);
+		return;
+	}
+	new Notice(`Claude Synapse: error — ${stripErrorPrefix(message)}`);
+}
+
+/**
+ * Register the editor right-click item: a single flat "Edit with Synapse" (text
+ * selected) or "Insert with Synapse" (no selection) entry. When the cursor line
+ * holds an image embed, a "Claude Synapse" submenu with the image actions is added too.
  */
 export function registerEditorMenu(plugin: SynapsePlugin): void {
 	plugin.registerEvent(
@@ -32,34 +56,29 @@ export function registerEditorMenu(plugin: SynapsePlugin): void {
 			const cmView = getCmView(view);
 			if (!cmView) return;
 
-			menu.addItem((item) => {
-				item.setTitle('Claude Synapse')
-					.setIcon(SYNAPSE_ICON_ID);
+			const hasSelection = !cmView.state.selection.main.empty;
+			menu.addItem((item) =>
+				item.setTitle(hasSelection ? 'Edit with Synapse' : 'Insert with Synapse')
+					.setIcon(SYNAPSE_ICON_ID)
+					.onClick(() => showEditOrInsertModal(plugin, cmView)),
+			);
 
-				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
-				buildSynapseMenu(submenu, plugin, cmView);
-			});
+			const imageResult = resolveImageEmbedOnLine(plugin, cmView);
+			if (imageResult) {
+				menu.addItem((item) => {
+					item.setTitle('Claude Synapse')
+						.setIcon(SYNAPSE_ICON_ID);
+					const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
+					buildEditorImageMenu(submenu, plugin, imageResult.file, imageResult.embed);
+				});
+			}
 		}),
 	);
 }
 
 /**
- * Open a markdown file and resolve its CM6 EditorView.
- * Returns null if the view cannot be obtained.
- */
-async function openFileAndGetView(plugin: SynapsePlugin, file: TFile): Promise<EditorView | null> {
-	const leaf = plugin.app.workspace.getLeaf();
-	await leaf.openFile(file);
-	const view = leaf.view;
-	if (view instanceof MarkdownView) {
-		return getCmView(view) ?? null;
-	}
-	return null;
-}
-
-/**
- * Register a "Synapse" submenu on the vault file-explorer context menu.
- * Shows note-level actions for markdown files and folder-level actions for folders.
+ * Register the vault file-explorer context menu: a flat chat item for markdown notes,
+ * a Synapse submenu for folders and for image files.
  */
 export function registerFileMenu(plugin: SynapsePlugin): void {
 	plugin.registerEvent(
@@ -79,43 +98,15 @@ export function registerFileMenu(plugin: SynapsePlugin): void {
 			// Markdown files only
 			if (abstractFile.extension !== 'md') return;
 
-			menu.addItem((item) => {
-				item.setTitle('Claude Synapse')
-					.setIcon(SYNAPSE_ICON_ID);
-
-				const submenu: Menu = (item as unknown as {setSubmenu: () => Menu}).setSubmenu();
-
-				submenu.addItem((si) =>
-					si.setTitle('Edit the note')
-						.setIcon('pencil')
-						.onClick(async () => {
-							const cmView = await openFileAndGetView(plugin, abstractFile);
-							if (cmView) showEditNoteModal(plugin, cmView);
-						}),
-				);
-				submenu.addItem((si) =>
-					si.setTitle('Structure and refine')
-						.setIcon('layout-list')
-						.onClick(async () => {
-							const cmView = await openFileAndGetView(plugin, abstractFile);
-							if (cmView) showStructureModal(plugin, cmView);
-						}),
-				);
-
-				submenu.addSeparator();
-
-				submenu.addItem((si) =>
-					si.setTitle('Chat with Claude Synapse')
-						.setIcon(SYNAPSE_ICON_ID)
-						.onClick(async () => {
-							const leaf = plugin.app.workspace.getLeaf();
-							await leaf.openFile(abstractFile);
-							openSynapseView(plugin);
-						}),
-				);
-
-
-			});
+			menu.addItem((item) =>
+				item.setTitle('Chat with Claude Synapse')
+					.setIcon(SYNAPSE_ICON_ID)
+					.onClick(async () => {
+						const leaf = plugin.app.workspace.getLeaf();
+						await leaf.openFile(abstractFile);
+						openSynapseView(plugin);
+					}),
+			);
 		}),
 	);
 }
@@ -251,7 +242,7 @@ async function createNewNote(plugin: SynapsePlugin, folder: TFolder, templateTyp
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -345,7 +336,7 @@ async function createNewCanvas(plugin: SynapsePlugin, folder: TFolder, templateT
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -403,72 +394,8 @@ async function createSummaryNote(plugin: SynapsePlugin, folder: TFolder): Promis
 		await leaf.openFile(newFile);
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
-}
-
-/**
- * Run a text action on selected text in a CM6 EditorView directly.
- * Used by both the gutter indicator menu and the context menu.
- */
-export async function runSelectionAction(
-	plugin: SynapsePlugin,
-	view: EditorView,
-	selectedText: string,
-	action: TextTask,
-): Promise<void> {
-	if (!plugin.agentService) {
-		new Notice('Synapse is not configured.');
-		return;
-	}
-
-	const notice = new Notice(`Claude Synapse: ${action.label}…`, 0);
-
-	try {
-		const result = await runActionPrompt(plugin, action, selectedText);
-
-		if (!result) {
-			notice.hide();
-			new Notice('Synapse: no response received.');
-			return;
-		}
-
-		// Replace the selection in the CM6 view
-		const sel = view.state.selection.main;
-		view.dispatch({
-			changes: {from: sel.from, to: sel.to, insert: result.trim()},
-		});
-		notice.hide();
-		new Notice(`Claude Synapse: ${action.label} — done.`);
-	} catch (e) {
-		notice.hide();
-		console.error('Synapse: editor action error', e);
-		new Notice(formatErrorForNotice(e));
-	}
-}
-
-/**
- * Core helper: send the action prompt to the agent and return the result.
- */
-async function runActionPrompt(
-	plugin: SynapsePlugin,
-	action: TextTask,
-	selectedText: string,
-): Promise<string | null> {
-	if (!plugin.agentService) return null;
-
-	const {content: result, sessionId} = await plugin.agentService.inlineChat({
-		app: plugin.app,
-		prompt: action.prompt(selectedText),
-		agent: plugin.settings.featureAgents?.inline || undefined,
-		plugins: getVaultPlugins(plugin),
-		systemMessage: TEXT_ACTION_SYSTEM_MESSAGE,
-		permissionMode: plugin.settings.toolApproval === 'allow' ? 'bypassPermissions' : 'default',
-		profile: 'textTransform',
-	});
-	registerInlineSession(plugin, sessionId, action.label);
-
-	return result ?? null;
 }
 
 /* ── Image context menu ───────────────────────────────────────── */
@@ -585,7 +512,7 @@ async function askAboutImage(plugin: SynapsePlugin, file: TFile, userPrompt: str
 		new Notice('Synapse: response inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -746,7 +673,7 @@ async function extractAndInsertBelow(plugin: SynapsePlugin, file: TFile, embedHi
 		new Notice('Synapse: extracted content inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -768,7 +695,7 @@ async function extractAndReplace(plugin: SynapsePlugin, file: TFile): Promise<vo
 		new Notice('Synapse: image replaced with extracted content.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
@@ -828,100 +755,148 @@ async function convertToMermaidBelow(plugin: SynapsePlugin, file: TFile, embedHi
 		new Notice('Synapse: Mermaid diagram inserted.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		showErrorNotice(e);
 	}
 }
 
-/* ── Note-level actions ───────────────────────────────────────── */
+/* ── Edit / insert with Synapse ───────────────────────────────── */
 
-/** "Edit the note" — user enters a free-form editing prompt. */
-export function showEditNoteModal(plugin: SynapsePlugin, view: EditorView): void {
+const SELECTION_START = '<<<SELECTION_START>>>';
+const SELECTION_END = '<<<SELECTION_END>>>';
+const CURSOR_MARKER = '<<<CURSOR>>>';
+
+const EDIT_INSERT_SYSTEM_MESSAGE =
+	'You are an inline writing assistant embedded in a note editor. Return ONLY the requested text. ' +
+	'Do not include explanations, introductory text, markdown code fences, surrounding quotes, ' +
+	'or any of the <<<...>>> markers. If the instruction names a skill (for example a writing style), ' +
+	'load it with the Skill tool first and follow it.';
+
+/** Permission gate for edit/insert: only skill loading and file reading, never prompt. */
+const allowSkillAndRead: PermissionHandler = (toolName, input) => Promise.resolve(
+	toolName === 'Skill' || toolName === 'Read'
+		? {behavior: 'allow', updatedInput: input}
+		: {behavior: 'deny', message: 'Only the Skill and Read tools are available here.'},
+);
+
+/** Remove any marker strings the model may have echoed back. */
+function stripMarkers(text: string): string {
+	return text.split(SELECTION_START).join('')
+		.split(SELECTION_END).join('')
+		.split(CURSOR_MARKER).join('');
+}
+
+/**
+ * Open the "Edit with Synapse" (text selected) or "Insert with Synapse" (no selection)
+ * instruction modal. The model sees the whole note; the result is applied directly to
+ * the note (Ctrl+Z undoes it).
+ */
+export function showEditOrInsertModal(plugin: SynapsePlugin, view: EditorView): void {
+	const sel = view.state.selection.main;
+	const mode: 'edit' | 'insert' = sel.empty ? 'insert' : 'edit';
+	const from = sel.from;
+	const to = sel.to;
+	const doc = view.state.doc.toString();
+
 	promptModal(plugin.app, {
-		title: 'Edit the note',
-		description: 'Describe how the note should be edited:',
-		placeholder: 'Ex: convert bullet points to a table',
-		goLabel: 'Apply',
-		requiredNotice: 'Please enter a prompt.',
-		onSubmit: (prompt) => void applyEditNote(plugin, view, prompt),
+		title: mode === 'edit' ? 'Edit with Synapse' : 'Insert with Synapse',
+		description: (mode === 'edit'
+			? 'Describe how the selected text should be changed.'
+			: 'Describe what should be inserted at the cursor.') +
+			' You can name a skill to use, for example your writing style.',
+		placeholder: mode === 'edit'
+			? 'Ex: make it more concise, using my writing-style skill'
+			: 'Ex: add a summary table of the points above',
+		goLabel: mode === 'edit' ? 'Edit' : 'Insert',
+		requiredNotice: 'Please enter instructions.',
+		multiline: true,
+		onSubmit: (instructions) => void runEditOrInsert(plugin, view, {mode, from, to, doc}, instructions),
 	});
 }
 
-async function applyEditNote(plugin: SynapsePlugin, view: EditorView, userPrompt: string): Promise<void> {
+interface EditOrInsertContext {
+	mode: 'edit' | 'insert';
+	from: number;
+	to: number;
+	/** Full note text captured when the modal opened. */
+	doc: string;
+}
+
+async function runEditOrInsert(
+	plugin: SynapsePlugin,
+	view: EditorView,
+	ctx: EditOrInsertContext,
+	instructions: string,
+): Promise<void> {
 	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
-	const doc = view.state.doc.toString();
-	const notice = new Notice('Synapse: editing note…', 0);
+	const {mode, from, to, doc} = ctx;
+	const original = doc.slice(from, to);
+
+	const marked = mode === 'edit'
+		? doc.slice(0, from) + SELECTION_START + original + SELECTION_END + doc.slice(to)
+		: doc.slice(0, from) + CURSOR_MARKER + doc.slice(from);
+	const prompt = mode === 'edit'
+		? `Edit the passage between ${SELECTION_START} and ${SELECTION_END} in the note below, following the instruction. ` +
+			`Use the rest of the note as context only. Return ONLY the replacement text for the selected passage.\n\n` +
+			`INSTRUCTION:\n${instructions}\n\nNOTE:\n${marked}`
+		: `Write new text to insert at the position marked ${CURSOR_MARKER} in the note below, following the instruction. ` +
+			`Use the rest of the note as context. Return ONLY the text to insert.\n\n` +
+			`INSTRUCTION:\n${instructions}\n\nNOTE:\n${marked}`;
+
+	const notice = new Notice(mode === 'edit' ? 'Synapse: editing…' : 'Synapse: inserting…', 0);
 	try {
+		// With skills the model may talk before its answer (e.g. "Loading the skill…");
+		// inlineChat() concatenates every turn's text, so prefer the final result message.
+		let finalResult: string | undefined;
 		const {content: result, sessionId} = await plugin.agentService.inlineChat({
 			app: plugin.app,
-			prompt:
-				`Apply the following edit instruction to the note and return the FULL updated note.\n\n` +
-				`INSTRUCTION:\n${userPrompt}\n\nNOTE:\n${doc}`,
+			prompt,
 			agent: plugin.settings.featureAgents?.inline || undefined,
 			plugins: getVaultPlugins(plugin),
-			systemMessage:
-				'You are a note editor. When given a note and an edit instruction, return ONLY the updated note content. ' +
-				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
-			profile: 'textTransform',
+			systemMessage: EDIT_INSERT_SYSTEM_MESSAGE,
+			profile: 'skillAware',
+			canUseTool: allowSkillAndRead,
+			onEvent: (msg) => {
+				if (msg.type === 'result' && 'result' in msg && typeof msg.result === 'string' && msg.result) {
+					finalResult = msg.result;
+				}
+			},
 		});
-		registerInlineSession(plugin, sessionId, `Edit: ${userPrompt.slice(0, 30)}`);
-		if (!result) { notice.hide(); new Notice('Synapse: no response.'); return; }
-		view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: result.trim()}});
+		registerInlineSession(plugin, sessionId, `${mode === 'edit' ? 'Edit' : 'Insert'}: ${instructions.slice(0, 30)}`);
+
+		const text = finalResult ?? result;
+		const cleaned = text ? stripMarkers(text).trim() : '';
+		if (!cleaned) { notice.hide(); new Notice('Synapse: no response.'); return; }
+
+		// Only apply when the target range is still valid.
+		const current = view.state.doc;
+		const stillValid = mode === 'edit'
+			? current.length >= to && view.state.sliceDoc(from, to) === original
+			: current.toString() === doc;
+		if (!stillValid) {
+			notice.hide();
+			try {
+				await navigator.clipboard.writeText(cleaned);
+				new Notice('Synapse: the note changed while editing, so the result was copied to your clipboard instead.');
+			} catch {
+				new Notice('Synapse: the note changed while editing and the result could not be applied or copied.');
+			}
+			return;
+		}
+
+		if (mode === 'edit') {
+			const lead = /^\s*/.exec(original)?.[0] ?? '';
+			const trail = original.trim() ? (/\s*$/.exec(original)?.[0] ?? '') : '';
+			view.dispatch({changes: {from, to, insert: lead + cleaned + trail}});
+		} else {
+			view.dispatch({changes: {from, insert: cleaned}});
+		}
 		notice.hide();
-		new Notice('Synapse: note edited.');
 	} catch (e) {
 		notice.hide();
-		new Notice(formatErrorForNotice(e));
+		console.error('Synapse: edit/insert error', e);
+		showErrorNotice(e);
 	}
 }
-
-/** "Structure and refine" — restructures the note with optional template type. */
-export function showStructureModal(plugin: SynapsePlugin, view: EditorView): void {
-	promptModal(plugin.app, {
-		title: 'Structure and refine',
-		description: 'The note will be restructured using Markdown and refined for clarity.',
-		placeholder: 'Ex: daily notes, meeting notes, project brief',
-		goLabel: 'Structure',
-		inputLabel: {text: 'Template type (optional):', cls: 'synapse-modal-label'},
-		// This modal never focused its input pre-refactor — preserved (#238).
-		focusInput: false,
-		onSubmit: (templateType) => void applyStructure(plugin, view, templateType),
-	});
-}
-
-async function applyStructure(plugin: SynapsePlugin, view: EditorView, templateType: string): Promise<void> {
-	if (!plugin.agentService) { new Notice('Synapse is not configured.'); return; }
-	const doc = view.state.doc.toString();
-	const notice = new Notice('Synapse: structuring note…', 0);
-
-	const templateClause = templateType
-		? `Structure the note as a "${templateType}" template. `
-		: '';
-
-	try {
-		const {content: result, sessionId} = await plugin.agentService.inlineChat({
-			app: plugin.app,
-			prompt:
-				`Structure and refine the following note using Markdown. ${templateClause}` +
-				`Organise the content with headings, lists, and emphasis where appropriate. ` +
-				`Improve clarity and readability while preserving all original information.\n\nNOTE:\n${doc}`,
-			agent: plugin.settings.featureAgents?.inline || undefined,
-			plugins: getVaultPlugins(plugin),
-			systemMessage:
-				'You are a note structuring assistant. Return ONLY the restructured note in Markdown. ' +
-				'Do not include explanations, markdown code fences, or introductory text. Return the full note.',
-			profile: 'textTransform',
-		});
-		registerInlineSession(plugin, sessionId, 'Structure and refine');
-		if (!result) { notice.hide(); new Notice('Synapse: no response.'); return; }
-		view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: result.trim()}});
-		notice.hide();
-		new Notice('Synapse: note structured.');
-	} catch (e) {
-		notice.hide();
-		new Notice(formatErrorForNotice(e));
-	}
-}
-
 export {type SelectionInfo} from '../types';
 
 /** "Chat with Claude Synapse" — open the sidebar view, optionally with prompt text and selection. */
@@ -958,93 +933,4 @@ async function openSynapseSearchWithScope(plugin: SynapsePlugin, folderPath: str
 		const view = leaves[0].view as SynapseView;
 		view.openSearchWithScope(folderPath);
 	}
-}
-
-/**
- * Populate a menu with Synapse actions. Used by both the context menu
- * and the gutter synapse-button to keep behaviour consistent.
- *
- * @param menu      The Obsidian Menu (or submenu) to populate.
- * @param plugin    The Synapse plugin instance.
- * @param view      The CM6 EditorView.
- */
-export function buildSynapseMenu(menu: Menu, plugin: SynapsePlugin, view: EditorView): void {
-	const sel = view.state.selection.main;
-	const hasSelection = !sel.empty;
-
-	// ── Image embed on cursor line — show image actions ──
-	const imageResult = resolveImageEmbedOnLine(plugin, view);
-	if (imageResult) {
-		buildEditorImageMenu(menu, plugin, imageResult.file, imageResult.embed);
-		return;
-	}
-
-	if (hasSelection) {
-		// ── Selection: text-transform actions ──
-		const selectedText = view.state.sliceDoc(sel.from, sel.to);
-
-		// Edit — advanced editing with tone, length, choices
-		menu.addItem((item) =>
-			item.setTitle('Edit')
-				.setIcon('pencil-line')
-				.onClick(() => {
-					new EditModal(plugin, selectedText, (result) => {
-						const currentSel = view.state.selection.main;
-						view.dispatch({
-							changes: {from: currentSel.from, to: currentSel.to, insert: result},
-						});
-					}).open();
-				}),
-		);
-		menu.addSeparator();
-
-		for (const action of TASKS) {
-			menu.addItem((item) =>
-				item.setTitle(action.label)
-					.setIcon(action.icon)
-					.onClick(() => void runSelectionAction(plugin, view, selectedText, action)),
-			);
-		}
-	} else {
-		// ── No selection: note-level actions ──
-		menu.addItem((item) =>
-			item.setTitle('Edit the note')
-				.setIcon('pencil')
-				.onClick(() => showEditNoteModal(plugin, view)),
-		);
-		menu.addItem((item) =>
-			item.setTitle('Structure and refine')
-				.setIcon('layout-list')
-				.onClick(() => showStructureModal(plugin, view)),
-		);
-	}
-
-	menu.addSeparator();
-
-	menu.addItem((item) =>
-		item.setTitle('Chat with Claude Synapse')
-			.setIcon(SYNAPSE_ICON_ID)
-			.onClick(() => {
-				if (hasSelection) {
-					const text = view.state.sliceDoc(sel.from, sel.to);
-					const startLine = view.state.doc.lineAt(sel.from);
-					const endLine = view.state.doc.lineAt(sel.to);
-					const activeFile = plugin.app.workspace.getActiveFile();
-					const filePath = activeFile?.path;
-					const fileName = activeFile?.name ?? 'unknown';
-					openSynapseView(plugin, text, {
-						filePath,
-						fileName,
-						startLine: startLine.number,
-						startChar: sel.from - startLine.from,
-						endLine: endLine.number,
-						endChar: sel.to - endLine.from,
-					});
-				} else {
-					openSynapseView(plugin);
-				}
-			}),
-	);
-
-
 }

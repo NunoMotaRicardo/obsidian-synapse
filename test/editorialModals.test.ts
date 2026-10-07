@@ -13,7 +13,6 @@ describe('editorial restyle: modals (#211)', () => {
 	const elicitationSource = readFileSync(resolve(repoRoot, 'src/modals/elicitationModal.ts'), 'utf8');
 	const vaultScopeSource = readFileSync(resolve(repoRoot, 'src/modals/vaultScopeModal.ts'), 'utf8');
 	const folderTreeSource = readFileSync(resolve(repoRoot, 'src/modals/folderTreeModal.ts'), 'utf8');
-	const editModalSource = readFileSync(resolve(repoRoot, 'src/modals/editModal.ts'), 'utf8');
 
 	describe('AC-1: Modal titles masthead treatment', () => {
 		it('styles modal titles with bundled serif font and heavy closing rule', () => {
@@ -46,7 +45,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(elicitationSource).toContain('synapse-modal-title');
 			expect(vaultScopeSource).toContain('synapse-modal-title');
 			expect(folderTreeSource).toContain('synapse-modal-title');
-			expect(editModalSource).toContain('synapse-modal-title');
 		});
 	});
 
@@ -64,26 +62,20 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-elicitation-message\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
 			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-textarea\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
-			);
 		});
 
 		it('styles form labels with uppercase letterspaced interface sans', () => {
-			// `.synapse-modal-label`/`.synapse-edit-label`/`.synapse-elicitation-label` share
+			// `.synapse-modal-label`/`.synapse-elicitation-label` share
 			// one exact typography combination and are declared together in a grouped rule
 			// (#217) rather than three times.
 			expect(stylesContent).toMatch(
-				/\.synapse-modal-label,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-modal-label\s*\{[^}]*text-transform:\s*uppercase/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-elicitation-label,[\s\S]*?\.synapse-modal-label,[\s\S]*?\{[^}]*letter-spacing:\s*0\.12em/
+				/\.synapse-elicitation-label,\s*\.synapse-modal-label\s*\{[^}]*letter-spacing:\s*0\.12em/
 			);
 			expect(stylesContent).toMatch(
-				/\.synapse-elicitation-label,[\s\S]*?\.synapse-modal-label,[\s\S]*?\{[^}]*font-family:\s*var\(--font-interface\)/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-label\s*\{[^}]*text-transform:\s*uppercase/
+				/\.synapse-elicitation-label,\s*\.synapse-modal-label\s*\{[^}]*font-family:\s*var\(--font-interface\)/
 			);
 			expect(stylesContent).toMatch(
 				/\.synapse-elicitation-label,[\s\S]*?\{[^}]*text-transform:\s*uppercase/
@@ -139,8 +131,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toContain('.synapse-askq-buttons button.mod-cta');
 			expect(stylesContent).toContain('.synapse-elicitation-buttons button.mod-cta');
 			expect(stylesContent).toContain('.synapse-scope-buttons button.mod-cta');
-			expect(stylesContent).toContain('.synapse-edit-btn-primary');
-			expect(stylesContent).toContain('.synapse-edit-btn-secondary');
 		});
 	});
 
@@ -269,9 +259,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(stylesContent).toMatch(
 				/\.synapse-rename-input:focus\s*\{[^}]*border-bottom:\s*2px solid var\(--interactive-accent\)/
 			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-textarea:focus\s*\{[^}]*border-bottom:\s*2px solid var\(--interactive-accent\)/
-			);
 		});
 	});
 
@@ -320,26 +307,6 @@ describe('editorial restyle: modals (#211)', () => {
 		});
 	});
 
-	describe('AC-8: Edit modal', () => {
-		it('styles edit modal cards as ruled rows with serif body copy', () => {
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-cards\s*\{[^}]*border-top:\s*1px solid var\(--synapse-rule-soft\)/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-card\s*\{[^}]*border:\s*none/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-card\s*\{[^}]*border-bottom:\s*1px solid var\(--synapse-rule-soft\)/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-card\s*\{[^}]*background:\s*transparent/
-			);
-			expect(stylesContent).toMatch(
-				/\.synapse-edit-card-text\s*\{[^}]*font-family:\s*var\(--synapse-font-serif\)/
-			);
-		});
-	});
-
 	describe('AC-10: Theme compliance and zero raw hex colors', () => {
 		it('modal styles contain zero raw hex colors', () => {
 			const startMarker = '/* ── Modal Titles Masthead Treatment';
@@ -381,7 +348,6 @@ describe('editorial restyle: modals (#211)', () => {
 			expect(specContent).toContain('Ask-user-question modal (`AskUserQuestionModal`):');
 			expect(specContent).toContain('Ruled underline form inputs:');
 			expect(specContent).toContain('Vault scope & Folder tree modals (`VaultScopeModal`, `FolderTreeModal`):');
-			expect(specContent).toContain('Edit modal (`EditModal`):');
 		});
 	});
 });

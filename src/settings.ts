@@ -52,8 +52,6 @@ export interface SynapseSettings {
 	/** Feature to Agent mapping for plugin features. */
 	featureAgents: FeatureAgentMap;
 
-	/** Persisted form defaults for the Edit modal. */
-	editModalDefaults?: EditModalDefaults;
 	/** Custom display names for sessions, keyed by SDK sessionId. */
 	sessionNames?: Record<string, string>;
 	/**
@@ -126,33 +124,6 @@ export interface SynapseSettings {
 	 */
 	loopCostThresholdUsd: number;
 }
-
-/** Persisted preferences for the Edit modal form. */
-export interface EditModalDefaults {
-	task: string;
-	adjustTask: boolean;
-	tone: string;
-	adjustTone: boolean;
-	format: string;
-	adjustFormat: boolean;
-	length: number;
-	adjustLength: boolean;
-	choices: number;
-	editPrompt: string;
-}
-
-export const DEFAULT_EDIT_MODAL: EditModalDefaults = {
-	task: 'Rewrite',
-	adjustTask: false,
-	tone: 'Professional',
-	adjustTone: false,
-	format: 'Single paragraph',
-	adjustFormat: false,
-	length: 5,
-	adjustLength: false,
-	choices: 4,
-	editPrompt: '',
-};
 
 export const DEFAULT_SETTINGS: SynapseSettings = {
 	authType: 'subscription',
@@ -524,7 +495,7 @@ export class SynapseSettingTab extends PluginSettingTab {
 
 			const features: Array<{id: keyof FeatureAgentMap; name: string; desc: string}> = [
 				{id: 'chat', name: 'Chat panel', desc: 'Default agent for main conversation sidebar.'},
-				{id: 'inline', name: 'Inline editor operations', desc: 'Default agent for context-menu actions (rewrite, summarize, structure).'},
+				{id: 'inline', name: 'Inline editor operations', desc: 'Default agent for context-menu actions (edit or insert with Synapse, image actions, new notes).'},
 				{id: 'search', name: 'Semantic search', desc: 'Default agent for vault semantic search.'},
 				{id: 'telegram', name: 'Telegram bot', desc: 'Default agent for responding to incoming Telegram messages.'},
 				{id: 'vision', name: 'Vision & image reading', desc: 'Handler agent for analyzing note images and visual attachments.'},

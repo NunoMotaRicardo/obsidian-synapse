@@ -62,9 +62,9 @@ and writes it when you say yes. No config screens, and no reload.
 **Everything is a note.** Agents and skills are Markdown files in your vault. Read them, edit
 them, version them with git, and sync them across devices like any other note.
 
-**It works where you work.** Chat in the side panel. Right-click selected text to rewrite,
-proofread, expand, or summarize it. Right-click a folder to summarize everything in it. Search your
-vault by describing what you want. Or message your agents from your phone through Telegram.
+**It works where you work.** Chat in the side panel. Right-click in a note to edit the selected
+text, or insert new text, with plain-language instructions. Right-click a folder to summarize everything in it.
+Search your vault by describing what you want. Or message your agents from your phone through Telegram.
 
 **It connects to everything else.** Add MCP servers to give Claude Synapse a browser, GitHub, web search,
 or your own tools. Approve each tool call, or allow them once you trust your setup.

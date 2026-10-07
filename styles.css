@@ -188,14 +188,13 @@
 }
 
 /*
- * Modal/panel field-label family — `.synapse-elicitation-label`,
- * `.synapse-modal-label` and `.synapse-edit-label` also share one exact font-family/size/
+ * Modal/panel field-label family — `.synapse-elicitation-label`
+ * and `.synapse-modal-label` also share one exact font-family/size/
  * weight/letter-spacing/transform/color combination; declared once here, same rationale as the
  * toolbar-row family above (#217).
  */
 .synapse-elicitation-label,
-.synapse-modal-label,
-.synapse-edit-label {
+.synapse-modal-label {
 	font-family: var(--font-interface);
 	font-size: 10.5px;
 	font-weight: 500;
@@ -806,8 +805,7 @@
 .synapse-userinput-buttons button.mod-cta,
 .synapse-askq-buttons button.mod-cta,
 .synapse-elicitation-buttons button.mod-cta,
-.synapse-scope-buttons button.mod-cta,
-.synapse-edit-btn-primary {
+.synapse-scope-buttons button.mod-cta {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -831,13 +829,8 @@
 .synapse-userinput-buttons button.mod-cta:hover,
 .synapse-askq-buttons button.mod-cta:hover,
 .synapse-elicitation-buttons button.mod-cta:hover,
-.synapse-scope-buttons button.mod-cta:hover,
-.synapse-edit-btn-primary:hover {
+.synapse-scope-buttons button.mod-cta:hover {
 	opacity: 0.9;
-}
-
-.synapse-edit-btn-primary.is-streaming {
-	background: var(--background-modifier-error);
 }
 
 .synapse-approval-buttons button:not(.mod-cta),
@@ -845,7 +838,6 @@
 .synapse-askq-buttons button:not(.mod-cta),
 .synapse-elicitation-buttons button:not(.mod-cta),
 .synapse-scope-buttons button:not(.mod-cta),
-.synapse-edit-btn-secondary,
 .synapse-userinput-choice {
 	display: inline-flex;
 	align-items: center;
@@ -872,7 +864,6 @@
 .synapse-askq-buttons button:not(.mod-cta):hover,
 .synapse-elicitation-buttons button:not(.mod-cta):hover,
 .synapse-scope-buttons button:not(.mod-cta):hover,
-.synapse-edit-btn-secondary:hover,
 .synapse-userinput-choice:hover {
 	background: transparent;
 	color: var(--text-normal);
@@ -2940,6 +2931,11 @@ body.synapse-no-select {
 	width: 100%;
 }
 
+.synapse-modal-textarea {
+	resize: vertical;
+	min-height: 5em;
+}
+
 .synapse-modal-label {
 	display: block;
 	margin-bottom: 4px;
@@ -2967,280 +2963,6 @@ body.synapse-no-select {
 /* Hidden file input for attach button */
 .synapse-file-input-hidden {
 	display: none;
-}
-
-/* ── Edit Modal ───────────────────────────────────────────────── */
-
-.synapse-edit-modal {
-	max-width: 560px;
-}
-
-.synapse-edit-form {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.synapse-edit-group {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.synapse-edit-label {
-	display: block;
-	margin-bottom: 4px;
-}
-
-.synapse-edit-slider-value {
-	font-variant-numeric: tabular-nums;
-	min-width: 1.2em;
-	text-align: right;
-	color: var(--text-normal);
-}
-
-.synapse-edit-textarea {
-	width: 100%;
-	padding: 8px 0;
-	font-size: 14.5px;
-	font-family: var(--synapse-font-serif);
-	border: none;
-	border-bottom: 1px solid var(--synapse-rule);
-	border-radius: 0;
-	background: transparent;
-	color: var(--text-normal);
-	resize: vertical;
-	line-height: 1.5;
-	box-shadow: none;
-}
-
-.synapse-edit-textarea:focus {
-	border-bottom: 2px solid var(--interactive-accent);
-	outline: none;
-	box-shadow: none;
-}
-
-.synapse-edit-userinput-textarea {
-	width: 100%;
-	margin-top: 8px;
-}
-
-.synapse-edit-prompt-area {
-	min-height: unset;
-	resize: vertical;
-	height: var(--prompt-height, auto);
-	overflow-y: var(--prompt-overflow, hidden);
-	line-height: 1.5;
-	font-family: var(--synapse-font-serif);
-	font-size: 14.5px;
-	border: none;
-	border-bottom: 1px solid var(--synapse-rule);
-	border-radius: 0;
-	background: transparent;
-	padding: 6px 0;
-	box-shadow: none;
-}
-
-.synapse-edit-prompt-area:focus {
-	border-bottom: 2px solid var(--interactive-accent);
-	outline: none;
-	box-shadow: none;
-}
-
-.synapse-edit-options {
-	display: flex;
-	gap: 16px;
-	flex-wrap: wrap;
-}
-
-.synapse-edit-option-group {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex: 1;
-	min-width: 100px;
-}
-
-.synapse-edit-select {
-	padding: 4px 0;
-	font-size: var(--font-ui-small);
-	border: none;
-	border-bottom: 1px solid var(--synapse-rule-soft);
-	border-radius: 0;
-	background: transparent;
-	color: var(--text-normal);
-}
-
-.synapse-edit-select:focus {
-	border-bottom-color: var(--interactive-accent);
-	outline: none;
-}
-
-.synapse-edit-slider {
-	width: 100%;
-	accent-color: var(--interactive-accent);
-}
-
-.synapse-edit-checkbox-row {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-}
-
-.synapse-edit-adjust-checkbox {
-	margin: 0;
-	cursor: pointer;
-}
-
-.synapse-edit-select.is-disabled,
-.synapse-edit-slider.is-disabled {
-	opacity: 0.4;
-	pointer-events: none;
-}
-
-.synapse-edit-buttons {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin-top: 8px;
-	padding-top: 10px;
-	border-top: 1px solid var(--synapse-rule-soft);
-}
-
-.synapse-edit-choices-inline {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.synapse-edit-choices-inline .synapse-edit-slider {
-	width: 80px;
-}
-
-.synapse-edit-btn-spacer {
-	flex: 1;
-}
-
-.synapse-edit-btn-icon {
-	display: flex;
-	align-items: center;
-}
-
-.synapse-edit-btn-icon svg {
-	width: 14px;
-	height: 14px;
-}
-
-/* Results */
-
-.synapse-edit-results-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 12px;
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-}
-
-.synapse-edit-generating {
-	animation: synapse-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes synapse-pulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.3; }
-}
-
-.synapse-edit-error {
-	color: var(--text-error);
-}
-
-.synapse-edit-cards {
-	display: flex;
-	flex-direction: column;
-	gap: 0;
-	max-height: 400px;
-	overflow-y: auto;
-	border-top: 1px solid var(--synapse-rule-soft);
-}
-
-.synapse-edit-card {
-	border: none;
-	border-bottom: 1px solid var(--synapse-rule-soft);
-	border-radius: 0;
-	overflow: hidden;
-	background: transparent;
-	transition: border-color 0.15s ease;
-	flex-shrink: 0;
-}
-
-.synapse-edit-card:hover {
-	border-bottom-color: var(--synapse-rule);
-}
-
-.synapse-edit-card-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 6px 0;
-	background: transparent;
-	border-bottom: none;
-}
-
-.synapse-edit-card-title {
-	font-family: var(--font-interface);
-	font-size: 10.5px;
-	letter-spacing: 0.1em;
-}
-
-.synapse-edit-card-actions {
-	display: flex;
-	gap: 4px;
-}
-
-.synapse-edit-card-btn {
-	padding: 2px 4px;
-	color: var(--text-muted);
-	background: transparent;
-	border: none;
-	cursor: pointer;
-	border-bottom: 1px solid transparent;
-}
-
-.synapse-edit-card-btn:hover {
-	color: var(--text-normal);
-	border-bottom-color: var(--interactive-accent);
-}
-
-.synapse-edit-card-use {
-	color: var(--interactive-accent);
-}
-
-.synapse-edit-card-body {
-	padding: 6px 0 10px;
-	max-height: 120px;
-	overflow-y: auto;
-}
-
-.synapse-edit-card.is-expanded .synapse-edit-card-body {
-	max-height: none;
-}
-
-.synapse-edit-card-text {
-	width: 100%;
-	min-height: 1.6em;
-	padding: 0;
-	margin: 0;
-	font-size: 14px;
-	line-height: 1.55;
-	color: var(--text-normal);
-	background: transparent;
-	border: none;
-	resize: none;
-	overflow: hidden;
-	white-space: pre-wrap;
-	font-family: var(--synapse-font-serif);
-	field-sizing: content;
 }
 
 /* ── Bot settings status ──────────────────────────────────────── */

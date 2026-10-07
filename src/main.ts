@@ -4,10 +4,8 @@ import {AgentService, type ModelInfo} from "./agentService";
 import {releasePluginSetTimeoutShim} from './sdkShims';
 import {fetchEndpointModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
-import {registerEditorMenu, registerFileMenu, openSynapseView, showEditNoteModal, showStructureModal, runSelectionAction} from './editor/editorMenu';
+import {registerEditorMenu, registerFileMenu, openSynapseView, showEditOrInsertModal} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
-import {TASKS} from './tasks';
-import {EditModal} from './modals/editModal';
 import {installStarterKit} from './configWriter';
 import {debugTrace} from './debug';
 import {getCmView} from './utils';
@@ -88,69 +86,20 @@ export default class SynapsePlugin extends Plugin {
 			},
 		});
 
-		// Command: Edit the note
+		// Command: Edit or insert with Synapse (edit if text is selected, insert otherwise)
 		this.addCommand({
-			id: 'edit-note',
-			name: 'Edit the note',
+			id: 'edit-or-insert',
+			name: 'Edit or insert with Synapse',
 			editorCallback: (_editor, view) => {
 				const cmView = getCmView(view);
-				if (cmView) showEditNoteModal(this, cmView);
+				if (cmView) showEditOrInsertModal(this, cmView);
 			},
 		});
 
-		// Command: Structure and refine
-		this.addCommand({
-			id: 'structure-and-refine',
-			name: 'Structure and refine',
-			editorCallback: (_editor, view) => {
-				const cmView = getCmView(view);
-				if (cmView) showStructureModal(this, cmView);
-			},
-		});
-
-		// Command: Edit selection (advanced editing modal)
-		this.addCommand({
-			id: 'edit-selection',
-			name: 'Edit selection',
-			editorCallback: (_editor, view) => {
-				const cmView = getCmView(view);
-				if (!cmView) return;
-				const sel = cmView.state.selection.main;
-				if (sel.empty) {
-					new Notice('Synapse: select some text first.');
-					return;
-				}
-				const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
-				new EditModal(this, selectedText, (result: string) => {
-					const currentSel = cmView.state.selection.main;
-					cmView.dispatch({changes: {from: currentSel.from, to: currentSel.to, insert: result}});
-				}).open();
-			},
-		});
-
-		// Text-transform commands for each task
-		for (const task of TASKS) {
-			this.addCommand({
-				id: `text-action-${task.label.toLowerCase().replace(/\s+/g, '-')}`,
-				name: task.label,
-				editorCallback: (_editor, view) => {
-					const cmView = getCmView(view);
-					if (!cmView) return;
-					const sel = cmView.state.selection.main;
-					if (sel.empty) {
-						new Notice('Synapse: select some text first.');
-						return;
-					}
-					const selectedText = cmView.state.sliceDoc(sel.from, sel.to);
-					void runSelectionAction(this, cmView, selectedText, task);
-				},
-			});
-		}
-
-		// Editor context menu (Synapse submenu for selected text)
+		// Editor context menu (flat Edit/Insert with Synapse item)
 		registerEditorMenu(this);
 
-		// Vault tree context menu (Synapse submenu for note files)
+		// Vault tree context menu (chat item for notes, submenus for folders/images)
 		registerFileMenu(this);
 
 		try {
