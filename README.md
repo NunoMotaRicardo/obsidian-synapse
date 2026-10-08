@@ -103,7 +103,8 @@ instruction, turn it into an agent or skill in a single message.
 
 1. **Install the [Claude CLI](https://code.claude.com/docs/en/setup)** and sign in by running `claude`,
    or have an Anthropic API key ready. For local models, also install [Ollama](https://ollama.com).
-2. **Install Claude Synapse** from the Obsidian Community directory when available, or use
+2. **Install Claude Synapse** from **Settings → Community plugins → Browse** by searching for
+   **Claude Synapse**. You can also use
    [BRAT](https://github.com/TfTHacker/obsidian42-brat) by adding
    `https://github.com/NunoMotaRicardo/obsidian-synapse`, or install manually from the
    [latest release](https://github.com/NunoMotaRicardo/obsidian-synapse/releases).
@@ -127,7 +128,7 @@ with warm parchment and charcoal variants and a terracotta accent. Install it fr
 
 The [wiki](wiki/Home.md) has the details:
 
-- **[Installation](wiki/Installation.md)**: requirements, the Claude CLI, BRAT or manual install, and first run
+- **[Installation](wiki/Installation.md)**: requirements, the Claude CLI, installing the plugin, and first run
 - **[Using Claude Synapse](wiki/Using-Synapse.md)**: the chat panel, search, sessions, and editor actions
 - **[Starter kit](wiki/Starter-Kit.md)**: every bundled skill and agent, and the `synapse-config` setup workflow
 - **[Customization](wiki/Customization.md)**: agents, skills, MCP servers, and vault settings in `_synapse/`

@@ -23,9 +23,11 @@ Claude → Claude CLI location**. The same page shows the resolved CLI path and 
 
 ## 2. Install the plugin
 
-- **Via BRAT (recommended while in beta).** Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat)
+- **From the Community directory (recommended).** Open **Settings → Community plugins → Browse**,
+  search for **Claude Synapse**, then select **Install** and **Enable**. Obsidian keeps it updated.
+- **Via BRAT.** To test unreleased builds, install the [BRAT](https://github.com/TfTHacker/obsidian42-brat)
   community plugin, then add `https://github.com/NunoMotaRicardo/obsidian-synapse` as a beta
-  plugin. BRAT downloads the plugin and keeps it updated.
+  plugin.
 - **Manually.** Download `main.js`, `styles.css`, and `manifest.json` from the
   [latest release](https://github.com/NunoMotaRicardo/obsidian-synapse/releases) into
   `<YourVault>/.obsidian/plugins/claude-synapse/`. Reload Obsidian and enable **Claude Synapse** in

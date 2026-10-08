@@ -37,7 +37,7 @@ writing styles."*
 
 ## Getting started
 
-- [Installation](Installation.md) — requirements (including the Claude CLI), BRAT or manual install, and first run
+- [Installation](Installation.md) — requirements (including the Claude CLI), installing the plugin, and first run
 - [Using Claude Synapse](Using-Synapse.md) — the chat panel, search, sessions, and editor and file actions
 - [Companion theme](https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme) — the matching Obsidian theme, optional (see [Installation](Installation.md#optional-the-companion-theme))
 - [Starter kit](Starter-Kit.md) — the bundled Writer agent and the `synapse-config`, `obsidian`, `think`, and `writing-style` skills

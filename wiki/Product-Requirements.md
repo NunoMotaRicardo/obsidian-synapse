@@ -4,7 +4,7 @@
 |---|---|
 | **Product** | Claude Synapse (`claude-synapse`), an Obsidian desktop plugin |
 | **Version described** | 0.4.1 (released 2026-10-08) |
-| **Status** | Beta, distributed through BRAT and GitHub releases |
+| **Status** | Published in the Obsidian Community plugins directory; also available through BRAT and GitHub releases |
 | **Owner** | Nuno Mota Ricardo |
 | **Last updated** | 2026-10-09 |
 
@@ -281,7 +281,7 @@ Requirement IDs are stable references for issues and reviews.
 ### Distribution and quality
 
 - Releases are tag-triggered GitHub releases with three installer assets (`main.js`,
-  `manifest.json`, `styles.css`), compatible with BRAT, and come with SLSA build-provenance
+  `manifest.json`, `styles.css`), which the Community directory and BRAT install from. They come with SLSA build-provenance
   attestations. The tag equals the manifest version, with no `v` prefix.
 - TypeScript strict mode, ESLint with `eslint-plugin-obsidianmd`, and a Vitest unit suite with a
   mocked Obsidian API.
@@ -316,7 +316,7 @@ These existed in earlier versions or were proposed, and are not part of the curr
 
 The plugin collects no telemetry, so success is judged from public and qualitative signals:
 
-- **Adoption:** BRAT installs, GitHub stars, and, once listed, Community directory downloads.
+- **Adoption:** Community directory downloads, GitHub stars, and BRAT installs.
 - **Activation:** users reporting that they completed the writing-style setup workflow.
 - **Customization:** issues and discussions about user-created agents, skills, and MCP servers.
 - **Quality:** open bug count and time to fix, and releases shipped without regressions.
@@ -327,8 +327,6 @@ The plugin collects no telemetry, so success is judged from public and qualitati
 - **Automation without a person at the keyboard.** Watch, schedule, and batch triggers were
   removed. The [2026-09-29 automations audit](../.docs/audits/2026-09-29-automations-audit-redo.md)
   proposes rebuilding them on SDK hooks.
-- **Community directory listing.** Readiness work is tracked in the
-  [publishing audit](../.docs/audits/2026-09-13-obsidian-plugin-publishing-readiness.md).
 - **Subagent management for local models** and **voice with local models**, explored in
   [`.docs/research/`](../.docs/research/).
 - **Replaying tool-call blocks** in reopened sessions.
