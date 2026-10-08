@@ -52,6 +52,10 @@ writing styles."*
 
 - [Local-Models-Ollama](Local-Models-Ollama.md) — configuring the local agent endpoint, Ollama Cloud models, and context-window tuning
 
+## Product
+
+- [Product requirements](Product-Requirements.md) — what Claude Synapse is for, who it serves, and every shipped requirement
+
 ## Credits
 
 Claude Synapse began as an adaptation of [obsidian-sidekick](https://github.com/vieiraae/obsidian-sidekick) by

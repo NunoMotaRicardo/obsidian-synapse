@@ -1,7 +1,7 @@
 # Claude Synapse (claude-synapse)
 
-Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
-triggers, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
+Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, vault search,
+editor actions, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
 Claude Agent SDK architecture decision.
 
 ## Stack & build

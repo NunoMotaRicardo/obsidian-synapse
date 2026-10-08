@@ -17,7 +17,7 @@ Claude Synapse itself has no analytics, crash-reporting, advertising, or telemet
 | Destination | When contacted | Data that can leave the machine |
 |---|---|---|
 | Claude CLI / Anthropic | Claude subscription or API-key sessions, through the CLI and Agent SDK | Prompts, selected vault text, attachments, tool results, and conversation/session content needed by the provider; provider logs and telemetry are outside this plugin's control |
-| User-configured Messages API endpoint | When a local agent endpoint is configured; model discovery also requests `/v1/models` and the Test button sends one minimal `/v1/messages` request | The configured URL receives the request body, model data, API key/header, and subsequent agent context |
+| User-configured Messages API endpoint | When a local agent endpoint is configured; model discovery and the Test button request only `/v1/models` | The configured URL receives the request body, model data, API key/header, and subsequent agent context |
 | `https://api.telegram.org` | Only when the optional Telegram bot is connected | Bot token, polling metadata, Telegram messages and attachments; replies and generated text are sent back through Telegram |
 | MCP servers | Only when the user enables/configures them | Whatever the configured MCP process or remote MCP transport sends; this plugin does not audit MCP privacy policies |
 
