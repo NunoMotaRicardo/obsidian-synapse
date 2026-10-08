@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-08
+
+### Security
+
+- Updated the Claude Agent SDK to 0.3.287, which brings in fixed versions of the MCP SDK (1.32.1, [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h)) and `proxy-addr` (2.0.8, [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h)). Synapse doesn't run the affected server code, so the practical risk was low.
+
 ## [0.4.0] - 2026-10-08
 
 ### Added
