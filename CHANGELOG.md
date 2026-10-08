@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-08
+
+### Added
+
+- Right-clicking in the editor now shows a single item: **Edit with Synapse** when text is selected, or **Insert with Synapse** when it isn't. Both open a box where you describe what you want. Synapse reads the whole note for context and applies the result directly; press Ctrl+Z to undo. If the note changes while Synapse is working, the result is copied to your clipboard instead.
+- Your instructions can name a skill, for example "rewrite this using my writing-style skill", to rewrite text in your own writing style. Synapse can load skills and read files here, but never changes files itself.
+- A new **Edit or insert with Synapse** command in the command palette.
+
+### Changed
+
+- When the API's safety filter blocks a request, the notice now explains why, names the model, and lists what to try, instead of showing the raw error.
+- Right-clicking a note in the file explorer now shows only **Chat with Claude Synapse**.
+
+### Removed
+
+- The Synapse editor submenu (Edit, Rewrite, Proofread, Use synonyms, Minor/Major revise, Describe, Answer, Explain, Expand, Summarize) and the multi-choice Edit dialog, replaced by **Edit with Synapse**.
+- The commands **Edit selection**, **Edit the note**, **Structure and refine**, and the per-action commands (Rewrite, Proofread, …). If you had hotkeys on them, assign one to **Edit or insert with Synapse**.
+
 ## [0.3.1] - 2026-10-05
 
 ### Fixed
