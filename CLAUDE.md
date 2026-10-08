@@ -1,7 +1,7 @@
 # Claude Synapse (claude-synapse)
 
-Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, editor actions,
-triggers, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
+Obsidian desktop plugin embedding a Claude-native AI assistant (chat panel, vault search,
+editor actions, Telegram bot). See `.docs/decisions/2026-06-28-claude-agent-sdk-migration.md` for the
 Claude Agent SDK architecture decision.
 
 ## Stack & build
@@ -39,7 +39,8 @@ and contributors can find them without digging. Rules:
   (re-enable via `obsidian vault=obsidian-configs eval …`; always pass `vault=` — the CLI
   otherwise targets the focused vault). That vault is the user's real vault — deploy only
   builds that compile clean.
-- Releases (BRAT): the **release** skill. Tag = `manifest.json` version, no `v` prefix.
+- Releases (Obsidian Community directory and BRAT both install from GitHub releases): the
+  **release** skill. Tag = `manifest.json` version, no `v` prefix.
 
 ## Dev workflow: agents & skills
 

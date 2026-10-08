@@ -13,3 +13,6 @@
 
 **Local models**
 - [Ollama](Local-Models-Ollama.md)
+
+**Product**
+- [Product requirements](Product-Requirements.md)
