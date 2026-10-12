@@ -809,7 +809,11 @@ export class ChatRendererController {
 		setIcon(icon, SYNAPSE_ICON_ID);
 		welcome.createEl('h3', {text: 'Claude Synapse'});
 		welcome.createEl('p', {
-			text: 'Your AI-powered second brain. Select an agent, choose a model, configure tools and get the job done!',
+			text: 'Your AI-powered second brain. New here? Ask Synapse to set itself up — the synapse-config skill builds your writing styles, agents and skills from a conversation.',
+			cls: 'synapse-welcome-desc',
+		});
+		welcome.createEl('p', {
+			text: 'Try: "Set up my writing styles" or "Create an agent that turns meeting notes into action items."',
 			cls: 'synapse-welcome-desc',
 		});
 	}
