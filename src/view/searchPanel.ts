@@ -7,6 +7,7 @@ import {buildCurrentAgentLine, buildResilienceHint, buildSelfImproveHint, getAda
 import {getSynapsePluginConfig} from '../vaultPaths';
 import {SEARCH_AGENT_INSTRUCTIONS, SEARCH_AGENT_NAME} from '../starterKit';
 import type {ViewContext} from './types';
+import {renderMarkdownSafe} from './utils';
 
 /** Read-only file tools for vault search — no write/exec access needed. */
 const SEARCH_TOOLS = ['Read', 'Glob', 'Grep'];
@@ -642,8 +643,14 @@ export class SearchPanelController {
 			// Handle both single object and array responses
 			results = (Array.isArray(parsed) ? parsed : [parsed]) as typeof results;
 		} catch {
-			// If not valid JSON, show the raw response
-			this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: content || 'No results found'});
+			// Not JSON — the model answered in prose (common for question-style queries).
+			// Render it as Markdown rather than dumping raw text in the faint empty-state style.
+			if (!content.trim()) {
+				this.searchResultsEl.createDiv({cls: 'synapse-search-empty', text: 'No results found'});
+				return;
+			}
+			const answerEl = this.searchResultsEl.createDiv({cls: 'synapse-search-answer markdown-rendered'});
+			void renderMarkdownSafe(this.view.app, content, answerEl, this.view.view);
 			return;
 		}
 

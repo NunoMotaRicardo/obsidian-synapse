@@ -712,8 +712,8 @@ else `featureAgents.search`/legacy `searchAgent`, else `Search` when installed
 (`resolveSearchAgent()`). The per-search prompt (`buildSearchPrompt()`) is just the query plus the
 vault config folder; when the agent is not `Search` (another agent, or none installed) the Search
 agent's body (`SEARCH_AGENT_INSTRUCTIONS`, exported from `starterKit.ts`) is prepended so output stays
-parseable. Results are rendered by `renderSearchResults()` (clickable file rows; raw text fallback
-when the response isn't JSON). The mode toggle's tooltip (`SEARCH_MODE_TOOLTIPS`) describes the
+parseable. Results are rendered by `renderSearchResults()` (clickable file rows; prose answers that
+aren't JSON render as Markdown in `.synapse-search-answer`). The mode toggle's tooltip (`SEARCH_MODE_TOOLTIPS`) describes the
 current mode and what clicking switches to.
 Both modes are **read-only**: `tools: ['Read', 'Glob', 'Grep']` (`SEARCH_TOOLS`) — no write or
 exec tools regardless of the tool-approval setting.
