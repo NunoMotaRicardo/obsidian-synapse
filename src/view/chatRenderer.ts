@@ -813,7 +813,7 @@ export class ChatRendererController {
 			cls: 'synapse-welcome-desc',
 		});
 		welcome.createEl('p', {
-			text: 'Try: "Set up my writing styles" or "Create an agent that turns meeting notes into action items."',
+			text: 'Try asking it to set up your writing styles, or to create an agent that turns meeting notes into action items.',
 			cls: 'synapse-welcome-desc',
 		});
 	}
