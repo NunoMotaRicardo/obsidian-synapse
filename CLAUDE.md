@@ -36,7 +36,8 @@ and contributors can find them without digging. Rules:
 - Verify changes with the **deploy-test** skill: build → copy artifacts to
   the test vault (`$env:SYNAPSE_DEV_VAULT` or default
   `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`) → reload
-  (`obsidian plugin:reload id=claude-synapse`). That vault is the user's real vault — deploy only
+  (re-enable via `obsidian vault=obsidian-configs eval …`; always pass `vault=` — the CLI
+  otherwise targets the focused vault). That vault is the user's real vault — deploy only
   builds that compile clean.
 - Releases (Obsidian Community directory and BRAT both install from GitHub releases): the
   **release** skill. Tag = `manifest.json` version, no `v` prefix.
