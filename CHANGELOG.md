@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-15
+
+### Changed
+
+- The chat welcome screen now suggests asking Synapse to set itself up: the **synapse-config** skill builds your writing styles, agents and skills from a conversation.
+
+### Fixed
+
+- When a search comes back as a written answer instead of a list of notes (common for questions like "do I already have…?"), the Search tab now shows it as formatted text, with tables and links, instead of raw Markdown in faint italics.
+
 ## [0.4.1] - 2026-10-08
 
 ### Security
