@@ -2843,6 +2843,19 @@ body.synapse-no-select {
 	50%      { transform: scaleX(1);   transform-origin: left; }
 }
 
+.synapse-search-answer {
+	font-size: 14.5px;
+	line-height: 1.55;
+	color: var(--text-normal);
+	padding: 12px 2px;
+	overflow-x: auto;
+	user-select: text;
+}
+
+.synapse-search-answer table {
+	font-size: 13px;
+}
+
 .synapse-search-empty {
 	font-family: var(--synapse-font-serif);
 	font-style: italic;
