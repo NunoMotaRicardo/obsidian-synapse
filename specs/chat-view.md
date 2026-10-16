@@ -709,8 +709,11 @@ The exploration (Glob/Grep/Read over file names and contents) and strict JSON-ar
 (`file`/`folder`/`reason`) instructions live in the starter **Search** agent
 (`src/starter/agents/search.agent.md`). Both modes run it by default: the agent is the toolbar pick,
 else `featureAgents.search`/legacy `searchAgent`, else `Search` when installed
-(`resolveSearchAgent()`). The per-search prompt (`buildSearchPrompt()`) is just the query plus the
-vault config folder; when the agent is not `Search` (another agent, or none installed) the Search
+(`resolveSearchAgent()`). The per-search prompt (`buildSearchPrompt()`) is the query, the
+vault config folder, and a scope line telling the model the search covers the working directory
+and all subfolders recursively (`**/` globs, whole-tree Grep) — carried in the request so older
+installed Search agents get it too, and because small local models otherwise glob only the top
+level; when the agent is not `Search` (another agent, or none installed) the Search
 agent's body (`SEARCH_AGENT_INSTRUCTIONS`, exported from `starterKit.ts`) is prepended so output stays
 parseable. Results are rendered by `renderSearchResults()` (clickable file rows; prose answers that
 aren't JSON render as Markdown in `.synapse-search-answer`). The mode toggle's tooltip (`SEARCH_MODE_TOOLTIPS`) describes the

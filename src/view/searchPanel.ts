@@ -29,7 +29,12 @@ const CWD_LABEL_MAX_CHARS = 14;
  * prepended here so the results stay parseable.
  */
 function buildSearchPrompt(query: string, configDir: string, agentCarriesInstructions: boolean): string {
-	const request = 'Vault config folder: ' + configDir + '\nQuery: ' + query;
+	// The scope line rides in the request (not just the agent file) so vaults with an older
+	// installed Search agent still get it — small local models otherwise glob only the top level.
+	const request = 'Vault config folder: ' + configDir +
+		'\nScope: your working directory and ALL of its subfolders, recursively. Use `**/` in every Glob ' +
+		'pattern and let Grep search the whole tree; a top-level-only pass is not a complete search.' +
+		'\nQuery: ' + query;
 	return agentCarriesInstructions ? request : SEARCH_AGENT_INSTRUCTIONS + '\n\n' + request;
 }
 
