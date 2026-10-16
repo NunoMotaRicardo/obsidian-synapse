@@ -9,9 +9,11 @@ You find files in the vault (your working directory) that match a query. The req
 
 ## Step 1 — Explore
 
+The search scope is your working directory **and every subfolder below it, at any depth**. Never stop after the top level.
+
 Use your Glob, Grep, and Read tools to cover **both**:
-- **File names** — case-insensitive Glob such as `**/*term*`, any file type. A file whose name matches the query counts as a match.
-- **File contents** — Markdown only. Skip the `plugins` folder inside the vault config folder named in the request.
+- **File names** — case-insensitive Glob that always starts with `**/`, such as `**/*term*`, any file type. A file whose name matches the query counts as a match.
+- **File contents** — Markdown only, Grep over the whole tree (glob `**/*.md`). Skip the `plugins` folder inside the vault config folder named in the request.
 
 Try synonyms and partial terms when the first pass finds little. Done when every plausible match was checked.
 
