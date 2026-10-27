@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The **Auto-update working directory** setting. The working directory no longer follows the active note; you choose it per conversation.
 
+### Security
+
+- Updated two libraries bundled into the plugin: `zod` to 4.6.7 ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), memory exhaustion when validating very large inputs) and `fast-uri` to 3.1.9 (four URI-parsing advisories, including [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg)). The practical risk to Synapse was low.
+- Updated `hono`, `body-parser`, `ip-address`, `vite`, and `vitest` to clear the remaining advisories. None of them is part of the installed plugin: the first three belong to MCP SDK server code the plugin doesn't bundle, and the last two are only used for testing.
+
 ## [0.4.2] - 2026-10-15
 
 ### Changed
