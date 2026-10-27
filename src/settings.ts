@@ -8,6 +8,7 @@ import {BUNDLED_SDK_VERSION, getVersionSkewWarning} from "./runtimeManager";
 // Re-exported so existing `import {SYNAPSE_FOLDER} from './settings'` call sites (notably
 // configWriter.ts, out of scope for #153) keep working. Canonical definition: vaultPaths.ts.
 import {SYNAPSE_FOLDER} from "./vaultPaths";
+import type {ConversationContext} from "./types";
 
 const COMPANION_THEME_URL = 'https://github.com/NunoMotaRicardo/obsidian-claude-synapse-theme';
 export {SYNAPSE_FOLDER};
@@ -65,6 +66,13 @@ export interface SynapseSettings {
 	 */
 	sessionCostBaselines?: Record<string, number>;
 	/**
+	 * Working directory, context note, and vault scope per SDK session id, restored when a
+	 * conversation is reopened from the sidebar. Bounded to the most recently touched
+	 * `MAX_SESSION_CONTEXTS` sessions (`upsertSessionContext()` in `view/sessionConfig.ts`) and
+	 * pruned when a session is deleted from the sidebar.
+	 */
+	sessionContexts?: Record<string, ConversationContext>;
+	/**
 	 * Reasoning effort level for model inference. '' = model default.
 	 * Stored as a free string because models report values beyond the SDK's
 	 * `ReasoningEffort` union (e.g. 'max', 'none'); validity is enforced against
@@ -75,9 +83,6 @@ export interface SynapseSettings {
 	searchAgent: string;
 	/** Search mode: 'basic' reuses session with minimal config, 'advanced' allows full agent/model/skills/tools. */
 	searchMode: 'basic' | 'advanced';
-
-	/** Automatically update working directory to the active note's parent folder. */
-	autoUpdateWorkingDirectory: boolean;
 
 	/** Automatically resolve and attach note-embedded images as context. */
 	autoIncludeNoteImages: boolean;
@@ -143,7 +148,6 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	reasoningEffort: '',
 	searchAgent: SEARCH_AGENT_NAME,
 	searchMode: 'basic',
-	autoUpdateWorkingDirectory: true,
 	autoIncludeNoteImages: true,
 	maxNoteImages: 3,
 	telegramBotId: '',
@@ -611,16 +615,6 @@ export class SynapseSettingTab extends PluginSettingTab {
 				.setButtonText('View on GitHub')
 				.onClick(() => {
 					window.open(COMPANION_THEME_URL);
-				}));
-
-		new Setting(panel)
-			.setName('Auto-update working directory')
-			.setDesc('Automatically change the working directory to the active note\'s parent folder when switching notes.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.autoUpdateWorkingDirectory)
-				.onChange(async (value) => {
-					this.plugin.settings.autoUpdateWorkingDirectory = value;
-					await this.plugin.saveSettings();
 				}));
 
 		new Setting(panel)

@@ -224,39 +224,46 @@ and built in `buildUI()` via `controller.build(parent)`.
   `AgentService.getSessionMessages()` (wraps the
   SDK's `getSessionMessages()`, called with no `dir` filter so it searches all project
   directories — sessions are listed unscoped (`loadSessions()` → `listSessions()`), and a
-  session's original working directory can differ from the current one since
-  `autoUpdateWorkingDirectory` changes it on note switch; scoping to the current `dir` would make
+  session's original working directory can differ from the current one (the user can change it
+  mid-conversation, and pre-existing sessions predate saved contexts); scoping to the current `dir` would make
   the lookup miss the session and reproduce an empty backlog). Replay walks each transcript
   message's content blocks for `text` (user/assistant) and `thinking` (assistant); `tool_use`/
   `tool_result` blocks are skipped — tool-call replay is a separate follow-up. An unreadable or
   missing transcript degrades to the welcome screen rather than throwing.
-- The active note is attached as context. When `settings.autoUpdateWorkingDirectory` is enabled (default `true`),
-  the working directory auto-updates to the active note's parent folder on note switch. While a conversation is
-  in progress, that update is deferred rather than applied immediately (see the bullet below). When disabled,
-  the working directory is not changed automatically (it defaults to the vault root unless overridden manually).
-  The active note's folder can also be overridden manually in the toolbar at any time — a manual override
-  (`SynapseView.setWorkingDir()`, e.g. dragging a folder onto the input area) always applies immediately,
-  deferral or not, and an auto-update on the next note switch will still overwrite that manual pick, same as
-  before this default flipped.
-  - **Active-note-driven changes are deferred while a conversation is in progress:** applying
-    this auto-update unconditionally makes `ensureSession()` (`synapseView.ts`) tear down the
-    live `Session` and rebuild it, resuming by id — a **new CLI process that replays the whole
-    transcript**, so the entire conversation is re-written to the prompt cache on every
-    folder-crossing note switch. Since users switch notes constantly *between* turns, an
-    immediate-apply policy pays that replay cost on a large share of follow-up messages. This is
-    a pure token-cost concern, not a correctness one. `updateActiveNote()` (`inputArea.ts`) calls
-    `decideWorkingDirAutoUpdate()` (`view/sessionConfig.ts`) with a `conversationInProgress` flag
-    (`currentSession !== null && messages.length > 0`); when true and the folder actually changed,
-    the new directory is held in `SynapseView.pendingWorkingDir` instead of being applied — the
-    working-directory button doesn't move and no rebuild happens — and applied the next time a
-    conversation is *not* in progress (`newConversation()`). If the active note instead returns
-    to the folder the session is already in (`newDir === currentWorkingDir`) while a deferral from
-    an earlier detour is outstanding, `decideWorkingDirAutoUpdate()` reports `clearPending: true`
-    and `updateActiveNote()` clears `pendingWorkingDir` — otherwise the abandoned detour's folder
-    would survive and get silently applied by the next `newConversation()`, even though the user
-    is looking at a note back in the original folder. A *manual* working-directory override
-    (`SynapseView.setWorkingDir()`) bypasses this function entirely and always applies immediately,
-    since it's a deliberate user action rather than a silent side effect of navigation.
+- **Conversation context (working directory, context note, scope) belongs to the conversation.**
+  `SynapseView` holds it as `workingDir` (vault-relative, `''` = vault root), `contextNotePath`
+  (the note attached as context) and `scopePaths`, separate from `activeNotePath` (the
+  workspace's live active note).
+  - **New conversation:** `newConversation()` resets the working directory to the vault root,
+    clears the scope, and sets the context note to the active note. Until the conversation
+    starts (`isConversationStarted()` — a session id exists or a message was sent),
+    `updateActiveNote()` (`inputArea.ts`) keeps `contextNotePath` following the active note.
+  - **After the conversation starts, nothing changes the context automatically.** Switching
+    notes only updates `activeNotePath`; the working directory never follows the active note
+    (the former `autoUpdateWorkingDirectory` setting and its deferral logic are gone). The user
+    changes context explicitly: the working-directory picker or a folder drop
+    (`setWorkingDir()`), the scope controls (`openScopeModal()`, `setScope()`, the scope chip's
+    remove button), and the state-line note menu (`openContextNoteMenu()` → `setContextNote()`),
+    which offers **Use active note: <name>** when the active note differs from the context note,
+    and **Remove note from context**. While they differ, the state-line note gets
+    `.is-detached` (dotted underline) and its tooltip names both notes. The live editor
+    selection still replaces the note for the turn it's sent with — selecting text is itself a
+    user action.
+  - **Persistence:** every user change, and `session.init` (the first moment a new
+    conversation has an id), calls `saveConversationContext()`, which writes
+    `{workingDir, notePath, scopePaths}` to `settings.sessionContexts[sessionId]` via
+    `upsertSessionContext()` (`sessionConfig.ts`; insertion-order LRU capped at
+    `MAX_SESSION_CONTEXTS` = 200). Deleting a session from the sidebar drops its entry; renaming a
+    note rewrites matching `notePath`s (`handleNoteRenamed()`, a `vault.on('rename')` handler).
+  - **Restore:** `selectSession()` (`sessionSidebar.ts`) applies
+    `resolveConversationContext()` before building any session config — for both the background
+    and cold-resume paths — so a cold resume runs in the cwd the conversation was left in.
+    Sessions with no saved context (created before this existed) fall back to the SDK's recorded
+    `SDKSessionInfo.cwd` mapped back to a vault-relative folder (vault root if outside the vault
+    or missing), with no note and no scope.
+  - `handleSend()` attaches `contextNotePath` (not the live active note) and uses it for
+    note-image auto-include and the per-turn `Active note:` line; a context note that no
+    longer exists is skipped.
   - **Every `configDirty` rebuild carries the conversation forward:** the toolbar-toggle pattern
     (agent/model/reasoning/tools) still marks `configDirty` and lets `ensureSession()` rebuild
     the `Session` — that part is unchanged, and deliberately so (see `agent-service.md`'s
@@ -467,8 +474,7 @@ and built in `buildUI()` via `controller.build(parent)`.
   temp files are tracked per-view (`SynapseView.attachmentTempFiles`) and deleted via
   `cleanupAttachmentTempFiles()` in `onClose()` (view unload). For any attachment path that
   falls outside the session's actual `cwd` (`SynapseView.getWorkingDirectory()` — the vault
-  root, or a narrower subfolder when the working directory is scoped via the toolbar or
-  `autoUpdateWorkingDirectory`) — e.g. out-of-vault files, OneDrive-synced folders, blob temp
+  root, or a narrower subfolder when the user scopes the working directory) — e.g. out-of-vault files, OneDrive-synced folders, blob temp
   files, or vault-relative attachments outside a scoped working directory —
   `computeAdditionalDirectories()` computes the parent directory and it's passed as
   `Session.send({additionalDirectories})`, merged with the session's own

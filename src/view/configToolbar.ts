@@ -377,9 +377,7 @@ export class ConfigToolbarController {
 
 	openCwdPicker(): void {
 		new FolderTreeModal(this.view.app, this.view.view.workingDir, (folder) => {
-			this.view.view.workingDir = folder.path;
-			this.updateCwdButton();
-			this.view.configDirty = true;
+			this.view.view.setWorkingDir(folder.path);
 		}).open();
 	}
 

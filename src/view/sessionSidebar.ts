@@ -5,6 +5,7 @@ import {debugTrace} from '../debug';
 import {formatTimeAgo, stripSessionTypePrefix, stripInjectedPromptContext} from './utils';
 import type {ViewContext} from './types';
 import {BackgroundSession} from './backgroundSession';
+import {resolveConversationContext} from './sessionConfig';
 
 /** A single content block from an Anthropic API message (subset used for replay). */
 type AnthropicContentBlock = {
@@ -772,6 +773,14 @@ export class SessionSidebarController {
 		this.view.view.isStreaming = false;
 		this.view.chatContainer.empty();
 
+		// Restore the conversation's own context (working directory, context note, scope)
+		// before any session config is built, so a cold resume runs in the cwd it was left in.
+		this.view.view.applyConversationContext(resolveConversationContext(
+			this.view.plugin.settings?.sessionContexts?.[sessionId],
+			this.view.view.sessionList.find(s => s.sessionId === sessionId)?.cwd,
+			this.view.getVaultBasePath(),
+		));
+
 		// ── Check if the target session is already alive in background ──
 		const bg = this.view.view.activeSessions.get(sessionId);
 		if (bg) {
@@ -823,7 +832,7 @@ export class SessionSidebarController {
 			// Deliberately omit `dir`: sessions are listed across all project
 			// directories (loadSessions() calls listSessions() unscoped), and the
 			// working directory can change between when a session was created and
-			// when it's cold-restored (autoUpdateWorkingDirectory). Passing a `dir`
+			// when it's cold-restored (the user can change it mid-conversation). Passing a `dir`
 			// that doesn't match the session's original project directory makes the
 			// SDK search only that one directory and return `[]` — reproducing the
 			// empty-chat bug this change fixes. Omitting `dir` searches all projects.
@@ -1014,6 +1023,10 @@ export class SessionSidebarController {
 		// never be cold-resumed again, so there's nothing left for it to seed.
 		if (this.view.plugin.settings?.sessionCostBaselines) {
 			delete this.view.plugin.settings.sessionCostBaselines[sessionId];
+			void this.view.plugin.saveSettings();
+		}
+		if (this.view.plugin.settings?.sessionContexts?.[sessionId]) {
+			delete this.view.plugin.settings.sessionContexts[sessionId];
 			void this.view.plugin.saveSettings();
 		}
 		this.view.view.sessionList = this.view.view.sessionList.filter(s => s.sessionId !== sessionId);

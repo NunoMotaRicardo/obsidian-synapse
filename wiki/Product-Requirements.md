@@ -127,8 +127,8 @@ Requirement IDs are stable references for issues and reviews.
 |---|---|
 | CH-1 | The panel opens from the ribbon icon or **Open chat**, in the right sidebar, with **Chat** and **Search** tabs and a session list. |
 | CH-2 | Responses stream with full Markdown rendering. **Enter** sends, **Shift+Enter** adds a line. |
-| CH-3 | The active note or selection is included with each message, and a context line above the input shows the note, agent, and model. |
-| CH-4 | The working directory follows the active note's folder. This can be turned off in **Capabilities**. |
+| CH-3 | The conversation's context note or the selection is included with each message, and a context line above the input shows the note, agent, and model. |
+| CH-4 | A new conversation starts at the vault root with the active note as context. After it starts, its working directory, context note, and scope change only when the user changes them, and they are restored when the conversation is reopened. |
 | CH-5 | **Scope** limits which files and folders the assistant can see. |
 | CH-6 | **Attach** adds files from disk. Files can also be dropped on the input or images pasted. Images embedded in the active note can be attached automatically, up to a configurable limit. |
 | CH-7 | Typing `/` opens a picker for skills and supported commands. Slash commands are sent exactly as typed, with no added note context. |

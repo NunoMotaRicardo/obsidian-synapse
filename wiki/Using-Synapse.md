@@ -17,9 +17,12 @@ The panel has two tabs, **Chat** and **Search**, plus a session list.
 A streaming conversation with full Markdown rendering. Press **Enter** to send and
 **Shift+Enter** for a new line. Type `/` to pick a skill to run.
 
-**Context comes along automatically.** The line above the input shows the active note (or your
-selection), the agent, and the model. The active note is included with each message, and the
-working directory follows the note's folder.
+**Context comes along automatically.** The line above the input shows the context note (or your
+selection), the agent, and the model. A new conversation starts at the vault root with the active
+note as its context. Once you send the first message, the context belongs to that conversation:
+switching notes doesn't change it, and reopening the conversation from the session list restores
+its working directory, note, and scope. To change it, pick another working directory, change the
+scope, or click the note name for **Use active note** or **Remove note from context**.
 
 **Composer controls:**
 

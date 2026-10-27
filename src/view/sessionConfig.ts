@@ -5,7 +5,7 @@ import type {App} from 'obsidian';
 import type {ModelInfo, SlashCommand, AgentInfo} from '../agentService';
 import {matchModelTiers} from '../agentService';
 import {scanVaultStructure} from '../configWriter';
-import type {AgentConfig, ChatAttachment, SkillInfo} from '../types';
+import type {AgentConfig, ChatAttachment, ConversationContext, SkillInfo} from '../types';
 import {IMAGE_EXTS} from '../types';
 import {nodeRequire} from '../nodeRequire';
 
@@ -441,9 +441,10 @@ export function buildCurrentAgentLine(agentName: string): string {
 
 /**
  * Build the per-turn volatile context block appended to the *user message* rather than
- * `systemPrompt.append` (issue #201): Active note, Working directory, the `[Vault Structure]`
- * block, and the current agent. Each of these can change between turns of the same resumed
- * conversation (switching notes, a `configDirty` rebuild changing cwd/agent, vault edits), so
+ * `systemPrompt.append` (issue #201): Active note (the conversation's context note), Working
+ * directory, the `[Vault Structure]` block, and the current agent. Each of these can change
+ * between turns of the same resumed conversation (the user changing the context note or cwd, a
+ * `configDirty` rebuild changing the agent, vault edits), so
  * baking them into the system prompt would invalidate the cached prefix — and everything
  * behind it in the conversation history — on every such change. Delivered here instead, a
  * change only costs this turn's own tokens.
@@ -463,63 +464,66 @@ export function buildTurnContextBlock(opts: {
 	return block;
 }
 
-/** Result of {@link decideWorkingDirAutoUpdate}. */
-export interface WorkingDirAutoUpdateDecision {
-	/** Whether `workingDir` should be updated (and the session config marked dirty) right now. */
-	applyNow: boolean;
-	/**
-	 * The directory that should become pending — applied once the conversation ends —
-	 * when `applyNow` is false and the note actually moved to a different folder.
-	 * `null` when there is nothing to defer (directory unchanged, or applied now).
-	 */
-	pendingDir: string | null;
-	/**
-	 * Whether any existing `pendingWorkingDir` on the caller should be cleared. True whenever
-	 * `pendingDir` is `null` — covers both `applyNow` (the change already landed, so there is
-	 * nothing left to defer) and the note returning to `currentWorkingDir` (any earlier deferral
-	 * from a since-abandoned detour would otherwise survive and get applied at the wrong time —
-	 * see the "stale pendingWorkingDir" scenario in this function's doc comment).
-	 */
-	clearPending: boolean;
+/**
+ * Cap on `SynapseSettings.sessionContexts` — the persisted per-conversation context map (see
+ * {@link upsertSessionContext}). Entries are a few short strings, so the cap is generous; it only
+ * keeps the settings file from growing unbounded across a long-lived vault's session history.
+ */
+export const MAX_SESSION_CONTEXTS = 200;
+
+/**
+ * Pure map-update helper for `SynapseSettings.sessionContexts`. Returns a **new** record with
+ * `sessionId`'s context set, evicting the least-recently-touched entries once the map exceeds
+ * `maxEntries` — same insertion-order recency scheme as `upsertSessionCostBaseline()`
+ * (re-touching a key moves it to the end; pruning removes from the front).
+ */
+export function upsertSessionContext(
+	contexts: Record<string, ConversationContext> | undefined,
+	sessionId: string,
+	context: ConversationContext,
+	maxEntries: number = MAX_SESSION_CONTEXTS,
+): Record<string, ConversationContext> {
+	const next: Record<string, ConversationContext> = {...contexts};
+	delete next[sessionId];
+	next[sessionId] = {workingDir: context.workingDir, notePath: context.notePath, scopePaths: [...context.scopePaths]};
+	const keys = Object.keys(next);
+	if (keys.length > maxEntries) {
+		for (const key of keys.slice(0, keys.length - maxEntries)) {
+			delete next[key];
+		}
+	}
+	return next;
 }
 
 /**
- * Decide whether an active-note-driven working-directory change should be applied
- * immediately or deferred until the conversation ends (issue #108, restored by #202).
+ * The context to restore when the user reopens a conversation from the sidebar.
  *
- * Applying a `cwd` change mid-conversation makes `ensureSession()` tear down the live
- * `Session` and rebuild it, resuming by id. A resumed session is a **new CLI process that
- * replays the whole transcript**, so every rebuild re-writes the entire conversation to the
- * prompt cache. Users switch the active note between essentially every turn, so an
- * immediate-apply policy pays that replay cost on a large share of follow-up messages.
- *
- * This is a pure token-cost concern, not a correctness one: `ensureSession()` already seeds
- * the rebuilt `SessionConfig` with the outgoing session's id (issue #104's `resume`
- * fallback via `resolveResumeSessionId()` in `agentService.ts`), so no transcript is lost,
- * and resuming under a changed `cwd` has been verified not to degrade the model's path
- * handling (see `.docs/decisions/2026-09-03-cwd-deferral-removed.md`). Deferring simply
- * avoids paying for a rebuild on every note switch: the directory change is held in
- * `pendingWorkingDir` while a conversation is in progress — the working-directory button
- * doesn't move and no rebuild happens — and applied the next time a conversation is *not*
- * in progress (`newConversation()`).
- *
- * Returning to `currentWorkingDir` mid-conversation must **cancel** any pending deferral
- * from an earlier detour, not just leave it as a no-op: a user chatting about a note in
- * folder A, glancing at a note in folder B (deferred), and coming back to A before ending the
- * conversation is looking at A when the conversation ends, so the working directory must stay
- * A — not silently jump to the abandoned B. `clearPending` on the returned decision signals
- * this to the caller (`inputArea.ts#updateActiveNote()`), which must clear its
- * `pendingWorkingDir` whenever `clearPending` is true, regardless of `pendingDir`.
+ * Prefers the context persisted for the session (`saved`). Sessions created before contexts were
+ * persisted have none; those fall back to the session's own recorded `cwd` (the SDK's
+ * `SDKSessionInfo.cwd`) mapped back to a vault-relative folder, with no note and no scope. A `cwd`
+ * outside the vault, or no `cwd` at all, falls back to the vault root.
  */
-export function decideWorkingDirAutoUpdate(params: {
-	newDir: string;
-	currentWorkingDir: string;
-	conversationInProgress: boolean;
-}): WorkingDirAutoUpdateDecision {
-	const {newDir, currentWorkingDir, conversationInProgress} = params;
-	if (newDir === currentWorkingDir) return {applyNow: false, pendingDir: null, clearPending: true};
-	if (conversationInProgress) return {applyNow: false, pendingDir: newDir, clearPending: false};
-	return {applyNow: true, pendingDir: null, clearPending: true};
+export function resolveConversationContext(
+	saved: ConversationContext | undefined,
+	sessionCwd: string | undefined,
+	vaultBasePath: string,
+): ConversationContext {
+	if (saved) return {workingDir: saved.workingDir, notePath: saved.notePath, scopePaths: [...saved.scopePaths]};
+	return {workingDir: vaultRelativeDir(sessionCwd, vaultBasePath), notePath: null, scopePaths: []};
+}
+
+/** Vault-relative form of an absolute directory, or `''` when it is the vault root, outside it, or missing. */
+function vaultRelativeDir(absDir: string | undefined, vaultBasePath: string): string {
+	if (!absDir || !vaultBasePath) return '';
+	const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+	const dir = norm(absDir);
+	const base = norm(vaultBasePath);
+	// Windows paths compare case-insensitively (drive letters in particular vary in case).
+	const caseFold = /^[a-zA-Z]:\//.test(base);
+	const dirCmp = caseFold ? dir.toLowerCase() : dir;
+	const baseCmp = caseFold ? base.toLowerCase() : base;
+	if (dirCmp === baseCmp || !dirCmp.startsWith(baseCmp + '/')) return '';
+	return dir.substring(base.length + 1);
 }
 
 /**
