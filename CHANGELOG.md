@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-27
+
+### Changed
+
+- Each conversation now keeps its own context: working directory, note, and scope. A new conversation starts at the vault root with the active note as context. Once you send the first message, switching notes no longer changes it, and reopening the conversation from the session list brings its context back.
+- To change a conversation's note, click the note name above the input and choose **Use active note** or **Remove note from context**. When you're viewing a different note than the conversation's, the name is underlined with dots.
+- Searches scoped to a folder now tell the model that subfolders are included, so smaller local models no longer stop at the top level and widen the search to the whole vault.
+
+### Removed
+
+- The **Auto-update working directory** setting. The working directory no longer follows the active note; you choose it per conversation.
+
 ## [0.4.2] - 2026-10-15
 
 ### Changed
