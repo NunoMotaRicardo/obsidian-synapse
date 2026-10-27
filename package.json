@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-claude-synapse",
-	"version": "0.4.2",
+	"version": "0.5.0",
 	"description": "Synapse — your Claude-native AI assistant for Obsidian.",
 	"main": "main.js",
 	"type": "module",
@@ -18,7 +18,7 @@
 	"devDependencies": {
 		"@eslint/js": "9.30.1",
 		"@types/node": "^22.20.1",
-		"@vitest/coverage-v8": "^4.1.11",
+		"@vitest/coverage-v8": "^4.1.12",
 		"esbuild": "0.28.2",
 		"eslint": "9.39.1",
 		"eslint-plugin-obsidianmd": "0.4.2",
@@ -28,7 +28,7 @@
 		"tsx": "^4.23.13",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "8.69.0",
-		"vitest": "^4.1.11"
+		"vitest": "^4.1.12"
 	},
 	"peerDependencies": {
 		"@codemirror/state": "^6",

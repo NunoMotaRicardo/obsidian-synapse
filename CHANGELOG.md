@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-27
+
+### Changed
+
+- Each conversation now keeps its own context: working directory, note, and scope. A new conversation starts at the vault root with the active note as context. Once you send the first message, switching notes no longer changes it, and reopening the conversation from the session list brings its context back.
+- To change a conversation's note, click the note name above the input and choose **Use active note** or **Remove note from context**. When you're viewing a different note than the conversation's, the name is underlined with dots.
+- Searches scoped to a folder now tell the model that subfolders are included, so smaller local models no longer stop at the top level and widen the search to the whole vault.
+
+### Removed
+
+- The **Auto-update working directory** setting. The working directory no longer follows the active note; you choose it per conversation.
+
+### Security
+
+- Updated two libraries bundled into the plugin: `zod` to 4.6.7 ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), memory exhaustion when validating very large inputs) and `fast-uri` to 3.1.9 (four URI-parsing advisories, including [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg)). The practical risk to Synapse was low.
+- Updated `hono`, `body-parser`, `ip-address`, `vite`, and `vitest` to clear the remaining advisories. None of them is part of the installed plugin: the first three belong to MCP SDK server code the plugin doesn't bundle, and the last two are only used for testing.
+
 ## [0.4.2] - 2026-10-15
 
 ### Changed
