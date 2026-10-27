@@ -1,7 +1,6 @@
 import {MarkdownView, Menu, Notice, TFile, TFolder, setIcon} from 'obsidian';
 import {IMAGE_EXTS, isImageAttachment, type ChatAttachment, type SelectionInfo, type SkillInfo} from '../types';
 import {VaultScopeModal} from '../modals/vaultScopeModal';
-import {decideWorkingDirAutoUpdate} from './sessionConfig';
 import {resolveFilePath} from '../utils';
 import type {ViewContext} from './types';
 
@@ -21,8 +20,8 @@ const SKILL_NAME_CHAR = /[A-Za-z0-9_:-]/;
  * `SynapseView`, `.docs/research/2026-09-11-view-composition-refactor.md`). Owns the
  * composer DOM it builds (state line, chips bars, textarea, slash-command skill popup)
  * and the editor selection-polling loop, and reaches the shared view state —
- * `attachments`, `activeNotePath`, `activeSelection`, `cursorPosition`, `scopePaths`,
- * `workingDir`/`pendingWorkingDir`, `enabledSkills`, `selectedAgent`/`selectedModel` —
+ * `attachments`, `activeNotePath`/`contextNotePath`, `activeSelection`, `cursorPosition`,
+ * `scopePaths`, `workingDir`, `enabledSkills`, `selectedAgent`/`selectedModel` —
  * through its `ViewContext`.
  *
  * `inputEl` and `cwdBtnEl` stay view-owned DOM fields that this controller assigns in
@@ -70,6 +69,10 @@ export class InputAreaController {
 
 	private get activeNotePath(): string | null {
 		return this.view.view.activeNotePath;
+	}
+
+	private get contextNotePath(): string | null {
+		return this.view.view.contextNotePath;
 	}
 
 	private get activeSelection(): {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null {
@@ -127,6 +130,7 @@ export class InputAreaController {
 		this.attachBtn.addEventListener('click', () => this.handleAttachFile());
 
 		this.stateNoteEl = this.stateLineEl.createSpan({cls: 'synapse-state-note', text: 'No note'});
+		this.stateNoteEl.addEventListener('click', (e) => this.openContextNoteMenu(e));
 		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
 		this.stateAgentEl = this.stateLineEl.createSpan({cls: 'synapse-state-agent', text: 'Auto'});
 		this.stateLineEl.createSpan({cls: 'synapse-state-sep', text: '/'});
@@ -417,41 +421,49 @@ export class InputAreaController {
 		removeBtn.addEventListener('click', () => {
 			this.view.view.scopePaths = [];
 			this.renderScopeBar();
+			this.view.view.saveConversationContext();
 		});
 	}
 
 	updateActiveNote(): void {
 		const file = this.view.app.workspace.getActiveFile();
 		this.view.view.activeNotePath = file ? file.path : null;
+		// Until the conversation starts its context note follows the active note; after that the
+		// context belongs to the conversation and only the user changes it (state-line menu).
+		if (!this.view.view.isConversationStarted()) {
+			this.view.view.contextNotePath = this.view.view.activeNotePath;
+		}
 		// Clear selection when switching files — pollSelection will pick up the new one
 		this.view.view.activeSelection = null;
 		this.renderActiveNoteBar();
 		this.updateStateLine();
+	}
 
-		// Update working directory to the parent folder of the active note — deferred
-		// while a conversation is in progress so switching notes mid-conversation doesn't
-		// force a session rebuild (and its full-transcript cache replay) on every follow-up
-		// message (issue #108 / #202).
-		if (file && this.view.plugin.settings.autoUpdateWorkingDirectory) {
-			const lastSlash = file.path.lastIndexOf('/');
-			const newDir = lastSlash > 0 ? file.path.substring(0, lastSlash) : '';
-			const conversationInProgress = this.view.view.currentSession !== null && this.view.view.messages.length > 0;
-			const decision = decideWorkingDirAutoUpdate({
-				newDir,
-				currentWorkingDir: this.view.view.workingDir,
-				conversationInProgress,
-			});
-			if (decision.applyNow) {
-				this.view.view.workingDir = newDir;
-				this.view.view.configToolbar.updateCwdButton();
-				this.view.configDirty = true;
-			}
-			if (decision.pendingDir !== null) {
-				this.view.view.pendingWorkingDir = decision.pendingDir;
-			} else if (decision.clearPending) {
-				this.view.view.pendingWorkingDir = null;
-			}
+	/**
+	 * State-line note menu: lets the user swap a started conversation's context note for the
+	 * active note, or drop it. Nothing to offer when the context already is the active note.
+	 */
+	private openContextNoteMenu(e: MouseEvent): void {
+		const active = this.activeNotePath;
+		const context = this.contextNotePath;
+		const menu = new Menu();
+		let hasItems = false;
+		if (active && active !== context) {
+			const name = active.split('/').pop() || active;
+			menu.addItem(item => item
+				.setTitle(`Use active note: ${name}`)
+				.setIcon('file-text')
+				.onClick(() => this.view.view.setContextNote(active)));
+			hasItems = true;
 		}
+		if (context) {
+			menu.addItem(item => item
+				.setTitle('Remove note from context')
+				.setIcon('x')
+				.onClick(() => this.view.view.setContextNote(null)));
+			hasItems = true;
+		}
+		if (hasItems) menu.showAtMouseEvent(e);
 	}
 
 	/**
@@ -593,6 +605,7 @@ export class InputAreaController {
 		new VaultScopeModal(this.view.app, this.scopePaths, (paths) => {
 			this.view.view.scopePaths = paths;
 			this.renderScopeBar();
+			this.view.view.saveConversationContext();
 		}).open();
 	}
 
@@ -602,6 +615,7 @@ export class InputAreaController {
 	setScope(paths: string[]): void {
 		this.view.view.scopePaths = paths;
 		this.renderScopeBar();
+		this.view.view.saveConversationContext();
 	}
 
 	/** Open the search tab with scope set to the given folder. */
@@ -609,11 +623,12 @@ export class InputAreaController {
 		this.view.view.search.openSearchWithScope(folderPath);
 	}
 
-	/** Set the working directory programmatically. */
+	/** Set the working directory (a user action — the folder picker, a folder drop, a command). */
 	setWorkingDir(folderPath: string): void {
-		this.view.view.workingDir = folderPath;
+		this.view.view.workingDir = folderPath === '/' ? '' : folderPath;
 		this.view.view.configToolbar.updateCwdButton();
 		this.view.configDirty = true;
+		this.view.view.saveConversationContext();
 	}
 
 	/** Set the prompt text programmatically and focus the input. */
@@ -661,12 +676,19 @@ export class InputAreaController {
 			noteText = sel.startLine === sel.endLine
 				? `${sel.fileName}:${sel.startLine}`
 				: `${sel.fileName}:${sel.startLine}-${sel.endLine}`;
-		} else if (this.activeNotePath) {
-			noteText = this.activeNotePath.split('/').pop() || this.activeNotePath;
+		} else if (this.contextNotePath) {
+			noteText = this.contextNotePath.split('/').pop() || this.contextNotePath;
 		}
 		if (this.stateNoteEl) {
 			this.stateNoteEl.setText(noteText);
-			this.stateNoteEl.setAttribute('title', this.activeSelection ? `Selection: ${noteText}` : (this.activeNotePath ? `Active note: ${this.activeNotePath}` : 'No active note'));
+			let title = 'No note in context';
+			if (this.activeSelection) title = `Selection: ${noteText}`;
+			else if (this.contextNotePath) title = `Context note: ${this.contextNotePath}`;
+			// A started conversation keeps its own note while the user browses others — say so.
+			const detached = !this.activeSelection && this.activeNotePath !== null && this.activeNotePath !== this.contextNotePath;
+			if (detached) title += `\nActive note: ${this.activeNotePath} (click to use it)`;
+			this.stateNoteEl.setAttribute('title', title);
+			this.stateNoteEl.toggleClass('is-detached', detached);
 		}
 
 		// Agent

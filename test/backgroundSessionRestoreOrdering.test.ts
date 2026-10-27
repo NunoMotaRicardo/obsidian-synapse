@@ -163,6 +163,7 @@ describe('concurrent session selection — behavioral regression tests', () => {
 		};
 		registerSessionEvents: ReturnType<typeof vi.fn>;
 		unsubscribeEvents: ReturnType<typeof vi.fn>;
+		applyConversationContext: ReturnType<typeof vi.fn>;
 		forceScrollToBottom: ReturnType<typeof vi.fn>;
 		refreshComposerState: ReturnType<typeof vi.fn>;
 		saveSessionNames: ReturnType<typeof vi.fn>;
@@ -238,6 +239,7 @@ describe('concurrent session selection — behavioral regression tests', () => {
 				registeredEventHistory.push(currentSessionId);
 			}),
 			unsubscribeEvents: vi.fn(),
+			applyConversationContext: vi.fn(),
 			forceScrollToBottom: vi.fn(),
 			refreshComposerState: vi.fn(),
 			saveSessionNames: vi.fn(),

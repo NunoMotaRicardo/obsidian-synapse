@@ -76,6 +76,20 @@ export interface SelectionInfo {
 	endChar: number;
 }
 
+/**
+ * The context a chat conversation runs in, persisted per SDK session id
+ * (`SynapseSettings.sessionContexts`) so returning to a conversation restores it. Once a
+ * conversation has started, only the user changes it — switching notes does not.
+ */
+export interface ConversationContext {
+	/** Vault-relative working directory; `''` = vault root. */
+	workingDir: string;
+	/** Vault-relative path of the note attached as context, or `null` for none. */
+	notePath: string | null;
+	/** Vault scope paths (`'/'` = entire vault). */
+	scopePaths: string[];
+}
+
 /** Image file extensions recognized for icon display, drag-drop handling, and attachment. */
 export const IMAGE_EXTS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 

@@ -19,7 +19,7 @@ import type {
 } from './agentService';
 import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS, upsertSessionCostBaseline} from './agentService';
 import {TaskPlanTracker} from './taskPlanTracker';
-import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, SelectionInfo} from './types';
+import type {AgentConfig, SkillInfo, ChatMessage, ChatAttachment, ConversationContext, SelectionInfo} from './types';
 import type {ViewContext} from './view/types';
 import {SearchPanelController} from './view/searchPanel';
 import {ConfigToolbarController} from './view/configToolbar';
@@ -35,7 +35,7 @@ import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/backgroundSession';
 
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg, upsertSessionContext} from './view/sessionConfig';
 import {friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
 
@@ -123,19 +123,19 @@ export class SynapseView extends ItemView implements ViewContext {
 	selectedModel = '';
 	enabledSkills: Set<string> = new Set();
 	attachments: ChatAttachment[] = [];
+	/** The workspace's live active note — tracked for the state line's "use active note" action. */
 	activeNotePath: string | null = null;
+	/**
+	 * The note attached as this conversation's context. Follows `activeNotePath` until the
+	 * conversation starts (`isConversationStarted()`); after that only the user changes it
+	 * (`setContextNote()`), and it is persisted with the conversation's other context.
+	 */
+	contextNotePath: string | null = null;
 	activeSelection: {filePath: string; fileName: string; text: string; startLine: number; startChar: number; endLine: number; endChar: number} | null = null;
 	cursorPosition: {filePath: string; fileName: string; line: number; ch: number} | null = null;
 	scopePaths: string[] = [];
+	/** Vault-relative working directory; `''` = vault root. Changed only by the user. */
 	workingDir = '';
-	/**
-	 * A working-directory change deferred by `decideWorkingDirAutoUpdate()` (issue #108,
-	 * restored by #202) because the active note switched folders while a conversation was
-	 * in progress. Applied the next time a conversation is not in progress — see
-	 * `newConversation()`. Manual overrides (`setWorkingDir()`) bypass this entirely and
-	 * apply immediately, since only the silent auto-update path is deferred.
-	 */
-	pendingWorkingDir: string | null = null;
 	/** Absolute paths of temp files written for clipboard-pasted (blob) attachments — cleaned up on view unload. */
 	attachmentTempFiles: Set<string> = new Set();
 
@@ -309,6 +309,71 @@ export class SynapseView extends ItemView implements ViewContext {
 		void this.plugin.saveSettings();
 	}
 
+	// ── Conversation context (working directory, context note, scope) ──
+
+	/**
+	 * Whether the foreground conversation has started — from then on its context changes only
+	 * through the user (`setWorkingDir()`, `setContextNote()`, the scope controls), never by
+	 * switching notes.
+	 */
+	isConversationStarted(): boolean {
+		return this.currentSessionId !== null || this.messages.length > 0;
+	}
+
+	getConversationContext(): ConversationContext {
+		return {workingDir: this.workingDir, notePath: this.contextNotePath, scopePaths: [...this.scopePaths]};
+	}
+
+	/** Make `ctx` the foreground context and refresh the controls that show it. */
+	applyConversationContext(ctx: ConversationContext): void {
+		if (ctx.workingDir !== this.workingDir) this.configDirty = true;
+		this.workingDir = ctx.workingDir;
+		this.contextNotePath = ctx.notePath;
+		this.scopePaths = [...ctx.scopePaths];
+		this.configToolbar.updateCwdButton();
+		this.inputArea.renderScopeBar();
+		this.inputArea.updateStateLine();
+	}
+
+	/**
+	 * Persist the foreground context under the current session id, so reopening the
+	 * conversation from the sidebar restores it. A no-op until the SDK has assigned the id —
+	 * `session.init` calls this once it does.
+	 */
+	saveConversationContext(): void {
+		if (!this.currentSessionId) return;
+		this.plugin.settings.sessionContexts = upsertSessionContext(
+			this.plugin.settings.sessionContexts, this.currentSessionId, this.getConversationContext(),
+		);
+		void this.plugin.saveSettings();
+	}
+
+	/** User-driven change of the context note (`null` = no note). */
+	setContextNote(notePath: string | null): void {
+		this.contextNotePath = notePath;
+		this.inputArea.updateStateLine();
+		this.saveConversationContext();
+	}
+
+	/** Keep the context note and persisted contexts pointing at a note the user renamed or moved. */
+	private handleNoteRenamed(newPath: string, oldPath: string): void {
+		if (this.activeNotePath === oldPath) this.activeNotePath = newPath;
+		if (this.contextNotePath === oldPath) {
+			this.contextNotePath = newPath;
+			this.inputArea.updateStateLine();
+		}
+		const contexts = this.plugin.settings.sessionContexts;
+		if (!contexts) return;
+		let changed = false;
+		for (const ctx of Object.values(contexts)) {
+			if (ctx.notePath === oldPath) {
+				ctx.notePath = newPath;
+				changed = true;
+			}
+		}
+		if (changed) void this.plugin.saveSettings();
+	}
+
 	registerInlineSession(sessionId: string, description: string): void {
 		if (!sessionId) return; // no id (e.g. aborted query) — don't create a junk entry
 		this.sessionNames[sessionId] = `[inline] ${description}`;
@@ -387,6 +452,9 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.updateActiveNote();
 		this.registerEvent(
 			this.app.workspace.on('file-open', () => this.updateActiveNote())
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => this.handleNoteRenamed(file.path, oldPath))
 		);
 		this.inputArea.startSelectionPolling();
 	}
@@ -706,7 +774,11 @@ export class SynapseView extends ItemView implements ViewContext {
 		// Manual attachments/scope are not sent with slash commands (the raw text only), so they
 		// are neither shown nor consumed; they stay staged for the next normal message.
 		const currentAttachments = isSlashCommand ? [] : [...this.attachments];
-		// Auto-include live editor selection or active note (not for slash commands)
+		// Auto-include live editor selection or the conversation's context note (not for slash
+		// commands). A context note that has since been deleted is skipped, not sent as a dead path.
+		const contextNotePath = this.contextNotePath && this.app.vault.getAbstractFileByPath(this.contextNotePath) instanceof TFile
+			? this.contextNotePath
+			: null;
 		if (!isSlashCommand && this.activeSelection && !currentAttachments.some(a => a.type === 'selection' && a.path === this.activeSelection!.filePath && !a.absolutePath)) {
 			const sel = this.activeSelection;
 			const displayName = sel.startLine === sel.endLine
@@ -724,18 +796,18 @@ export class SynapseView extends ItemView implements ViewContext {
 					endChar: sel.endChar,
 				},
 			});
-		} else if (!isSlashCommand && this.activeNotePath && !currentAttachments.some(a => (a.type === 'file' || a.type === 'selection') && a.path === this.activeNotePath && !a.absolutePath)) {
-			const name = this.activeNotePath.split('/').pop() || this.activeNotePath;
-			currentAttachments.push({type: 'file', name, path: this.activeNotePath});
+		} else if (!isSlashCommand && contextNotePath && !currentAttachments.some(a => (a.type === 'file' || a.type === 'selection') && a.path === contextNotePath && !a.absolutePath)) {
+			const name = contextNotePath.split('/').pop() || contextNotePath;
+			currentAttachments.push({type: 'file', name, path: contextNotePath});
 		}
 
 		// Auto-include note-embedded images (AC-1 through AC-8)
-		if (!isSlashCommand && this.plugin.settings.autoIncludeNoteImages && this.activeNotePath) {
+		if (!isSlashCommand && this.plugin.settings.autoIncludeNoteImages && contextNotePath) {
 			try {
-				const noteFile = this.app.vault.getAbstractFileByPath(this.activeNotePath);
+				const noteFile = this.app.vault.getAbstractFileByPath(contextNotePath);
 				if (noteFile instanceof TFile) {
 					const noteContent = await this.app.vault.cachedRead(noteFile);
-					const embeddedImages = resolveNoteImageEmbeds(noteContent, this.activeNotePath, this.app);
+					const embeddedImages = resolveNoteImageEmbeds(noteContent, contextNotePath, this.app);
 
 					// Determine effective cap: min of plugin setting and SDK model limit
 					const selectedModelInfo = this.models.find(m => m.id === this.selectedModel);
@@ -815,7 +887,7 @@ export class SynapseView extends ItemView implements ViewContext {
 				this.attachmentTempFiles.add(tempPath);
 			}
 
-			// Per-turn volatile context (issue #201) — Active note, Working directory, the
+			// Per-turn volatile context (issue #201) — context note, Working directory, the
 			// vault-structure block, and the current agent all vary between turns of the same
 			// resumed conversation, so they're delivered here in the user message rather than
 			// `systemPrompt.append` (built once, session-stable, in `buildSessionConfig()`) —
@@ -825,7 +897,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			const turnContext = isSlashCommand ? '' : buildTurnContextBlock({
 				app: this.app,
 				vaultRoot: vaultBasePath.replace(/\\/g, '/'),
-				activeNotePath: this.app.workspace.getActiveFile()?.path,
+				activeNotePath: contextNotePath ?? undefined,
 				workingDirectory: this.getWorkingDirectory().replace(/\\/g, '/'),
 				agentName: effectiveAgentName || 'Auto',
 			});
@@ -1046,6 +1118,8 @@ export class SynapseView extends ItemView implements ViewContext {
 					this.updateMastheadKicker();
 				}
 				this.pendingSessionLabel = null;
+				// The conversation now has an id to file its context under.
+				this.saveConversationContext();
 				if (!this.sessionList.some(s => s.sessionId === sessionId)) {
 					this.sessionList.unshift({
 						sessionId,
@@ -1311,18 +1385,15 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.isStreaming = false;
 		this.selectedAgent = this.plugin.settings.featureAgents?.chat ?? '';
 		this.selectedModel = '';
-		// Apply any working-directory change deferred while the previous conversation was
-		// in progress (issue #108 / #202) — safe now that there's no live session to rebuild.
-		if (this.pendingWorkingDir !== null) {
-			this.workingDir = this.pendingWorkingDir;
-			this.pendingWorkingDir = null;
-			this.configToolbar.updateCwdButton();
-		}
+		// A new conversation starts at the vault root with the active note as its context.
+		this.workingDir = '';
+		this.contextNotePath = this.activeNotePath;
+		this.scopePaths = [];
+		this.configToolbar.updateCwdButton();
 		this.updateConfigUI();
 		this.configToolbar.updateContextIndicator();
 		this.configDirty = true;
 		this.attachments = [];
-		this.scopePaths = [];
 		this.chatContainer.empty();
 		this.renderer.renderWelcome();
 		this.inputArea.renderAttachments();

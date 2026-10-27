@@ -1474,6 +1474,13 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	max-width: 180px;
+	cursor: pointer;
+}
+
+/* A started conversation keeps its own context note while another note is active. */
+.synapse-state-note.is-detached {
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
 }
 
 .synapse-state-sep {
