@@ -109,7 +109,7 @@ Requirement IDs are stable references for issues and reviews.
 | ID | Requirement |
 |---|---|
 | RT-1 | The plugin drives the system-installed `claude` CLI through `@anthropic-ai/claude-agent-sdk`, spawning a CLI process per query. |
-| RT-2 | The CLI is found automatically: settings override, then global npm install, then OS install locations (WinGet, `~/.claude/bin`, `/usr/local/bin`, and others), then the SDK package fallback. |
+| RT-2 | The CLI is found automatically: settings override, then global npm install, then OS install locations (WinGet, `~/.claude/bin`, `/usr/local/bin`, and others), then a [mise](https://mise.jdx.dev) install (Linux and macOS), then the first `claude` on an absolute `PATH` entry, then the SDK package fallback. |
 | RT-3 | When no CLI is found, a platform-specific notice explains how to install it. |
 | RT-4 | **Settings → Claude** shows the resolved CLI path, its source, the CLI version, and the bundled SDK version, plus a non-blocking warning when CLI and SDK builds drift apart. |
 | RT-5 | Authentication is either **Claude subscription (OAuth)**, using the CLI login, or **Anthropic API key**. |

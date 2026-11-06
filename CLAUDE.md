@@ -33,12 +33,23 @@ and contributors can find them without digging. Rules:
   plan→code→review→PR cycle, or `/synapse-lite "description"` for a quick one-pass change (still
   build/lint/deploy-test, opens a draft PR). See
   `.docs/decisions/2026-06-14-github-issue-workflow.md`.
-- Verify changes with the **deploy-test** skill: build → copy artifacts to
-  the test vault (`$env:SYNAPSE_DEV_VAULT` or default
-  `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`) → reload
-  (re-enable via `obsidian vault=obsidian-configs eval …`; always pass `vault=` — the CLI
-  otherwise targets the focused vault). That vault is the user's real vault — deploy only
-  builds that compile clean.
+- Verify changes with the **deploy-test** skill: build → copy `main.js`, `manifest.json`,
+  `styles.css` to the test vault's plugin folder → reload the plugin. Always pass `vault=` to the
+  `obsidian` CLI (otherwise it targets the focused vault), and enable **Settings → General →
+  Advanced → Command line interface** in Obsidian. Pick the platform you are on:
+  - **Windows:** vault `$env:SYNAPSE_DEV_VAULT` or default
+    `D:\nmr-obsidian\obsidian-configs\.obsidian\plugins\synapse\`; reload by re-enabling via
+    `obsidian vault=obsidian-configs eval …`. That vault is the user's real vault — deploy only
+    builds that compile clean.
+  - **Linux / Omarchy:** disposable vault `$SYNAPSE_DEV_VAULT` or default
+    `/data/dev-obsidian/vault_test` (plugin folder `.obsidian/plugins/claude-synapse/`, the
+    `manifest.json` id; open the vault once with community plugins turned on); reload with
+    `electron43 /usr/lib/obsidian/app.asar vault=vault_test plugin:reload id=claude-synapse`, then
+    `… eval …`. Don't use the `/usr/bin/obsidian` wrapper for CLI calls: it injects
+    `~/.config/obsidian/user-flags.conf` flags before the arguments, so Obsidian reads
+    `-disable-gpu` as the command (`Command "-disable-gpu" not found`). In Obsidian's "Set up CLI"
+    dialog choose **Skip** (registration fails because the process is named `electron`).
+    Never write to the user's real vaults on Linux (e.g. `~/Cloud/onedrive/vault_nmr`).
 - Releases (Obsidian Community directory and BRAT both install from GitHub releases): the
   **release** skill. Tag = `manifest.json` version, no `v` prefix.
 

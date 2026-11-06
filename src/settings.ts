@@ -382,6 +382,8 @@ export class SynapseSettingTab extends PluginSettingTab {
 						'settings': 'settings override',
 						'global-npm': 'global npm install',
 						'os-links': 'OS links',
+						'mise': 'mise install',
+						'path': 'PATH',
 						'sdk-fallback': 'SDK package fallback',
 					};
 					const sourceStr = sourceLabels[resolved.source] ?? resolved.source;

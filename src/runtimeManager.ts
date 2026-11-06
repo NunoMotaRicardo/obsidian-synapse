@@ -32,6 +32,8 @@ export type CliPathSource =
 	| 'settings'
 	| 'global-npm'
 	| 'os-links'
+	| 'mise'
+	| 'path'
 	| 'sdk-fallback';
 
 /** A resolved CLI binary path together with the chain step it came from. */
@@ -147,7 +149,8 @@ export function getVersionSkewWarning(cliVersion: string, sdkVersion: string = B
  * Resolve the platform-specific Claude native binary, in priority order:
  *   1. global npm prefix (`%APPDATA%\npm\node_modules` or global npm binaries) + `__dirname/node_modules`,
  *   2. OS links (WinGet links, ~/.claude/bin, /usr/local/bin, etc.),
- *   3. SDK fallback package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`).
+ *   3. mise install dir (non-Windows) and then a scan of absolute `PATH` entries,
+ *   4. SDK fallback package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`).
  *
  * The explicit settings path (`claudeLocation`) is handled by the caller and
  * is not part of this function — when set it short-circuits resolution
@@ -235,7 +238,41 @@ export async function resolveDefaultCliPath(): Promise<ResolvedCliPath> {
 		}
 	}
 
-	// 3. Fallback to SDK native package binary.
+	// 3. Version-manager installs and PATH. Distros like Omarchy install `claude` through
+	//    mise, which lands under ~/.local/share/mise/ — none of the fixed locations above.
+	//    Obsidian launched from a desktop launcher may not inherit the shell PATH, so the
+	//    mise install dir is probed directly (the real binary, not a wrapper that would need
+	//    mise at runtime) before falling back to a PATH scan.
+	const dynamicCandidates: {path: string; source: CliPathSource}[] = [];
+	if (process.platform !== 'win32') {
+		const home = process.env['HOME'];
+		const miseDataDir = process.env['MISE_DATA_DIR']
+			|| (process.env['XDG_DATA_HOME'] ? path.join(process.env['XDG_DATA_HOME'], 'mise') : undefined)
+			|| (home ? path.join(home, '.local', 'share', 'mise') : undefined);
+		if (miseDataDir) {
+			// `latest` / `global` are symlinks mise maintains, so they follow upgrades.
+			for (const link of ['latest', 'global']) {
+				dynamicCandidates.push({path: path.join(miseDataDir, 'installs', 'claude', link, 'claude'), source: 'mise'});
+			}
+		}
+	}
+	// Relative PATH entries are skipped: they would resolve against the Obsidian process cwd.
+	// Windows only considers `claude.exe` (via `ext`) — `.cmd` wrappers can't be exec'd directly.
+	for (const dir of (process.env['PATH'] ?? '').split(path.delimiter)) {
+		if (dir && path.isAbsolute(dir)) {
+			dynamicCandidates.push({path: path.join(dir, `claude${ext}`), source: 'path'});
+		}
+	}
+	for (const candidate of dynamicCandidates) {
+		try {
+			await fs.access(candidate.path);
+			return candidate;
+		} catch {
+			// not found, continue
+		}
+	}
+
+	// 4. Fallback to SDK native package binary.
 	//    Both nested and flat paths are existence-checked. If neither exists, we
 	//    return the flat path anyway so callers get a consistent "not found"
 	//    error pointing at a real expected location (ensureConnected() will

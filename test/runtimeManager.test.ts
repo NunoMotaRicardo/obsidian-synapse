@@ -85,8 +85,96 @@ describe('resolveDefaultCliPath', () => {
 		const result = await resolveDefaultCliPath();
 
 		// The source should be one of the valid CliPathSource values
-		expect(['global-npm', 'os-links', 'sdk-fallback']).toContain(result.source);
+		expect(['global-npm', 'os-links', 'mise', 'path', 'sdk-fallback']).toContain(result.source);
 		expect(typeof result.path).toBe('string');
+	});
+
+	describe.skipIf(process.platform === 'win32')('mise and PATH lookup', () => {
+		const accessOnly = (...allowed: string[]) => {
+			mockedAccess.mockImplementation((p) =>
+				allowed.includes(String(p)) ? Promise.resolve(undefined) : Promise.reject(new Error('ENOENT')));
+		};
+
+		beforeEach(() => {
+			vi.stubEnv('HOME', '/home/tester');
+			vi.stubEnv('MISE_DATA_DIR', '');
+			vi.stubEnv('XDG_DATA_HOME', '');
+			vi.stubEnv('PATH', '');
+		});
+
+		afterEach(() => {
+			vi.unstubAllEnvs();
+		});
+
+		it('finds the mise-installed binary under the default data dir', async () => {
+			const bin = '/home/tester/.local/share/mise/installs/claude/latest/claude';
+			accessOnly(bin);
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result).toEqual({path: bin, source: 'mise'});
+		});
+
+		it('honours MISE_DATA_DIR over the default location', async () => {
+			vi.stubEnv('MISE_DATA_DIR', '/opt/mise-data');
+			const bin = '/opt/mise-data/installs/claude/latest/claude';
+			accessOnly(bin);
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result).toEqual({path: bin, source: 'mise'});
+		});
+
+		it('honours XDG_DATA_HOME when MISE_DATA_DIR is unset', async () => {
+			vi.stubEnv('XDG_DATA_HOME', '/xdg/data');
+			const bin = '/xdg/data/mise/installs/claude/global/claude';
+			accessOnly(bin);
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result).toEqual({path: bin, source: 'mise'});
+		});
+
+		it('finds claude on PATH', async () => {
+			vi.stubEnv('PATH', '/nonexistent:/custom/bin');
+			const bin = '/custom/bin/claude';
+			accessOnly(bin);
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result).toEqual({path: bin, source: 'path'});
+		});
+
+		it('ignores relative PATH entries', async () => {
+			vi.stubEnv('PATH', 'bin:./tools::/custom/bin');
+			accessOnly('bin/claude', 'tools/claude', 'claude', '/custom/bin/claude');
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result.path).toBe('/custom/bin/claude');
+			expect(mockedAccess).not.toHaveBeenCalledWith('bin/claude');
+			expect(mockedAccess).not.toHaveBeenCalledWith('tools/claude');
+			expect(mockedAccess).not.toHaveBeenCalledWith('claude');
+		});
+
+		it('prefers the mise install over a PATH match', async () => {
+			vi.stubEnv('PATH', '/custom/bin');
+			const mise = '/home/tester/.local/share/mise/installs/claude/latest/claude';
+			accessOnly(mise, '/custom/bin/claude');
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result.source).toBe('mise');
+		});
+
+		it('prefers OS links over mise and PATH', async () => {
+			vi.stubEnv('PATH', '/custom/bin');
+			accessOnly('/usr/bin/claude', '/custom/bin/claude');
+
+			const result = await resolveDefaultCliPath();
+
+			expect(result).toEqual({path: '/usr/bin/claude', source: 'os-links'});
+		});
 	});
 
 	it('includes the platform in the binary package name within the resolved path', async () => {

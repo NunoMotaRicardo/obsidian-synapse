@@ -7,7 +7,7 @@ Source: `src/runtimeManager.ts` — `resolveDefaultCliPath`, `getCliVersion`, `c
 
 - `resolveDefaultCliPath(): Promise<ResolvedCliPath>` — walks the resolution chain below
   (excluding the explicit settings path, which the caller short-circuits) and returns
-  `{path, source}` where `source` is one of `'global-npm' | 'os-links' | 'sdk-fallback'`.
+  `{path, source}` where `source` is one of `'global-npm' | 'os-links' | 'mise' | 'path' | 'sdk-fallback'`.
 - `ResolvedCliPath = {path: string; source: CliPathSource; version?: string}`
   where `CliPathSource` also includes `'settings'` (used by `AgentService` when an explicit `claudeLocation` is set).
 - `getCliVersion(binaryPath: string): Promise<{version: string}>` — validates `binaryPath` (absolute, allowlisted extension) then attempts `execFile(binaryPath, ['--version'], {timeout: 5000})` to extract the CLI version.
@@ -42,7 +42,9 @@ passes `pathToClaudeCodeExecutable` to query options, and exposes:
    1. Explicit path from settings (`claudeLocation`, when non-empty). Handled in `AgentService.resolveCliPath()`.
    2. Global npm prefix: native package binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude(.exe)`, also checked nested under `@anthropic-ai/claude-agent-sdk`'s and `@anthropic-ai/claude-code`'s own `node_modules`, plus `@anthropic-ai/claude-code/bin/claude(.exe)`) under `%APPDATA%\npm\node_modules` (Windows), or on other platforms `~/.nvm/versions/node/current/lib/node_modules`, `/usr/local/lib/node_modules`, `/opt/homebrew/lib/node_modules` — and `__dirname/node_modules` on every platform. Note: `.cmd` wrapper files (created by npm for global installs) are **not** used as binary candidates — they cannot be passed to `execFile()` or to `pathToClaudeCodeExecutable`.
    3. OS links: WinGet links (`%LOCALAPPDATA%\Microsoft\WinGet\Links\claude.exe`), `~/.claude/bin/claude`, `/usr/local/bin/claude`, `/usr/bin/claude`, `~/.local/bin/claude`.
-   4. SDK package binary fallback — both nested and flat paths under `__dirname/node_modules` are existence-checked. Returns the canonical expected path if neither exists (so `ensureConnected()` can surface a clear error).
+   4. mise install dir (non-Windows): `<MISE_DATA_DIR | $XDG_DATA_HOME/mise | ~/.local/share/mise>/installs/claude/{latest,global}/claude`. This is the real binary, so it works without mise on `PATH` (Obsidian started from a desktop launcher often lacks the shell `PATH`). Source tag `'mise'`.
+   5. `PATH` scan: each **absolute** `PATH` entry joined with `claude` (`claude.exe` on Windows; `.cmd` wrappers are never used). Relative entries are skipped so a `.` in `PATH` can't resolve against the Obsidian process cwd. Source tag `'path'`. Whatever this finds is shown in Settings → Claude as the resolved CLI, so the executed binary is always user-visible; set **Claude CLI location** to override.
+   6. SDK package binary fallback — both nested and flat paths under `__dirname/node_modules` are existence-checked. Returns the canonical expected path if neither exists (so `ensureConnected()` can surface a clear error).
 
 2. **Version check**:
    - After connect, `AgentService` calls `getCliVersion(resolved.path)` fire-and-forget and fires its `onVersionInfo` constructor callback with `{version, path}`.

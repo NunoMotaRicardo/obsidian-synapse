@@ -120,7 +120,7 @@ export default class SynapsePlugin extends Plugin {
 					? 'winget install Anthropic.ClaudeCode or npm install -g @anthropic-ai/claude-code'
 					: 'npm install -g @anthropic-ai/claude-code';
 				new Notice(
-					`No Claude CLI found. Install with "${installCmd}", then restart the plugin.`,
+					`No Claude CLI found. Install with "${installCmd}", then restart the plugin — or set the Claude CLI location in Settings → Claude.`,
 					30000,
 				);
 			}

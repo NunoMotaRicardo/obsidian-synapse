@@ -18,7 +18,7 @@
 Follow the official [Claude Code setup guide](https://code.claude.com/docs/en/setup). Then run
 `claude` once in a terminal and sign in if you use a Claude subscription.
 
-Claude Synapse finds the CLI automatically. If it's in an unusual place, set **Settings → Claude Synapse →
+Claude Synapse finds the CLI automatically, including installs managed by mise. If it's in an unusual place, set **Settings → Claude Synapse →
 Claude → Claude CLI location**. The same page shows the resolved CLI path and version.
 
 ## 2. Install the plugin
