@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - On Linux, Synapse now finds a Claude CLI installed with mise (for example on Omarchy), or anywhere on your `PATH`, instead of failing with "Claude CLI not found". If auto-detect still misses it, set **Claude CLI location** in Settings → Claude. The "No Claude CLI found" message now says so.
 
+### Security
+
+- Updated `@hono/node-server` to 2.1.6 ([GHSA-rmxm-3fg6-px4f](https://github.com/advisories/GHSA-rmxm-3fg6-px4f), static-path middleware bypass). It belongs to MCP SDK server code the plugin doesn't bundle, so the practical risk to Synapse was nil.
+
 ## [0.5.0] - 2026-10-27
 
 ### Changed
