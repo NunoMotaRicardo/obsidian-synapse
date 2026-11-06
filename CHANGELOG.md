@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-06
+
 ### Fixed
 
 - On Linux, Synapse now finds a Claude CLI installed with mise (for example on Omarchy), or anywhere on your `PATH`, instead of failing with "Claude CLI not found". If auto-detect still misses it, set **Claude CLI location** in Settings → Claude. The "No Claude CLI found" message now says so.
+
+### Changed
+
+- Updated the bundled Claude Agent SDK to 0.3.318, so it matches current Claude CLI releases and the version-mismatch warning in Settings → Claude goes away for up-to-date CLIs.
 
 ### Security
 
