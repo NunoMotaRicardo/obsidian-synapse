@@ -16,12 +16,23 @@ if (!version) {
 const changelog = readFileSync('CHANGELOG.md', 'utf8')
 const lines = changelog.split('\n')
 
-const headingPattern = new RegExp(`^##\\s+\\[?${version.replace(/\./g, '\\.')}\\]?\\b`)
 const nextHeadingPattern = /^##\s+/
+
+// Plain string comparison (no RegExp built from the argument): the heading
+// must be "## x.y.z" or "## [x.y.z]", optionally followed by a non-word
+// character such as " - date".
+function matchesVersion(line) {
+	const match = /^##\s+\[?/.exec(line)
+	if (!match) return false
+	const rest = line.slice(match[0].length)
+	if (!rest.startsWith(version)) return false
+	const after = rest.slice(version.length)
+	return after === '' || /^[^\w]/.test(after)
+}
 
 let start = -1
 for (let i = 0; i < lines.length; i++) {
-	if (headingPattern.test(lines[i])) {
+	if (matchesVersion(lines[i])) {
 		start = i + 1
 		break
 	}
