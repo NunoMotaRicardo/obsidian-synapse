@@ -289,6 +289,15 @@ export const DEFAULT_AGENTIC_MAX_TURNS = 50;
 export const PLAN_TRACKING_TOOLS: string[] = ['TodoWrite', 'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList'];
 
 /**
+ * Lean built-in toolset for local-model queries. Every tool schema is prompt tokens a small
+ * local model must read on every turn (and the more tools, the worse its tool selection), so
+ * when the caller leaves `tools` unset, `routeQueryOptions()` offers just file work, shell,
+ * and skills instead of the CLI's full default set (subagents, web, notebook, plan-mode, ...).
+ * A caller's explicit `tools` always wins.
+ */
+export const LOCAL_MODEL_TOOLS: string[] = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'Skill'];
+
+/**
  * Named presets for the recurring shapes of `AgentService#inlineChat()` calls (issue #230,
  * audit rec 5). The editor's call sites were previously kept consistent only by convention
  * comments ("pure text transform → `tools: []` + `maxTurns: 1`"); the convention now lives in
@@ -359,6 +368,8 @@ export interface LocalAgentEndpointConfig {
 	 * its value, so an empty/unset key falls back to the literal `'ollama'` per Ollama's own docs.
 	 */
 	apiKey?: string;
+	/** Keep MCP servers inherited from user settings / `.mcp.json` / plugins for local models. Default false. */
+	allowMcp?: boolean;
 }
 
 export type VersionInfoCallback = (info: {version: string; path: string}) => void;
@@ -497,6 +508,12 @@ export class AgentService {
 		if (modelId && this.isLocalModel(modelId) && this.localAgentEndpoint?.baseUrl?.trim()) {
 			env['ANTHROPIC_BASE_URL'] = this.localAgentEndpoint.baseUrl.trim();
 			env['ANTHROPIC_API_KEY'] = this.localAgentEndpoint.apiKey?.trim() || 'ollama';
+			// The CLI issues background requests (titles, summaries) with a Haiku-class model
+			// name. A gateway such as LiteLLM rejects unknown names, so pin every tier to the
+			// selected local model; Ollama accepts this too. User-set env vars win.
+			for (const key of ['ANTHROPIC_SMALL_FAST_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL']) {
+				if (!env[key]) env[key] = modelId;
+			}
 			return env;
 		}
 		if (this.auth.type === 'apiKey' && this.auth.apiKey) {
@@ -1129,7 +1146,20 @@ export class AgentService {
 				opts.model = this.resolveValidModel(opts.model);
 			}
 		}
-		if (this.isLocalAgentEndpointConfigured()) {
+		const isLocalQuery = !!opts.model && this.isLocalModel(opts.model) && this.isLocalAgentEndpointConfigured();
+		if (isLocalQuery) {
+			// Trim the toolset for local models (see LOCAL_MODEL_TOOLS). Keep `TodoWrite` (one
+			// tool feeds the plan panel) but drop the TaskCreate/Get/Update/List family.
+			if (opts.tools === undefined) opts.tools = [...LOCAL_MODEL_TOOLS];
+			// Unless the user opted in (`allowMcp`), ignore MCP servers inherited from user settings / project `.mcp.json` / plugins:
+			// a handful of them can add 80k+ chars of tool schemas, overflowing a local model's
+			// context window. Servers passed explicitly in `mcpServers` still load.
+			if (opts.strictMcpConfig === undefined && !this.localAgentEndpoint?.allowMcp) opts.strictMcpConfig = true;
+			if (opts.allowedTools) {
+				opts.allowedTools = opts.allowedTools.filter(t => !/^Task(Create|Get|Update|List)$/.test(t));
+			}
+		}
+		if (this.isLocalAgentEndpointConfigured() && !isLocalQuery) {
 			const delegationServer = this.getDelegationMcpServer();
 			if (delegationServer) {
 				opts.mcpServers = {

@@ -147,6 +147,7 @@ export default class SynapsePlugin extends Plugin {
 				localAgentEndpoint: {
 					baseUrl: s.localAgentEndpointUrl.trim(),
 					apiKey: s.localAgentEndpointApiKey,
+					allowMcp: s.localAgentEndpointAllowMcp,
 				},
 			} : {}),
 			claudeLocation: s.claudeLocation,

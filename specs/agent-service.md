@@ -908,11 +908,27 @@ branch in `chat()`/`inlineChat()`/`Session.send()`.
 - **`buildEnv(modelId?)`**: when `modelId` is classified local (`isLocalModel()`) *and* the
   endpoint is configured, sets `ANTHROPIC_BASE_URL` to the endpoint's base URL and
   `ANTHROPIC_API_KEY` to its configured key (falling back to the literal `'ollama'` when blank,
-  per Ollama's own docs) for that call only — additive to, not a replacement of, the
+  per Ollama's own docs) for that call only. It also pins `ANTHROPIC_SMALL_FAST_MODEL` and
+  `ANTHROPIC_DEFAULT_HAIKU_MODEL` to the selected local model (unless already set) so the CLI's
+  background Haiku-named requests don't hit a gateway such as LiteLLM that rejects unknown
+  model names. A gateway auth failure ("Authentication Error") is rewritten by
+  `friendlyEndpointAuthError()` (`toolErrors.ts`) to point at the endpoint API key setting.
+  Local-endpoint behaviour is additive to, not a replacement of, the to, not a replacement of, the
   subscription/API-key auth branches, which run unchanged for every Claude-model call and for
   local-model calls when no endpoint is configured. Every call site that builds `env` threads its
   own `model`/`queryOptions.model` through to `buildEnv()` for this reason (`chat()`,
   `inlineChat()`, `createQuery()`).
+- **Lean toolset for local models**: when a query's model is local and the endpoint is configured,
+  `routeQueryOptions()` defaults an unset `tools` to `LOCAL_MODEL_TOOLS`
+  (`Read, Write, Edit, Glob, Grep, Bash, Skill`) instead of the CLI's full default set, drops the
+  `TaskCreate/Get/Update/List` entries from `allowedTools` (keeping `TodoWrite`), defaults
+  `strictMcpConfig: true` unless the **Load MCP servers for local models** setting
+  (`localAgentEndpointAllowMcp`, default off, passed as `LocalAgentEndpointConfig.allowMcp`) is on (MCP servers from user settings, `.mcp.json` and plugins are not loaded —
+  measured at ~86k chars of schemas in one setup, which overflowed a 32k-token context — only
+  explicitly passed `mcpServers` are), and skips the
+  `delegation` MCP server (cheap-model delegation is meaningless for a local model). Fewer tool
+  schemas means fewer prompt tokens and better tool selection on small models. A caller's explicit
+  `tools` (e.g. an inline profile's) always wins. Claude-model queries are unchanged.
 - **`routeQueryOptions()`** preserves a local model's requested id (rather than clearing it, the
   way an unresolvable Claude id would be) so it reaches the endpoint as the CLI's `model` request
   field.

@@ -22,6 +22,17 @@ export function stripErrorPrefix(rawError: string): string {
 	return rawError.startsWith('Error: ') ? rawError.slice(7) : rawError;
 }
 
+/**
+ * Replace a raw 401/403 from a local agent endpoint (e.g. LiteLLM with a master key; Ollama
+ * never rejects keys) with actionable guidance. Returns the input unchanged otherwise.
+ */
+export function friendlyEndpointAuthError(rawError: string): string {
+	if (!/authentication error|no api key passed|invalid proxy server token/i.test(rawError)) {
+		return rawError;
+	}
+	return `The endpoint rejected the API key. If it requires one (for example a LiteLLM master key), set it in **Settings → Claude Synapse → Local agent endpoint → API key**. Original error: ${rawError}`;
+}
+
 export function isWriteToolName(toolName: string | undefined): boolean {
 	return !!toolName && WRITE_TOOL_NAMES.has(toolName);
 }

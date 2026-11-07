@@ -36,7 +36,7 @@ import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/backgroundSession';
 
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg, upsertSessionContext} from './view/sessionConfig';
-import {friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
+import {friendlyEndpointAuthError, friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
 
 export const SYNAPSE_VIEW_TYPE = 'synapse-view';
@@ -1562,7 +1562,7 @@ export class SynapseView extends ItemView implements ViewContext {
 
 	/** Format an error for display. */
 	formatErrorForChat(rawError: string): string {
-		return `Error: ${stripErrorPrefix(rawError)}`;
+		return `Error: ${friendlyEndpointAuthError(stripErrorPrefix(rawError))}`;
 	}
 
 	getVaultBasePath(): string {

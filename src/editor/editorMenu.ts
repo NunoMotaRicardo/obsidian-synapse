@@ -7,7 +7,7 @@ import {getCmView} from '../utils';
 import {promptModal} from '../modals/promptModal';
 
 import {SYNAPSE_VIEW_TYPE, SynapseView, registerInlineSession} from '../synapseView';
-import {stripErrorPrefix} from '../toolErrors';
+import {friendlyEndpointAuthError, stripErrorPrefix} from '../toolErrors';
 import type {SelectionInfo} from '../types';
 
 /** Plain-language explanations for the API safety filter's reason codes. */
@@ -42,7 +42,7 @@ function showErrorNotice(error: unknown): void {
 		new Notice(filterBlock, 20000);
 		return;
 	}
-	new Notice(`Claude Synapse: error — ${stripErrorPrefix(message)}`);
+	new Notice(`Claude Synapse: error — ${friendlyEndpointAuthError(stripErrorPrefix(message))}`);
 }
 
 /**

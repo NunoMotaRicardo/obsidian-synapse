@@ -43,9 +43,11 @@ line from frontmatter; a file without frontmatter receives a new (possibly empty
 
 ## Local agent endpoint
 
-The Claude tab's **Local agent endpoint** section has two settings — **Endpoint URL**
+The Claude tab's **Local agent endpoint** section has three settings — **Endpoint URL**
 (`localAgentEndpointUrl`) and **Endpoint API key** (`localAgentEndpointApiKey`, stored securely
-like the other secrets) — plus a **Test** button. Setting a URL points local-model queries at
+like the other secrets) and **Load MCP servers for local models**
+(`localAgentEndpointAllowMcp`, boolean, default off; see `agent-service.md`'s lean-toolset note) —
+plus a **Test** button. Setting a URL points local-model queries at
 that endpoint via `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` (see `agent-service.md`'s
 `buildEnv()`), so local models run through the same Agent SDK/CLI as Claude: full streaming, tool
 use, skills, and permission modes.

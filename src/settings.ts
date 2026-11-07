@@ -49,6 +49,11 @@ export interface SynapseSettings {
 	 * send the literal `'ollama'` automatically.
 	 */
 	localAgentEndpointApiKey: string;
+	/**
+	 * Load MCP servers from user settings, project `.mcp.json` and plugins for local-model
+	 * queries. Off by default: their tool schemas can overflow a local model's context window.
+	 */
+	localAgentEndpointAllowMcp: boolean;
 	toolApproval: 'ask' | 'allow';
 	/** Feature to Agent mapping for plugin features. */
 	featureAgents: FeatureAgentMap;
@@ -136,6 +141,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	claudeLocation: '',
 	localAgentEndpointUrl: '',
 	localAgentEndpointApiKey: '',
+	localAgentEndpointAllowMcp: false,
 	toolApproval: 'ask',
 	featureAgents: {
 		chat: '',
@@ -466,6 +472,17 @@ export class SynapseSettingTab extends PluginSettingTab {
 						await this.plugin.initAgentService();
 					});
 			});
+
+		new Setting(panel)
+			.setName('Load MCP servers for local models')
+			.setDesc('Off (recommended): local-model queries only get the built-in file, shell and skill tools. Their small context window is easily overflowed by the tool schemas of MCP servers from your user settings, vault or plugins. Turn on to load them anyway.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.localAgentEndpointAllowMcp)
+				.onChange(async (val) => {
+					this.plugin.settings.localAgentEndpointAllowMcp = val;
+					await this.plugin.saveSettings();
+					await this.plugin.initAgentService();
+				}));
 	}
 
 	/** Render the Feature Map & Agents tab. */
