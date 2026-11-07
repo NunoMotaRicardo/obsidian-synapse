@@ -3027,3 +3027,63 @@ body.synapse-no-select {
 	width: 90px;
 }
 
+
+/* Per-conversation extension source toggles (Sources button + popover). */
+.synapse-sources-btn {
+	margin-right: 12px;
+}
+
+.synapse-sources-popover {
+	position: fixed;
+	right: var(--sources-right, 8px);
+	bottom: var(--sources-bottom, 40px);
+	z-index: var(--layer-popover, 40);
+	width: 260px;
+	max-height: 60vh;
+	overflow-y: auto;
+	padding: 10px 12px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+}
+
+.synapse-sources-title {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.synapse-sources-note,
+.synapse-sources-empty {
+	color: var(--text-faint);
+	margin: 2px 0 6px;
+}
+
+.synapse-sources-heading {
+	margin-top: 8px;
+	font-size: 10px;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.synapse-sources-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+	cursor: pointer;
+}
+
+.synapse-sources-label {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+}
+
+.synapse-sources-tokens {
+	font-family: var(--font-monospace);
+	color: var(--text-faint);
+}

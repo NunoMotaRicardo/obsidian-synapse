@@ -4,6 +4,7 @@ import type {AgentConfig, SkillInfo} from '../types';
 import {FolderTreeModal} from '../modals';
 import {setDebugEnabled} from '../debug';
 import {resolveModelForAgent, mergeLiveAgents, mergeLiveSkills} from './sessionConfig';
+import {buildSourceInventory, summarizeDisabled} from './sourceFilter';
 import type {ViewContext} from './types';
 
 /** Human label for a reasoning-effort level. 'none' reads as "Off". */
@@ -39,6 +40,9 @@ export class ConfigToolbarController {
 	private gaugeFillEl?: HTMLElement;
 	private gaugeValueEl?: HTMLElement;
 	private debugBtnEl!: HTMLElement;
+	private sourcesBtnEl!: HTMLButtonElement;
+	private sourcesPopoverEl: HTMLElement | null = null;
+	private sourcesPopoverCleanup: (() => void) | null = null;
 
 	constructor(private view: ViewContext) {}
 
@@ -138,6 +142,15 @@ export class ConfigToolbarController {
 		// Spacer to push debug toggle to the right
 		lowerToolbar.createDiv({cls: 'synapse-toolbar-spacer'});
 
+		// Sources button — per-conversation extension source toggles (skills/plugins/MCP servers)
+		this.sourcesBtnEl = lowerToolbar.createEl('button', {cls: 'synapse-toolbar-btn synapse-sources-btn', attr: {type: 'button'}});
+		this.sourcesBtnEl.addEventListener('click', (e) => {
+			e.stopPropagation();
+			if (this.sourcesPopoverEl) this.closeSourcesPopover();
+			else this.openSourcesPopover();
+		});
+		this.updateSourcesButton();
+
 		// Debug toggle on the right
 		this.debugBtnEl = lowerToolbar.createDiv({cls: 'synapse-debug-toggle', attr: {title: 'Show tool & token details'}});
 		this.debugBtnEl.createSpan({cls: 'synapse-debug-label', text: 'Debug'});
@@ -156,6 +169,106 @@ export class ConfigToolbarController {
 				debugCheck.dispatchEvent(new Event('change'));
 			}
 		});
+	}
+
+	/** Reflect the number of disabled sources on the Sources button. */
+	updateSourcesButton(): void {
+		if (!this.sourcesBtnEl) return;
+		const summary = summarizeDisabled(this.view.view.disabledSources);
+		this.sourcesBtnEl.setText(summary ? `Sources · ${summary}` : 'Sources');
+		this.sourcesBtnEl.toggleClass('is-active', summary !== '');
+		this.sourcesBtnEl.setAttribute('title', summary
+			? 'Extension sources — some are switched off for this conversation'
+			: 'Switch skills, plugins and MCP servers on or off for this conversation');
+	}
+
+	/** Remove the Sources popover and its document listeners (view close). */
+	dispose(): void {
+		this.closeSourcesPopover();
+	}
+
+	private closeSourcesPopover(): void {
+		this.sourcesPopoverCleanup?.();
+		this.sourcesPopoverCleanup = null;
+		this.sourcesPopoverEl?.remove();
+		this.sourcesPopoverEl = null;
+	}
+
+	/**
+	 * Popover with one checkbox per extension source, grouped by kind, each showing its token cost
+	 * from the last context-usage snapshot. Stays open across toggles; closes on outside click/Escape.
+	 * Changes apply from the next turn (`configDirty` rebuilds the Session with `resume`).
+	 */
+	private openSourcesPopover(): void {
+		const view = this.view.view;
+		const pop = document.body.createDiv({cls: 'synapse-sources-popover'});
+		this.sourcesPopoverEl = pop;
+
+		// No message needed: probe the CLI for what this conversation would load, then re-render the
+		// list in place. The cached/last snapshot shows immediately while the probe runs.
+		let loading = true;
+		const render = (): void => {
+			pop.empty();
+			pop.createDiv({cls: 'synapse-sources-title', text: 'Extension sources'});
+			pop.createDiv({cls: 'synapse-sources-note', text: 'Applies from the next message in this conversation.'});
+			const inventory = buildSourceInventory(view.sourceInventoryUsage());
+			// Sources the user disabled that the snapshot no longer lists still need a row to switch back on.
+			for (const key of view.disabledSources) {
+				if (!inventory.some(s => s.key === key)) {
+					const [kind, ...rest] = key.split(':');
+					const label = rest.join(':');
+					inventory.push({
+						key, label: kind === 'plugin' ? (label.split('@')[0] ?? label) : label,
+						group: kind === 'mcp' ? 'mcp' : kind === 'plugin' ? 'plugins' : 'skills', tokens: 0, skillNames: [],
+					});
+				}
+			}
+			if (loading) pop.createDiv({cls: 'synapse-sources-empty', text: inventory.length > 0 ? 'Refreshing…' : 'Loading sources…'});
+			else if (inventory.length === 0) pop.createDiv({cls: 'synapse-sources-empty', text: 'Could not read the available sources.'});
+
+			const groups: [string, string][] = [['skills', 'Skills'], ['plugins', 'Plugins'], ['mcp', 'MCP servers']];
+			for (const [group, heading] of groups) {
+				const rows = inventory.filter(s => s.group === group);
+				if (rows.length === 0) continue;
+				pop.createDiv({cls: 'synapse-sources-heading', text: heading});
+				for (const s of rows) {
+					const row = pop.createEl('label', {cls: 'synapse-sources-row'});
+					const cb = row.createEl('input', {type: 'checkbox'});
+					cb.checked = !view.disabledSources.has(s.key);
+					row.createSpan({cls: 'synapse-sources-label', text: s.label});
+					if (s.tokens > 0) row.createSpan({cls: 'synapse-sources-tokens', text: s.tokens >= 1000 ? `${(s.tokens / 1000).toFixed(1)}k` : String(s.tokens)});
+					cb.addEventListener('change', () => {
+						if (cb.checked) view.disabledSources.delete(s.key);
+						else view.disabledSources.add(s.key);
+						this.view.configDirty = true;
+						this.updateSourcesButton();
+						view.saveConversationContext();
+					});
+				}
+			}
+		};
+		render();
+		void view.refreshSourceProbe().finally(() => {
+			loading = false;
+			// The user may have closed the popover (or opened a new one) while the probe ran.
+			if (this.sourcesPopoverEl === pop) render();
+		});
+
+		const rect = this.sourcesBtnEl.getBoundingClientRect();
+		pop.setCssProps({'--sources-right': `${Math.max(8, window.innerWidth - rect.right)}px`, '--sources-bottom': `${window.innerHeight - rect.top + 6}px`});
+
+		const onDown = (ev: MouseEvent) => {
+			const t = ev.target as Node | null;
+			if (t && (pop.contains(t) || this.sourcesBtnEl.contains(t))) return;
+			this.closeSourcesPopover();
+		};
+		const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') this.closeSourcesPopover(); };
+		document.addEventListener('mousedown', onDown, true);
+		document.addEventListener('keydown', onKey, true);
+		this.sourcesPopoverCleanup = () => {
+			document.removeEventListener('mousedown', onDown, true);
+			document.removeEventListener('keydown', onKey, true);
+		};
 	}
 
 	populateModelSelect(): void {

@@ -251,10 +251,28 @@ and built in `buildUI()` via `controller.build(parent)`.
     user action.
   - **Persistence:** every user change, and `session.init` (the first moment a new
     conversation has an id), calls `saveConversationContext()`, which writes
-    `{workingDir, notePath, scopePaths}` to `settings.sessionContexts[sessionId]` via
+    `{workingDir, notePath, scopePaths, disabledSources?}` to `settings.sessionContexts[sessionId]` via
     `upsertSessionContext()` (`sessionConfig.ts`; insertion-order LRU capped at
     `MAX_SESSION_CONTEXTS` = 200). Deleting a session from the sidebar drops its entry; renaming a
     note rewrites matching `notePath`s (`handleNoteRenamed()`, a `vault.on('rename')` handler).
+  - **Extension sources (per conversation).** The **Sources** button in the lower toolbar (next to
+    **Debug**, `configToolbar.ts`) opens a popover that switches skills, plugins and MCP servers
+    on or off for the foreground conversation. `SynapseView.disabledSources` is a deny-list of
+    keys (`skills:<source>`, `plugin:<id>`, `mcp:<server>`; empty = everything on, so new
+    extensions default to on). The source list comes from the last `getContextUsage()` snapshot
+    from `AgentService.probeExtensionInventory()` (`agent-service.md`): when the popover opens, the view
+    starts a prompt-less CLI query (`refreshSourceProbe()` — no message, no model call, no transcript;
+    waits until no MCP server is `pending`; reused for a minute per cwd) and re-renders the list when it
+    answers. The probe is unfiltered, so disabled sources keep their cost and can be switched back on;
+    `lastContextUsage` (only captured while nothing is disabled) is the fallback if the probe fails;
+    sources already disabled always keep a row. `buildSessionConfig()` turns
+    the set into SDK options via `buildSourceFilter()` (`view/sourceFilter.ts`): a disabled
+    marketplace plugin → `settings.enabledPlugins[id] = false`; a disabled vault `_synapse/` plugin
+    is dropped from `plugins`; a disabled MCP server → `disallowedTools: ['mcp__<server>']`; a
+    disabled skill source narrows `skills` (intersected with the agent's `enabledSkills`). Toggling
+    sets `configDirty`, so the change applies from the next message (rebuild + `resume`). The set
+    is persisted in `ConversationContext.disabledSources` (omitted when empty), restored with the
+    rest of the context and reset by `newConversation()`.
   - **Restore:** `selectSession()` (`sessionSidebar.ts`) applies
     `resolveConversationContext()` before building any session config — for both the background
     and cold-resume paths — so a cold resume runs in the cwd the conversation was left in.

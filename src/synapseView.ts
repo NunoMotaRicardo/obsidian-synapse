@@ -16,6 +16,7 @@ import type {
 	Session,
 	SlashCommand,
 	AgentInfo,
+	SDKControlGetContextUsageResponse,
 } from './agentService';
 import {extractAllowRuleStrings, buildInMemoryPermissionSettings, PLAN_TRACKING_TOOLS, upsertSessionCostBaseline} from './agentService';
 import {TaskPlanTracker} from './taskPlanTracker';
@@ -35,6 +36,7 @@ import {AskUserQuestionModal} from './modals/askUserQuestionModal';
 import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/backgroundSession';
 
+import {buildSourceFilter, buildSourceInventory} from './view/sourceFilter';
 import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg, upsertSessionContext} from './view/sessionConfig';
 import {friendlyEndpointAuthError, friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
@@ -114,6 +116,21 @@ export class SynapseView extends ItemView implements ViewContext {
 	 */
 	lastSupportedCommands: SlashCommand[] | null = null;
 	lastSupportedAgents: AgentInfo[] | null = null;
+	/**
+	 * Extension sources switched off for the foreground conversation (`SourceEntry.key`s from
+	 * `view/sourceFilter.ts`). Per conversation: persisted in `ConversationContext`, cleared by
+	 * `newConversation()`. Empty = everything on.
+	 */
+	disabledSources: Set<string> = new Set();
+	/** Last context-usage snapshot, kept across Session rebuilds so the Sources popover can list sources. */
+	lastContextUsage: SDKControlGetContextUsageResponse | null = null;
+	/**
+	 * Unfiltered extension inventory from `AgentService.probeExtensionInventory()` (no message needed),
+	 * keyed by the working directory it was taken for. Preferred over `lastContextUsage`, which comes from
+	 * a turn that already had the user's toggles applied and so omits whatever they disabled.
+	 */
+	sourceProbe: {cwd: string; usage: SDKControlGetContextUsageResponse; at: number} | null = null;
+	sourceProbeInFlight: Promise<void> | null = null;
 	currentSession: Session | null = null;
 	agents: AgentConfig[] = [];
 	models: ModelInfo[] = [];
@@ -320,8 +337,36 @@ export class SynapseView extends ItemView implements ViewContext {
 		return this.currentSessionId !== null || this.messages.length > 0;
 	}
 
+	/** The best available (unfiltered) usage snapshot to list extension sources from. */
+	sourceInventoryUsage(): SDKControlGetContextUsageResponse | undefined {
+		return this.sourceProbe?.usage ?? this.lastContextUsage ?? undefined;
+	}
+
+	/**
+	 * Refresh `sourceProbe` for the current working directory — no message required. Shared in-flight
+	 * promise so rapid popover opens don't spawn several CLIs; a probe younger than a minute for the same
+	 * cwd is reused.
+	 */
+	refreshSourceProbe(): Promise<void> {
+		const cwd = this.getWorkingDirectory();
+		const fresh = this.sourceProbe && this.sourceProbe.cwd === cwd && Date.now() - this.sourceProbe.at < 60_000;
+		if (fresh) return Promise.resolve();
+		if (this.sourceProbeInFlight) return this.sourceProbeInFlight;
+		const service = this.plugin.agentService;
+		if (!service) return Promise.resolve();
+		const run = (async () => {
+			const usage = await service.probeExtensionInventory({cwd, plugins: getSynapsePluginConfig(this.app), app: this.app});
+			if (usage) this.sourceProbe = {cwd, usage, at: Date.now()};
+		})().finally(() => { this.sourceProbeInFlight = null; });
+		this.sourceProbeInFlight = run;
+		return run;
+	}
+
 	getConversationContext(): ConversationContext {
-		return {workingDir: this.workingDir, notePath: this.contextNotePath, scopePaths: [...this.scopePaths]};
+		return {
+			workingDir: this.workingDir, notePath: this.contextNotePath, scopePaths: [...this.scopePaths],
+			...(this.disabledSources.size > 0 ? {disabledSources: [...this.disabledSources]} : {}),
+		};
 	}
 
 	/** Make `ctx` the foreground context and refresh the controls that show it. */
@@ -330,6 +375,10 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.workingDir = ctx.workingDir;
 		this.contextNotePath = ctx.notePath;
 		this.scopePaths = [...ctx.scopePaths];
+		const nextDisabled = new Set(ctx.disabledSources ?? []);
+		if (nextDisabled.size !== this.disabledSources.size || [...nextDisabled].some(k => !this.disabledSources.has(k))) this.configDirty = true;
+		this.disabledSources = nextDisabled;
+		this.configToolbar.updateSourcesButton();
 		this.configToolbar.updateCwdButton();
 		this.inputArea.renderScopeBar();
 		this.inputArea.updateStateLine();
@@ -460,6 +509,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	}
 
 	async onClose(): Promise<void> {
+		this.configToolbar.dispose();
 		this.inputArea.destroy();
 		if (this.configRefreshTimer) window.clearTimeout(this.configRefreshTimer);
 		await this.search.disconnect();
@@ -1275,6 +1325,10 @@ export class SynapseView extends ItemView implements ViewContext {
 				if (this.currentSession?.cachedSupportedAgents) {
 					this.lastSupportedAgents = this.currentSession.cachedSupportedAgents;
 				}
+				// Only while nothing is switched off: a snapshot from a filtered turn omits the disabled sources.
+				if (this.currentSession?.cachedContextUsage && this.disabledSources.size === 0) {
+					this.lastContextUsage = this.currentSession.cachedContextUsage;
+				}
 				this.configToolbar.updateContextIndicator();
 				break;
 		}
@@ -1389,6 +1443,8 @@ export class SynapseView extends ItemView implements ViewContext {
 		this.workingDir = '';
 		this.contextNotePath = this.activeNotePath;
 		this.scopePaths = [];
+		this.disabledSources = new Set();
+		this.configToolbar.updateSourcesButton();
 		this.configToolbar.updateCwdButton();
 		this.updateConfigUI();
 		this.configToolbar.updateContextIndicator();
@@ -1514,6 +1570,19 @@ export class SynapseView extends ItemView implements ViewContext {
 
 		systemContent += buildSelfImproveHint();
 
+		// Per-conversation source toggles (view/sourceFilter.ts): plugins/MCP servers/skill sources the
+		// user switched off for this conversation. Everything is on when `disabledSources` is empty.
+		const sourceFilter = buildSourceFilter({
+			disabled: this.disabledSources,
+			inventory: buildSourceInventory(this.sourceInventoryUsage()),
+			enabledSkills: Array.from(this.enabledSkills),
+			plugins: getSynapsePluginConfig(this.app),
+		});
+		const filterSettings = Object.keys(sourceFilter.enabledPlugins).length > 0
+			? {enabledPlugins: sourceFilter.enabledPlugins}
+			: undefined;
+		const sessionSettings = buildInMemoryPermissionSettings(this.sessionToolGrants, filterSettings);
+
 		const config: SessionConfig = {
 			model: opts.model,
 			// Interactive chat panel only (issue #103) — real token-level streaming instead
@@ -1524,8 +1593,9 @@ export class SynapseView extends ItemView implements ViewContext {
 			canUseTool: permissionHandler,
 			onElicitation: elicitationHandler,
 			cwd: this.getWorkingDirectory(),
-			plugins: getSynapsePluginConfig(this.app),
-			skills: Array.from(this.enabledSkills),
+			plugins: sourceFilter.plugins,
+			skills: sourceFilter.skills,
+			...(sourceFilter.disallowedTools.length > 0 ? {disallowedTools: sourceFilter.disallowedTools} : {}),
 			agent: effectiveAgentName || undefined,
 			// Explicitly enable the plan/task-tracking tools (issue #264) — CLI 2.1.268 made
 			// them default only on a specific model list; on other models (Opus 5.x, Sonnet 5)
@@ -1546,7 +1616,7 @@ export class SynapseView extends ItemView implements ViewContext {
 			// Seed a (re)built session with whatever grants this conversation already
 			// accumulated (issue #193 round 2) — survives a configDirty rebuild the same way
 			// `resume` above does. Omitted entirely when nothing has been granted yet.
-			...(this.sessionToolGrants.size > 0 ? {settings: buildInMemoryPermissionSettings(this.sessionToolGrants)} : {}),
+			...(sessionSettings ? {settings: sessionSettings} : {}),
 		};
 
 		return config;

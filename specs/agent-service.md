@@ -650,6 +650,17 @@ once it has one (set from the first message of *this* `Session` object); otherwi
 config-seeded id — the prior `Session`'s id, carried across the rebuild — is used. Exported and
 unit-tested (`test/sessionResume.test.ts`) since it requires no live CLI to verify.
 
+## Extension inventory probe
+
+`probeExtensionInventory({cwd, plugins, app})` returns a `getContextUsage({detail: 'summary'})` snapshot
+(skills, plugin agents, MCP tools) without a conversation turn, for the chat panel's Sources popover.
+It runs a streaming-input `query()` whose prompt iterable never yields: the CLI initializes and answers
+control requests but makes no model call and writes no transcript (verified against the live CLI). MCP
+servers connect after init, so it polls `mcpServerStatus()` until none is `pending` (cap `mcpWaitMs`,
+default 15 s) before reading usage. The query is always closed; any failure returns `undefined`. It goes
+through `routeQueryOptions()` like other queries and is intentionally unfiltered by the per-conversation
+source toggles.
+
 ## Model list mapping
 
 `fetchModels()` maps the CLI's `initializationResult().models` to the plugin `ModelInfo` shape via

@@ -485,7 +485,10 @@ export function upsertSessionContext(
 ): Record<string, ConversationContext> {
 	const next: Record<string, ConversationContext> = {...contexts};
 	delete next[sessionId];
-	next[sessionId] = {workingDir: context.workingDir, notePath: context.notePath, scopePaths: [...context.scopePaths]};
+	next[sessionId] = {
+		workingDir: context.workingDir, notePath: context.notePath, scopePaths: [...context.scopePaths],
+		...(context.disabledSources?.length ? {disabledSources: [...context.disabledSources]} : {}),
+	};
 	const keys = Object.keys(next);
 	if (keys.length > maxEntries) {
 		for (const key of keys.slice(0, keys.length - maxEntries)) {
@@ -508,7 +511,12 @@ export function resolveConversationContext(
 	sessionCwd: string | undefined,
 	vaultBasePath: string,
 ): ConversationContext {
-	if (saved) return {workingDir: saved.workingDir, notePath: saved.notePath, scopePaths: [...saved.scopePaths]};
+	if (saved) {
+		return {
+			workingDir: saved.workingDir, notePath: saved.notePath, scopePaths: [...saved.scopePaths],
+			...(saved.disabledSources?.length ? {disabledSources: [...saved.disabledSources]} : {}),
+		};
+	}
 	return {workingDir: vaultRelativeDir(sessionCwd, vaultBasePath), notePath: null, scopePaths: []};
 }
 

@@ -28,6 +28,7 @@ import {query, listSessions, getSessionMessages, deleteSession, renameSession, t
 import type {
 	Options,
 	Query,
+	SDKUserMessage,
 	SDKMessage,
 	SDKAssistantMessage,
 	SDKResultMessage,
@@ -666,6 +667,62 @@ export class AgentService {
 			warm.close();
 		}
 		return this.getModels();
+	}
+
+	/**
+	 * Snapshot of everything a conversation in `cwd` would load — skills, plugin agents, MCP tools —
+	 * without sending a message (feeds the chat panel's Sources popover before a conversation has
+	 * a turn to capture metadata from).
+	 *
+	 * Starts a streaming-input `query()` whose prompt generator never yields, so the CLI initializes
+	 * and answers control requests but never makes a model call (no tokens, no transcript — verified
+	 * against the live CLI). MCP servers connect in the background after init, so a snapshot taken
+	 * immediately lists no MCP tools; this waits until no server is `pending` (capped by
+	 * `mcpWaitMs`) before reading `getContextUsage()`. The query is always closed. Returns
+	 * `undefined` on any failure — callers fall back to whatever snapshot they already hold.
+	 *
+	 * Deliberately unfiltered: callers pass the session's plugins but none of the per-conversation
+	 * source toggles, so a disabled source still shows up (with its cost) and can be switched back on.
+	 */
+	async probeExtensionInventory(options: {
+		cwd: string;
+		plugins?: SdkPluginConfig[];
+		app?: App;
+		mcpWaitMs?: number;
+	}): Promise<SDKControlGetContextUsageResponse | undefined> {
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>(resolve => { release = resolve; });
+		// Never yields a user message: `next()` only resolves (as done) once `release()` runs.
+		const neverPrompt: AsyncIterable<SDKUserMessage> = {
+			[Symbol.asyncIterator]: () => ({next: () => gate.then(() => ({done: true as const, value: undefined}))}),
+		};
+		let q: Query | undefined;
+		try {
+			await this.ensureConnected();
+			q = query({
+				prompt: neverPrompt,
+				options: this.routeQueryOptions({
+					cwd: options.cwd,
+					...(options.plugins ? {plugins: options.plugins} : {}),
+					env: this.buildEnv(),
+					pathToClaudeCodeExecutable: this.resolvedCli?.path,
+				}, options.app),
+			});
+			const deadline = Date.now() + (options.mcpWaitMs ?? 15000);
+			// First status read also forces initialization; poll until no server is still connecting.
+			for (;;) {
+				const statuses = await q.mcpServerStatus();
+				if (!statuses.some(s => s.status === 'pending') || Date.now() >= deadline) break;
+				await new Promise(resolve => window.setTimeout(resolve, 400));
+			}
+			return await q.getContextUsage({detail: 'summary'});
+		} catch (e) {
+			debugTrace('[synapse] extension inventory probe failed:', e);
+			return undefined;
+		} finally {
+			try { q?.close(); } catch { /* already closed */ }
+			release?.();
+		}
 	}
 
 	/**

@@ -88,6 +88,8 @@ export interface ConversationContext {
 	notePath: string | null;
 	/** Vault scope paths (`'/'` = entire vault). */
 	scopePaths: string[];
+	/** Extension sources (`skills:user`, `plugin:<id>`, `mcp:<server>`) switched off for this conversation. Absent = all on. */
+	disabledSources?: string[];
 }
 
 /** Image file extensions recognized for icon display, drag-drop handling, and attachment. */
