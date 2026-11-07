@@ -6,6 +6,8 @@ Claude Agent SDK a Claude session uses, with full skills, subagents, sessions, p
 and streaming (there is no separate, degraded local-model loop). See [Customization](Customization.md)
 for how agents/skills/`.mcp.json` apply the same way regardless of which model is selected.
 
+> Using vLLM or another OpenAI-compatible server? See [vLLM + LiteLLM](Local-Models-vLLM-LiteLLM.md). For local models Synapse also uses a lean built-in toolset and does not load MCP servers by default (setting: **Load MCP servers for local models**) — details on that page.
+
 ## Configuring the local agent endpoint
 
 1. Install and run Ollama locally (`ollama serve`), or point at a remote/proxied instance you trust.

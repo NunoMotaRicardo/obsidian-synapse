@@ -51,6 +51,7 @@ writing styles."*
 ## Local models
 
 - [Local-Models-Ollama](Local-Models-Ollama.md) — configuring the local agent endpoint, Ollama Cloud models, and context-window tuning
+- [Local-Models-vLLM-LiteLLM](Local-Models-vLLM-LiteLLM.md) — tested vLLM + LiteLLM gateway setup, lean toolset and MCP trimming for local models
 
 ## Product
 

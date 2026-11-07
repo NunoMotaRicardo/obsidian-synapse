@@ -14,7 +14,9 @@ Choose how Claude Synapse authenticates with Claude:
 
 Set an **Endpoint URL** and optional **Endpoint API key** to use Ollama v0.14.0+ or another endpoint that speaks the Anthropic Messages API. The **Test** button verifies the endpoint, and its model catalogue is added to the chat model picker. A configured endpoint receives the entire agent loop, including tool calls, so use only an endpoint you trust with your vault context.
 
-OpenAI-compatible-only endpoints are not supported directly. See [Local models with Ollama](Local-Models-Ollama.md) for setup and context-window guidance.
+**Load MCP servers for local models** (off by default) controls whether MCP servers from your user settings, project `.mcp.json` and plugins are loaded for local-model queries. They are skipped by default because their tool schemas can overflow a local model's context window.
+
+OpenAI-compatible-only endpoints (such as vLLM) are not supported directly, but work behind a gateway like LiteLLM. See [Local models with Ollama](Local-Models-Ollama.md) for setup and context-window guidance, and [Local models with vLLM + LiteLLM](Local-Models-vLLM-LiteLLM.md) for the tested gateway setup.
 
 ## Feature Map & Agents
 
@@ -42,4 +44,5 @@ Configure and connect a Telegram bot with its identifier, token, allowed user ID
 - [Starter kit](Starter-Kit.md) — the bundled agent and skills
 - [Customization](Customization.md) — agents, skills, MCP servers, and vault settings
 - [Local models with Ollama](Local-Models-Ollama.md) — compatible endpoint setup
+- [Local models with vLLM + LiteLLM](Local-Models-vLLM-LiteLLM.md) — gateway setup, MCP trimming for local models
 - [Claude Code settings](https://code.claude.com/docs/en/settings) — settings supported by the Claude CLI
