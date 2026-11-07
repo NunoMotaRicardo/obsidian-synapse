@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-07
+
+### Added
+
+- Local models now work behind a LiteLLM gateway in front of vLLM, as well as Ollama. Set **Endpoint URL** to the gateway and **Endpoint API key** to its master key. A new wiki page, "Local models with vLLM + LiteLLM", covers the tested setup.
+- New setting **Load MCP servers for local models** (off by default) in Settings → Claude → Local agent endpoint.
+
+### Changed
+
+- Local-model queries now use a lean built-in toolset (read, write, edit, search, shell and skills) and skip MCP servers from your user settings, `.mcp.json` and plugins by default. Their tool definitions could overflow a local model's context window. Turn on **Load MCP servers for local models** to load them. Claude models are unchanged.
+- Background requests from the Claude CLI now use the selected local model instead of a Haiku model name, so gateways that reject unknown model names no longer fail them.
+- An endpoint "Authentication Error" now tells you to set the **Endpoint API key** in Settings → Claude.
+- The dotted underline on a conversation's detached note now uses longhand CSS properties, which clears an Obsidian plugin review warning.
+
 ## [0.5.1] - 2026-11-06
 
 ### Fixed
