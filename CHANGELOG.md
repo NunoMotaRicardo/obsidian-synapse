@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The dotted marker under a conversation's detached note no longer uses `text-decoration`, which the Obsidian plugin review flags as partially supported. It is now a dotted bottom border.
+
 ## [0.6.0] - 2026-11-07
 
 ### Added

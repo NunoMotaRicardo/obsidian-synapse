@@ -1479,9 +1479,8 @@
 
 /* A started conversation keeps its own context note while another note is active. */
 .synapse-state-note.is-detached {
-	text-decoration-line: underline;
-	text-decoration-style: dotted;
-	text-underline-offset: 3px;
+	/* A dotted bottom border instead of `text-decoration`, which Obsidian's review flags as partially supported. */
+	border-bottom: 1px dotted currentColor;
 }
 
 .synapse-state-sep {
