@@ -11,7 +11,7 @@ Claude Agent SDK architecture decision.
 - `npm run lint` (eslint + eslint-plugin-obsidianmd).
 - Key dependency: `@anthropic-ai/claude-agent-sdk` (0.3.x). It talks JSON-RPC to a system-installed
   `claude` CLI. SDK type reference lives in `node_modules/@anthropic-ai/claude-agent-sdk/dist/*.d.ts`
-  and the `synapse:claude-agent-sdk-reference` skill (installed via the synapse plugin, not vendored in this repo).
+  and see `.claude/skills/claude-agent-sdk-reference/`.
 
 ## Architecture
 
