@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
+
+### Added
+
+- New **Sources** button next to **Debug** in the chat panel. It switches skills, plugins and MCP servers on or off for the current conversation, with each source's token cost, so a chat only loads the extensions it needs. Changes apply from the next message, are saved with the conversation, and a new conversation starts with everything on.
+- The Sources list is available before the first message: opening it asks the Claude CLI what a conversation would load, without sending a prompt or using tokens.
+
 ## [0.6.1] - 2026-11-07
 
 ### Fixed
