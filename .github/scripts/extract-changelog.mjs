@@ -19,15 +19,15 @@ const lines = changelog.split('\n')
 const nextHeadingPattern = /^##\s+/
 
 // Plain string comparison (no RegExp built from the argument): the heading
-// must be "## x.y.z" or "## [x.y.z]", optionally followed by a non-word
-// character such as " - date".
+// must be "## x.y.z" or "## [x.y.z]", optionally followed by "]" or
+// whitespace (e.g. " - date"), so "0.7" never matches "0.7.0".
 function matchesVersion(line) {
 	const match = /^##\s+\[?/.exec(line)
 	if (!match) return false
 	const rest = line.slice(match[0].length)
 	if (!rest.startsWith(version)) return false
 	const after = rest.slice(version.length)
-	return after === '' || /^[^\w]/.test(after)
+	return after === '' || /^[\]\s]/.test(after)
 }
 
 let start = -1
