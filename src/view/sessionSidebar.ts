@@ -726,6 +726,9 @@ export class SessionSidebarController {
 	}
 
 	private restoreAgentFromSessionName(sessionId: string): void {
+		// A saved context already restored the agent (applyConversationContext); the name parse is
+		// only the fallback for conversations that predate persisted agents.
+		if (this.view.plugin.settings?.sessionContexts?.[sessionId]?.agent !== undefined) return;
 		let sessionName = this.view.view.sessionNames[sessionId] || '';
 		// Strip session type prefix
 		sessionName = stripSessionTypePrefix(sessionName);

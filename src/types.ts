@@ -90,6 +90,10 @@ export interface ConversationContext {
 	scopePaths: string[];
 	/** Extension sources (`skills:user`, `plugin:<id>`, `mcp:<server>`) switched off for this conversation. Absent = all on. */
 	disabledSources?: string[];
+	/** Model id the conversation runs on (`''` = default model). Absent on contexts saved before this was persisted. */
+	model?: string;
+	/** Agent name selected for the conversation (`''` = Auto). Absent on contexts saved before this was persisted. */
+	agent?: string;
 }
 
 /** Image file extensions recognized for icon display, drag-drop handling, and attachment. */

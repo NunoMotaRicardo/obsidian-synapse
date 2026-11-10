@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {upsertSessionContext, resolveConversationContext} from '../src/view/sessionConfig';
+import {upsertSessionContext, resolveConversationContext, resolveSavedSelection} from '../src/view/sessionConfig';
 import type {ConversationContext} from '../src/types';
 
 // ---------------------------------------------------------------------------
@@ -57,5 +57,45 @@ describe('resolveConversationContext', () => {
 		expect(resolveConversationContext(undefined, 'D:/vault', 'D:/vault').workingDir).toBe('');
 		expect(resolveConversationContext(undefined, 'D:/vault-other/x', 'D:/vault').workingDir).toBe('');
 		expect(resolveConversationContext(undefined, undefined, 'D:/vault').workingDir).toBe('');
+	});
+});
+
+describe('model and agent persistence', () => {
+	const withSel = (model?: string, agent?: string): ConversationContext =>
+		({...ctx(''), ...(model !== undefined ? {model} : {}), ...(agent !== undefined ? {agent} : {})});
+
+	it('round-trips model and agent through upsert and resolve, including empty strings', () => {
+		const map = upsertSessionContext(undefined, 's1', withSel('claude-opus-5-5', 'researcher'));
+		expect(resolveConversationContext(map.s1, undefined, '/v')).toEqual(withSel('claude-opus-5-5', 'researcher'));
+		const auto = upsertSessionContext(undefined, 's2', withSel('', ''));
+		expect(resolveConversationContext(auto.s2, undefined, '/v')).toEqual(withSel('', ''));
+	});
+
+	it('leaves model and agent absent for legacy contexts', () => {
+		const map = upsertSessionContext(undefined, 's1', ctx('A'));
+		expect(map.s1).not.toHaveProperty('model');
+		expect(map.s1).not.toHaveProperty('agent');
+		expect(resolveConversationContext(ctx('A'), undefined, '/v')).not.toHaveProperty('agent');
+	});
+});
+
+describe('resolveSavedSelection', () => {
+	const agents = ['Researcher', 'Writer'];
+	const models = ['m1', 'm2'];
+
+	it('keeps valid values and matches agents case-insensitively', () => {
+		expect(resolveSavedSelection({agent: 'writer', model: 'm2'}, agents, models)).toEqual({agent: 'Writer', model: 'm2'});
+	});
+
+	it('falls back to Auto / default for values that no longer exist', () => {
+		expect(resolveSavedSelection({agent: 'Gone', model: 'old'}, agents, models)).toEqual({agent: '', model: ''});
+	});
+
+	it('keeps saved values while the lists are not loaded yet', () => {
+		expect(resolveSavedSelection({agent: 'Gone', model: 'old'}, [], [])).toEqual({agent: 'Gone', model: 'old'});
+	});
+
+	it('leaves undefined (legacy) fields undefined', () => {
+		expect(resolveSavedSelection({}, agents, models)).toEqual({});
 	});
 });
