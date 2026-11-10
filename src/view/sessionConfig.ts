@@ -488,6 +488,8 @@ export function upsertSessionContext(
 	next[sessionId] = {
 		workingDir: context.workingDir, notePath: context.notePath, scopePaths: [...context.scopePaths],
 		...(context.disabledSources?.length ? {disabledSources: [...context.disabledSources]} : {}),
+		...(context.model !== undefined ? {model: context.model} : {}),
+		...(context.agent !== undefined ? {agent: context.agent} : {}),
 	};
 	const keys = Object.keys(next);
 	if (keys.length > maxEntries) {
@@ -515,9 +517,34 @@ export function resolveConversationContext(
 		return {
 			workingDir: saved.workingDir, notePath: saved.notePath, scopePaths: [...saved.scopePaths],
 			...(saved.disabledSources?.length ? {disabledSources: [...saved.disabledSources]} : {}),
+			...(saved.model !== undefined ? {model: saved.model} : {}),
+			...(saved.agent !== undefined ? {agent: saved.agent} : {}),
 		};
 	}
 	return {workingDir: vaultRelativeDir(sessionCwd, vaultBasePath), notePath: null, scopePaths: []};
+}
+
+/**
+ * Validate a saved agent/model against what is currently available. A saved value that no longer
+ * exists falls back to `''` (Auto / default model) rather than being kept. An empty availability
+ * list means "not loaded yet", so the saved value is kept (`refreshProviderModels()` re-validates
+ * models once they arrive). `undefined` in → `undefined` out (legacy context: leave as is).
+ */
+export function resolveSavedSelection(
+	saved: {agent?: string; model?: string},
+	agentNames: readonly string[],
+	modelIds: readonly string[],
+): {agent?: string; model?: string} {
+	const agent = saved.agent === undefined || saved.agent === '' || agentNames.length === 0
+		? saved.agent
+		: (agentNames.find(n => n === saved.agent) ?? agentNames.find(n => n.toLowerCase() === saved.agent!.toLowerCase()) ?? '');
+	const model = saved.model === undefined || saved.model === '' || modelIds.length === 0
+		? saved.model
+		: (modelIds.includes(saved.model) ? saved.model : '');
+	return {
+		...(agent !== undefined ? {agent} : {}),
+		...(model !== undefined ? {model} : {}),
+	};
 }
 
 /** Vault-relative form of an absolute directory, or `''` when it is the vault root, outside it, or missing. */

@@ -251,7 +251,7 @@ and built in `buildUI()` via `controller.build(parent)`.
     user action.
   - **Persistence:** every user change, and `session.init` (the first moment a new
     conversation has an id), calls `saveConversationContext()`, which writes
-    `{workingDir, notePath, scopePaths, disabledSources?}` to `settings.sessionContexts[sessionId]` via
+    `{workingDir, notePath, scopePaths, disabledSources?, model?, agent?}` to `settings.sessionContexts[sessionId]` via
     `upsertSessionContext()` (`sessionConfig.ts`; insertion-order LRU capped at
     `MAX_SESSION_CONTEXTS` = 200). Deleting a session from the sidebar drops its entry; renaming a
     note rewrites matching `notePath`s (`handleNoteRenamed()`, a `vault.on('rename')` handler).
@@ -273,6 +273,15 @@ and built in `buildUI()` via `controller.build(parent)`.
     sets `configDirty`, so the change applies from the next message (rebuild + `resume`). The set
     is persisted in `ConversationContext.disabledSources` (omitted when empty), restored with the
     rest of the context and reset by `newConversation()`.
+  - **Model and agent (per conversation).** `ConversationContext.model` (`''` = default model) and
+    `.agent` (`''` = Auto) are saved with the context and re-saved by `ConfigToolbar.setModel()` /
+    `selectAgent()`. `applyConversationContext()` restores them through the toolbar, agent first so
+    the agent's preferred-model auto-switch can't override the saved model, with
+    `restoringContext` suppressing saves mid-restore. `resolveSavedSelection()` (`sessionConfig.ts`)
+    validates them against the loaded agents/models: a vanished value falls back to Auto/default,
+    and an empty list ("not loaded yet") keeps the saved value. Contexts saved before this carry
+    neither field (left untouched), and the agent then falls back to the session-name parse in
+    `restoreAgentFromSessionName()`. Reasoning effort stays global.
   - **Restore:** `selectSession()` (`sessionSidebar.ts`) applies
     `resolveConversationContext()` before building any session config — for both the background
     and cold-resume paths — so a cold resume runs in the cwd the conversation was left in.

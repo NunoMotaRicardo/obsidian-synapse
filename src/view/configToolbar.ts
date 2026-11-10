@@ -304,6 +304,7 @@ export class ConfigToolbarController {
 		this.updateReasoningBadge();
 		this.applyReasoningToSession();
 		this.view.view.updateStateLine();
+		this.view.view.saveConversationContext();
 	}
 
 	private openReasoningMenu(e: MouseEvent): void {
@@ -429,6 +430,7 @@ export class ConfigToolbarController {
 			// Deselecting was previously the one branch that didn't refresh the state line
 			// (#217) — it displays the active agent, so it needs to reflect "Auto" too.
 			this.view.view.updateStateLine();
+			this.view.view.saveConversationContext();
 			return;
 		}
 		const effectiveAgents = this.getEffectiveAgents();
@@ -458,6 +460,7 @@ export class ConfigToolbarController {
 		this.applyAgentToolsAndSkills(agent);
 		this.view.configDirty = true;
 		this.view.view.updateStateLine();
+		this.view.view.saveConversationContext();
 	}
 
 	applyAgentToolsAndSkills(agent?: AgentConfig): void {

@@ -37,7 +37,7 @@ import {ElicitationModal} from './modals/elicitationModal';
 import type {BackgroundSession} from './view/backgroundSession';
 
 import {buildSourceFilter, buildSourceInventory} from './view/sourceFilter';
-import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg, upsertSessionContext} from './view/sessionConfig';
+import {buildPrompt, cleanupAttachmentTempFiles, computeAdditionalDirectories, materializeBlobAttachments, buildSelfImproveHint, buildTurnContextBlock, buildResilienceHint, resolveNoteImageEmbeds, isSlashCommandInput, parseModelCommand, formatModelStatus, resolveModelCommandArg, upsertSessionContext, resolveSavedSelection} from './view/sessionConfig';
 import {friendlyEndpointAuthError, friendlyWriteToolError, stripErrorPrefix} from './toolErrors';
 import {stripSessionTypePrefix} from './view/utils';
 
@@ -366,8 +366,13 @@ export class SynapseView extends ItemView implements ViewContext {
 		return {
 			workingDir: this.workingDir, notePath: this.contextNotePath, scopePaths: [...this.scopePaths],
 			...(this.disabledSources.size > 0 ? {disabledSources: [...this.disabledSources]} : {}),
+			model: this.selectedModel,
+			agent: this.selectedAgent,
 		};
 	}
+
+	/** True while `applyConversationContext()` drives the toolbar, so restoring never re-saves a half-applied state. */
+	private restoringContext = false;
 
 	/** Make `ctx` the foreground context and refresh the controls that show it. */
 	applyConversationContext(ctx: ConversationContext): void {
@@ -378,6 +383,17 @@ export class SynapseView extends ItemView implements ViewContext {
 		const nextDisabled = new Set(ctx.disabledSources ?? []);
 		if (nextDisabled.size !== this.disabledSources.size || [...nextDisabled].some(k => !this.disabledSources.has(k))) this.configDirty = true;
 		this.disabledSources = nextDisabled;
+		// Model and agent: legacy contexts carry neither (leave the toolbar alone; the sidebar falls
+		// back to the session-name heuristic for the agent).
+		const sel = resolveSavedSelection(ctx, this.agents.map(a => a.name), this.models.map(m => m.id));
+		this.restoringContext = true;
+		try {
+			if (sel.agent !== undefined && sel.agent !== this.selectedAgent) this.configToolbar.selectAgent(sel.agent);
+			// After the agent, so its preferred-model auto-switch can't override the saved model.
+			if (sel.model !== undefined && sel.model !== this.selectedModel) this.configToolbar.setModel(sel.model);
+		} finally {
+			this.restoringContext = false;
+		}
 		this.configToolbar.updateSourcesButton();
 		this.configToolbar.updateCwdButton();
 		this.inputArea.renderScopeBar();
@@ -390,7 +406,7 @@ export class SynapseView extends ItemView implements ViewContext {
 	 * `session.init` calls this once it does.
 	 */
 	saveConversationContext(): void {
-		if (!this.currentSessionId) return;
+		if (!this.currentSessionId || this.restoringContext) return;
 		this.plugin.settings.sessionContexts = upsertSessionContext(
 			this.plugin.settings.sessionContexts, this.currentSessionId, this.getConversationContext(),
 		);
