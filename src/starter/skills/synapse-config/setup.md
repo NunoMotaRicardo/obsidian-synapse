@@ -1,4 +1,21 @@
-# Setup: custom writing styles
+# Setup
+
+Setup has two parts, in this order: **permissions** (so Synapse stops asking about files and web pages it should be able to use), then **writing styles**. Run both when the user asks to set Synapse up; run just one when they ask for only that.
+
+## Part 1: Permissions
+
+The goal is a small, general permission set instead of one prompt per file. Rules live in the plugin folder's `settings.json` — format and rules: [settings.md](_synapse/skills/synapse-config/settings.md).
+
+### Steps
+
+1. **Read** the current `settings.json` (it may not exist) and say in one line what it allows today.
+2. **Find symlinks** — list links inside the vault, up to two levels deep (Bash: `find <vault> -maxdepth 2 -type l`; PowerShell: `Get-ChildItem -Attributes ReparsePoint`), then resolve each to its real absolute path (`readlink -f`). Files reached through a link count as *outside* the vault, so each one prompts on its own — the usual cause of constant file prompts. Done when you have the list of real target roots (collapse targets nested inside another; none is fine — say so).
+3. **Ask** — show each real root and ask which to grant. Say what it means: Synapse may read **and edit** files there without asking. Never grant a root the user did not confirm; warn on broad ones (a home folder, a drive root).
+4. **Ask about the web** — offer bare `WebFetch` and `WebSearch` in `permissions.allow`, instead of one rule per site. Say that this lets Synapse open any web page without asking.
+5. **Write** after approval: confirmed roots go in `permissions.additionalDirectories` (real paths, no trailing slash); web rules in `permissions.allow`. Keep every existing key and rule. Done when the file parses and holds exactly what the user approved.
+6. **Explain** that the file is per device and that this applies from the next message. Tell them that later you can tidy rules that pile up from **Always allow** (see "Tidy permissions" in settings.md).
+
+## Part 2: Custom writing styles
 
 A custom style captures how the user actually writes, drawn from their own documents. It lives at `_synapse/skills/writing-style/styles/<kebab-name>.md`, where the `writing-style` skill picks it up.
 

@@ -213,11 +213,12 @@ Requirement IDs are stable references for issues and reviews.
 |---|---|
 | SK-1 | On first run in a vault without `_synapse/`, the plugin installs the **Writer** and **Search** agents and the `synapse-config`, `writing-style`, `think`, and `obsidian` skills, plus a default `settings.json`. |
 | SK-2 | **Initialize** (on **Feature Map & Agents** and **Capabilities**) adds missing files and never overwrites edits. It can reset the Writer and Search agents and the `obsidian` and `synapse-config` skills to their bundled versions, confirming each one separately. `writing-style`, `think`, `settings.json`, and the user's own files are never replaced. |
-| SK-3 | The `synapse-config` **setup workflow** builds writing styles from 3–5 of the user's own documents in seven steps: inventory, choose styles, collect samples, analyze (patterns seen in at least two samples), propose, write after approval, and try it. |
+| SK-3 | The `synapse-config` **setup workflow** builds writing styles (after the permissions step, SK-8) from 3–5 of the user's own documents in seven steps: inventory, choose styles, collect samples, analyze (patterns seen in at least two samples), propose, write after approval, and try it. |
 | SK-4 | **Writer** delivers a complete piece (essay, document, speech, or article), confirms the brief once, grounds claims in the vault or marks them as assumptions, and always loads `writing-style`. |
 | SK-5 | `writing-style` uses the user's styles when one matches, otherwise one of four built-in voices (personal, technical, spoken, professional). It strips AI-sounding phrasing and never invents facts, quotes, or stories. |
 | SK-6 | `think` asks one question at a time with a recommended answer, checks the vault before asking, and summarizes what was agreed. |
 | SK-7 | `obsidian` covers Obsidian Flavored Markdown, Bases, and the `obsidian` CLI. |
+| SK-8 | The empty chat shows a **Set up Synapse** button, highlighted until first used and shown quietly afterwards. It starts the `synapse-config` setup: permissions first (symlinked vault folders and web access, each confirmed by the user), then writing styles. |
 
 ### 6.11 Telegram bot
 

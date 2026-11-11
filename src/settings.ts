@@ -55,6 +55,8 @@ export interface SynapseSettings {
 	 */
 	localAgentEndpointAllowMcp: boolean;
 	toolApproval: 'ask' | 'allow';
+	/** True once the user has clicked **Set up Synapse** on the welcome screen; the button is then shown quietly instead of highlighted. */
+	setupStarted: boolean;
 	/** Feature to Agent mapping for plugin features. */
 	featureAgents: FeatureAgentMap;
 
@@ -143,6 +145,7 @@ export const DEFAULT_SETTINGS: SynapseSettings = {
 	localAgentEndpointApiKey: '',
 	localAgentEndpointAllowMcp: false,
 	toolApproval: 'ask',
+	setupStarted: false,
 	featureAgents: {
 		chat: '',
 		inline: '',

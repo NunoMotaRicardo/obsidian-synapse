@@ -661,6 +661,14 @@ for the `Session`-side mechanism and its one-turn-stale/timing caveats.
     entry's `folderPath` is `''` — never read for those entries, since nothing in the popup or
     picker resolves a folder path for display.
 
+## Welcome screen and setup button
+
+`ChatRendererController.renderWelcome()` (empty chat) shows the intro and a **Set up Synapse** button.
+Clicking it sends `SETUP_PROMPT` through `handleSend()`, which makes the `synapse-config` skill run its
+setup (permissions first, then writing styles), and sets `settings.setupStarted = true`. Until then the
+button is highlighted (`mod-cta`); afterwards it is shown quietly (same button, no accent), so setup
+stays one click away. The flag lives in `data.json` (a UI preference, not a secret).
+
 ## Slash commands in the send path
 
 `handleSend()` (`synapseView.ts`) classifies the trimmed input with `isSlashCommandInput(input,
