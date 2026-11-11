@@ -69,7 +69,7 @@ export async function sendAndWaitWithAbort<T>(
 	} catch (e) {
 		abortWithSetTimeoutShim(controller);
 		if (timedOut) {
-			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
+			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`, { cause: e });
 		}
 		throw e;
 	} finally {
