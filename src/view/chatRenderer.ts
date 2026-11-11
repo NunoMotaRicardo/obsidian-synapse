@@ -75,6 +75,9 @@ const TASK_STATUS_LABEL: Record<TodoItem['status'], string> = {
  * that module is not converted yet (step 5). All such state is reached through
  * `this.view.view.<x>` (see `ViewContext` in `view/types.ts`).
  */
+/** Sent by the welcome screen's **Set up Synapse** button; the `synapse-config` skill's setup flow does the rest. */
+export const SETUP_PROMPT = 'Set up Synapse for this vault. Follow the synapse-config skill\'s setup: first review permissions (symlinked folders and web access), then offer to build my writing styles.';
+
 export class ChatRendererController {
 	constructor(private view: ViewContext) {}
 
@@ -809,11 +812,23 @@ export class ChatRendererController {
 		setIcon(icon, SYNAPSE_ICON_ID);
 		welcome.createEl('h3', {text: 'Claude Synapse'});
 		welcome.createEl('p', {
-			text: 'Your AI-powered second brain. New here? Ask Synapse to set itself up — the synapse-config skill builds your writing styles, agents and skills from a conversation.',
+			text: 'Your AI-powered second brain. New here? Run setup — Synapse checks what it can access in your vault, then builds your writing styles, agents and skills from a conversation.',
 			cls: 'synapse-welcome-desc',
 		});
+		// Highlighted until first used, then shown quietly so setup stays one click away.
+		const setupDone = this.view.plugin.settings.setupStarted;
+		const setupBtn = welcome.createEl('button', {
+			text: 'Set up Synapse',
+			cls: setupDone ? 'synapse-welcome-setup' : 'synapse-welcome-setup mod-cta',
+		});
+		setupBtn.addEventListener('click', () => {
+			this.view.plugin.settings.setupStarted = true;
+			void this.view.plugin.saveSettings();
+			this.view.view.inputEl.value = SETUP_PROMPT;
+			void this.view.view.handleSend();
+		});
 		welcome.createEl('p', {
-			text: 'Try asking it to set up your writing styles, or to create an agent that turns meeting notes into action items.',
+			text: 'Or ask it to create an agent that turns meeting notes into action items.',
 			cls: 'synapse-welcome-desc',
 		});
 	}

@@ -32,6 +32,10 @@ Rule examples (paths are relative to the vault root):
 
 Prefer the narrowest rule that does the job: a folder over the whole vault, an exact command over a wildcard.
 
+## Directories outside the vault
+
+A folder outside the vault (including the target of a symlinked vault folder) is granted with `permissions.additionalDirectories`, a list of **real absolute paths** — not with one `Read(//path/**)` rule per file. Resolve links first (`readlink -f`); a path that runs through a link is treated as outside. See [setup.md](_synapse/skills/synapse-config/setup.md) for the guided flow.
+
 ## Steps
 
 1. **Read** that `settings.json` if it exists (it may not, or may hold other keys).
@@ -39,3 +43,15 @@ Prefer the narrowest rule that does the job: a folder over the whole vault, an e
 3. **Write** after approval. Keep every existing key and rule, add the new ones to the right list, and keep the file valid JSON. Done when the file parses and contains the approved rules.
 
 Changes apply on the next message. The **Always allow** button in a tool-approval prompt writes to this same file, so rules added that way already appear here.
+
+## Tidy permissions
+
+The **Always allow** button adds one very specific rule per approval, so the list grows noisy. Offer a tidy-up when the user asks, when setup finishes, or when you see many narrow rules while editing the file. Never tidy silently.
+
+1. **Read** the file and count the rules.
+2. **Propose** a compact version (permission model applies — show before and after):
+   - Drop rules a broader rule already covers — a bare `Read`, `Edit`, `Write` or `Bash` covers every `Tool(...)` rule of that tool; a rule covers any narrower one for the same tool.
+   - Merge path aliases for the same folder (a symlink and its target) into one `additionalDirectories` entry.
+   - Replace per-domain `WebFetch(domain:…)` rules with bare `WebFetch`, and per-tool `mcp__<server>__<tool>` rules with `mcp__<server>` — but **never** widen a server that has tools which trade, send, delete or otherwise change things; keep those individual and tell the user which ones you left.
+   - Drop one-off commands: a `Bash(...)` rule holding a whole `cd … && …` chain, or a specific file name, will not match again. Suggest a prefix rule (`Bash(mv:*)`) only when the user says they repeat that kind of command; never for `python`, `bash -c`, `sh`, `eval`, `ssh`, `sudo`, `rm`.
+3. **Write** after approval, keeping unrelated keys. Done when the file parses and the user has seen the before/after count.

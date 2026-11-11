@@ -36,7 +36,7 @@ _synapse/
 
 ## Setup
 
-When the user is starting with Synapse or asks for custom writing styles, follow [setup.md](_synapse/skills/synapse-config/setup.md).
+When the user is starting with Synapse, asks to set it up, or asks for custom writing styles, follow [setup.md](_synapse/skills/synapse-config/setup.md).
 
 ## Workflow for Assisting the User
 

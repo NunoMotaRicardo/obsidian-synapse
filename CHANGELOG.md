@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Set up Synapse** button on the empty chat. It is highlighted until first used, then shown quietly. It runs the setup in the `synapse-config` skill, which now starts with permissions: it finds symlinked vault folders, asks before granting their real locations (so file prompts stop), and offers general web access.
+- `synapse-config` can tidy permissions on request: it proposes dropping redundant rules, merging path aliases and replacing per-domain and per-tool rules with general ones, and always shows the before and after.
+
 ## [0.9.0] - 2026-11-11
 
 ### Changed
