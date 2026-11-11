@@ -319,8 +319,6 @@ export type SessionEvent = {[K in keyof SessionEvents]: {type: K; data: SessionE
 
 // ── Session wrapper ─────────────────────────────────────────────
 
-type SessionEventHandler<K extends keyof SessionEvents = keyof SessionEvents> = (data: SessionEvents[K]) => void;
-
 /**
  * Session wraps the Agent SDK's query() to provide a stateful session API
  * compatible with the chat panel. It:
@@ -358,7 +356,7 @@ export class Session {
 	 * a different handler-value type per key. Type-safety is enforced at the `on()`/`dispatch()`
 	 * boundary instead, where the generic `K` ties a given call's event name to its payload type.
 	 */
-	private handlers: Map<keyof SessionEvents, SessionEventHandler[]> = new Map();
+	private handlers: Map<keyof SessionEvents, Array<(data: unknown) => void>> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
 	private pendingToolCalls: Map<string, string> = new Map();
@@ -457,10 +455,10 @@ export class Session {
 	 */
 	on<K extends keyof SessionEvents>(eventType: K, handler: (data: SessionEvents[K]) => void): () => void {
 		const list = this.handlers.get(eventType) ?? [];
-		list.push(handler);
+		list.push(handler as (data: unknown) => void);
 		this.handlers.set(eventType, list);
 		return () => {
-			const idx = list.indexOf(handler);
+			const idx = list.indexOf(handler as (data: unknown) => void);
 			if (idx >= 0) list.splice(idx, 1);
 		};
 	}
