@@ -1539,14 +1539,14 @@ export class SynapseView extends ItemView implements ViewContext {
 				}
 			}
 
-			// "Always allow" (issue #197) — persist into _synapse/settings.json, deliberately
+			// "Always allow" (issue #197) — persist into the plugin-folder settings.json, deliberately
 			// separate from #193's in-memory accumulation above (which always runs for an allowed
 			// call regardless of scope). The modal itself never writes; this is the one call site
 			// that does, per the configWriter.ts file-writing rule in CLAUDE.md.
 			if (persistRules.length > 0) {
 				try {
 					await persistToolApprovalRules(this.app, persistRules);
-					new Notice(`Synapse: saved to _synapse/settings.json — ${persistRules.join(', ')}`);
+					new Notice(`Synapse: saved to this device's plugin settings — ${persistRules.join(', ')}`);
 				} catch (e) {
 					debugTrace('[synapse] Failed to persist tool-approval rule:', e);
 					new Notice(e instanceof Error ? e.message : '[synapse] Failed to persist tool-approval rule.');

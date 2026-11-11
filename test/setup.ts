@@ -100,16 +100,42 @@ const {
 		readonly configDir = '.mock-config-dir';
 		private readonly nodes = new Map<string, TAbstractFile>();
 		private readonly contents = new Map<string, string>();
+		/** Files/folders written through the raw adapter (outside the vault index, e.g. under the config dir). */
+		private readonly rawFiles = new Map<string, string>();
+		private readonly rawFolders = new Set<string>();
 		readonly adapter: {
 			basePath: string;
 			exists: (path: string) => Promise<boolean>;
+			read: (path: string) => Promise<string>;
+			write: (path: string, content: string) => Promise<void>;
+			mkdir: (path: string) => Promise<void>;
 		};
 
 		constructor(basePath = 'C:/mock-vault') {
 			this.nodes.set('', this.root);
 			this.adapter = {
 				basePath,
-				exists: async (path: string) => this.nodes.has(normalize(path)),
+				exists: async (path: string) => {
+					const key = normalize(path);
+					return this.nodes.has(key) || this.rawFiles.has(key) || this.rawFolders.has(key);
+				},
+				read: async (path: string) => {
+					const key = normalize(path);
+					const content = this.rawFiles.get(key) ?? this.contents.get(key);
+					if (content === undefined) throw new Error(`File not found: "${key}"`);
+					return content;
+				},
+				write: async (path: string, content: string) => {
+					const key = normalize(path);
+					const parent = this.parentKeyOf(key);
+					if (parent && !this.rawFolders.has(parent) && !this.nodes.has(parent)) {
+						throw new Error(`Parent folder does not exist: "${parent}"`);
+					}
+					this.rawFiles.set(key, content);
+				},
+				mkdir: async (path: string) => {
+					this.rawFolders.add(normalize(path));
+				},
 			};
 		}
 

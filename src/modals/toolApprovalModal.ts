@@ -67,7 +67,7 @@ export function resolveToolApprovalPresentation(hints: {defaultToNo?: boolean; s
 
 /**
  * Outcome of a `ToolApprovalModal` — the SDK-facing `PermissionResult` plus what (if anything)
- * should be persisted to `_synapse/settings.json` (issue #197). `persistRules` is empty for both
+ * should be persisted to the plugin-folder `settings.json` (issue #197). `persistRules` is empty for both
  * **Allow** (#193's original, conversation-scoped, writes nothing — AC-2) and **Deny**; only
  * **Always allow** sets it. The modal itself never touches disk — `SynapseView.buildSessionConfig()`'s
  * `permissionHandler` is the one that calls `configWriter.persistToolApprovalRules()` with these
@@ -75,7 +75,7 @@ export function resolveToolApprovalPresentation(hints: {defaultToNo?: boolean; s
  */
 export interface ToolApprovalOutcome {
 	result: PermissionResult;
-	/** Rule string(s) to persist into `_synapse/settings.json`; empty unless **Always allow** was chosen. */
+	/** Rule string(s) to persist into the plugin-folder `settings.json`; empty unless **Always allow** was chosen. */
 	persistRules: string[];
 }
 
@@ -148,7 +148,7 @@ export class ToolApprovalModal extends Modal {
 		if (presentation.showAlwaysAllow) {
 			const alwaysRow = scopeInfo.createDiv({cls: 'synapse-approval-row'});
 			alwaysRow.createEl('strong', {text: 'Always allow'});
-			alwaysRow.appendText(' permanently grants, by writing to _synapse/settings.json in this vault:');
+			alwaysRow.appendText(' permanently grants, by writing to the Synapse plugin settings file on this device:');
 			const rulesPre = scopeInfo.createEl('pre', {cls: 'synapse-approval-details synapse-ledger'});
 			rulesPre.createEl('code', {text: rules.join('\n')});
 		} else if (presentation.suppressedNote) {

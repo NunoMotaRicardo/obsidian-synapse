@@ -12,7 +12,6 @@ _synapse/
   agents/*.md
   skills/<name>/SKILL.md
   .mcp.json
-  settings.json
 ```
 
 ## Naming Conventions
@@ -33,7 +32,7 @@ _synapse/
 - **Skill** — a procedure, workflow, or reference the agent consults. Spec + example: [skills.md](_synapse/skills/synapse-config/skills.md).
 - **MCP servers** — configured in `_synapse/.mcp.json`, standard Model Context Protocol server definitions.
 
-- **Permissions** — tool allow/ask/deny rules in `_synapse/settings.json` (never `.claude/settings*.json`). Format + workflow: [settings.md](_synapse/skills/synapse-config/settings.md).
+- **Permissions** — tool allow/ask/deny rules in the plugin folder's `settings.json` (per device, not in `_synapse/`; never `.claude/settings*.json`). Format + workflow: [settings.md](_synapse/skills/synapse-config/settings.md).
 
 ## Setup
 

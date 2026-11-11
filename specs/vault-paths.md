@@ -4,7 +4,7 @@
 
 A small, dependency-free module giving every caller a single source of truth for vault-path
 derivation: the vault's on-disk base path, the `_synapse/` customization folder, the SDK plugin
-config that points at it, and the `_synapse/settings.json` path.
+config that points at it, and the per-device settings path (plugin folder).
 
 Source: `src/vaultPaths.ts`.
 
@@ -34,7 +34,10 @@ export function getVaultBasePath(app: App): string
 // folder. Backslash-normalizes the basePath (SDK plugin paths are POSIX-style).
 export function getSynapsePluginConfig(app: App): LocalPluginConfig[]
 
-// Absolute on-disk path to the vault's own settings layer, `_synapse/settings.json`.
+// Absolute on-disk path to the per-device settings layer,
+// `<basePath>/<configDir>/plugins/claude-synapse/settings.json`
+// (`getSynapseSettingsVaultPath(app)` is the vault-relative form; `LEGACY_VAULT_SETTINGS_PATH`
+// is the old synced `_synapse/settings.json`, read only by the migration).
 // Pure path derivation only — does not check existence or read the
 // file; see agentService.ts's AgentService#loadVaultSettings for that.
 export function getSynapseSettingsPath(app: App): string
@@ -77,7 +80,7 @@ export function getSynapseSettingsPath(app: App): string
   scan paths.
 - **`view/searchPanel.ts`** — `buildSearchSessionConfig()` uses `getSynapsePluginConfig`.
 - **`agentService.ts`** — `AgentService#loadVaultSettings()` uses `getSynapseSettingsPath`
-  to locate `_synapse/settings.json`, the sole caller of that function.
+  to locate the plugin folder's `settings.json`, the sole caller of that function.
 
 `configWriter.ts` imports `SYNAPSE_FOLDER` via the settings re-export for approval persistence,
 folder exclusion, and starter-kit installation.

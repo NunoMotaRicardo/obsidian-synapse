@@ -38,13 +38,13 @@ export const SEARCH_AGENT_NAME = 'Search';
 export const SEARCH_AGENT_INSTRUCTIONS = searchAgent.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
 
 /**
- * Default `_synapse/settings.json`: the minimal permission set — read files, nothing else. A bare
+ * Default settings layer (the plugin folder's `settings.json`, not part of the synced `_synapse/`
+ * starter kit — see `seedDefaultVaultSettings()`): the minimal permission set — read files, nothing else. A bare
  * `Read` rule is used because a path-scoped `Read(./**)` did not match in practice. Everything broader is granted by the user via **Always allow** or the synapse-config skill.
  */
-const DEFAULT_VAULT_SETTINGS = `${JSON.stringify({permissions: {allow: ['Read']}}, null, 2)}\n`;
+export const DEFAULT_VAULT_SETTINGS = `${JSON.stringify({permissions: {allow: ['Read']}}, null, 2)}\n`;
 
 export const STARTER_FILES: readonly StarterFile[] = [
-	{path: 'settings.json', content: DEFAULT_VAULT_SETTINGS},
 	{path: 'agents/writer.agent.md', content: writerAgent},
 	{path: 'agents/search.agent.md', content: searchAgent},
 	{path: 'skills/synapse-config/SKILL.md', content: synapseConfigSkill},

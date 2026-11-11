@@ -201,7 +201,7 @@ this (and why its auto-allow branch sends no `updatedPermissions` at all instead
 *persistent* grant is a separate mechanism: the modal's **Always allow**
 button calls `persistToolApprovalRules()` (`src/configWriter.ts`), which writes the same rule
 string(s) `permissionRuleToString()`/`extractAllowRuleStrings()` (below) derive directly into
-`_synapse/settings.json`'s `permissions.allow` — the vault settings layer described below.
+the plugin folder's `settings.json` `permissions.allow` — the settings layer described below.
 The vault settings layer (below) reads and merges that file; nothing in `agentService.ts` ever writes to it.
 
 **`suppressAlwaysAllowRule` overrides all of the above (issue #268).** SDK 0.3.268's `CanUseTool`
@@ -258,10 +258,7 @@ adding a second, separate merge point.
 
 ## Vault settings layer
 
-`_synapse/settings.json` is the vault's own settings layer — vault-scoped configuration that
-follows the vault regardless of a session's `cwd`. It sits alongside `agents/*.md`,
-`skills/*/SKILL.md`, and `.mcp.json` as vault-local customization (`wiki/Customization.md`), but
-is applied inside `AgentService`, not written by the plugin.
+The plugin folder's `settings.json` (`<configDir>/plugins/claude-synapse/settings.json`) is the plugin's own settings layer — **per device** (it is not in the synced, user-visible `_synapse/` folder) and independent of a session's `cwd`. It is applied inside `AgentService`; the plugin writes it only for **Always allow**, the first-run default, and the one-time migration from the legacy `_synapse/settings.json` (`config-writer.md`).
 
 **Applied at a single choke point, not threaded through every caller.** All three real query
 paths — `chat()`, `inlineChat()`, and `Session.send()` (via `AgentService.createQuery()`) — funnel
@@ -281,7 +278,7 @@ path string would silently defeat that merge (session grants would vanish into t
 branch) the moment a caller's `settings` became a path. Reading and parsing the file plugin-side
 keeps everything on the object-merge branch.
 
-- **`getSynapseSettingsPath(app): string`** (`vaultPaths.ts`) derives `<basePath>/_synapse/settings.json`
+- **`getSynapseSettingsPath(app): string`** (`vaultPaths.ts`) derives `<basePath>/<configDir>/plugins/claude-synapse/settings.json`
   — pure path derivation, no fs access, matching `getSynapsePluginConfig()`'s existing pattern.
   `vaultPaths.ts` stays dependency-free (no `node:fs`, no internal imports) per its own spec.
 - **`AgentService.loadVaultSettings(app): Settings | undefined`** does the actual read: a
@@ -294,8 +291,8 @@ keeps everything on the object-merge branch.
   fallback off the hot path (`ensureConnected()`); this method runs on every query build and must
   stay synchronous, and a static import also works in the test environment where
   `window.require` is unavailable.
-  - **Absent file → `undefined`, silently** (AC-2): a missing `_synapse/settings.json` is
-    silently ignored. The plugin never creates the file itself.
+  - **Absent file → `undefined`, silently** (AC-2): a missing settings file is
+    silently ignored. (The plugin only seeds it on first run — `seedDefaultVaultSettings()`.)
   - **Malformed JSON → `undefined`, with exactly one `[synapse]`-prefixed `Notice` + `debugTrace`**
     (AC-4): the query proceeds without the layer rather than crashing. A second `Map` keyed by
     path (`malformedSettingsWarnedAt: Map<string, number>`) tracks the mtime of the last warning,
@@ -351,10 +348,10 @@ SDK's own default of `['user', 'project', 'local']`:
   does today.
 - **A caller-set `settingSources` always wins** — the default only fills in when `options.settingSources`
   is unset, same "caller's explicit value wins" convention as the rest of `routeQueryOptions()`.
-- This is orthogonal to the vault-settings layer above: `_synapse/settings.json` is read and merged
+- This is orthogonal to the vault-settings layer above: the plugin settings file is read and merged
   by the plugin directly into `Options.settings` (the higher-priority flag-settings layer, per the
   SDK's own precedence), never through `settingSources`/`SettingSource` — so this default has no
-  effect on whether `_synapse/settings.json` applies.
+  effect on whether the plugin settings file applies.
 
 ## Named Agent Model Binding & Routing
 

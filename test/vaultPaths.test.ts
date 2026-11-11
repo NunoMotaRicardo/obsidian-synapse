@@ -64,14 +64,14 @@ describe('getSynapsePluginConfig', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSynapseSettingsPath', () => {
-	it('returns <basePath>/_synapse/settings.json', () => {
+	it('returns <basePath>/<configDir>/plugins/claude-synapse/settings.json', () => {
 		const app = createMockApp('C:/mock-vault') as unknown as import('obsidian').App;
-		expect(getSynapseSettingsPath(app)).toBe('C:/mock-vault/_synapse/settings.json');
+		expect(getSynapseSettingsPath(app)).toBe('C:/mock-vault/.mock-config-dir/plugins/claude-synapse/settings.json');
 	});
 
 	it('normalizes Windows backslashes in the basePath to forward slashes', () => {
 		const app = createMockApp('C:\\Users\\me\\vault') as unknown as import('obsidian').App;
-		expect(getSynapseSettingsPath(app)).toBe('C:/Users/me/vault/_synapse/settings.json');
+		expect(getSynapseSettingsPath(app)).toBe('C:/Users/me/vault/.mock-config-dir/plugins/claude-synapse/settings.json');
 	});
 
 	it('propagates getVaultBasePath()\'s throw when there is no basePath', () => {

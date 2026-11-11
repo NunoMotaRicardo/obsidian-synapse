@@ -47,7 +47,7 @@ streamed yet), **Thinking…** (reasoning streams live in a collapsible block), 
 (a tool is running). Models without reasoning go straight to the answer.
 
 When a tool needs approval, a dialog shows exactly what will run. **Allow** grants it for this
-conversation, **Always allow** saves the rule to `_synapse/settings.json`, and **Deny** refuses it.
+conversation, **Always allow** saves the rule to the plugin's per-device `settings.json`, and **Deny** refuses it.
 See [Customization → Vault settings](Customization.md#5-vault-settings-_synapsesettingsjson).
 
 ### Search

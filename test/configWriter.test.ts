@@ -9,8 +9,10 @@ import {
 	installStarterKit,
 	findInstalledStarterUnits,
 	persistToolApprovalRules,
+	migrateVaultSettingsToPluginFolder,
+	seedDefaultVaultSettings,
 } from '../src/configWriter';
-import {STARTER_FILES, SYNAPSE_CONFIG_SKILL_NAME} from '../src/starterKit';
+import {DEFAULT_VAULT_SETTINGS, STARTER_FILES, SYNAPSE_CONFIG_SKILL_NAME} from '../src/starterKit';
 import {createMockApp, seedFile, seedFolder, readVaultFile} from './setup';
 
 // ---------------------------------------------------------------------------
@@ -347,42 +349,50 @@ function parseSettingsFile(raw: string): TestSettingsFile {
 	return JSON.parse(raw) as TestSettingsFile;
 }
 
+const PLUGIN_SETTINGS = '.mock-config-dir/plugins/claude-synapse/settings.json';
+
+async function seedPluginSettings(app: App, content: string): Promise<void> {
+	await app.vault.adapter.mkdir('.mock-config-dir/plugins/claude-synapse');
+	await app.vault.adapter.write(PLUGIN_SETTINGS, content);
+}
+
 describe('persistToolApprovalRules', () => {
-	it('creates _synapse/settings.json when absent, with the rule under permissions.allow', async () => {
+	it('creates the plugin-folder settings.json when absent, with the rule under permissions.allow', async () => {
 		const app = createMockApp() as unknown as App;
 		await persistToolApprovalRules(app, ['Read(/some/path/**)']);
-		const raw = await readVaultFile(app, '_synapse/settings.json');
-		const parsed = parseSettingsFile(raw);
+		const parsed = parseSettingsFile(await app.vault.adapter.read(PLUGIN_SETTINGS));
 		expect(parsed.permissions?.allow).toEqual(['Read(/some/path/**)']);
+	});
+
+	it('never writes to the synced _synapse/ folder', async () => {
+		const app = createMockApp() as unknown as App;
+		await persistToolApprovalRules(app, ['Read(/some/path/**)']);
+		expect(await app.vault.adapter.exists('_synapse/settings.json')).toBe(false);
 	});
 
 	it('is a no-op when given an empty rule list', async () => {
 		const app = createMockApp() as unknown as App;
 		await persistToolApprovalRules(app, []);
-		expect(app.vault.getAbstractFileByPath('_synapse/settings.json')).toBeNull();
+		expect(await app.vault.adapter.exists(PLUGIN_SETTINGS)).toBe(false);
 	});
 
 	it('unions new rules into an existing allow list without duplicating', async () => {
 		const app = createMockApp() as unknown as App;
-		seedFile(app, '_synapse/settings.json', JSON.stringify({
-			permissions: {allow: ['Bash(git status)']},
-		}));
+		await seedPluginSettings(app, JSON.stringify({permissions: {allow: ['Bash(git status)']}}));
 		await persistToolApprovalRules(app, ['Bash(git status)', 'Read(/foo/**)']);
-		const raw = await readVaultFile(app, '_synapse/settings.json');
-		const parsed = parseSettingsFile(raw);
+		const parsed = parseSettingsFile(await app.vault.adapter.read(PLUGIN_SETTINGS));
 		expect(parsed.permissions?.allow?.slice().sort()).toEqual(['Bash(git status)', 'Read(/foo/**)']);
 	});
 
 	it('preserves every other top-level key and every other permissions key in an existing file', async () => {
 		const app = createMockApp() as unknown as App;
-		seedFile(app, '_synapse/settings.json', JSON.stringify({
+		await seedPluginSettings(app, JSON.stringify({
 			$schema: 'https://example.com/schema.json',
 			model: 'sonnet',
 			permissions: {allow: ['Bash(git status)'], deny: ['Bash(rm -rf /)'], defaultMode: 'default'},
 		}));
 		await persistToolApprovalRules(app, ['Read(/foo/**)']);
-		const raw = await readVaultFile(app, '_synapse/settings.json');
-		const parsed = parseSettingsFile(raw);
+		const parsed = parseSettingsFile(await app.vault.adapter.read(PLUGIN_SETTINGS));
 		expect(parsed.$schema).toBe('https://example.com/schema.json');
 		expect(parsed.model).toBe('sonnet');
 		expect(parsed.permissions?.deny).toEqual(['Bash(rm -rf /)']);
@@ -392,10 +402,56 @@ describe('persistToolApprovalRules', () => {
 
 	it('throws and does not overwrite when the existing file is malformed JSON', async () => {
 		const app = createMockApp() as unknown as App;
-		seedFile(app, '_synapse/settings.json', '{ not valid json');
+		await seedPluginSettings(app, '{ not valid json');
 		await expect(persistToolApprovalRules(app, ['Read(/foo/**)'])).rejects.toThrow('not valid JSON');
-		const raw = await readVaultFile(app, '_synapse/settings.json');
-		expect(raw).toBe('{ not valid json');
+		expect(await app.vault.adapter.read(PLUGIN_SETTINGS)).toBe('{ not valid json');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// migrateVaultSettingsToPluginFolder / seedDefaultVaultSettings
+// ---------------------------------------------------------------------------
+
+describe('migrateVaultSettingsToPluginFolder', () => {
+	it('copies _synapse/settings.json into the plugin folder and leaves the original', async () => {
+		const app = createMockApp() as unknown as App;
+		const legacy = JSON.stringify({permissions: {allow: ['Read', 'Bash(git status)']}});
+		seedFile(app, '_synapse/settings.json', legacy);
+		expect(await migrateVaultSettingsToPluginFolder(app)).toBe(true);
+		expect(await app.vault.adapter.read(PLUGIN_SETTINGS)).toBe(legacy);
+		expect(await readVaultFile(app, '_synapse/settings.json')).toBe(legacy);
+	});
+
+	it('never overwrites an existing plugin-folder settings.json', async () => {
+		const app = createMockApp() as unknown as App;
+		seedFile(app, '_synapse/settings.json', '{"permissions":{"allow":["Write"]}}');
+		await seedPluginSettings(app, '{"permissions":{"allow":["Read"]}}');
+		expect(await migrateVaultSettingsToPluginFolder(app)).toBe(false);
+		expect(await app.vault.adapter.read(PLUGIN_SETTINGS)).toBe('{"permissions":{"allow":["Read"]}}');
+	});
+
+	it('does nothing when there is no legacy file, and is idempotent', async () => {
+		const app = createMockApp() as unknown as App;
+		expect(await migrateVaultSettingsToPluginFolder(app)).toBe(false);
+		expect(await app.vault.adapter.exists(PLUGIN_SETTINGS)).toBe(false);
+		seedFile(app, '_synapse/settings.json', '{}');
+		expect(await migrateVaultSettingsToPluginFolder(app)).toBe(true);
+		expect(await migrateVaultSettingsToPluginFolder(app)).toBe(false);
+	});
+});
+
+describe('seedDefaultVaultSettings', () => {
+	it('writes the minimal default when absent, and never overwrites', async () => {
+		const app = createMockApp() as unknown as App;
+		expect(await seedDefaultVaultSettings(app)).toBe(true);
+		expect(await app.vault.adapter.read(PLUGIN_SETTINGS)).toBe(DEFAULT_VAULT_SETTINGS);
+		await app.vault.adapter.write(PLUGIN_SETTINGS, '{"custom":true}');
+		expect(await seedDefaultVaultSettings(app)).toBe(false);
+		expect(await app.vault.adapter.read(PLUGIN_SETTINGS)).toBe('{"custom":true}');
+	});
+
+	it('is not part of the synced starter kit', () => {
+		expect(STARTER_FILES.some(f => f.path === 'settings.json')).toBe(false);
 	});
 });
 

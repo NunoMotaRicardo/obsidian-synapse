@@ -1,6 +1,6 @@
-# Permissions: `_synapse/settings.json`
+# Permissions: the plugin's `settings.json`
 
-`_synapse/settings.json` is this vault's own Claude settings layer. Synapse reads it on every query and merges it beneath the user's other Claude settings. It is the **only** place to grant or restrict tools for Synapse chats — do not create or edit `.claude/settings.json`, `.claude/settings.local.json`, or `~/.claude/settings.json` for this.
+The plugin folder's `settings.json` — `<config folder>/plugins/claude-synapse/settings.json`, usually `.obsidian/plugins/claude-synapse/settings.json` — is Synapse's own Claude settings layer. It is **per device** and deliberately not in `_synapse/`, which is synced. Ignore any `settings.json` left in `_synapse/`: it is only a legacy copy. Synapse reads it on every query and merges it beneath the user's other Claude settings. It is the **only** place to grant or restrict tools for Synapse chats — do not create or edit `.claude/settings.json`, `.claude/settings.local.json`, or `~/.claude/settings.json` for this.
 
 Synapse ships it with a minimal default: read files, nothing else.
 
@@ -34,7 +34,7 @@ Prefer the narrowest rule that does the job: a folder over the whole vault, an e
 
 ## Steps
 
-1. **Read** `_synapse/settings.json` if it exists (it may not, or may hold other keys).
+1. **Read** that `settings.json` if it exists (it may not, or may hold other keys).
 2. **Propose** the exact rule strings and the list each goes in (permission model applies — this file controls what runs unprompted, so always ask first, and warn when a rule is broad).
 3. **Write** after approval. Keep every existing key and rule, add the new ones to the right list, and keep the file valid JSON. Done when the file parses and contains the approved rules.
 

@@ -384,10 +384,10 @@ and built in `buildUI()` via `controller.build(parent)`.
   - The modal itself never writes to disk (it only returns `persistRules`); `buildSessionConfig()`'s
     `permissionHandler` is the one call site that does, via `configWriter.persistToolApprovalRules()`
     (see `config-writer.md`) — matching the `configWriter.ts` file-writing rule in `CLAUDE.md`. A
-    write failure (e.g. malformed existing `_synapse/settings.json`) surfaces as a `Notice` but does
+    write failure (e.g. malformed existing plugin settings file) surfaces as a `Notice` but does
     not revoke the in-memory grant already returned to the SDK for the current conversation.
   - There is no in-app UI to remove a persisted grant — `wiki/Customization.md` documents
-    editing `_synapse/settings.json`'s `permissions.allow` list directly.
+    editing the plugin folder's `settings.json` `permissions.allow` list directly.
 - **Risk hints suppress Always allow and default-approve (issue #268).** SDK 0.3.268 attaches two
   hints to `canUseTool`'s options for asks the CLI itself flags as unsafe to hand a blanket rule
   or a careless keystroke — `defaultToNo` and `suppressAlwaysAllowRule` (e.g. a dangerous-`rm`
@@ -427,7 +427,7 @@ and built in `buildUI()` via `controller.build(parent)`.
     resets the view's set to empty before either restoring that copy (same conversation, still
     alive in the background) or cold-loading a persisted session from disk (a different
     conversation this view instance has no in-memory grant history for).
-  - The vault settings layer (`_synapse/settings.json`) is merged *underneath* whatever
+  - The settings layer (plugin folder's `settings.json`) is merged *underneath* whatever
     `sessionToolGrants` produces here, inside `AgentService.routeQueryOptions()` — not a second
     merge point in the view layer. A vault-level `permissions.deny` rule still applies even after
     a grant is added mid-conversation, because the merge happens fresh on every query build; see

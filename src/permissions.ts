@@ -99,7 +99,7 @@ export function buildInMemoryPermissionSettings(
 }
 
 /**
- * Merge the vault's own settings layer (`_synapse/settings.json`, issue #194) beneath whatever
+ * Merge the vault's own settings layer (the plugin-folder `settings.json`, issue #194) beneath whatever
  * `Options.settings` a call site/session already carries — including, notably, #193's
  * in-memory tool-approval grants (`buildInMemoryPermissionSettings()`'s output, folded into
  * `Session.applyToolGrants()`'s `this.config.settings`).

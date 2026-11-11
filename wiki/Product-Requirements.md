@@ -153,8 +153,8 @@ Requirement IDs are stable references for issues and reviews.
 | ID | Requirement |
 |---|---|
 | PE-1 | **Tools approval** defaults to **Ask**. **Allow** approves tool calls automatically for chat, editor actions, and search. |
-| PE-2 | In **Ask** mode, a dialog shows exactly what will run, with **Allow** (this conversation), **Always allow** (saved to `_synapse/settings.json`, with a notice confirming where), and **Deny**. |
-| PE-3 | `_synapse/settings.json` is a vault-level permission layer applied to every session. A new vault gets one that allows `Read`. An existing file is never overwritten. |
+| PE-2 | In **Ask** mode, a dialog shows exactly what will run, with **Allow** (this conversation), **Always allow** (saved to the plugin's per-device `settings.json`, with a notice confirming where), and **Deny**. |
+| PE-3 | The plugin folder's `settings.json` (per device, not synced) is a permission layer applied to every session. A first run gets one that allows `Read`; an existing `_synapse/settings.json` is copied across once and left in place. An existing file is never overwritten. |
 | PE-4 | Read-only tools are approved automatically. |
 
 ### 6.5 Run guardrails

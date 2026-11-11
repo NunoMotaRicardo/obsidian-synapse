@@ -415,7 +415,7 @@ export class Session {
 	 * Takes the grant set rather than a finished `settings` value so the merge happens *here*,
 	 * against this session's own `settings` — `config` is private, so a caller could only ever
 	 * pass a grants-only object and would silently drop any other `settings` the session was
-	 * built with (e.g. #194's `_synapse/settings.json`).
+	 * built with (e.g. #194's the plugin-folder `settings.json`).
 	 */
 	applyToolGrants(grants: Iterable<string>): void {
 		this.config = {...this.config, settings: buildInMemoryPermissionSettings(grants, this.config.settings)};
@@ -474,7 +474,7 @@ export class Session {
 	 * specific send() call, on top of whatever the session was already configured with.
 	 *
 	 * `app` (#138/#194) is read on the real Agent SDK path (`createQuery()` ->
-	 * `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path for the vault
+	 * `routeQueryOptions()`) to derive per-device settings path for the vault
 	 * settings layer — the CLI itself doesn't need an `App`, since its own tools run inside
 	 * the CLI process, but locating the vault-scoped settings file does.
 	 * `Session`/`AgentService` hold no `App` reference of their own (architecture rule:

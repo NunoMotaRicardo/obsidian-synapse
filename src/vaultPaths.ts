@@ -69,14 +69,33 @@ export function getSynapsePluginConfig(app: App): LocalPluginConfig[] {
 	return [{type: 'local', path: `${normalizedBase}/${SYNAPSE_FOLDER}/`}];
 }
 
+/** Obsidian plugin id (`manifest.json`), i.e. the plugin's folder name under `<configDir>/plugins/`. */
+export const SYNAPSE_PLUGIN_ID = 'claude-synapse';
+
 /**
- * Absolute on-disk path to the vault's own settings layer, `_synapse/settings.json` (issue
- * #194) — matching how `getSynapsePluginConfig()` already derives `_synapse/`'s SDK-plugin
- * path. Purely path derivation: this does not check whether the file exists, nor read it — see
- * `AgentService`'s vault-settings-layer merge in `agentService.ts` for that (kept out of this
- * dependency-free module, which must stay free of `node:fs`/internal imports).
+ * Legacy vault-relative location of the settings layer. Before it moved into the plugin folder
+ * (so it stays per device and out of the synced, user-visible `_synapse/` folder), the file lived
+ * here. Only the one-time migration reads it — see `migrateVaultSettingsToPluginFolder()`.
+ */
+export const LEGACY_VAULT_SETTINGS_PATH = `${SYNAPSE_FOLDER}/settings.json`;
+
+/**
+ * Vault-relative path of the per-device settings layer: `<configDir>/plugins/claude-synapse/settings.json`.
+ * It lives under the vault's config folder (`Vault.configDir`, never hardcoded), which Obsidian's
+ * vault index skips — so it is read and written through the adapter, not the `Vault` file API.
+ */
+export function getSynapseSettingsVaultPath(app: App): string {
+	return `${app.vault.configDir}/plugins/${SYNAPSE_PLUGIN_ID}/settings.json`;
+}
+
+/**
+ * Absolute on-disk path to the plugin's settings layer (issue #194), the file
+ * `AgentService.loadVaultSettings()` reads. Purely path derivation: this does not check whether
+ * the file exists, nor read it — see `AgentService`'s vault-settings-layer merge in
+ * `agentService.ts` for that (kept out of this dependency-free module, which must stay free of
+ * `node:fs`/internal imports).
  */
 export function getSynapseSettingsPath(app: App): string {
 	const normalizedBase = getVaultBasePath(app).replace(/\\/g, '/');
-	return `${normalizedBase}/${SYNAPSE_FOLDER}/settings.json`;
+	return `${normalizedBase}/${getSynapseSettingsVaultPath(app)}`;
 }
