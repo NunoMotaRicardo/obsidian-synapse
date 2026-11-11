@@ -6,7 +6,7 @@ import {fetchEndpointModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditOrInsertModal} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
-import {installStarterKit} from './configWriter';
+import {installStarterKit, migrateVaultSettingsToPluginFolder, seedDefaultVaultSettings} from './configWriter';
 import {debugTrace} from './debug';
 import {getCmView} from './utils';
 import {migrateClaudeBrainStorage} from './identityMigration';
@@ -32,8 +32,7 @@ export default class SynapsePlugin extends Plugin {
 		// First run: seed `_synapse/` with the starter kit. Deferred to layout-ready so the vault
 		// index is loaded — before that an existing `_synapse/` can look absent.
 		this.app.workspace.onLayoutReady(() => {
-			if (this.app.vault.getAbstractFileByPath(SYNAPSE_FOLDER)) return;
-			installStarterKit(this.app).catch(e => console.error('Synapse: failed to install starter kit', e));
+			void this.initVaultConfig();
 		});
 
 		this.addSettingTab(new SynapseSettingTab(this.app, this));
@@ -170,6 +169,22 @@ export default class SynapsePlugin extends Plugin {
 			}).catch(() => {});
 		}
 		this.notifySidebarModelsChanged(this.agentService.getModels());
+	}
+
+	/**
+	 * Per-device settings layer + first-run starter kit. The legacy synced
+	 * `_synapse/settings.json` is copied into the plugin folder first (every startup, idempotent),
+	 * so a fresh install's default is only seeded when there is nothing to migrate.
+	 */
+	private async initVaultConfig(): Promise<void> {
+		try {
+			await migrateVaultSettingsToPluginFolder(this.app);
+			if (this.app.vault.getAbstractFileByPath(SYNAPSE_FOLDER)) return;
+			await installStarterKit(this.app);
+			await seedDefaultVaultSettings(this.app);
+		} catch (e) {
+			console.error('Synapse: failed to initialise vault config', e);
+		}
 	}
 
 	private migrateLocalStorageKeys(): void {

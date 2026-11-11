@@ -25,7 +25,6 @@ _synapse/                 ← registered as an SDK local plugin on every session
       SKILL.md            ← skill instructions (invocable via /name)
       ...optional resources...
   .mcp.json               ← MCP server configs (SDK-native format)
-  settings.json           ← vault settings layer (permissions, env, model overrides, ...)
 ```
 
 The underscore prefix keeps `_synapse/` sorted at the top of Obsidian's file explorer and
@@ -199,13 +198,13 @@ content:
 
 ---
 
-## 5. Vault settings (`_synapse/settings.json`)
+## 5. Plugin settings file (`settings.json`, per device)
 
-An optional JSON file carrying vault-scoped settings — permission rules, environment values, a
+An optional JSON file carrying settings — permission rules, environment values, a
 default model override, and anything else the [Claude Code settings
 schema](https://code.claude.com/docs/en/settings#available-settings) supports. It's Claude Synapse's own
 settings layer, distinct from the plugin's own preferences (Settings tab, stored in Obsidian's
-`data.json`): this file follows the **vault**, not any one session's working directory, so it
+`data.json`): this file lives in the plugin's own folder (`.obsidian/plugins/claude-synapse/settings.json`, hidden from the file explorer and per **device**, so it is not synced with `_synapse/`), and is independent of any one session's working directory, so it
 applies the same whether you're chatting from the vault root or with the working directory
 scoped to a subfolder.
 
@@ -268,7 +267,7 @@ attached folder), the CLI can suggest a very broad rule shaped like `Read(//d//*
 drive). Read what's shown before making it permanent — narrower is safer.
 
 **There is no in-app UI to remove a persisted grant.** To revoke one, open
-`_synapse/settings.json` yourself and delete the entry from `permissions.allow` (or delete the
+that `settings.json` yourself and delete the entry from `permissions.allow` (or delete the
 whole file if you have nothing else in it worth keeping).
 
 ### Relationship to Claude Code's own settings files

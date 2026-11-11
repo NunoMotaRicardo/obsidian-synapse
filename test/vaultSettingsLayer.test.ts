@@ -81,7 +81,7 @@ describe('AgentService vault settings layer (#194)', () => {
 	function makeVault(): {app: App; settingsPath: string} {
 		const base = mkdtempSync(join(tmpdir(), 'synapse-vault-settings-'));
 		dirs.push(base);
-		const app = {vault: {adapter: {basePath: base}}} as unknown as App;
+		const app = {vault: {configDir: '.mock-config-dir', adapter: {basePath: base}}} as unknown as App;
 		return {app, settingsPath: getSynapseSettingsPath(app)};
 	}
 

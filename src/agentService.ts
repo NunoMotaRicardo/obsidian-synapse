@@ -451,7 +451,7 @@ export class AgentService {
 	private sdkModels: ModelInfo[] = [];
 	private cachedDelegationServer: McpServerConfig | null = null;
 	/**
-	 * Cached parse of `_synapse/settings.json` (issue #194), keyed by its absolute path and
+	 * Cached parse of the plugin-folder `settings.json` (issue #194), keyed by its absolute path and
 	 * re-read whenever the file's mtime changes — so an edit takes effect on the very next
 	 * query (AC-5) without re-parsing an unchanged file on every turn. `settings: null` means
 	 * the last read attempt found a malformed file (distinguished from "not cached yet"/`this.
@@ -460,7 +460,7 @@ export class AgentService {
 	 */
 	private vaultSettingsCache: {path: string; mtimeMs: number; settings: Settings | null} | null = null;
 	/**
-	 * mtime (ms) of `_synapse/settings.json` the last time a malformed-JSON Notice fired for
+	 * mtime (ms) of the plugin-folder `settings.json` the last time a malformed-JSON Notice fired for
 	 * that path, so a broken file warns once per edit rather than once per turn (AC-4) — a
 	 * fresh mtime (the user fixed or re-broke the file) clears the dedup and allows one more
 	 * Notice.
@@ -899,7 +899,7 @@ export class AgentService {
 		permissionMode?: Options['permissionMode'];
 		tools?: Options['tools'];
 		/**
-		 * Vault handle for the `_synapse/settings.json` layer (issue #194) — see
+		 * Vault handle for the the plugin-folder `settings.json` layer (issue #194) — see
 		 * `routeQueryOptions()`. Not used for anything else here (no vault tools are offered by
 		 * this one-shot helper), so it's fine for a caller to omit it, at the cost of the layer
 		 * not applying to that call.
@@ -948,7 +948,7 @@ export class AgentService {
 	 * The session persists and can be resumed later.
 	 *
 	 * `app` (#194, mirroring `Session.send()`) is read on the real Agent SDK path
-	 * (`createQuery()` -> `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path
+	 * (`createQuery()` -> `routeQueryOptions()`) to derive per-device settings path
 	 * for the vault settings layer. `AgentService` holds no `App` reference of its own
 	 * (architecture rule: SDK/session plumbing stays UI-agnostic), so each editor action/edit
 	 * modal/search caller passes it per call.
@@ -1081,7 +1081,7 @@ export class AgentService {
 	createQuery(options: {
 		prompt: string;
 		queryOptions: Options;
-		/** Vault handle for the `_synapse/settings.json` layer (issue #194) — see `routeQueryOptions()`. */
+		/** Vault handle for the the plugin-folder `settings.json` layer (issue #194) — see `routeQueryOptions()`. */
 		app?: App;
 	}): Query {
 		const routedOptions = this.routeQueryOptions({
@@ -1123,7 +1123,7 @@ export class AgentService {
 	}
 
 	/**
-	 * Read and parse `_synapse/settings.json` from the vault, synchronously — desktop-only
+	 * Read and parse the per-device `settings.json` from the plugin folder (`getSynapseSettingsPath()`), synchronously — desktop-only
 	 * plugin, tiny file, and a sync read keeps `routeQueryOptions()` (the single choke point
 	 * every real SDK query passes through) synchronous too (issue #194).
 	 *
@@ -1163,7 +1163,7 @@ export class AgentService {
 			this.vaultSettingsCache = {path, mtimeMs, settings: null};
 			if (this.malformedSettingsWarnedAt.get(path) !== mtimeMs) {
 				this.malformedSettingsWarnedAt.set(path, mtimeMs);
-				new Notice('[synapse] _synapse/settings.json is not valid JSON — ignoring it for this query.');
+				new Notice('Synapse: plugin settings file is not valid JSON — ignoring it for this query.');
 				debugTrace('[synapse] Failed to parse vault settings.json:', e);
 			}
 			return undefined;
@@ -1173,11 +1173,11 @@ export class AgentService {
 	/**
 	 * Route query options. Resolves bound model for named agent if configured, defaults
 	 * `settingSources` to `['user', 'project']` (issue #196) unless a caller already set its
-	 * own, and layers in the vault's `_synapse/settings.json` (issue #194) beneath whatever
+	 * own, and layers in the vault's the plugin-folder `settings.json` (issue #194) beneath whatever
 	 * `Options.settings` the caller already built (including any in-memory tool-approval
 	 * grants) — see `mergeVaultSettingsLayer()`. `app` is optional because not every caller has
 	 * one (`AgentService` holds no `App` reference of its own, per the architecture rule); no
-	 * `app` means no `_synapse/settings.json` layer, same as a vault with no such file.
+	 * `app` means no the plugin-folder `settings.json` layer, same as a vault with no such file.
 	 */
 	private routeQueryOptions(options: Options, app?: App): Options {
 		const opts = {...options};

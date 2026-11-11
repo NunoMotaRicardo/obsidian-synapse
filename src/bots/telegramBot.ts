@@ -109,7 +109,7 @@ export class TelegramBotService {
 			this.api = null;
 			this.setStatus('error');
 			const msg = e instanceof TelegramApiError ? e.description : String(e);
-			throw new Error(msg);
+			throw new Error(msg, { cause: e });
 		}
 
 		// Load agent/skill/tool configs for session creation

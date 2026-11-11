@@ -64,7 +64,7 @@ The separate `writeSkill` helper serializes frontmatter and creates a new skill 
 | `scanSkills(app, folder)` | — | Reads `_synapse/skills/*/SKILL.md` → `SkillInfo[]` |
 | `writeSkill(app, folder, config)` | `SKILL.md` in subfolder | `_synapse/skills/<kebab-name>/SKILL.md` |
 | `ensureFolder(app, path)` | Folder | Creates intermediates |
-| `persistToolApprovalRules(app, ruleStrings)` | `settings.json` (if absent) | `_synapse/settings.json`'s `permissions.allow` |
+| `persistToolApprovalRules(app, ruleStrings)` | plugin-folder `settings.json` (if absent) | its `permissions.allow` |
 
 ### Rules
 
@@ -121,26 +121,37 @@ suppress Always allow and default-approve".
   (`toolName` or `toolName(ruleContent)`) — produced by `permissionRuleToString()`/
   `extractAllowRuleStrings()` in `agentService.ts`, never re-derived here.
 - No-op (returns immediately, writes nothing) when `ruleStrings` is empty.
-- Serializes writes to `_synapse/settings.json` through `lockManager`, same as every other writer
+- Serializes writes to the plugin folder's `settings.json` through `lockManager`, same as every other writer
   in this module.
-- Creates `_synapse/settings.json` (and `_synapse/` itself) if absent, otherwise reads it via
-  `vault.read`, parses as JSON, and writes back **every top-level key untouched** except
+- Creates `<configDir>/plugins/claude-synapse/settings.json` if absent, otherwise reads it, parses as JSON, and writes back **every top-level key untouched** except
   `permissions.allow`, which is unioned (deduplicated, never clobbered) with `ruleStrings`.
-- Uses the Vault API: `getAbstractFileByPath()` determines
-  whether the file exists before `vault.read`, `vault.create`, or `vault.modify`. If the file is on
-  disk but not yet in Obsidian's cache (e.g. written by the agent's own Write tool), an
-  `adapter.exists()` check routes the read/write through `vault.adapter` instead, so `vault.create`
-  never fails with "already exists" and drops the grant. `_synapse/settings.json`
+- Uses the raw `vault.adapter` (`exists`/`read`/`write`/`mkdir`) throughout: the config folder is not in Obsidian's vault index, so the `Vault` file API cannot see it. The file
   is read by `AgentService.loadVaultSettings()` (`agent-service.md`)
-  via `node:fs`, cached by the file's mtime — a `vault.create`/`vault.modify` write here changes
+  via `node:fs`, cached by the file's mtime — an adapter write here changes
   that mtime, so the next query picks up the change with no separate invalidation.
 - Invalid JSON throws (surfaced by the caller as a `Notice`) rather than being
   silently overwritten; the caller's in-memory, conversation-scoped grant already returned to the
   SDK is unaffected by a persistence failure.
 - Valid JSON that is not an object is treated as an empty settings object; malformed
   `permissions` containers are replaced and non-string allow entries are filtered out.
-- No removal UI — removing a persisted grant means hand-editing `_synapse/settings.json`'s
+- No removal UI — removing a persisted grant means hand-editing the plugin folder's `settings.json`
   `permissions.allow` list; documented in `wiki/Customization.md`.
+
+## Per-device settings: migration and seeding
+
+The settings layer lives in the plugin folder, not the synced `_synapse/`, so it stays per device
+(`vault-paths.md`). Two functions maintain it; both use the raw adapter, take the write lock, and
+never overwrite an existing file:
+
+- `migrateVaultSettingsToPluginFolder(app)` — runs on every startup (`main.ts`
+  `initVaultConfig()`, at layout-ready). If the plugin folder has no `settings.json` and the legacy
+  `_synapse/settings.json` exists, it **copies** it across. The original is **left in place** (another
+  device may not have migrated yet, and deleting would sync) and is ignored afterwards. Returns
+  `true` when it copied.
+- `seedDefaultVaultSettings(app)` — first run only (when `_synapse/` was absent and the starter kit
+  was just installed, after the migration): writes `DEFAULT_VAULT_SETTINGS`
+  (`permissions.allow: ["Read"]`; defined in `starterKit.ts`, deliberately not in `STARTER_FILES`)
+  if the file is still absent.
 
 ## Vault structure scanner
 
@@ -154,7 +165,7 @@ context in the per-turn user message, not the system prompt.
 
 `buildSelfImproveHint()` in `sessionConfig.ts` teaches agents to recognize customization intent.
 Mentions "agent" and "skill" as artifact types, states that tool permissions live in
-`_synapse/settings.json` (never `.claude/settings*.json`), and names the `synapse-config` skill. Session-stable and takes no arguments — the
+the plugin folder's `settings.json` (never `.claude/settings*.json`), and names the `synapse-config` skill. Session-stable and takes no arguments — the
 volatile "Current agent" line is delivered per-turn by `buildCurrentAgentLine(agentName)`
 instead, so this static hint doesn't invalidate the cached system-prompt prefix when the selected
 agent changes.
@@ -167,14 +178,11 @@ returns the vault paths it created. The kit's content lives as plain Markdown un
 esbuild's `.md` loader (`vitest.config.ts` mirrors that loader for tests); `src/starterKit.ts`
 lists the files in `STARTER_FILES`:
 
-- `settings.json` — default vault permissions, minimal: `permissions.allow: ["Read"]` (read
-  files; a path-scoped `Read(./**)` did not match in practice). Defined inline as `DEFAULT_VAULT_SETTINGS` in `starterKit.ts`. Seeded only
-  when absent, so an existing file (with the user's grants) is never touched.
 - `agents/writer.agent.md` — **Writer** agent (structure of essays, documents, speeches, articles).
 - `agents/search.agent.md` — **Search** agent: vault-search instructions (explore names + contents,
   answer with a JSON array). Default agent for the Search tab; `SEARCH_AGENT_INSTRUCTIONS` exports its body.
 - `skills/synapse-config/` — authoring agents, skills, and MCP servers; `settings.md` documents
-  the `_synapse/settings.json` permission format and workflow (so the agent edits that file rather
+  the plugin-folder `settings.json` permission format and workflow (so the agent edits that file rather
   than `.claude/settings*.json`); `setup.md` builds custom writing styles from the user's own
   documents.
 - `skills/obsidian/` — Obsidian Flavored Markdown, Bases, and the `obsidian` CLI.
@@ -187,7 +195,7 @@ The one exception is the `replace` option (vault paths of starter files to reset
 content). The replaceable units are `REPLACEABLE_STARTER_UNITS` — the Writer and Search agents and the
 `obsidian` and `synapse-config` skills; **Initialize** asks for a separate confirmation per
 already-installed unit (`ConfirmModal.ask`) and passes only the confirmed units' files. `think`,
-`writing-style`, `settings.json`, the user's own agents/skills, and extra files inside a replaced
+`writing-style`, the user's own agents/skills, and extra files inside a replaced
 skill folder are never overwritten or deleted. The button is shown on the Feature Map & Agents and
 Capabilities pages, and sets Semantic search to the Search agent when the user hasn't chosen one.
 Called from two places:

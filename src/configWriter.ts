@@ -1,8 +1,9 @@
-import {App, DataAdapter, normalizePath, TFile, TFolder} from 'obsidian';
+import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
-import {REPLACEABLE_STARTER_UNITS, STARTER_FILES} from './starterKit';
+import {DEFAULT_VAULT_SETTINGS, REPLACEABLE_STARTER_UNITS, STARTER_FILES} from './starterKit';
+import {getSynapseSettingsVaultPath, LEGACY_VAULT_SETTINGS_PATH} from './vaultPaths';
 
 /** Module-level compiled regex for frontmatter detection. */
 export const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -228,20 +229,37 @@ export async function writeSkill(
 // Tool-approval persistence (issue #197)
 // ---------------------------------------------------------------------------
 
+/** Create `dir` and any missing parents through the raw adapter (the config folder is not in the vault index). */
+async function ensureAdapterFolder(app: App, dir: string): Promise<void> {
+	const parts = normalizePath(dir).split('/');
+	let current = '';
+	for (const part of parts) {
+		current = current ? `${current}/${part}` : part;
+		if (!(await app.vault.adapter.exists(current))) await app.vault.adapter.mkdir(current);
+	}
+}
+
 /**
- * Persist tool-approval rule string(s) into `_synapse/settings.json`'s `permissions.allow`,
- * creating the file (and `_synapse/`) if absent (AC-3). `ruleStrings` must already be in the
- * CLI's rule-string syntax — callers derive them via `permissionRuleToString()`/
- * `extractAllowRuleStrings()` (`agentService.ts`) so what's shown to the user in
- * `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
+ * Write the settings layer, creating the plugin folder if needed. Raw adapter, because
+ * `<configDir>/plugins/...` is not indexed by `Vault`.
+ */
+async function writeSettingsFile(app: App, path: string, content: string): Promise<void> {
+	await ensureAdapterFolder(app, path.slice(0, path.lastIndexOf('/')));
+	await app.vault.adapter.write(path, content);
+}
+
+/**
+ * Persist tool-approval rule string(s) into the per-device settings layer
+ * (`<configDir>/plugins/claude-synapse/settings.json`)'s `permissions.allow`, creating the file
+ * if absent (AC-3). `ruleStrings` must already be in the CLI's rule-string syntax — callers derive
+ * them via `permissionRuleToString()`/`extractAllowRuleStrings()` (`agentService.ts`) so what's
+ * shown to the user in `ToolApprovalModal` before persisting is exactly what lands on disk (AC-4).
  *
- * Uses `vault.getAbstractFileByPath` + `vault.read`/`vault.create`/`vault.modify` rather
- * than `node:fs`, parses the existing content as JSON, and writes back every
- * other top-level key untouched: only `permissions.allow` is unioned with `ruleStrings` (never
- * clobbered, never duplicated). `_synapse/settings.json` is read directly by
- * `AgentService.loadVaultSettings()` via `node:fs`, cached by mtime (issue #194): a plain
- * `vault.create`/`vault.modify` write here changes the file's on-disk mtime, so the next query
- * picks up the change with no extra invalidation needed.
+ * Uses the raw vault adapter (the config folder is outside the vault index), parses the existing
+ * content as JSON, and writes back every other top-level key untouched: only `permissions.allow`
+ * is unioned with `ruleStrings` (never clobbered, never duplicated). The file is read directly by
+ * `AgentService.loadVaultSettings()` via `node:fs`, cached by mtime (issue #194): a write here
+ * changes the on-disk mtime, so the next query picks up the change with no extra invalidation.
  *
  * A malformed existing file is left untouched and reported via a thrown error (surfaced by the
  * caller, e.g. as a `Notice`) rather than silently overwritten — the in-memory conversation grant
@@ -249,25 +267,17 @@ export async function writeSkill(
  */
 export async function persistToolApprovalRules(app: App, ruleStrings: string[]): Promise<void> {
 	if (ruleStrings.length === 0) return;
-	const path = normalizePath(`${SYNAPSE_FOLDER}/settings.json`);
+	const path = normalizePath(getSynapseSettingsVaultPath(app));
 
 	await lockManager.withLock(path, async () => {
-		await ensureFolder(app, SYNAPSE_FOLDER);
-
-		const existingFile = app.vault.getAbstractFileByPath(path);
-		// The file can be on disk before Obsidian's cache knows it (a seeded/agent-written
-		// settings.json, or an external sync): `vault.create` would then throw "already exists"
-		// and the grant would silently never land. Fall back to the raw adapter in that case.
-		const adapter = app.vault.adapter as Partial<DataAdapter> | undefined;
-		const onDiskOnly = !(existingFile instanceof TFile) && typeof adapter?.exists === 'function' && await adapter.exists(path);
 		let settings: Record<string, unknown> = {};
-		if (existingFile instanceof TFile || onDiskOnly) {
-			const raw = existingFile instanceof TFile ? await app.vault.read(existingFile) : await app.vault.adapter.read(path);
+		if (await app.vault.adapter.exists(path)) {
+			const raw = await app.vault.adapter.read(path);
 			try {
 				const parsed: unknown = JSON.parse(raw);
 				settings = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed as Record<string, unknown> : {};
 			} catch {
-				throw new Error('[synapse] _synapse/settings.json is not valid JSON — fix or remove it, then try "Always allow" again.');
+				throw new Error(`[synapse] ${path} is not valid JSON — fix or remove it, then try "Always allow" again.`);
 			}
 		}
 
@@ -280,14 +290,44 @@ export async function persistToolApprovalRules(app: App, ruleStrings: string[]):
 		existingPermissions['allow'] = Array.from(new Set([...existingAllow, ...ruleStrings]));
 		settings['permissions'] = existingPermissions;
 
-		const content = `${JSON.stringify(settings, null, 2)}\n`;
-		if (existingFile instanceof TFile) {
-			await app.vault.modify(existingFile, content);
-		} else if (onDiskOnly) {
-			await app.vault.adapter.write(path, content);
-		} else {
-			await app.vault.create(path, content);
-		}
+		await writeSettingsFile(app, path, `${JSON.stringify(settings, null, 2)}\n`);
+	});
+}
+
+/**
+ * One-time, per-device migration: copy the legacy synced `_synapse/settings.json` into the plugin
+ * folder, where the settings layer now lives (per device, hidden from the vault's file explorer).
+ * Runs on every startup and is idempotent:
+ *
+ * - **Copy, never move.** The original is left in place (other devices that have not migrated yet
+ *   still need it, and a sync would propagate a delete). It is ignored from now on.
+ * - **Never overwrites.** If the plugin folder already has a `settings.json`, nothing happens.
+ *
+ * Returns `true` when a file was copied.
+ */
+export async function migrateVaultSettingsToPluginFolder(app: App): Promise<boolean> {
+	const dest = normalizePath(getSynapseSettingsVaultPath(app));
+	const adapter = app.vault.adapter;
+	return lockManager.withLock(dest, async () => {
+		if (await adapter.exists(dest)) return false;
+		if (!(await adapter.exists(LEGACY_VAULT_SETTINGS_PATH))) return false;
+		const content = await adapter.read(LEGACY_VAULT_SETTINGS_PATH);
+		await writeSettingsFile(app, dest, content);
+		return true;
+	});
+}
+
+/**
+ * Seed the minimal default settings layer (read files, nothing else) into the plugin folder when
+ * none exists. Called on first run, after the migration has had its chance to bring an existing
+ * `_synapse/settings.json` across. Never overwrites. Returns `true` when written.
+ */
+export async function seedDefaultVaultSettings(app: App): Promise<boolean> {
+	const dest = normalizePath(getSynapseSettingsVaultPath(app));
+	return lockManager.withLock(dest, async () => {
+		if (await app.vault.adapter.exists(dest)) return false;
+		await writeSettingsFile(app, dest, DEFAULT_VAULT_SETTINGS);
+		return true;
 	});
 }
 

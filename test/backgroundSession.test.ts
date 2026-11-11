@@ -19,7 +19,7 @@ function fakeSession(initialCumulativeCostUsd?: number) {
 	let cumulativeCostUsd = initialCumulativeCostUsd;
 	const session = {
 		on<K extends keyof SessionEvents>(type: K, handler: (data: SessionEvents[K]) => void) {
-			const storedHandler: StoredHandler = handler;
+			const storedHandler = handler as StoredHandler;
 			const list = handlers.get(type) ?? [];
 			list.push(storedHandler);
 			handlers.set(type, list);

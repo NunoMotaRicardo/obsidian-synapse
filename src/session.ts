@@ -69,7 +69,7 @@ export async function sendAndWaitWithAbort<T>(
 	} catch (e) {
 		abortWithSetTimeoutShim(controller);
 		if (timedOut) {
-			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
+			throw new Error(`Request timed out after ${options?.timeoutMs ?? 0}ms`, { cause: e });
 		}
 		throw e;
 	} finally {
@@ -319,8 +319,6 @@ export type SessionEvent = {[K in keyof SessionEvents]: {type: K; data: SessionE
 
 // ── Session wrapper ─────────────────────────────────────────────
 
-type SessionEventHandler<K extends keyof SessionEvents = keyof SessionEvents> = (data: SessionEvents[K]) => void;
-
 /**
  * Session wraps the Agent SDK's query() to provide a stateful session API
  * compatible with the chat panel. It:
@@ -358,7 +356,7 @@ export class Session {
 	 * a different handler-value type per key. Type-safety is enforced at the `on()`/`dispatch()`
 	 * boundary instead, where the generic `K` ties a given call's event name to its payload type.
 	 */
-	private handlers: Map<keyof SessionEvents, SessionEventHandler[]> = new Map();
+	private handlers: Map<keyof SessionEvents, Array<(data: unknown) => void>> = new Map();
 	private onEventCallback: ((event: SessionEvent) => void) | null = null;
 	/** toolCallId -> toolName, tracked from `tool_use` so `tool_result` can report which tool failed. */
 	private pendingToolCalls: Map<string, string> = new Map();
@@ -417,7 +415,7 @@ export class Session {
 	 * Takes the grant set rather than a finished `settings` value so the merge happens *here*,
 	 * against this session's own `settings` — `config` is private, so a caller could only ever
 	 * pass a grants-only object and would silently drop any other `settings` the session was
-	 * built with (e.g. #194's `_synapse/settings.json`).
+	 * built with (e.g. #194's the plugin-folder `settings.json`).
 	 */
 	applyToolGrants(grants: Iterable<string>): void {
 		this.config = {...this.config, settings: buildInMemoryPermissionSettings(grants, this.config.settings)};
@@ -457,10 +455,10 @@ export class Session {
 	 */
 	on<K extends keyof SessionEvents>(eventType: K, handler: (data: SessionEvents[K]) => void): () => void {
 		const list = this.handlers.get(eventType) ?? [];
-		list.push(handler);
+		list.push(handler as (data: unknown) => void);
 		this.handlers.set(eventType, list);
 		return () => {
-			const idx = list.indexOf(handler);
+			const idx = list.indexOf(handler as (data: unknown) => void);
 			if (idx >= 0) list.splice(idx, 1);
 		};
 	}
@@ -476,7 +474,7 @@ export class Session {
 	 * specific send() call, on top of whatever the session was already configured with.
 	 *
 	 * `app` (#138/#194) is read on the real Agent SDK path (`createQuery()` ->
-	 * `routeQueryOptions()`) to derive `_synapse/settings.json`'s vault path for the vault
+	 * `routeQueryOptions()`) to derive per-device settings path for the vault
 	 * settings layer — the CLI itself doesn't need an `App`, since its own tools run inside
 	 * the CLI process, but locating the vault-scoped settings file does.
 	 * `Session`/`AgentService` hold no `App` reference of their own (architecture rule:

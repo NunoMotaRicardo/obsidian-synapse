@@ -43,7 +43,7 @@ boundaries, subprocesses, and privacy disclosures are maintained in
 | editor | [editor.md](editor.md) | `src/editor/*` | Context-menu AI actions |
 | bots | [bots.md](bots.md) | `src/bots/*` | Telegram bot front-end |
 | lock-manager | [lock-manager.md](lock-manager.md) | `src/lockManager.ts` | In-memory per-file advisory write lock serializing plugin-initiated writes (config writes, tool-approval persistence) |
-| vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, settings.json path |
+| vault-paths | [vault-paths.md](vault-paths.md) | `src/vaultPaths.ts` | Vault base path resolution, `_synapse/` folder + SDK plugin config, per-device settings.json path |
 
 ## Vault customization (`_synapse/`)
 
