@@ -62,6 +62,13 @@ export const STARTER_FILES: readonly StarterFile[] = [
 ];
 
 /**
+ * Starter paths (prefixes under `_synapse/`) that are part of the app, not user content: the
+ * plugin re-syncs them to the bundled version on every startup (`syncManagedStarterFiles()`), so a
+ * new plugin release ships its updated skill text without the user clicking **Initialize**.
+ */
+export const MANAGED_STARTER_PREFIXES: readonly string[] = ['skills/synapse-config/'];
+
+/**
  * Starter files the user may reset to their bundled version (Settings → **Initialize**), grouped
  * so each agent or skill is confirmed as one unit. `think` and `writing-style` are deliberately
  * absent — they hold the user's own voice and styles and are only ever created when missing.

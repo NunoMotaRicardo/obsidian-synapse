@@ -153,6 +153,16 @@ never overwrite an existing file:
   (`permissions.allow: ["Read"]`; defined in `starterKit.ts`, deliberately not in `STARTER_FILES`)
   if the file is still absent.
 
+## App-owned starter files
+
+`syncManagedStarterFiles(app)` keeps the files under `MANAGED_STARTER_PREFIXES` (`starterKit.ts`;
+currently `skills/synapse-config/`) identical to the bundled version, on **every startup**
+(`main.ts` `initVaultConfig()`, when `_synapse/` already exists). Changed → rewritten, missing →
+recreated, identical → not written (no sync churn). Local edits to these files are overwritten:
+they ship with the plugin, so a release updates the skill text with no user action. Extra files a
+user adds to the folder are never touched or deleted. **Initialize**'s `replace` still works for
+the other replaceable units.
+
 ## Vault structure scanner
 
 `scanVaultStructure(app)` returns alphabetically sorted `{name, fileCount}` entries for top-level

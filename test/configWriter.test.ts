@@ -11,6 +11,7 @@ import {
 	persistToolApprovalRules,
 	migrateVaultSettingsToPluginFolder,
 	seedDefaultVaultSettings,
+	syncManagedStarterFiles,
 } from '../src/configWriter';
 import {DEFAULT_VAULT_SETTINGS, STARTER_FILES, SYNAPSE_CONFIG_SKILL_NAME} from '../src/starterKit';
 import {createMockApp, seedFile, seedFolder, readVaultFile} from './setup';
@@ -520,5 +521,40 @@ describe('installStarterKit', () => {
 		expect(await readVaultFile(app, style)).toBe('customized');
 		expect(await readVaultFile(app, mine)).toBe('my agent');
 		expect(await readVaultFile(app, extra)).toBe('my extra file');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// syncManagedStarterFiles — app-owned starter files track the bundled version
+// ---------------------------------------------------------------------------
+
+describe('syncManagedStarterFiles', () => {
+	const managed = STARTER_FILES.filter(f => f.path.startsWith('skills/synapse-config/'));
+
+	it('does nothing when _synapse/ does not exist', async () => {
+		const app = createMockApp() as unknown as App;
+		expect(await syncManagedStarterFiles(app)).toEqual([]);
+		expect(app.vault.getAbstractFileByPath('_synapse')).toBeNull();
+	});
+
+	it('overwrites a stale synapse-config file and recreates a missing one', async () => {
+		const app = createMockApp() as unknown as App;
+		seedFolder(app, '_synapse');
+		const [first] = managed;
+		seedFile(app, `_synapse/${first?.path}`, 'old text');
+		const written = await syncManagedStarterFiles(app);
+		expect(written).toHaveLength(managed.length);
+		for (const f of managed) expect(await readVaultFile(app, `_synapse/${f.path}`)).toBe(f.content);
+	});
+
+	it('writes nothing when files already match, and leaves other files alone', async () => {
+		const app = createMockApp() as unknown as App;
+		await installStarterKit(app);
+		seedFile(app, '_synapse/skills/synapse-config/extra.md', 'mine');
+		const writer = '_synapse/agents/writer.agent.md';
+		seedFile(app, writer, 'customized');
+		expect(await syncManagedStarterFiles(app)).toEqual([]);
+		expect(await readVaultFile(app, '_synapse/skills/synapse-config/extra.md')).toBe('mine');
+		expect(await readVaultFile(app, writer)).toBe('customized');
 	});
 });

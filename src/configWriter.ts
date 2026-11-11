@@ -2,7 +2,7 @@ import {App, normalizePath, TFile, TFolder} from 'obsidian';
 import type {AgentConfig, SkillInfo} from './types';
 import {SYNAPSE_FOLDER} from './settings';
 import {lockManager} from './lockManager';
-import {DEFAULT_VAULT_SETTINGS, REPLACEABLE_STARTER_UNITS, STARTER_FILES} from './starterKit';
+import {DEFAULT_VAULT_SETTINGS, MANAGED_STARTER_PREFIXES, REPLACEABLE_STARTER_UNITS, STARTER_FILES} from './starterKit';
 import {getSynapseSettingsVaultPath, LEGACY_VAULT_SETTINGS_PATH} from './vaultPaths';
 
 /** Module-level compiled regex for frontmatter detection. */
@@ -379,6 +379,35 @@ export function findInstalledStarterUnits(app: App, synapseFolder = SYNAPSE_FOLD
 				.filter(filePath => app.vault.getAbstractFileByPath(filePath) instanceof TFile),
 		}))
 		.filter(unit => unit.paths.length > 0);
+}
+
+/**
+ * Keep the app-owned starter files (`MANAGED_STARTER_PREFIXES`, currently the `synapse-config`
+ * skill) identical to the bundled version. Runs on every startup: a file that differs is rewritten,
+ * a missing one is recreated, an identical one is left alone (no write, so no sync churn). Local
+ * edits to these files are therefore overwritten — they ship with the plugin. Files in the folder
+ * that are not part of the bundle are never touched or deleted. Does nothing when `_synapse/` does
+ * not exist (first run is `installStarterKit()`'s job). Returns the vault paths it wrote.
+ */
+export async function syncManagedStarterFiles(app: App, synapseFolder = SYNAPSE_FOLDER): Promise<string[]> {
+	if (!(app.vault.getAbstractFileByPath(synapseFolder) instanceof TFolder)) return [];
+	const written: string[] = [];
+	for (const file of STARTER_FILES) {
+		if (!MANAGED_STARTER_PREFIXES.some(prefix => file.path.startsWith(prefix))) continue;
+		const filePath = normalizePath(`${synapseFolder}/${file.path}`);
+		const existing = app.vault.getAbstractFileByPath(filePath);
+		if (existing instanceof TFile) {
+			if (await app.vault.read(existing) === file.content) continue;
+			await lockManager.withLock(filePath, () => app.vault.modify(existing, file.content));
+		} else if (!existing) {
+			await ensureFolder(app, filePath.slice(0, filePath.lastIndexOf('/')));
+			await lockManager.withLock(filePath, () => app.vault.create(filePath, file.content));
+		} else {
+			continue;
+		}
+		written.push(filePath);
+	}
+	return written;
 }
 
 /**
