@@ -19,7 +19,6 @@ try {
 		// Intentionally extracted so the wrapper below can call it via `.apply(this,
 		// ...)`, which re-binds `this` to whatever `events.setMaxListeners(...)` is
 		// called on — the rule can't verify that manual rebinding.
-		// eslint-disable-next-line @typescript-eslint/unbound-method -- see comment above
 		const origSetMaxListeners = events.setMaxListeners;
 		events.setMaxListeners = function(n: number, ...eventTargets: unknown[]) {
 			try {
