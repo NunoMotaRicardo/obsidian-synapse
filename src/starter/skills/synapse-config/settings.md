@@ -1,6 +1,6 @@
 # Permissions: the plugin's `settings.json`
 
-The plugin folder's `settings.json` — `<config folder>/plugins/claude-synapse/settings.json`, usually `.obsidian/plugins/claude-synapse/settings.json` — is Synapse's own Claude settings layer. It is **per device** and deliberately not in `_synapse/`, which is synced. Ignore any `settings.json` left in `_synapse/`: it is only a legacy copy. Synapse reads it on every query and merges it beneath the user's other Claude settings. It is the **only** place to grant or restrict tools for Synapse chats — do not create or edit `.claude/settings.json`, `.claude/settings.local.json`, or `~/.claude/settings.json` for this.
+The plugin folder's `settings.json` — `<config folder>/plugins/claude-synapse/settings.json`, usually `.obsidian/plugins/claude-synapse/settings.json` — is Synapse's own Claude settings layer. It is **per device** and deliberately not in `_synapse/`, which is synced. Ignore any `settings.json` left in `_synapse/`: it is only a legacy copy. Because the file is per device, a rule added here applies on this device only — say so when you change permissions. Synapse reads it on every query and merges it beneath the user's other Claude settings. It is the **only** place to grant or restrict tools for Synapse chats — do not create or edit `.claude/settings.json`, `.claude/settings.local.json`, or `~/.claude/settings.json` for this.
 
 Synapse ships it with a minimal default: read files, nothing else.
 

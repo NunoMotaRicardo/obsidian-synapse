@@ -6,7 +6,7 @@ import {fetchEndpointModels} from "./providerModels";
 import {SynapseView, SYNAPSE_VIEW_TYPE} from './synapseView';
 import {registerEditorMenu, registerFileMenu, openSynapseView, showEditOrInsertModal} from './editor/editorMenu';
 import {TelegramBotService} from './bots';
-import {installStarterKit, migrateVaultSettingsToPluginFolder, seedDefaultVaultSettings} from './configWriter';
+import {installStarterKit, migrateVaultSettingsToPluginFolder, seedDefaultVaultSettings, syncManagedStarterFiles} from './configWriter';
 import {debugTrace} from './debug';
 import {getCmView} from './utils';
 import {migrateClaudeBrainStorage} from './identityMigration';
@@ -174,12 +174,16 @@ export default class SynapsePlugin extends Plugin {
 	/**
 	 * Per-device settings layer + first-run starter kit. The legacy synced
 	 * `_synapse/settings.json` is copied into the plugin folder first (every startup, idempotent),
-	 * so a fresh install's default is only seeded when there is nothing to migrate.
+	 * so a fresh install's default is only seeded when there is nothing to migrate. App-owned starter
+	 * files (the `synapse-config` skill) are re-synced to the bundled version on every startup.
 	 */
 	private async initVaultConfig(): Promise<void> {
 		try {
 			await migrateVaultSettingsToPluginFolder(this.app);
-			if (this.app.vault.getAbstractFileByPath(SYNAPSE_FOLDER)) return;
+			if (this.app.vault.getAbstractFileByPath(SYNAPSE_FOLDER)) {
+				await syncManagedStarterFiles(this.app);
+				return;
+			}
 			await installStarterKit(this.app);
 			await seedDefaultVaultSettings(this.app);
 		} catch (e) {

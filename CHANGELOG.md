@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The permissions file `settings.json` now lives in the plugin folder (`.obsidian/plugins/claude-synapse/`) instead of `_synapse/`, so it is per device and no longer synced or shown with your vault content. On startup an existing `_synapse/settings.json` is copied there once; the original is left in place and ignored.
+- The `synapse-config` skill is now kept in step with the plugin: it is refreshed to the bundled version on every startup, so updates reach existing vaults without running **Initialize**. Local edits to that skill are overwritten.
 - Updated dependencies: Claude Agent SDK 0.3.322, TypeScript 6, ESLint 10, Vitest 5.
 
 ## [0.8.0] - 2026-11-11
