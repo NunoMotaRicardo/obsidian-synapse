@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     build:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
 
         strategy:
             matrix:
@@ -31,7 +31,7 @@ jobs:
             - run: npm run test
 
     coverage:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
 
         steps:
             - uses: actions/checkout@v5
@@ -52,7 +52,7 @@ jobs:
                   { echo "### Coverage (src/)"; echo '```'; cat coverage-output.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             - name: Upload coverage report
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: coverage-report
                   path: coverage/

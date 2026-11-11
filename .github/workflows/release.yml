@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
     validate-build:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         permissions:
             contents: read
             attestations: write
@@ -73,7 +73,7 @@ jobs:
             # This is the only cross-job input to publication: exactly the
             # installer assets plus their verification evidence and release notes.
             - name: Preserve verified build and verification evidence
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: verified-release-build-${{ github.ref_name }}
                   path: |
@@ -86,7 +86,7 @@ jobs:
 
     publish:
         needs: validate-build
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         permissions:
             contents: write
         steps:
@@ -101,7 +101,7 @@ jobs:
               run: node .github/scripts/verify-tag-identity.mjs
 
             - name: Download verified build artifact
-              uses: actions/download-artifact@v5
+              uses: actions/download-artifact@v7
               with:
                   name: verified-release-build-${{ github.ref_name }}
                   path: verified-release-build
@@ -188,7 +188,7 @@ jobs:
             # verification, the build-job artifact is still available as evidence.
             - name: Preserve publication verification evidence
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: release-publication-verification-${{ github.ref_name }}
                   path: |
