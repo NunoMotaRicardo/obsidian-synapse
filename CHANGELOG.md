@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-11
+
+### Added
+
+- A conversation now remembers its **model** and **agent**, alongside its sources, working folder and context note. Reopening it from the sidebar (or after a plugin reload) restores both instead of keeping whatever the panel last used. If a saved model or agent no longer exists, it falls back to the default model or Auto.
+
 ## [0.7.0] - 2026-11-07
 
 ### Added
