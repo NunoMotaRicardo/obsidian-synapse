@@ -93,12 +93,15 @@ export class ConfigToolbarController {
 			this.view.view.updateStateLine();
 		});
 
+		this.useMenuForSelect(this.agentSelect);
+
 		addSep();
 
 		// Model dropdown
 		this.view.view.modelSelect = toolbar.createEl('select', {cls: 'synapse-select synapse-model-select'});
 		this.modelSelect.toggleClass('is-active', this.selectedModel !== '');
 		this.modelSelect.addEventListener('change', () => this.setModel(this.modelSelect.value));
+		this.useMenuForSelect(this.modelSelect);
 
 		addSep();
 
@@ -269,6 +272,43 @@ export class ConfigToolbarController {
 			document.removeEventListener('mousedown', onDown, true);
 			document.removeEventListener('keydown', onKey, true);
 		};
+	}
+
+	/**
+	 * Replace a native `<select>` popup with an Obsidian `Menu`. The native popup fails to open
+	 * on Linux/Wayland (Omarchy) when the window reaches near the bottom of the screen; `Menu`
+	 * positions itself within the viewport (flipping upward when needed). The <select> stays the
+	 * source of truth: picking an item sets its value and dispatches `change`.
+	 */
+	private useMenuForSelect(select: HTMLSelectElement): void {
+		const open = (e: MouseEvent | KeyboardEvent): void => {
+			e.preventDefault();
+			e.stopPropagation();
+			select.focus();
+			const menu = new Menu();
+			for (const opt of Array.from(select.options)) {
+				menu.addItem(item => {
+					item.setTitle(opt.text)
+						.setChecked(opt.value === select.value)
+						.setDisabled(opt.disabled)
+						.onClick(() => {
+							select.value = opt.value;
+							select.dispatchEvent(new Event('change'));
+						});
+				});
+			}
+			const rect = select.getBoundingClientRect();
+			menu.showAtPosition({x: rect.left, y: rect.bottom, overlap: true, left: false});
+		};
+		// Suppress the native popup on mousedown, but open the menu on click: opening on
+		// mousedown made the following mouseup/click dismiss the menu immediately.
+		select.addEventListener('mousedown', (e) => {
+			if (e.button === 0) e.preventDefault();
+		});
+		select.addEventListener('click', (e) => open(e));
+		select.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') open(e);
+		});
 	}
 
 	populateModelSelect(): void {
